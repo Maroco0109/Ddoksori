@@ -315,3 +315,16 @@ class HybridRetriever:
             final_results.append(result)
 
         return final_results
+
+    def get_case_chunks(self, case_uid: str) -> List[Dict]:
+        """
+        특정 사례의 모든 청크 조회
+        RAGRetriever.get_case_chunks()로 위임
+
+        Args:
+            case_uid: 문서 ID (doc_id)
+
+        Returns:
+            해당 사례의 모든 청크 정보 리스트
+        """
+        return self.rag_retriever.get_case_chunks(case_uid)

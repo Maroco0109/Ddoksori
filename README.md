@@ -533,7 +533,7 @@ python backend/scripts/data_loading/embed_all_data.py
 #### 5단계: 백엔드 서버 실행
 
 ```bash
-cd ../../../backend
+cd backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -545,6 +545,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd frontend
 npm install  # (최초 1회만)
 npm run dev
+```
+
+#### 7단계: CloudBeaver 실행
+
+```bash
+docker-compose up -d cloudbeaver
 ```
 
 ---

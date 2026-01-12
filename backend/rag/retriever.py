@@ -549,6 +549,57 @@ class RAGRetriever:
         keywords = re.findall(r'[가-힣]+', query)
         return [kw for kw in keywords if len(kw) >= 2]
     
+    def get_case_chunks(self, case_uid: str) -> List[Dict]:
+        """
+        특정 사례의 모든 청크 조회
+
+        Args:
+            case_uid: 문서 ID (doc_id)
+
+        Returns:
+            해당 사례의 모든 청크 정보 리스트
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chunk_id,
+                    c.doc_id,
+                    c.chunk_type,
+                    c.content,
+                    c.chunk_order,
+                    d.title AS doc_title,
+                    d.doc_type,
+                    d.source_org,
+                    d.url,
+                    d.category_path,
+                    d.metadata
+                FROM chunks c
+                JOIN documents d ON c.doc_id = d.doc_id
+                WHERE c.doc_id = %s
+                ORDER BY c.chunk_order ASC
+                """,
+                (case_uid,)
+            )
+
+            results = []
+            for row in cur.fetchall():
+                results.append({
+                    'chunk_id': row[0],
+                    'doc_id': row[1],
+                    'chunk_type': row[2],
+                    'content': row[3],
+                    'chunk_order': row[4],
+                    'doc_title': row[5],
+                    'doc_type': row[6],
+                    'source_org': row[7],
+                    'url': row[8],
+                    'category_path': row[9] or [],
+                    'metadata': row[10] or {}
+                })
+
+            return results
+
     def format_results_for_llm(self, results: List[SearchResult]) -> str:
         """검색 결과를 LLM 입력 형식으로 포맷팅"""
         formatted = []

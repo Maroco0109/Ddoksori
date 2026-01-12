@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -153,16 +154,21 @@ async def search(
     Vector DB에서 유사한 사례 검색 (LLM 답변 생성 없이 검색만)
     """
     try:
+        # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
         # Hybrid search (RRF fusion) or vector-only
         if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
             chunks = retriever.search(
                 query=request.query,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
         else:
             chunks = retriever.vector_search(
                 query=request.query,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
 
         # SearchResult 객체를 dict로 변환
@@ -189,12 +195,16 @@ async def chat(
     start_time = time.time()
     log_entry = rag_logger.create_entry(query=request.message)
 
+    # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+    chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
     try:
         # 1. 유사 청크 검색 (instrumented)
         if retrieval_mode == 'hybrid' and hasattr(retriever, 'search_instrumented'):
             search_result = retriever.search_instrumented(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
             chunks = search_result['results']
             chunks_dict = [_serialize_search_result(c) for c in chunks]
@@ -212,7 +222,8 @@ async def chat(
         elif hasattr(retriever, 'vector_search_instrumented'):
             search_result = retriever.vector_search_instrumented(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
             chunks = search_result['results']
             chunks_dict = [_serialize_search_result(c) for c in chunks]
@@ -230,12 +241,14 @@ async def chat(
             if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
                 chunks = retriever.search(
                     query=request.message,
-                    top_k=request.top_k
+                    top_k=request.top_k,
+                    chunk_type_filter=chunk_type_filter
                 )
             else:
                 chunks = retriever.vector_search(
                     query=request.message,
-                    top_k=request.top_k
+                    top_k=request.top_k,
+                    chunk_type_filter=chunk_type_filter
                 )
             chunks_dict = [_serialize_search_result(c) for c in chunks]
             rag_logger.log_retrieval(
@@ -357,16 +370,21 @@ async def chat_stream(
     RAG 기반 스트리밍 챗봇 응답 생성
     """
     try:
+        # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
         # 유사 청크 검색
         if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
             chunks = retriever.search(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
         else:
             chunks = retriever.vector_search(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
 
         if not chunks:
@@ -377,9 +395,11 @@ async def chat_stream(
         # SearchResult를 dict로 변환
         chunks_dict = [_serialize_search_result(chunk) for chunk in chunks]
 
-        # 스트리밍 답변 생성
+        # 스트리밍 답변 생성 (동기 함수를 비동기로 실행)
         async def stream_response():
-            result = generator.generate_answer(request.message, chunks_dict)
+            result = await asyncio.to_thread(
+                generator.generate_answer, request.message, chunks_dict
+            )
             yield result['answer']
 
         return StreamingResponse(
