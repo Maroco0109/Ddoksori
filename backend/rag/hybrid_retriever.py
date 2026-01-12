@@ -316,6 +316,46 @@ class HybridRetriever:
 
         return final_results
 
+    def search_prioritized(
+        self,
+        query: str,
+        top_k: int = 5,
+        primary_doc_type: str = 'mediation_case',
+        secondary_doc_type: str = 'counsel_case'
+    ) -> List[SearchResult]:
+        """
+        2단계 검색: primary doc_type 우선, 부족분은 secondary에서 채움
+
+        Args:
+            query: 검색 쿼리
+            top_k: 반환할 결과 수
+            primary_doc_type: 우선 검색할 문서 유형 (기본: mediation_case)
+            secondary_doc_type: 보조 검색할 문서 유형 (기본: counsel_case)
+
+        Returns:
+            List of SearchResult (primary 결과 우선, 부족분은 secondary로 채움)
+        """
+        # 1단계: primary doc_type (분쟁조정사례) 우선 검색
+        primary_results = self.search(
+            query=query,
+            top_k=top_k,
+            doc_type_filter=primary_doc_type
+        )
+
+        # 결과가 충분하면 반환
+        if len(primary_results) >= top_k:
+            return primary_results[:top_k]
+
+        # 2단계: 부족분만큼 secondary doc_type (상담사례) 추가
+        remaining = top_k - len(primary_results)
+        secondary_results = self.search(
+            query=query,
+            top_k=remaining,
+            doc_type_filter=secondary_doc_type
+        )
+
+        return primary_results + secondary_results
+
     def get_case_chunks(self, case_uid: str) -> List[Dict]:
         """
         특정 사례의 모든 청크 조회

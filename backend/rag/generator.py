@@ -215,7 +215,8 @@ class RAGGenerator:
         self, query: str, chunks: List[Dict]
     ) -> Tuple[bool, List[str]]:
         """Check if evidence is sufficient"""
-        if not chunks or chunks[0].get('similarity', 0) < 0.5:
+        similarity_threshold = float(os.getenv('SIMILARITY_THRESHOLD', '0.01'))
+        if not chunks or chunks[0].get('similarity', 0) < similarity_threshold:
             return False, [
                 "분쟁 발생 날짜가 언제인가요?",
                 "구입한 제품/서비스의 구체적인 명칭은 무엇인가요?",

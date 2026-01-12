@@ -567,7 +567,7 @@ class RAGRetriever:
                     c.doc_id,
                     c.chunk_type,
                     c.content,
-                    c.chunk_order,
+                    c.chunk_index,
                     d.title AS doc_title,
                     d.doc_type,
                     d.source_org,
@@ -577,7 +577,7 @@ class RAGRetriever:
                 FROM chunks c
                 JOIN documents d ON c.doc_id = d.doc_id
                 WHERE c.doc_id = %s
-                ORDER BY c.chunk_order ASC
+                ORDER BY c.chunk_index ASC
                 """,
                 (case_uid,)
             )
@@ -589,7 +589,7 @@ class RAGRetriever:
                     'doc_id': row[1],
                     'chunk_type': row[2],
                     'content': row[3],
-                    'chunk_order': row[4],
+                    'chunk_index': row[4],
                     'doc_title': row[5],
                     'doc_type': row[6],
                     'source_org': row[7],

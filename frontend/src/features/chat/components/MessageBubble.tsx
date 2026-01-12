@@ -1,11 +1,11 @@
 /**
  * MessageBubble Component - Sprint 1 S1-4
- * Renders chat messages with inline citation support
+ * Renders chat messages with inline citation support and markdown formatting
  */
 
 import React, { useState } from 'react';
 import type { MessageWithCitations } from '@/shared/types';
-import { renderTextWithCitations } from '@/shared/lib/citation';
+import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer';
 import { CitationModal } from './CitationModal';
 
 interface MessageBubbleProps {
@@ -16,6 +16,7 @@ interface MessageBubbleProps {
 /**
  * Chat message bubble with support for:
  * - AI vs User styling
+ * - Markdown rendering for AI messages (bold, italic, lists, code blocks)
  * - Inline clickable citations [1], [2], [3]
  * - Citation modal on click
  * - Different colors per chat type
@@ -50,16 +51,21 @@ export function MessageBubble({
       >
         {/* Message Bubble */}
         <div
-          className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-line ${
+          className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl leading-relaxed text-sm sm:text-base ${
             isAI
               ? 'bg-lavender/30 text-dark-navy rounded-bl-sm'
-              : `${userBgColor} text-white rounded-br-sm`
+              : `${userBgColor} text-white rounded-br-sm whitespace-pre-line`
           }`}
         >
-          {/* AI messages with citations render as interactive elements */}
-          {isAI && message.citations && message.citations.length > 0
-            ? renderTextWithCitations(message.content, setSelectedCitationId)
-            : message.content}
+          {/* AI messages render with markdown formatting and interactive citations */}
+          {isAI ? (
+            <MarkdownRenderer
+              content={message.content}
+              onCitationClick={setSelectedCitationId}
+            />
+          ) : (
+            message.content
+          )}
         </div>
 
         {/* Timestamp */}
