@@ -497,15 +497,37 @@ cp backend/.env.example backend/.env
 docker-compose up --build
 ```
 
-#### Windows (PowerShell)
+#### Windows (PowerShell) - 로컬 개발 환경 (권장)
 
-Windows 환경에서는 전용 스크립트와 구성 파일을 사용합니다.
+DB는 Docker로 실행하고, Backend/Frontend는 로컬에서 실행하는 방식입니다.
 
 ```powershell
 # 1. 환경 변수 설정 (최초 1회)
 Copy-Item backend/.env.example backend/.env
 
-# 2. 전체 서비스 실행 (노트북 환경)
+# 2. Docker DB 시작
+.\scripts\start_windows_local.ps1
+
+# 3. DB 복원 (최초 1회, backup.sql 필요)
+.\scripts\restore_db_windows.ps1
+
+# 4. 백엔드 실행 (새 터미널)
+$env:PYTHONIOENCODING = "utf-8"
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 5. 프론트엔드 실행 (새 터미널)
+cd frontend
+npm install  # (최초 1회)
+npm run dev
+```
+
+#### Windows (PowerShell) - Docker 전체 실행
+
+모든 서비스를 Docker로 실행하는 방식입니다. (RunPod GPU 연결 시)
+
+```powershell
+# 노트북 환경 (RunPod SSH 터널 필요)
 .\scripts\start_laptop.ps1
 
 # 또는 데스크탑(Local GPU) 환경
@@ -670,15 +692,26 @@ docker exec -t ddoksori_db pg_dump -U postgres -d ddoksori -c > backup.sql
 
 새로운 PC(예: 노트북)에서 Docker DB 컨테이너만 실행한 상태(`docker-compose up -d db`)에서 복원합니다.
 
+#### Linux / macOS
+
 ```bash
 # 주의: 기존 데이터는 초기화됩니다.
 cat backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
+```
 
-# Windows (PowerShell)
-Get-Content backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
+#### Windows (PowerShell) - 권장
 
-# Windows (Command Prompt)
-type backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
+Windows에서는 파이프(`|`) 방식이 psql 제한 모드 문제를 일으킬 수 있으므로, `docker cp`를 사용합니다.
+
+```powershell
+# 1. backup.sql을 컨테이너 안으로 복사
+docker cp backup.sql ddoksori_db:/tmp/backup.sql
+
+# 2. 컨테이너 내부에서 실행 (주의: 기존 데이터는 초기화됩니다)
+docker exec ddoksori_db psql -U postgres -d ddoksori -f /tmp/backup.sql
+
+# 3. (선택) 임시 파일 삭제
+docker exec ddoksori_db rm /tmp/backup.sql
 ```
 
 ## 6. 문서 및 가이드
