@@ -5,6 +5,7 @@
 """
 
 import psycopg2
+import time
 from typing import List, Dict, Optional, Tuple
 import requests
 from dataclasses import dataclass
@@ -13,7 +14,8 @@ import re
 
 @dataclass
 class SearchResult:
-    """검색 결과 데이터 클래스"""
+    """검색 결과 데이터 클래스 (S1-1 citation metadata)"""
+    # Core fields
     chunk_id: str
     doc_id: str
     chunk_type: str
@@ -22,6 +24,13 @@ class SearchResult:
     doc_type: str
     category_path: List[str]
     similarity: float
+
+    # S1-1 Citation metadata
+    source_org: Optional[str] = None      # KCA/ECMC/KCDRC/statute/consumer.go.kr
+    url: Optional[str] = None             # Original document URL
+    decision_date: Optional[str] = None   # From metadata['decision_date']
+    collected_at: Optional[str] = None    # Document collection timestamp
+
     metadata: Optional[Dict] = None
 
 
@@ -74,7 +83,105 @@ class RAGRetriever:
             return embeddings[0]
         except requests.exceptions.RequestException as e:
             raise Exception(f"임베딩 API 오류: {e}")
-    
+
+    def embed_query_timed(self, query: str) -> Tuple[List[float], float]:
+        """
+        쿼리 임베딩 생성 with timing
+
+        Returns:
+            Tuple of (embedding_vector, time_ms)
+        """
+        start = time.time()
+        embedding = self.embed_query(query)
+        time_ms = (time.time() - start) * 1000
+        return embedding, time_ms
+
+    def vector_search_instrumented(
+        self,
+        query: str,
+        top_k: int = 10,
+        doc_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[str] = None
+    ) -> Dict:
+        """
+        벡터 유사도 검색 with timing info
+
+        Returns:
+            {
+                'results': List[SearchResult],
+                'embedding_time_ms': float,
+                'search_time_ms': float
+            }
+        """
+        # Embedding with timing
+        query_embedding, embed_time = self.embed_query_timed(query)
+
+        # Search with timing
+        search_start = time.time()
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chunk_id,
+                    c.doc_id,
+                    c.chunk_type,
+                    c.content,
+                    d.title AS doc_title,
+                    d.doc_type,
+                    d.category_path,
+                    1 - (c.embedding <=> %s::vector) AS similarity,
+                    d.source_org,
+                    d.url,
+                    d.collected_at,
+                    d.metadata
+                FROM chunks c
+                JOIN documents d ON c.doc_id = d.doc_id
+                WHERE
+                    c.embedding IS NOT NULL
+                    AND (%s IS NULL OR d.doc_type = %s)
+                    AND (%s IS NULL OR c.chunk_type = %s)
+                ORDER BY c.embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (
+                    query_embedding,
+                    doc_type_filter, doc_type_filter,
+                    chunk_type_filter, chunk_type_filter,
+                    query_embedding,
+                    top_k
+                )
+            )
+
+            results = []
+            for row in cur.fetchall():
+                metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
+                results.append(SearchResult(
+                    chunk_id=row[0],
+                    doc_id=row[1],
+                    chunk_type=row[2],
+                    content=row[3],
+                    doc_title=row[4],
+                    doc_type=row[5],
+                    category_path=row[6] or [],
+                    similarity=float(row[7]),
+                    source_org=row[8],
+                    url=row[9],
+                    collected_at=row[10].isoformat() if row[10] else None,
+                    decision_date=decision_date,
+                    metadata=metadata_json
+                ))
+
+        search_time = (time.time() - search_start) * 1000
+
+        return {
+            'results': results,
+            'embedding_time_ms': embed_time,
+            'search_time_ms': search_time
+        }
+
     def vector_search(
         self,
         query: str,
@@ -90,7 +197,7 @@ class RAGRetriever:
         with self.conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT 
+                SELECT
                     c.chunk_id,
                     c.doc_id,
                     c.chunk_type,
@@ -98,10 +205,14 @@ class RAGRetriever:
                     d.title AS doc_title,
                     d.doc_type,
                     d.category_path,
-                    1 - (c.embedding <=> %s::vector) AS similarity
+                    1 - (c.embedding <=> %s::vector) AS similarity,
+                    d.source_org,
+                    d.url,
+                    d.collected_at,
+                    d.metadata
                 FROM chunks c
                 JOIN documents d ON c.doc_id = d.doc_id
-                WHERE 
+                WHERE
                     c.embedding IS NOT NULL
                     AND (%s IS NULL OR d.doc_type = %s)
                     AND (%s IS NULL OR c.chunk_type = %s)
@@ -116,9 +227,13 @@ class RAGRetriever:
                     top_k
                 )
             )
-            
+
             results = []
             for row in cur.fetchall():
+                # Parse decision_date from metadata if exists
+                metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
                 results.append(SearchResult(
                     chunk_id=row[0],
                     doc_id=row[1],
@@ -127,28 +242,122 @@ class RAGRetriever:
                     doc_title=row[4],
                     doc_type=row[5],
                     category_path=row[6] or [],
-                    similarity=float(row[7])
+                    similarity=float(row[7]),
+                    source_org=row[8],
+                    url=row[9],
+                    collected_at=row[10].isoformat() if row[10] else None,
+                    decision_date=decision_date,
+                    metadata=metadata_json
                 ))
-            
+
             return results
     
     def keyword_search(
         self,
         query: str,
         top_k: int = 10,
+        doc_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[str] = None,
+        use_fts: bool = True
+    ) -> List[SearchResult]:
+        """
+        키워드 기반 검색 (PostgreSQL FTS 또는 LIKE 폴백)
+
+        Args:
+            query: 검색 쿼리
+            top_k: 반환할 최대 결과 수
+            doc_type_filter: 문서 타입 필터
+            chunk_type_filter: 청크 타입 필터
+            use_fts: True이면 FTS 사용, False이면 LIKE 폴백
+
+        Returns:
+            검색 결과 리스트
+        """
+        if use_fts:
+            return self._keyword_search_fts(query, top_k, doc_type_filter, chunk_type_filter)
+        else:
+            return self._keyword_search_like(query, top_k, doc_type_filter)
+
+    def _keyword_search_fts(
+        self,
+        query: str,
+        top_k: int,
+        doc_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[str] = None
+    ) -> List[SearchResult]:
+        """FTS 기반 키워드 검색 (mv_searchable_chunks 사용)"""
+        with self.conn.cursor() as cur:
+            # 토큰화: 공백으로 분리하고 '&'로 연결 (AND 검색)
+            tokens = query.split()
+            tsquery = ' & '.join(tokens)
+
+            cur.execute(
+                """
+                SELECT
+                    chunk_id,
+                    doc_id,
+                    chunk_type,
+                    content,
+                    doc_type,
+                    source_org,
+                    category_path,
+                    ts_rank(content_vector, to_tsquery('simple', %s)) AS rank_score
+                FROM mv_searchable_chunks
+                WHERE
+                    content_vector @@ to_tsquery('simple', %s)
+                    AND (%s IS NULL OR doc_type = %s)
+                    AND (%s IS NULL OR chunk_type = %s)
+                ORDER BY rank_score DESC
+                LIMIT %s
+                """,
+                (
+                    tsquery, tsquery,
+                    doc_type_filter, doc_type_filter,
+                    chunk_type_filter, chunk_type_filter,
+                    top_k
+                )
+            )
+
+            results = []
+            for row in cur.fetchall():
+                # 문서 제목 조회
+                cur.execute(
+                    "SELECT title FROM documents WHERE doc_id = %s",
+                    (row[1],)
+                )
+                doc_title_row = cur.fetchone()
+                doc_title = doc_title_row[0] if doc_title_row else "Unknown"
+
+                results.append(SearchResult(
+                    chunk_id=row[0],
+                    doc_id=row[1],
+                    chunk_type=row[2],
+                    content=row[3],
+                    doc_title=doc_title,
+                    doc_type=row[4],
+                    category_path=row[6] or [],
+                    similarity=float(row[7])  # ts_rank score
+                ))
+
+            return results
+
+    def _keyword_search_like(
+        self,
+        query: str,
+        top_k: int,
         doc_type_filter: Optional[str] = None
     ) -> List[SearchResult]:
-        """키워드 기반 검색 (PostgreSQL 전문 검색)"""
+        """LIKE 기반 키워드 검색 (폴백용)"""
         # 한국어 키워드 추출 (간단한 토큰화)
         keywords = self._extract_keywords(query)
-        
+
         with self.conn.cursor() as cur:
             # LIKE 검색 (간단한 구현)
             search_pattern = f"%{query}%"
-            
+
             cur.execute(
                 """
-                SELECT 
+                SELECT
                     c.chunk_id,
                     c.doc_id,
                     c.chunk_type,
@@ -159,7 +368,7 @@ class RAGRetriever:
                     0.5 AS similarity
                 FROM chunks c
                 JOIN documents d ON c.doc_id = d.doc_id
-                WHERE 
+                WHERE
                     (c.content LIKE %s OR d.title LIKE %s)
                     AND (%s IS NULL OR d.doc_type = %s)
                 LIMIT %s
@@ -170,7 +379,7 @@ class RAGRetriever:
                     top_k
                 )
             )
-            
+
             results = []
             for row in cur.fetchall():
                 results.append(SearchResult(
@@ -183,7 +392,7 @@ class RAGRetriever:
                     category_path=row[6] or [],
                     similarity=float(row[7])
                 ))
-            
+
             return results
     
     def hybrid_search(

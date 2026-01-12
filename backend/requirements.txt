@@ -1,5 +1,5 @@
 fastapi==0.115.6
-uvicorn[standard]==0.34.0
+uvicorn[standard]==0.32.1
 python-multipart==0.0.20
 websockets==14.1
 psycopg2-binary==2.9.10
@@ -11,3 +11,18 @@ python-dotenv==1.0.1
 openai==1.58.1
 torch==2.5.1
 rich>=13.0.0
+langgraph>=0.0.10
+langchain>=0.1.0
+langchain-openai>=0.0.5
+ragas>=0.1.0
+datasets>=2.16.0
+
+# Testing framework (Phase 6 validation scripts)
+pytest==8.0.0
+pytest-asyncio==0.23.3
+httpx>=0.27.0
+pytest-timeout==2.2.0
+pytest-xdist==3.5.0
+pytest-cov==4.1.0
+docker==7.0.0
+fastmcp==0.4.1

@@ -54,17 +54,28 @@ logs/
 .cache/
 models/
 
-# Test artifacts
-tests/**/*.log
-tests/**/results/
-tests/**/cache/
+# archives
+backend/data/law/scripts/_archive
+backend/_archive
 
-# SPLADE POC
-tests/splade_poc/models/
-tests/splade_poc/__pycache__/
-tests/splade_poc/*.pyc
 
-# Temporary test results
-/tmp/vector_db_test_results.json
-/tmp/chunking_quality_test_results.json
-/tmp/db_stats.json
+# Data
+backend/data/counsel/
+backend/data/criteria/
+backend/data/dispute/
+backend/data/law/raw
+
+
+# Backup Data
+backup.sql
+
+
+# Agents
+Agents
+.agent
+.cursorrules
+AGENTS.md
+CLAUDE.md
+AI_MEMO.md
+AI_MEMO_S1.md
+docs/sprint/
