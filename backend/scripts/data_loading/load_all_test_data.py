@@ -33,6 +33,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 import psycopg
+import tempfile
 
 # Add backend directory to path for imports
 BACKEND_DIR = Path(__file__).parent.parent.parent
@@ -412,7 +413,7 @@ def save_report(report: Dict[str, Any], output_dir: Path = None) -> Path:
         Path to saved report file
     """
     if output_dir is None:
-        output_dir = Path("/tmp")
+        output_dir = Path(tempfile.gettempdir())
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = output_dir / f"data_load_report_{timestamp}.json"
@@ -439,7 +440,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=1000, help="Batch size for inserts")
     parser.add_argument("--skip-existing", action="store_true", help="Skip existing documents")
     parser.add_argument("--quiet", action="store_true", help="Suppress progress messages")
-    parser.add_argument("--output-dir", type=Path, default=Path("/tmp"), help="Report output directory")
+    parser.add_argument("--output-dir", type=Path, default=Path(tempfile.gettempdir()), help="Report output directory")
 
     args = parser.parse_args()
 

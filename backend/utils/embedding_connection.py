@@ -1,6 +1,7 @@
 import os
 import requests
 import subprocess
+import tempfile
 import time
 import sys
 
@@ -32,7 +33,9 @@ def start_local_server():
         print(f"❌ Error: Embedding server script not found at {script_path}")
         return False
 
-    log_file = open("/tmp/embedding_server.log", "w")
+    # Use cross-platform temp directory (Windows: %TEMP%, Linux/Mac: /tmp)
+    log_path = os.path.join(tempfile.gettempdir(), "embedding_server.log")
+    log_file = open(log_path, "w")
     
     # Run uvicorn server
     subprocess.Popen(
@@ -51,7 +54,7 @@ def start_local_server():
         time.sleep(1)
         print(".", end="", flush=True)
         
-    print("\n❌ Failed to start local embedding server. Check /tmp/embedding_server.log")
+    print(f"\n❌ Failed to start local embedding server. Check {log_path}")
     return False
 
 def get_embedding_api_url() -> str:
