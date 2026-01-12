@@ -1,9 +1,10 @@
 import os
 import time
+import asyncio
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Generator
 from dotenv import load_dotenv
 # from fastmcp import FastMCP
@@ -90,10 +91,17 @@ def _serialize_search_result(chunk: SearchResult) -> Dict[str, Any]:
 
 # Request/Response 모델
 class ChatRequest(BaseModel):
-    message: str
-    top_k: Optional[int] = 5
+    message: str = Field(..., min_length=1, description="사용자 질문")
+    top_k: Optional[int] = Field(default=5, ge=1, le=100, description="검색 결과 수")
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
+
+    @field_validator('message')
+    @classmethod
+    def message_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError('메시지는 빈 문자열일 수 없습니다')
+        return v.strip()
 
 
 class ChatResponse(BaseModel):
@@ -107,10 +115,17 @@ class ChatResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = 5
+    query: str = Field(..., min_length=1, description="검색 쿼리")
+    top_k: Optional[int] = Field(default=5, ge=1, le=100, description="검색 결과 수")
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
+
+    @field_validator('query')
+    @classmethod
+    def query_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError('쿼리는 빈 문자열일 수 없습니다')
+        return v.strip()
 
 
 # API 엔드포인트
@@ -153,16 +168,21 @@ async def search(
     Vector DB에서 유사한 사례 검색 (LLM 답변 생성 없이 검색만)
     """
     try:
+        # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
         # Hybrid search (RRF fusion) or vector-only
         if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
             chunks = retriever.search(
                 query=request.query,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
         else:
             chunks = retriever.vector_search(
                 query=request.query,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
 
         # SearchResult 객체를 dict로 변환
@@ -189,30 +209,36 @@ async def chat(
     start_time = time.time()
     log_entry = rag_logger.create_entry(query=request.message)
 
+    # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+    chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
     try:
-        # 1. 유사 청크 검색 (instrumented)
-        if retrieval_mode == 'hybrid' and hasattr(retriever, 'search_instrumented'):
-            search_result = retriever.search_instrumented(
+        # 1. 유사 청크 검색 (2단계: mediation_case 우선 → counsel_case 보조)
+        if retrieval_mode == 'hybrid' and hasattr(retriever, 'search_prioritized'):
+            # 2단계 우선순위 검색 사용
+            chunks = retriever.search_prioritized(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                primary_doc_type='mediation_case',
+                secondary_doc_type='counsel_case'
             )
-            chunks = search_result['results']
             chunks_dict = [_serialize_search_result(c) for c in chunks]
 
             rag_logger.log_retrieval(
                 entry=log_entry,
-                mode='hybrid',
+                mode='hybrid_prioritized',
                 top_k=request.top_k,
-                embedding_time_ms=search_result['embedding_time_ms'],
-                search_time_ms=search_result['search_time_ms'],
+                embedding_time_ms=0,
+                search_time_ms=0,
                 chunks=chunks_dict,
-                dense_candidates=search_result.get('dense_candidates', 0),
-                lexical_candidates=search_result.get('lexical_candidates', 0)
+                dense_candidates=0,
+                lexical_candidates=0
             )
         elif hasattr(retriever, 'vector_search_instrumented'):
             search_result = retriever.vector_search_instrumented(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
             chunks = search_result['results']
             chunks_dict = [_serialize_search_result(c) for c in chunks]
@@ -227,15 +253,24 @@ async def chat(
             )
         else:
             # Fallback to non-instrumented
-            if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
+            if hasattr(retriever, 'search_prioritized') and retrieval_mode == 'hybrid':
+                chunks = retriever.search_prioritized(
+                    query=request.message,
+                    top_k=request.top_k,
+                    primary_doc_type='mediation_case',
+                    secondary_doc_type='counsel_case'
+                )
+            elif hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
                 chunks = retriever.search(
                     query=request.message,
-                    top_k=request.top_k
+                    top_k=request.top_k,
+                    chunk_type_filter=chunk_type_filter
                 )
             else:
                 chunks = retriever.vector_search(
                     query=request.message,
-                    top_k=request.top_k
+                    top_k=request.top_k,
+                    chunk_type_filter=chunk_type_filter
                 )
             chunks_dict = [_serialize_search_result(c) for c in chunks]
             rag_logger.log_retrieval(
@@ -357,16 +392,21 @@ async def chat_stream(
     RAG 기반 스트리밍 챗봇 응답 생성
     """
     try:
+        # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
+        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+
         # 유사 청크 검색
         if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
             chunks = retriever.search(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
         else:
             chunks = retriever.vector_search(
                 query=request.message,
-                top_k=request.top_k
+                top_k=request.top_k,
+                chunk_type_filter=chunk_type_filter
             )
 
         if not chunks:
@@ -377,9 +417,11 @@ async def chat_stream(
         # SearchResult를 dict로 변환
         chunks_dict = [_serialize_search_result(chunk) for chunk in chunks]
 
-        # 스트리밍 답변 생성
+        # 스트리밍 답변 생성 (동기 함수를 비동기로 실행)
         async def stream_response():
-            result = generator.generate_answer(request.message, chunks_dict)
+            result = await asyncio.to_thread(
+                generator.generate_answer, request.message, chunks_dict
+            )
             yield result['answer']
 
         return StreamingResponse(

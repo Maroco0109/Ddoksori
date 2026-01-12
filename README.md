@@ -354,6 +354,15 @@ graph TB
 | | Nginx | - | 리버스 프록시 및 SSL 종료 |
 | | Docker Volume | - | 데이터 영속성 |
 
+### 2.7. AI 모델 및 파라미터 상세
+
+| 구분 | 모델/알고리즘 | 주요 파라미터 | 역할 |
+|---|---|---|---|
+| **LLM** | GPT-4o-mini | Temperature=0.3 | 최종 답변 생성 및 구조화 |
+| **Dense Embedding** | intfloat/multilingual-e5-large | Dimension=1024 | 의미 기반 벡터 검색 (Semantic Search) |
+| **Sparse Embedding** | naver/splade-cocondenser-ensembledistil | - | 키워드 매칭 보완 (Lexical Match) |
+| **Fusion** | RRF (Reciprocal Rank Fusion) | k=60 | Dense와 Sparse 검색 결과 재순위화 |
+
 ## 3. PR 단위 개발 로드맵
 
 본 프로젝트는 기능 단위로 Pull Request(PR)를 쪼개어 개발하고, 2개의 스프린트로 프로토타입 → 서버화까지 단계적으로 확장합니다.
@@ -528,12 +537,20 @@ python load_all_test_data.py --all
 python backend/scripts/data_loading/embed_all_data.py
 ```
 
+```bash
+# 포트 사용 중인 프로세스 확인
+lsof -i :8000
+
+# 포트 사용 중인 프로세스 종료
+kill -9 [PID]
+```
+
 *참고: 데이터 양에 따라 시간이 소요될 수 있습니다 (약 30분~1시간). 터미널에 "Done"이 출력될 때까지 기다리거나, 별도 터미널에서 실행하세요.*
 
 #### 5단계: 백엔드 서버 실행
 
 ```bash
-cd ../../../backend
+cd backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -545,6 +562,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd frontend
 npm install  # (최초 1회만)
 npm run dev
+```
+
+#### 7단계: CloudBeaver 실행
+
+```bash
+docker-compose up -d cloudbeaver
 ```
 
 ---
@@ -628,6 +651,12 @@ docker exec -t ddoksori_db pg_dump -U postgres -d ddoksori -c > backup.sql
 ```bash
 # 주의: 기존 데이터는 초기화됩니다.
 cat backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
+
+# Windows (PowerShell)
+Get-Content backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
+
+# Windows (Command Prompt)
+type backup.sql | docker exec -i ddoksori_db psql -U postgres -d ddoksori
 ```
 
 ## 6. 문서 및 가이드

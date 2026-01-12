@@ -21,14 +21,14 @@ class TestInputValidation:
     def test_search_invalid_top_k_negative(self, api_client):
         """/search rejects negative top_k"""
         resp = api_client.post("/search", json={"query": "test", "top_k": -1})
-        # May not be validated currently - test for expected behavior
-        # assert resp.status_code in [422, 400]
+        # Pydantic validation: top_k >= 1
+        assert resp.status_code == 422
 
     def test_search_invalid_top_k_zero(self, api_client):
-        """/search handles zero top_k"""
+        """/search rejects zero top_k"""
         resp = api_client.post("/search", json={"query": "test", "top_k": 0})
-        # Should either validate or handle gracefully
-        assert resp.status_code in [200, 400, 422]
+        # Pydantic validation: top_k >= 1
+        assert resp.status_code == 422
 
     def test_search_malformed_json(self, api_client):
         """/search rejects malformed JSON"""
@@ -40,10 +40,10 @@ class TestInputValidation:
         assert resp.status_code == 422
 
     def test_search_empty_string_query(self, api_client):
-        """/search handles empty query string"""
+        """/search rejects empty query string"""
         resp = api_client.post("/search", json={"query": "", "top_k": 5})
-        # Should either reject or return empty results
-        assert resp.status_code in [200, 400, 422]
+        # Pydantic validation: query min_length=1
+        assert resp.status_code == 422
 
 
 class TestCORS:

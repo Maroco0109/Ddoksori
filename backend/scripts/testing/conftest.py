@@ -46,9 +46,12 @@ def db_connection():
         f"password={os.getenv('DB_PASSWORD', 'postgres')}"
     )
 
-    conn = psycopg.connect(conninfo)
-    yield conn
-    conn.close()
+    try:
+        conn = psycopg.connect(conninfo)
+        yield conn
+        conn.close()
+    except psycopg.OperationalError as e:
+        pytest.skip(f"PostgreSQL 연결 실패: {e}")
 
 
 @pytest.fixture(scope="function")
@@ -136,8 +139,20 @@ def pytest_collection_modifyitems(config, items):
     Pytest hook to modify test collection
 
     Automatically skips tests requiring OpenAI API key if not configured.
+    Also skips Docker tests if Docker is not available.
     """
     skip_no_api_key = pytest.mark.skip(reason="OPENAI_API_KEY not configured")
+    skip_docker = pytest.mark.skip(reason="Docker 환경이 실행되지 않음")
+
+    # Check Docker availability
+    docker_available = False
+    try:
+        import docker
+        client = docker.from_env()
+        client.ping()
+        docker_available = True
+    except Exception:
+        pass
 
     for item in items:
         # Skip tests that need API key if not available
@@ -145,3 +160,7 @@ def pytest_collection_modifyitems(config, items):
             # Check if test explicitly requires API key
             if "test_chat" in item.name and "no_api_key" not in item.name:
                 item.add_marker(skip_no_api_key)
+
+        # Skip Docker tests if Docker is not available
+        if not docker_available and "docker" in item.keywords:
+            item.add_marker(skip_docker)
