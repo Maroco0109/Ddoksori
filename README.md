@@ -497,9 +497,37 @@ cp backend/.env.example backend/.env
 docker-compose up --build
 ```
 
-#### Windows (PowerShell) - 로컬 개발 환경 (권장)
+#### Windows (PowerShell) - Docker 전체 실행 (권장)
 
-DB는 Docker로 실행하고, Backend/Frontend는 로컬에서 실행하는 방식입니다.
+모든 서비스를 Docker로 실행하는 방식입니다. Windows 한글 로케일 환경에서 발생할 수 있는 인코딩 문제를 방지합니다.
+
+```powershell
+# 1. 환경 변수 설정 (최초 1회)
+Copy-Item backend/.env.example backend/.env
+
+# 2. 전체 서비스 시작 (DB + Backend + Frontend)
+docker-compose -f docker-compose.windows.yml up --build
+
+# 3. DB 복원 (최초 1회, backup.sql 필요 - 새 터미널에서 실행)
+docker cp backup.sql ddoksori_db:/tmp/backup.sql
+docker exec ddoksori_db psql -U postgres -d ddoksori -f /tmp/backup.sql
+
+# 4. 복원 확인
+docker exec ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM documents;"
+```
+
+**접속 정보:**
+
+- **Frontend (사용자 UI)**: [http://localhost:5173](http://localhost:5173)
+- **Backend API (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+- **CloudBeaver (DB 관리)**: [http://localhost:8978](http://localhost:8978)
+
+#### Windows (PowerShell) - 로컬 개발 환경
+
+DB는 Docker로 실행하고, Backend/Frontend는 로컬에서 실행하는 방식입니다. 코드 수정 시 빠른 반영이 필요한 경우 사용합니다.
+
+> **Note**: Windows 한글 로케일 환경에서 psycopg2 인코딩 오류가 발생할 수 있습니다. 반드시 환경 변수를 설정하세요.
 
 ```powershell
 # 1. 환경 변수 설정 (최초 1회)
@@ -511,8 +539,9 @@ Copy-Item backend/.env.example backend/.env
 # 3. DB 복원 (최초 1회, backup.sql 필요)
 .\scripts\restore_db_windows.ps1
 
-# 4. 백엔드 실행 (새 터미널)
+# 4. 백엔드 실행 (새 터미널) - 인코딩 환경변수 필수!
 $env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 cd backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -521,27 +550,6 @@ cd frontend
 npm install  # (최초 1회)
 npm run dev
 ```
-
-#### Windows (PowerShell) - Docker 전체 실행
-
-모든 서비스를 Docker로 실행하는 방식입니다. (RunPod GPU 연결 시)
-
-```powershell
-# 노트북 환경 (RunPod SSH 터널 필요)
-.\scripts\start_laptop.ps1
-
-# 또는 데스크탑(Local GPU) 환경
-# .\scripts\start_desktop.ps1
-
-# 수동 실행 시 (Windows 전용 설정 사용)
-docker-compose -f docker-compose.windows.yml up --build
-```
-
-**접속 정보:**
-
-- **Frontend (사용자 UI)**: [http://localhost:5173](http://localhost:5173)
-- **Backend API (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **CloudBeaver (DB 관리)**: [http://localhost:8978](http://localhost:8978)
 
 > **Note**: 최초 실행 시에는 DB 스키마 생성과 데이터 로딩이 필요할 수 있습니다. (5.2의 2단계, 3단계 참고)
 
