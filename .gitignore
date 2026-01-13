@@ -58,6 +58,9 @@ models/
 backend/data/law/scripts/_archive
 backend/_archive
 
+# documents
+docs/diagram
+
 
 # Data
 backend/data/counsel/
@@ -68,6 +71,7 @@ backend/data/law/raw
 
 # Backup Data
 backup.sql
+backup_v2.sql
 
 
 # Agents

@@ -2,7 +2,7 @@
 법령 데이터 ETL 파이프라인 v2 + S1-D2
 
 XML 파일을 파싱하여 PostgreSQL에 적재하는 통합 파이프라인
-- law_node 테이블: 법령 계층 구조 (조/항/호/목)
+- law_units 테이블: 법령 계층 구조 (조/항/호/목)
 - documents + chunks 테이블: RAG 벡터 검색용
 - chunk_relations 테이블: 법령 계층 관계
 """
@@ -55,10 +55,10 @@ CREATE TABLE IF NOT EXISTS laws (
   domain              TEXT
 );
 
-CREATE TABLE IF NOT EXISTS law_node (
+CREATE TABLE IF NOT EXISTS law_units (
   doc_id                 TEXT PRIMARY KEY,
   law_id                 TEXT NOT NULL REFERENCES laws(law_id) ON DELETE CASCADE,
-  parent_id              TEXT REFERENCES law_node(doc_id),
+  parent_id              TEXT REFERENCES law_units(doc_id),
   level                  TEXT NOT NULL,
   is_indexable           BOOLEAN NOT NULL DEFAULT TRUE,
   article_no             TEXT,
@@ -82,12 +82,12 @@ CREATE TABLE IF NOT EXISTS law_node (
   updated_at             TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_law_node_law_id ON law_node(law_id);
-CREATE INDEX IF NOT EXISTS idx_law_node_parent_id ON law_node(parent_id);
-CREATE INDEX IF NOT EXISTS idx_law_node_level ON law_node(level);
-CREATE INDEX IF NOT EXISTS idx_law_node_is_indexable ON law_node(is_indexable);
-CREATE INDEX IF NOT EXISTS idx_law_node_law_article ON law_node(law_id, article_no);
-CREATE INDEX IF NOT EXISTS idx_law_node_search_stage ON law_node(search_stage);
+CREATE INDEX IF NOT EXISTS idx_law_units_law_id ON law_units(law_id);
+CREATE INDEX IF NOT EXISTS idx_law_units_parent_id ON law_units(parent_id);
+CREATE INDEX IF NOT EXISTS idx_law_units_level ON law_units(level);
+CREATE INDEX IF NOT EXISTS idx_law_units_is_indexable ON law_units(is_indexable);
+CREATE INDEX IF NOT EXISTS idx_law_units_law_article ON law_units(law_id, article_no);
+CREATE INDEX IF NOT EXISTS idx_law_units_search_stage ON law_units(search_stage);
 """
 
 
@@ -112,45 +112,7 @@ ON CONFLICT (law_id) DO UPDATE SET
 """
 
 
-UPSERT_LAW_NODE_SQL = """
-INSERT INTO law_node (
-  doc_id, law_id, parent_id,
-  level, is_indexable,
-  article_no, article_title, paragraph_no, item_no, subitem_no,
-  path, text, amendment_note,
-  section_path, chapter_no, chapter_name, section_no, section_name, search_stage,
-  ref_citations_internal, ref_citations_external, mentioned_laws
-) VALUES (
-  %(doc_id)s, %(law_id)s, %(parent_id)s,
-  %(level)s, %(is_indexable)s,
-  %(article_no)s, %(article_title)s, %(paragraph_no)s, %(item_no)s, %(subitem_no)s,
-  %(path)s, %(text)s, %(amendment_note)s,
-  %(section_path)s::jsonb, %(chapter_no)s, %(chapter_name)s, %(section_no)s, %(section_name)s, %(search_stage)s,
-  %(ref_citations_internal)s::jsonb, %(ref_citations_external)s::jsonb, %(mentioned_laws)s::jsonb
-)
-ON CONFLICT (doc_id) DO UPDATE SET
-  law_id=EXCLUDED.law_id,
-  parent_id=EXCLUDED.parent_id,
-  level=EXCLUDED.level,
-  is_indexable=EXCLUDED.is_indexable,
-  article_no=EXCLUDED.article_no,
-  article_title=EXCLUDED.article_title,
-  paragraph_no=EXCLUDED.paragraph_no,
-  item_no=EXCLUDED.item_no,
-  subitem_no=EXCLUDED.subitem_no,
-  path=EXCLUDED.path,
-  text=EXCLUDED.text,
-  amendment_note=EXCLUDED.amendment_note,
-  section_path=EXCLUDED.section_path,
-  chapter_no=EXCLUDED.chapter_no,
-  chapter_name=EXCLUDED.chapter_name,
-  section_no=EXCLUDED.section_no,
-  section_name=EXCLUDED.section_name,
-  search_stage=EXCLUDED.search_stage,
-  ref_citations_internal=EXCLUDED.ref_citations_internal,
-  ref_citations_external=EXCLUDED.ref_citations_external,
-  mentioned_laws=EXCLUDED.mentioned_laws;
-"""
+
 
 # RAG 테이블용 SQL
 UPSERT_DOCUMENT_SQL = """
@@ -264,8 +226,8 @@ def extract_law_info(nodes: List[Dict[str, Any]], xml_path: Optional[str] = None
     }
 
 
-def extract_law_node_row(node: Dict[str, Any]) -> Dict[str, Any]:
-    """노드를 law_node 테이블 적재용 딕셔너리로 변환"""
+def extract_law_unit_row(node: Dict[str, Any]) -> Dict[str, Any]:
+    """노드를 law_units 테이블 적재용 딕셔너리로 변환"""
     # search_stage 결정
     level = node.get("level", "")
     is_indexable = node.get("is_indexable", False)
@@ -322,8 +284,8 @@ def create_document_for_law(law_info: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def create_chunk_for_node(node: Dict[str, Any], chunk_index: int, total_indexable: int) -> Optional[Dict[str, Any]]:
-    """law_node를 chunks 테이블용 딕셔너리로 변환 (indexable 노드만)"""
+def create_chunk_for_unit(node: Dict[str, Any], chunk_index: int, total_indexable: int) -> Optional[Dict[str, Any]]:
+    """law_units 노드를 chunks 테이블용 딕셔너리로 변환 (indexable 노드만)"""
     if not node.get("is_indexable", False):
         return None
 
@@ -339,7 +301,7 @@ def create_chunk_for_node(node: Dict[str, Any], chunk_index: int, total_indexabl
     doc_id = node.get("doc_id", "")
     text = node.get("text", "")
 
-    # chunk_id: law_node의 doc_id를 그대로 사용 (중복 방지)
+    # chunk_id: law_units의 doc_id를 그대로 사용 (중복 방지)
     chunk_id = doc_id
 
     # doc_id는 law_id (documents 테이블의 doc_id와 연결)
@@ -376,7 +338,7 @@ def create_chunk_relation(parent_node: Dict[str, Any], child_node: Dict[str, Any
     if not relation_type:
         return None
 
-    # chunk_id는 law_node의 doc_id
+    # chunk_id는 law_units의 doc_id
     parent_chunk_id = parent_node.get("doc_id")
     child_chunk_id = child_node.get("doc_id")
 
@@ -391,10 +353,82 @@ def create_chunk_relation(parent_node: Dict[str, Any], child_node: Dict[str, Any
     }
 
 
+def insert_law_units(conn: psycopg.Connection, nodes: List[Dict[str, Any]]):
+    """법령 노드(law_units) 대량 적재 (COPY 사용)"""
+    if not nodes:
+        return
+
+    # Deferrable constraints 설정 (트랜잭션 내에서 FK 검사 지연)
+    # parent_id가 아직 삽입되지 않은 노드를 참조할 수 있으므로 필수
+    with conn.cursor() as cur:
+        cur.execute("SET CONSTRAINTS ALL DEFERRED;")
+
+    columns = [
+        "doc_id", "law_id", "parent_id", "level", "is_indexable",
+        "article_no", "article_title", "paragraph_no", "item_no", "subitem_no",
+        "path", "text", "amendment_note",
+        "section_path", "chapter_no", "chapter_name", "section_no", "section_name", "search_stage",
+        "ref_citations_internal", "ref_citations_external", "mentioned_laws"
+    ]
+
+    # 부모를 먼저 삽입하기 위해 level별로 정렬: chapter/section → article → paragraph → item → subitem
+    level_order = {
+        'chapter': 0,
+        'section': 1,
+        'article': 2,
+        'paragraph': 3,
+        'item': 4,
+        'subitem': 5,
+    }
+
+    def node_sort_key(node):
+        """계층 순서대로 정렬 (부모 먼저)"""
+        level = node.get("level", "article")
+        return level_order.get(level, 99)
+
+    sorted_nodes = sorted(nodes, key=node_sort_key)
+
+    with conn.cursor() as cur:
+        with cur.copy(f"COPY law_units ({', '.join(columns)}) FROM STDIN (FORMAT BINARY)") as copy:
+            for node in sorted_nodes:
+                law_unit_row = extract_law_unit_row(node)
+                if not law_unit_row["doc_id"]:
+                    continue
+                
+                # psycopg.copy_from_sequence는 튜플 리스트를 기대
+                # JSONB 필드는 미리 직렬화
+                row_values = (
+                    law_unit_row["doc_id"],
+                    law_unit_row["law_id"],
+                    law_unit_row["parent_id"],
+                    law_unit_row["level"],
+                    law_unit_row["is_indexable"],
+                    law_unit_row["article_no"],
+                    law_unit_row["article_title"],
+                    law_unit_row["paragraph_no"],
+                    law_unit_row["item_no"],
+                    law_unit_row["subitem_no"],
+                    law_unit_row["path"],
+                    law_unit_row["text"],
+                    law_unit_row["amendment_note"],
+                    law_unit_row["section_path"], # Already JSON string
+                    law_unit_row["chapter_no"],
+                    law_unit_row["chapter_name"],
+                    law_unit_row["section_no"],
+                    law_unit_row["section_name"],
+                    law_unit_row["search_stage"],
+                    law_unit_row["ref_citations_internal"], # Already JSON string
+                    law_unit_row["ref_citations_external"], # Already JSON string
+                    law_unit_row["mentioned_laws"], # Already JSON string
+                )
+                copy.write_row(row_values)
+    print(f"  [law_units] 적재 완료: {len(sorted_nodes)}개 노드")
+
+
 def load_xml_to_db(
     xml_path: str,
     *,
-    batch_size: int = 2000,
+    batch_size: int = 2000, # Not used for law_units anymore, but kept for other tables
     strategy: Optional[Any] = None,
     load_rag_tables: bool = True
 ) -> int:
@@ -405,7 +439,7 @@ def load_xml_to_db(
         xml_path: XML 파일 경로
         batch_size: 배치 크기
         strategy: ChunkingStrategy 인스턴스 (None이면 자동 생성)
-        load_rag_tables: True면 documents/chunks도 함께 로드, False면 law_node만 로드
+        load_rag_tables: True면 documents/chunks도 함께 로드, False면 law_units만 로드
 
     Returns:
         적재된 노드 수
@@ -427,6 +461,9 @@ def load_xml_to_db(
     if not law_info or not law_info.get("law_id"):
         print("경고: 법령 기본 정보를 추출할 수 없습니다.")
         return 0
+    
+    law_id = law_info["law_id"]
+    law_name = law_info["law_name"]
 
     # 데이터 무결성 검증: parent_id 참조 검증
     node_ids = {n.get("doc_id") for n in nodes if n.get("doc_id")}
@@ -459,50 +496,19 @@ def load_xml_to_db(
             # This allows inserting nodes in any order
             cur.execute("SET CONSTRAINTS ALL DEFERRED;")
 
-            # 1. 법령 정보 upsert (laws 테이블)
-            print(f"  [laws] 법령 정보 적재: {law_info['law_name']}")
+            # 1. 기존 데이터 삭제 (법령 단위)
+            # laws 테이블에서 삭제하면 law_units도 CASCADE 삭제됨
+            print(f"  [laws] 기존 법령 데이터 삭제 (law_id: {law_id})")
+            cur.execute("DELETE FROM laws WHERE law_id = %s", (law_id,))
+
+            # 2. 법령 정보 upsert (laws 테이블)
+            print(f"  [laws] 법령 정보 적재: {law_name}")
             cur.execute(UPSERT_LAW_SQL, law_info)
 
-            # 2. law_node 노드 배치 적재
-            # 부모를 먼저 삽입하기 위해 level별로 정렬: chapter/section → article → paragraph → item → subitem
-            level_order = {
-                'chapter': 0,
-                'section': 1,
-                'article': 2,
-                'paragraph': 3,
-                'item': 4,
-                'subitem': 5,
-            }
-
-            def node_sort_key(node):
-                """계층 순서대로 정렬 (부모 먼저)"""
-                level = node.get("level", "article")
-                return level_order.get(level, 99)
-
-            sorted_nodes = sorted(nodes, key=node_sort_key)
-
-            law_node_buffer: List[Dict[str, Any]] = []
-            loaded_count = 0
-
-            for node in sorted_nodes:
-                law_node_row = extract_law_node_row(node)
-                if not law_node_row["doc_id"]:
-                    continue
-
-                law_node_buffer.append(law_node_row)
-
-                if len(law_node_buffer) >= batch_size:
-                    cur.executemany(UPSERT_LAW_NODE_SQL, law_node_buffer)
-                    loaded_count += len(law_node_buffer)
-                    law_node_buffer.clear()
-                    print(f"  [law_node] 적재 중: {loaded_count}/{len(sorted_nodes)}")
-
-            # 남은 버퍼 flush
-            if law_node_buffer:
-                cur.executemany(UPSERT_LAW_NODE_SQL, law_node_buffer)
-                loaded_count += len(law_node_buffer)
-
-            print(f"  [law_node] 적재 완료: {loaded_count}개 노드")
+            # 4. 법령 노드 적재 (law_units)
+            print(f"  [law_units] 적재 시작 ({len(nodes)}개)")
+            insert_law_units(conn, nodes)
+            loaded_count = len(nodes)
 
             # 3. RAG 테이블 로딩 (documents + chunks + chunk_relations)
             if load_rag_tables:
@@ -519,7 +525,7 @@ def load_xml_to_db(
 
                 chunk_buffer: List[Dict[str, Any]] = []
                 for idx, node in enumerate(indexable_nodes):
-                    chunk_row = create_chunk_for_node(node, idx, total_indexable)
+                    chunk_row = create_chunk_for_unit(node, idx, total_indexable)
                     if chunk_row:
                         chunk_buffer.append(chunk_row)
 
@@ -555,7 +561,8 @@ def load_xml_to_db(
                 print(f"    [chunk_relations] {len([n for n in nodes if n.get('parent_id')])}개 관계 적재")
 
         conn.commit()
-        print(f"✓ 전체 적재 완료: {loaded_count}개 law_node 노드")
+        conn.commit()
+        print(f"✓ 전체 적재 완료: {loaded_count}개 law_units 노드")
         return loaded_count
 
 
