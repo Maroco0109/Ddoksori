@@ -40,8 +40,10 @@ Write-Host "  OK: File copied" -ForegroundColor Green
 
 # 4. psql로 복원 실행
 Write-Host "[4/4] Restoring database (this may take a while)..." -ForegroundColor Yellow
-# Use ON_ERROR_STOP=off to continue despite non-fatal DROP errors (e.g., DROP INDEX for non-existent indexes on fresh DB)
-docker exec ddoksori_db psql -U postgres -d ddoksori -v ON_ERROR_STOP=off -f /tmp/backup.sql 2>&1 | Out-Null
+# Temporarily allow errors (psql outputs warnings to stderr for DROP on non-existent objects)
+$ErrorActionPreference = "Continue"
+docker exec ddoksori_db psql -U postgres -d ddoksori -f /tmp/backup.sql 2>&1 | Out-Null
+$ErrorActionPreference = "Stop"
 
 # 5. 결과 검증
 Write-Host ""
