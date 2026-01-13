@@ -157,7 +157,12 @@ async def health_check():
         checker.close()
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        # Safe string conversion for Windows CP949/EUC-KR locale issues
+        try:
+            error_msg = str(e)
+        except UnicodeDecodeError:
+            error_msg = repr(e)
+        return {"status": "unhealthy", "error": error_msg}
 
 
 @app.post("/search")
