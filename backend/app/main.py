@@ -38,7 +38,8 @@ db_config = {
     'port': int(os.getenv('DB_PORT', 5432)),
     'database': os.getenv('DB_NAME', 'ddoksori'),
     'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'postgres')
+    'password': os.getenv('DB_PASSWORD', 'postgres'),
+    'client_encoding': 'UTF8'  # Ensure UTF-8 encoding for Korean text
 }
 
 # RAG 컴포넌트 설정
