@@ -49,7 +49,7 @@ export default function LoginModal() {
       >
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-dark-navy">가입/로그인</h2>
+            <h2 className="text-2xl font-bold text-dark-navy">1초 만에 시작하기</h2>
             <p className="text-sm text-gray-purple mt-1">
               간편하게 소셜 계정으로 시작하세요
             </p>

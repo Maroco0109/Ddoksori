@@ -81,7 +81,7 @@ export default function RootLayout() {
                 onClick={() => setIsAuthModalOpen(true)}
                 className="bg-dark-navy text-white px-6 sm:px-7 md:px-8 py-2 sm:py-2.5 md:py-3 rounded-full text-xs sm:text-sm md:text-base font-semibold hover:bg-mint-green transition-all"
               >
-                가입/로그인
+                1초 만에 시작하기
               </button>
             </div>
           </div>
