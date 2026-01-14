@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 기존 테이블 삭제 (개발 환경용)
 DROP TABLE IF EXISTS law_citation_map CASCADE;
 DROP TABLE IF EXISTS law_version CASCADE;
-DROP TABLE IF EXISTS law_node CASCADE;
+DROP TABLE IF EXISTS law_units CASCADE;
 DROP TABLE IF EXISTS laws CASCADE;
 DROP TABLE IF EXISTS chunk_relations CASCADE;
 DROP TABLE IF EXISTS chunks CASCADE;
@@ -128,12 +128,12 @@ COMMENT ON COLUMN laws.law_id IS '법령 고유 ID (법제처 법령ID)';
 COMMENT ON COLUMN laws.enforcement_date IS '현재 시행일자 (최신 버전 기준)';
 
 -- ============================================
--- 5. law_node 테이블: 법령 계층 구조
+-- 5. law_units 테이블: 법령 계층 구조
 -- ============================================
-CREATE TABLE law_node (
+CREATE TABLE law_units (
     doc_id VARCHAR(255) PRIMARY KEY,
     law_id VARCHAR(255) NOT NULL REFERENCES laws(law_id) ON DELETE CASCADE,
-    parent_id VARCHAR(255) REFERENCES law_node(doc_id) DEFERRABLE INITIALLY DEFERRED,  -- 상위 노드 (article → paragraph → item → subitem)
+    parent_id VARCHAR(255) REFERENCES law_units(doc_id) DEFERRABLE INITIALLY DEFERRED,  -- 상위 노드 (article → paragraph → item → subitem)
 
     level VARCHAR(50) NOT NULL,  -- 'article', 'paragraph', 'item', 'subitem', 'chapter', 'section'
     is_indexable BOOLEAN NOT NULL DEFAULT TRUE,  -- 검색 가능 여부
@@ -170,19 +170,19 @@ CREATE TABLE law_node (
 );
 
 -- 인덱스 생성
-CREATE INDEX idx_law_node_law_id ON law_node(law_id);
-CREATE INDEX idx_law_node_parent_id ON law_node(parent_id);
-CREATE INDEX idx_law_node_level ON law_node(level);
-CREATE INDEX idx_law_node_is_indexable ON law_node(is_indexable);
-CREATE INDEX idx_law_node_law_article ON law_node(law_id, article_no);
-CREATE INDEX idx_law_node_section_path ON law_node USING GIN(section_path);
-CREATE INDEX idx_law_node_search_stage ON law_node(search_stage);
+CREATE INDEX idx_law_units_law_id ON law_units(law_id);
+CREATE INDEX idx_law_units_parent_id ON law_units(parent_id);
+CREATE INDEX idx_law_units_level ON law_units(level);
+CREATE INDEX idx_law_units_is_indexable ON law_units(is_indexable);
+CREATE INDEX idx_law_units_law_article ON law_units(law_id, article_no);
+CREATE INDEX idx_law_units_section_path ON law_units USING GIN(section_path);
+CREATE INDEX idx_law_units_search_stage ON law_units(search_stage);
 
 -- 코멘트 추가
-COMMENT ON TABLE law_node IS '법령 계층 구조 테이블: 조/항/호/목 단위의 법령 노드';
-COMMENT ON COLUMN law_node.level IS '노드 수준: article(조), paragraph(항), item(호), subitem(목), chapter(장), section(절)';
-COMMENT ON COLUMN law_node.search_stage IS '검색 단계: stage1(조 수준 검색), stage2(항/호/목 정밀 검색)';
-COMMENT ON COLUMN law_node.path IS '전체 계층 경로 (예: "전자상거래법 제17조 제1항 제2호")';
+COMMENT ON TABLE law_units IS '법령 계층 구조 테이블: 조/항/호/목 단위의 법령 노드';
+COMMENT ON COLUMN law_units.level IS '노드 수준: article(조), paragraph(항), item(호), subitem(목), chapter(장), section(절)';
+COMMENT ON COLUMN law_units.search_stage IS '검색 단계: stage1(조 수준 검색), stage2(항/호/목 정밀 검색)';
+COMMENT ON COLUMN law_units.path IS '전체 계층 경로 (예: "전자상거래법 제17조 제1항 제2호")';
 
 -- ============================================
 -- 6. law_version 테이블: 법령 버전 관리
@@ -214,18 +214,18 @@ CREATE TABLE law_citation_map (
     citation_id SERIAL PRIMARY KEY,
     source_type VARCHAR(50) NOT NULL,  -- 'mediation_case', 'counsel_case', 'criteria_rule'
     source_id VARCHAR(255) NOT NULL,  -- doc_id or chunk_id
-    law_node_id VARCHAR(255) NOT NULL REFERENCES law_node(doc_id) ON DELETE CASCADE,
+    law_unit_id VARCHAR(255) NOT NULL REFERENCES law_units(doc_id) ON DELETE CASCADE,
     citation_type VARCHAR(50),  -- 'direct' (직접 인용), 'related' (연관), 'applied' (적용)
     confidence FLOAT DEFAULT 1.0,  -- 연결 신뢰도 (0.0 ~ 1.0, 자동/수동 구분)
     created_by VARCHAR(50),  -- 'manual', 'auto', 'semi-auto'
     created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(source_type, source_id, law_node_id, citation_type),
+    UNIQUE(source_type, source_id, law_unit_id, citation_type),
     CHECK (confidence >= 0.0 AND confidence <= 1.0)
 );
 
 -- 인덱스 생성
 CREATE INDEX idx_law_citation_source ON law_citation_map(source_type, source_id);
-CREATE INDEX idx_law_citation_law_node ON law_citation_map(law_node_id);
+CREATE INDEX idx_law_citation_law_unit ON law_citation_map(law_unit_id);
 CREATE INDEX idx_law_citation_type ON law_citation_map(citation_type);
 
 -- 코멘트 추가
@@ -400,8 +400,8 @@ CREATE TRIGGER update_laws_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_law_node_updated_at
-    BEFORE UPDATE ON law_node
+CREATE TRIGGER update_law_units_updated_at
+    BEFORE UPDATE ON law_units
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -520,7 +520,7 @@ BEGIN
     RAISE NOTICE '';
     RAISE NOTICE '생성된 법령 테이블 (S1-D2):';
     RAISE NOTICE '  - laws: 법령 메타데이터';
-    RAISE NOTICE '  - law_node: 법령 계층 구조 (조/항/호/목)';
+    RAISE NOTICE '  - law_units: 법령 계층 구조 (조/항/호/목)';
     RAISE NOTICE '  - law_version: 법령 버전 관리';
     RAISE NOTICE '  - law_citation_map: 사례-법령 연결';
     RAISE NOTICE '';

@@ -80,7 +80,7 @@ class TestDockerStack:
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
-                  AND table_name IN ('documents', 'chunks', 'laws', 'law_node');
+                  AND table_name IN ('documents', 'chunks', 'laws', 'law_units');
             """
         ], capture_output=True, text=True)
 

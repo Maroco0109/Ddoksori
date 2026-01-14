@@ -1,7 +1,7 @@
 """
 로드된 데이터 검증 스크립트 (S1-D2 Enhanced)
 
-documents/chunks/law_node 테이블에 로드된 데이터를 검증합니다.
+documents/chunks/law_units 테이블에 로드된 데이터를 검증합니다.
 argparse 지원: --law, --criteria, --dispute, --counsel, --all
 """
 import os
@@ -236,20 +236,20 @@ def verify_laws(conn: psycopg.Connection):
             print(f"  - {row[0]} (시행: {row[1]}, {row[2]})")
 
 
-def verify_law_nodes(conn: psycopg.Connection):
-    """law_node 테이블 검증 (S1-D2)"""
-    print("\n=== Law_Node 테이블 검증 (S1-D2) ===")
+def verify_law_units(conn: psycopg.Connection):
+    """law_units 테이블 검증 (S1-D2)"""
+    print("\n=== Law_Units 테이블 검증 (S1-D2) ===")
 
     with conn.cursor() as cur:
         # 전체 노드 수
-        cur.execute("SELECT COUNT(*) FROM law_node")
+        cur.execute("SELECT COUNT(*) FROM law_units")
         total = cur.fetchone()[0]
-        print(f"전체 law_node 수: {total}")
+        print(f"전체 law_units 수: {total}")
 
         # level별 통계
         cur.execute("""
             SELECT level, COUNT(*) as count
-            FROM law_node
+            FROM law_units
             GROUP BY level
             ORDER BY count DESC
         """)
@@ -260,7 +260,7 @@ def verify_law_nodes(conn: psycopg.Connection):
         # search_stage별 통계
         cur.execute("""
             SELECT search_stage, COUNT(*) as count
-            FROM law_node
+            FROM law_units
             WHERE search_stage IS NOT NULL
             GROUP BY search_stage
             ORDER BY count DESC
@@ -272,7 +272,7 @@ def verify_law_nodes(conn: psycopg.Connection):
         # indexable 통계
         cur.execute("""
             SELECT is_indexable, COUNT(*) as count
-            FROM law_node
+            FROM law_units
             GROUP BY is_indexable
         """)
         print("\nis_indexable 통계:")
@@ -282,17 +282,17 @@ def verify_law_nodes(conn: psycopg.Connection):
 
 
 def verify_law_hierarchy(conn: psycopg.Connection):
-    """law_node 계층 구조 무결성 검증 (S1-D2)"""
-    print("\n=== Law_Node 계층 구조 무결성 검증 ===")
+    """law_units 계층 구조 무결성 검증 (S1-D2)"""
+    print("\n=== Law_Units 계층 구조 무결성 검증 ===")
 
     with conn.cursor() as cur:
         # 1. parent_id 참조 무결성
         cur.execute("""
             SELECT COUNT(*)
-            FROM law_node ln1
+            FROM law_units ln1
             WHERE ln1.parent_id IS NOT NULL
             AND NOT EXISTS (
-                SELECT 1 FROM law_node ln2 WHERE ln2.doc_id = ln1.parent_id
+                SELECT 1 FROM law_units ln2 WHERE ln2.doc_id = ln1.parent_id
             )
         """)
         orphan_nodes = cur.fetchone()[0]
@@ -307,8 +307,8 @@ def verify_law_hierarchy(conn: psycopg.Connection):
                 parent.level as parent_level,
                 child.level as child_level,
                 COUNT(*) as count
-            FROM law_node child
-            JOIN law_node parent ON child.parent_id = parent.doc_id
+            FROM law_units child
+            JOIN law_units parent ON child.parent_id = parent.doc_id
             GROUP BY parent.level, child.level
             ORDER BY count DESC
         """)
@@ -325,7 +325,7 @@ def verify_law_2stage_search(conn: psycopg.Connection):
         # stage1 (article-level) 검증
         cur.execute("""
             SELECT COUNT(*)
-            FROM law_node
+            FROM law_units
             WHERE level = 'article' AND search_stage != 'stage1'
         """)
         wrong_stage1 = cur.fetchone()[0]
@@ -337,7 +337,7 @@ def verify_law_2stage_search(conn: psycopg.Connection):
         # stage2 (paragraph/item/subitem) 검증
         cur.execute("""
             SELECT COUNT(*)
-            FROM law_node
+            FROM law_units
             WHERE level IN ('paragraph', 'item', 'subitem')
             AND is_indexable = TRUE
             AND search_stage != 'stage2'
@@ -350,8 +350,8 @@ def verify_law_2stage_search(conn: psycopg.Connection):
 
 
 def verify_law_rag_integration(conn: psycopg.Connection):
-    """law_node와 RAG 테이블 통합 검증 (S1-D2)"""
-    print("\n=== Law_Node ↔ RAG 통합 검증 ===")
+    """law_units와 RAG 테이블 통합 검증 (S1-D2)"""
+    print("\n=== Law_Units ↔ RAG 통합 검증 ===")
 
     with conn.cursor() as cur:
         # 1. documents 테이블에 law 타입 문서 존재 확인
@@ -373,19 +373,19 @@ def verify_law_rag_integration(conn: psycopg.Connection):
         law_chunks = cur.fetchone()[0]
         print(f"chunks 테이블의 law 청크: {law_chunks}개")
 
-        # 3. law_node의 indexable 노드와 chunks 개수 비교
+        # 3. law_units의 indexable 노드와 chunks 개수 비교
         cur.execute("""
             SELECT COUNT(*)
-            FROM law_node
+            FROM law_units
             WHERE is_indexable = TRUE
         """)
         indexable_nodes = cur.fetchone()[0]
-        print(f"law_node의 indexable 노드: {indexable_nodes}개")
+        print(f"law_units의 indexable 노드: {indexable_nodes}개")
 
         if law_chunks == indexable_nodes:
-            print("✓ law_node (indexable) 개수와 chunks 개수 일치")
+            print("✓ law_units (indexable) 개수와 chunks 개수 일치")
         else:
-            print(f"⚠️  law_node (indexable) {indexable_nodes}개 vs chunks {law_chunks}개 불일치")
+            print(f"⚠️  law_units (indexable) {indexable_nodes}개 vs chunks {law_chunks}개 불일치")
 
         # 4. chunk_relations에 법령 계층 관계 존재 확인
         cur.execute("""
@@ -413,7 +413,7 @@ def verify_law_sample_queries(conn: psycopg.Connection):
         # 샘플 1: 특정 법령의 조문 조회
         cur.execute("""
             SELECT doc_id, level, article_no, paragraph_no, path, LEFT(text, 60) as text_preview
-            FROM law_node
+            FROM law_units
             WHERE law_id = (SELECT law_id FROM laws LIMIT 1)
             AND level = 'article'
             AND is_indexable = TRUE
@@ -426,8 +426,8 @@ def verify_law_sample_queries(conn: psycopg.Connection):
         # 샘플 2: 특정 조문의 하위 항/호 조회
         cur.execute("""
             SELECT child.doc_id, child.level, child.path, LEFT(child.text, 60) as text_preview
-            FROM law_node child
-            JOIN law_node parent ON child.parent_id = parent.doc_id
+            FROM law_units child
+            JOIN law_units parent ON child.parent_id = parent.doc_id
             WHERE parent.level = 'article'
             AND child.level IN ('paragraph', 'item')
             AND child.is_indexable = TRUE
@@ -484,7 +484,7 @@ Examples:
                 print("법령 데이터 검증 (S1-D2)")
                 print("=" * 60)
                 verify_laws(conn)
-                verify_law_nodes(conn)
+                verify_law_units(conn)
                 verify_law_hierarchy(conn)
                 verify_law_2stage_search(conn)
                 verify_law_rag_integration(conn)

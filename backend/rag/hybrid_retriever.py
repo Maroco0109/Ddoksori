@@ -368,3 +368,127 @@ class HybridRetriever:
             해당 사례의 모든 청크 정보 리스트
         """
         return self.rag_retriever.get_case_chunks(case_uid)
+
+    def search_by_doc_type(
+        self,
+        query: str,
+        doc_type: str,
+        top_k: int = 5
+    ) -> List[SearchResult]:
+        """
+        특정 doc_type만 검색
+
+        Args:
+            query: 검색 쿼리
+            doc_type: 문서 유형 (law, mediation_case, counsel_case, criteria_* 등)
+            top_k: 반환할 결과 수
+
+        Returns:
+            List[SearchResult]: 해당 doc_type의 검색 결과
+        """
+        return self.search(
+            query=query,
+            top_k=top_k,
+            doc_type_filter=doc_type
+        )
+
+    def search_all_sections(
+        self,
+        query: str,
+        dispute_k: int = 3,
+        counsel_k: int = 3,
+        law_k: int = 3,
+        criteria_k: int = 3
+    ) -> Dict[str, List[SearchResult]]:
+        """
+        4개 섹션 데이터 일괄 검색 (간소화 버전)
+
+        StructuredRetriever를 사용하지 않고 HybridRetriever만으로 검색.
+        법령/기준의 2단계 검색은 지원하지 않음 (StructuredRetriever 사용 권장)
+
+        Args:
+            query: 검색 쿼리
+            dispute_k: 분쟁조정사례 검색 수
+            counsel_k: 상담사례 검색 수
+            law_k: 법령 검색 수
+            criteria_k: 기준 검색 수
+
+        Returns:
+            {
+                'disputes': List[SearchResult],
+                'counsels': List[SearchResult],
+                'laws': List[SearchResult],
+                'criteria': List[SearchResult]
+            }
+        """
+        return {
+            'disputes': self.search_by_doc_type(query, 'mediation_case', dispute_k),
+            'counsels': self.search_by_doc_type(query, 'counsel_case', counsel_k),
+            'laws': self.search_by_doc_type(query, 'law', law_k),
+            'criteria': self._search_criteria(query, criteria_k)
+        }
+
+    def _search_criteria(self, query: str, top_k: int = 3) -> List[SearchResult]:
+        """
+        기준(criteria) 검색
+
+        criteria_* doc_type들을 모두 검색
+        """
+        candidate_count = top_k * 3
+
+        # Dense search
+        dense_results = []
+        try:
+            query_embedding = self.rag_retriever.embed_query(query)
+
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        c.chunk_type,
+                        c.content,
+                        d.title AS doc_title,
+                        d.doc_type,
+                        d.category_path,
+                        1 - (c.embedding <=> %s::vector) AS similarity,
+                        d.source_org,
+                        d.url,
+                        d.collected_at,
+                        d.metadata
+                    FROM chunks c
+                    JOIN documents d ON c.doc_id = d.doc_id
+                    WHERE
+                        c.embedding IS NOT NULL
+                        AND c.drop = FALSE
+                        AND d.doc_type LIKE 'criteria_%%'
+                    ORDER BY c.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (query_embedding, query_embedding, candidate_count)
+                )
+
+                for row in cur.fetchall():
+                    metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
+                    dense_results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        chunk_type=row[2],
+                        content=row[3],
+                        doc_title=row[4],
+                        doc_type=row[5],
+                        category_path=row[6] or [],
+                        similarity=float(row[7]),
+                        source_org=row[8],
+                        url=row[9],
+                        collected_at=row[10].isoformat() if row[10] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json
+                    ))
+        except Exception as e:
+            print(f"Criteria dense search failed: {e}")
+
+        return dense_results[:top_k]

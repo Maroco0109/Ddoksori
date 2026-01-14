@@ -1,6 +1,7 @@
 """
 똑소리 프로젝트 - RAG Answer Generator (S1-1 MVP)
 작성일: 2026-01-11
+수정일: 2026-01-13 - 4섹션 구조화 응답 추가
 LLM 기반 구조화된 답변 생성
 """
 import os
@@ -17,6 +18,51 @@ SECTIONS = [
     "3. 관련 법적 근거",
     "4. 다음 행동 체크리스트"
 ]
+
+# 4섹션 구조화 응답용 섹션
+STRUCTURED_SECTIONS = [
+    "1. 추천 기관",
+    "2. 유사 사례",
+    "3. 관련 법령",
+    "4. 관련 기준"
+]
+
+# 기관 추천을 위한 키워드
+CONTENT_KEYWORDS = [
+    "게임", "영화", "콘텐츠", "앱", "어플", "애플리케이션",
+    "음악", "웹툰", "만화", "동영상", "영상", "스트리밍",
+    "OTT", "넷플릭스", "왓챠", "디즈니", "유튜브",
+    "인앱", "결제", "아이템", "캐시", "다이아", "루비",
+    "디지털", "다운로드", "구독", "VOD", "e북", "전자책"
+]
+
+INDIVIDUAL_KEYWORDS = [
+    "중고", "직거래", "당근", "당근마켓", "번개장터", "중고나라",
+    "개인간", "개인거래", "개인 판매", "개인판매자",
+    "직접 거래", "직접거래", "만나서", "택배거래",
+    "중고거래", "중고 거래", "세컨핸드", "second hand"
+]
+
+AGENCY_INFO = {
+    'KCA': {
+        'name': '한국소비자원',
+        'full_name': '한국소비자원 소비자분쟁조정위원회',
+        'description': '일반 소비자 분쟁 조정 (사업자 대 소비자)',
+        'url': 'https://www.kca.go.kr'
+    },
+    'ECMC': {
+        'name': '전자거래분쟁조정위원회',
+        'full_name': '전자거래분쟁조정위원회',
+        'description': '전자거래 및 개인간 거래 분쟁 조정',
+        'url': 'https://www.ecmc.or.kr'
+    },
+    'KCDRC': {
+        'name': '콘텐츠분쟁조정위원회',
+        'full_name': '콘텐츠분쟁조정위원회',
+        'description': '콘텐츠(게임, 영화, 음악 등) 관련 분쟁 조정',
+        'url': 'https://www.kcdrc.kr'
+    }
+}
 
 
 class RAGGenerator:
@@ -271,5 +317,359 @@ class RAGGenerator:
             'chunks_used': 0,
             'model': self.model,
             'has_sufficient_evidence': False,
+            'clarifying_questions': []
+        }
+
+    # ========================================
+    # 4섹션 구조화 응답 생성 메서드
+    # ========================================
+
+    def determine_agency(self, query: str) -> Dict:
+        """
+        질문을 분석하여 적절한 기관 추천
+
+        Args:
+            query: 사용자 질문
+
+        Returns:
+            {
+                'agency': 'KCA' | 'ECMC' | 'KCDRC',
+                'agency_info': {...},
+                'dispute_type': '1:N' | '1:1' | 'contents',
+                'reason': '추천 이유',
+                'confidence': 0.0 ~ 1.0
+            }
+        """
+        query_lower = query.lower()
+
+        # 콘텐츠 관련 키워드 체크
+        content_matches = [kw for kw in CONTENT_KEYWORDS if kw in query_lower]
+        if content_matches:
+            return {
+                'agency': 'KCDRC',
+                'agency_info': AGENCY_INFO['KCDRC'],
+                'dispute_type': 'contents',
+                'reason': f"콘텐츠 관련 분쟁으로 판단됩니다 (키워드: {', '.join(content_matches[:3])})",
+                'confidence': min(0.6 + len(content_matches) * 0.1, 1.0)
+            }
+
+        # 개인간 거래 키워드 체크
+        individual_matches = [kw for kw in INDIVIDUAL_KEYWORDS if kw in query_lower]
+        if individual_matches:
+            return {
+                'agency': 'ECMC',
+                'agency_info': AGENCY_INFO['ECMC'],
+                'dispute_type': '1:1',
+                'reason': f"개인간 거래 분쟁으로 판단됩니다 (키워드: {', '.join(individual_matches[:3])})",
+                'confidence': min(0.6 + len(individual_matches) * 0.1, 1.0)
+            }
+
+        # 기본값: KCA (일반 소비자 분쟁)
+        return {
+            'agency': 'KCA',
+            'agency_info': AGENCY_INFO['KCA'],
+            'dispute_type': '1:N',
+            'reason': '일반 소비자 분쟁으로 판단됩니다 (사업자 대 소비자)',
+            'confidence': 0.7
+        }
+
+    def generate_structured_answer(
+        self,
+        query: str,
+        agency_info: Dict,
+        disputes: List[Dict],
+        counsels: List[Dict],
+        laws: List[Dict],
+        criteria: List[Dict]
+    ) -> Dict:
+        """
+        4개 섹션을 포함한 구조화된 응답 생성
+
+        Args:
+            query: 사용자 질문
+            agency_info: 기관 추천 정보
+            disputes: 분쟁조정사례 리스트
+            counsels: 상담사례 리스트
+            laws: 관련 법령 리스트
+            criteria: 관련 기준 리스트
+
+        Returns:
+            {
+                'answer': str,
+                'agency': {...},
+                'disputes': [...],
+                'counsels': [...],
+                'laws': [...],
+                'criteria': [...],
+                'chunks_used': int,
+                'model': str,
+                'has_sufficient_evidence': bool,
+                'clarifying_questions': List[str],
+                # Logging metadata
+                'system_prompt': str,
+                'user_prompt': str,
+                'prompt_tokens': int,
+                'completion_tokens': int,
+                'response_time_ms': float
+            }
+        """
+        # 총 청크 수 계산
+        total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
+
+        # 충분한 근거 여부 판단
+        has_evidence = total_chunks > 0 and (len(disputes) > 0 or len(laws) > 0)
+        clarifying_questions = []
+
+        if not has_evidence:
+            clarifying_questions = [
+                "분쟁 발생 날짜가 언제인가요?",
+                "구입한 제품/서비스의 구체적인 명칭은 무엇인가요?",
+                "어떤 문제가 발생했는지 자세히 설명해 주시겠어요?"
+            ]
+
+        if not self.use_llm:
+            result = self._generate_structured_stub(
+                query, agency_info, disputes, counsels, laws, criteria
+            )
+            # Add empty logging metadata for stub mode
+            result.update({
+                'system_prompt': '',
+                'user_prompt': '',
+                'prompt_tokens': 0,
+                'completion_tokens': 0,
+                'response_time_ms': 0.0
+            })
+            return result
+
+        # LLM 프롬프트 생성
+        system_prompt = self._get_structured_system_prompt()
+        user_prompt = self._build_structured_prompt(
+            query, agency_info, disputes, counsels, laws, criteria
+        )
+
+        # LLM 호출 with timing
+        start_time = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
+        )
+        response_time_ms = (time.time() - start_time) * 1000
+
+        answer_text = response.choices[0].message.content
+
+        # Extract token usage
+        usage = response.usage
+        prompt_tokens = usage.prompt_tokens if usage else 0
+        completion_tokens = usage.completion_tokens if usage else 0
+
+        return {
+            'answer': answer_text,
+            'agency': agency_info,
+            'disputes': disputes,
+            'counsels': counsels,
+            'laws': laws,
+            'criteria': criteria,
+            'chunks_used': total_chunks,
+            'model': self.model,
+            'has_sufficient_evidence': has_evidence,
+            'clarifying_questions': clarifying_questions,
+            # Logging metadata
+            'system_prompt': system_prompt,
+            'user_prompt': user_prompt,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
+            'response_time_ms': response_time_ms
+        }
+
+    def _get_structured_system_prompt(self) -> str:
+        """4섹션 구조화 응답용 시스템 프롬프트"""
+        return """당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
+
+역할:
+- 검색된 사례, 법령, 기준을 기반으로 정보를 제공합니다
+- 법률 자문이나 확정적인 판단을 하지 않습니다
+- 근거가 부족할 경우 추가 질문을 통해 정보를 수집합니다
+
+답변 구조:
+""" + DISCLAIMER + """
+
+1. 추천 기관
+   - 제공된 기관 정보를 바탕으로 추천 이유를 설명합니다
+
+2. 유사 사례
+   - 분쟁조정사례: 법적 효력이 있는 조정 결과입니다
+   - 상담사례: 참고용 정보입니다
+
+3. 관련 법령
+   - 해당 분쟁에 적용될 수 있는 법령을 설명합니다
+   - 법령명과 조항을 정확히 인용합니다
+
+4. 관련 기준
+   - 분쟁조정기준(별표)에서 관련 내용을 안내합니다
+
+금지 사항:
+- "~해야 합니다", "~입니다" 같은 단정적 표현
+- 법률 판단이나 예측
+- 개인정보 요구
+"""
+
+    def _build_structured_prompt(
+        self,
+        query: str,
+        agency_info: Dict,
+        disputes: List[Dict],
+        counsels: List[Dict],
+        laws: List[Dict],
+        criteria: List[Dict]
+    ) -> str:
+        """4섹션 구조화 프롬프트 생성"""
+        lines = [f"사용자 질문: {query}\n"]
+
+        # 섹션 1: 추천 기관
+        lines.append("=" * 50)
+        lines.append("[섹션 1: 추천 기관 정보]")
+        lines.append(f"추천 기관: {agency_info.get('agency', 'KCA')}")
+        lines.append(f"기관명: {agency_info.get('agency_info', {}).get('full_name', '')}")
+        lines.append(f"분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
+        lines.append(f"추천 이유: {agency_info.get('reason', '')}")
+        lines.append("")
+
+        # 섹션 2: 유사 사례
+        lines.append("=" * 50)
+        lines.append("[섹션 2: 유사 사례]")
+
+        lines.append("\n## 분쟁조정사례 (법적 효력 있음)")
+        if disputes:
+            for i, case in enumerate(disputes[:3], 1):
+                lines.append(f"\n{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}")
+                if case.get('decision_date'):
+                    lines.append(f"   결정일: {case['decision_date']}")
+                lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
+                content = case.get('content', '')[:300]
+                lines.append(f"   내용: {content}...")
+        else:
+            lines.append("   관련 분쟁조정사례를 찾지 못했습니다.")
+
+        lines.append("\n## 상담사례 (참고용)")
+        if counsels:
+            for i, case in enumerate(counsels[:3], 1):
+                lines.append(f"\n{i}. {case.get('doc_title', '제목 없음')}")
+                lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
+                content = case.get('content', '')[:200]
+                lines.append(f"   내용: {content}...")
+        else:
+            lines.append("   관련 상담사례를 찾지 못했습니다.")
+
+        # 섹션 3: 관련 법령
+        lines.append("\n" + "=" * 50)
+        lines.append("[섹션 3: 관련 법령]")
+        if laws:
+            for i, law in enumerate(laws[:3], 1):
+                law_name = law.get('law_name', '법령')
+                full_path = law.get('full_path', '')
+                lines.append(f"\n{i}. {law_name} {full_path}")
+                lines.append(f"   유사도: {law.get('similarity', 0):.2%}")
+                text = law.get('text', law.get('content', ''))[:300]
+                lines.append(f"   내용: {text}...")
+        else:
+            lines.append("   관련 법령을 찾지 못했습니다.")
+
+        # 섹션 4: 관련 기준
+        lines.append("\n" + "=" * 50)
+        lines.append("[섹션 4: 관련 기준 (분쟁조정기준)]")
+        if criteria:
+            for i, crit in enumerate(criteria[:3], 1):
+                source_label = crit.get('source_label', '기준')
+                category = crit.get('category', '')
+                item = crit.get('item', crit.get('item_group', ''))
+                path = f"{category} > {item}" if category and item else category or item or ''
+
+                lines.append(f"\n{i}. [{source_label}] {path}")
+                lines.append(f"   유사도: {crit.get('similarity', 0):.2%}")
+                text = crit.get('unit_text', crit.get('content', ''))[:300]
+                lines.append(f"   내용: {text}...")
+        else:
+            lines.append("   관련 기준을 찾지 못했습니다.")
+
+        lines.append("\n" + "=" * 50)
+        lines.append("\n위 정보를 바탕으로 사용자의 질문에 답변해 주세요.")
+        lines.append("각 섹션별로 정리하여 답변하고, 출처를 명확히 밝혀 주세요.")
+
+        return "\n".join(lines)
+
+    def _generate_structured_stub(
+        self,
+        query: str,
+        agency_info: Dict,
+        disputes: List[Dict],
+        counsels: List[Dict],
+        laws: List[Dict],
+        criteria: List[Dict]
+    ) -> Dict:
+        """Stub 모드 (LLM 없이) 구조화된 응답 생성"""
+        lines = [DISCLAIMER, "\n"]
+
+        # 섹션 1: 추천 기관
+        lines.append("## 1. 추천 기관")
+        lines.append(f"- 기관: {agency_info.get('agency_info', {}).get('full_name', '한국소비자원')}")
+        lines.append(f"- 분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
+        lines.append(f"- 추천 이유: {agency_info.get('reason', '일반 소비자 분쟁')}")
+        lines.append("")
+
+        # 섹션 2: 유사 사례
+        lines.append("## 2. 유사 사례")
+        lines.append("\n### 분쟁조정사례 (법적 효력 있음)")
+        for i, case in enumerate(disputes[:3], 1):
+            lines.append(f"{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}")
+            lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
+        if not disputes:
+            lines.append("   관련 사례 없음")
+
+        lines.append("\n### 상담사례 (참고용)")
+        for i, case in enumerate(counsels[:3], 1):
+            lines.append(f"{i}. {case.get('doc_title', '제목 없음')}")
+            lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
+        if not counsels:
+            lines.append("   관련 사례 없음")
+        lines.append("")
+
+        # 섹션 3: 관련 법령
+        lines.append("## 3. 관련 법령")
+        for i, law in enumerate(laws[:3], 1):
+            law_name = law.get('law_name', '법령')
+            full_path = law.get('full_path', '')
+            lines.append(f"{i}. {law_name} {full_path}")
+            lines.append(f"   유사도: {law.get('similarity', 0):.2%}")
+        if not laws:
+            lines.append("   관련 법령 없음")
+        lines.append("")
+
+        # 섹션 4: 관련 기준
+        lines.append("## 4. 관련 기준")
+        for i, crit in enumerate(criteria[:3], 1):
+            source_label = crit.get('source_label', '기준')
+            category = crit.get('category', '')
+            item = crit.get('item', '')
+            lines.append(f"{i}. [{source_label}] {category} > {item}")
+            lines.append(f"   유사도: {crit.get('similarity', 0):.2%}")
+        if not criteria:
+            lines.append("   관련 기준 없음")
+
+        total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
+
+        return {
+            'answer': "\n".join(lines),
+            'agency': agency_info,
+            'disputes': disputes,
+            'counsels': counsels,
+            'laws': laws,
+            'criteria': criteria,
+            'chunks_used': total_chunks,
+            'model': 'stub',
+            'has_sufficient_evidence': total_chunks > 0,
             'clarifying_questions': []
         }

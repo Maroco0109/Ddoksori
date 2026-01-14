@@ -41,6 +41,7 @@ Thumbs.db
 # Logs directory
 logs/
 *.log
+backend/results/
 
 # Database
 *.db
@@ -58,21 +59,28 @@ models/
 backend/data/law/scripts/_archive
 backend/_archive
 
+# documents
+docs/diagram
+
 
 # Data
 backend/data/counsel/
 backend/data/criteria/
 backend/data/dispute/
 backend/data/law/raw
+backend/data/evaluation
 
 
 # Backup Data
 backup.sql
+backup_v2.sql
+backup_v3.sql
 
 
 # Agents
 Agents
 .agent
+.claude
 .cursorrules
 AGENTS.md
 CLAUDE.md
