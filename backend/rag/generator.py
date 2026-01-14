@@ -404,30 +404,15 @@ class RAGGenerator:
                 'chunks_used': int,
                 'model': str,
                 'has_sufficient_evidence': bool,
-                'clarifying_questions': List[str]
+                'clarifying_questions': List[str],
+                # Logging metadata
+                'system_prompt': str,
+                'user_prompt': str,
+                'prompt_tokens': int,
+                'completion_tokens': int,
+                'response_time_ms': float
             }
         """
-        if not self.use_llm:
-            return self._generate_structured_stub(
-                query, agency_info, disputes, counsels, laws, criteria
-            )
-
-        # LLM 프롬프트 생성
-        prompt = self._build_structured_prompt(
-            query, agency_info, disputes, counsels, laws, criteria
-        )
-
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self._get_structured_system_prompt()},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3
-        )
-
-        answer_text = response.choices[0].message.content
-
         # 총 청크 수 계산
         total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
 
@@ -442,6 +427,45 @@ class RAGGenerator:
                 "어떤 문제가 발생했는지 자세히 설명해 주시겠어요?"
             ]
 
+        if not self.use_llm:
+            result = self._generate_structured_stub(
+                query, agency_info, disputes, counsels, laws, criteria
+            )
+            # Add empty logging metadata for stub mode
+            result.update({
+                'system_prompt': '',
+                'user_prompt': '',
+                'prompt_tokens': 0,
+                'completion_tokens': 0,
+                'response_time_ms': 0.0
+            })
+            return result
+
+        # LLM 프롬프트 생성
+        system_prompt = self._get_structured_system_prompt()
+        user_prompt = self._build_structured_prompt(
+            query, agency_info, disputes, counsels, laws, criteria
+        )
+
+        # LLM 호출 with timing
+        start_time = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
+        )
+        response_time_ms = (time.time() - start_time) * 1000
+
+        answer_text = response.choices[0].message.content
+
+        # Extract token usage
+        usage = response.usage
+        prompt_tokens = usage.prompt_tokens if usage else 0
+        completion_tokens = usage.completion_tokens if usage else 0
+
         return {
             'answer': answer_text,
             'agency': agency_info,
@@ -452,7 +476,13 @@ class RAGGenerator:
             'chunks_used': total_chunks,
             'model': self.model,
             'has_sufficient_evidence': has_evidence,
-            'clarifying_questions': clarifying_questions
+            'clarifying_questions': clarifying_questions,
+            # Logging metadata
+            'system_prompt': system_prompt,
+            'user_prompt': user_prompt,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
+            'response_time_ms': response_time_ms
         }
 
     def _get_structured_system_prompt(self) -> str:

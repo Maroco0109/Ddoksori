@@ -301,17 +301,15 @@ async def chat(
         laws = search_results['laws']
         criteria = search_results['criteria']
 
-        # 로깅
+        # 로깅: 4섹션 구조화 검색 결과
         total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
-        rag_logger.log_retrieval(
+        rag_logger.log_structured_retrieval(
             entry=log_entry,
-            mode='structured_4section',
-            top_k=request.top_k,
-            embedding_time_ms=0,
-            search_time_ms=0,
-            chunks=[],  # 구조화된 결과는 별도 저장
-            dense_candidates=total_chunks,
-            lexical_candidates=0
+            agency_info=agency_info,
+            disputes=disputes,
+            counsels=counsels,
+            laws=laws,
+            criteria=criteria
         )
 
         if total_chunks == 0:
@@ -346,9 +344,11 @@ async def chat(
         rag_logger.log_llm(
             entry=log_entry,
             model=result['model'],
-            system_prompt='',
-            user_prompt='',
-            response_time_ms=0,
+            system_prompt=result.get('system_prompt', ''),
+            user_prompt=result.get('user_prompt', ''),
+            response_time_ms=result.get('response_time_ms', 0),
+            prompt_tokens=result.get('prompt_tokens', 0),
+            completion_tokens=result.get('completion_tokens', 0),
             has_sufficient_evidence=result.get('has_sufficient_evidence', True),
             clarifying_questions=result.get('clarifying_questions', [])
         )

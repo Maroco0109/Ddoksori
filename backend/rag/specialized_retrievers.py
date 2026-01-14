@@ -545,7 +545,8 @@ class AgencyClassifier:
                 'agency_info': {...},
                 'dispute_type': '1:N' | '1:1' | 'contents',
                 'reason': '추천 이유',
-                'confidence': 0.0 ~ 1.0
+                'confidence': 0.0 ~ 1.0,
+                'matched_keywords': [...]  # 매칭된 키워드 목록
             }
         """
         query_lower = query.lower()
@@ -558,7 +559,8 @@ class AgencyClassifier:
                 'agency_info': self.AGENCIES['KCDRC'],
                 'dispute_type': 'contents',
                 'reason': f"콘텐츠 관련 분쟁으로 판단됩니다 (키워드: {', '.join(content_matches[:3])})",
-                'confidence': min(0.6 + len(content_matches) * 0.1, 1.0)
+                'confidence': min(0.6 + len(content_matches) * 0.1, 1.0),
+                'matched_keywords': content_matches
             }
 
         # 개인간 거래 키워드 체크
@@ -569,7 +571,8 @@ class AgencyClassifier:
                 'agency_info': self.AGENCIES['ECMC'],
                 'dispute_type': '1:1',
                 'reason': f"개인간 거래 분쟁으로 판단됩니다 (키워드: {', '.join(individual_matches[:3])})",
-                'confidence': min(0.6 + len(individual_matches) * 0.1, 1.0)
+                'confidence': min(0.6 + len(individual_matches) * 0.1, 1.0),
+                'matched_keywords': individual_matches
             }
 
         # 기본값: KCA (일반 소비자 분쟁)
@@ -578,7 +581,8 @@ class AgencyClassifier:
             'agency_info': self.AGENCIES['KCA'],
             'dispute_type': '1:N',
             'reason': '일반 소비자 분쟁으로 판단됩니다 (사업자 대 소비자)',
-            'confidence': 0.7
+            'confidence': 0.7,
+            'matched_keywords': []
         }
 
 

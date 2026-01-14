@@ -67,6 +67,76 @@ class ResponseSummary:
     error_message: Optional[str] = None
 
 
+# ============================================================
+# 4-Section Structured Retrieval Logs (for /chat endpoint)
+# ============================================================
+
+@dataclass
+class DomainLog:
+    """기관 추천 로그"""
+    agency: str  # KCA, ECMC, KCDRC
+    dispute_type: str  # 1:N, 1:1, contents
+    reason: str  # Why this agency was chosen
+    confidence: float
+    matched_keywords: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DisputeLog:
+    """분쟁조정 사례 로그"""
+    chunk_id: str
+    doc_id: str
+    doc_title: str
+    source_org: str
+    decision_date: Optional[str]
+    similarity: float
+    content_preview: str  # 200 chars
+
+
+@dataclass
+class CounselLog:
+    """상담 사례 로그"""
+    chunk_id: str
+    doc_id: str
+    doc_title: str
+    source_org: str
+    similarity: float
+    content_preview: str  # 200 chars
+
+
+@dataclass
+class LawLog:
+    """법령 로그"""
+    unit_id: str
+    law_name: str
+    full_path: str  # 제14조 제1항
+    similarity: float
+    text_preview: str  # 200 chars
+
+
+@dataclass
+class CriteriaLog:
+    """기준 로그"""
+    unit_id: str
+    source_label: str
+    category: str
+    industry: str
+    item_group: str
+    item: str
+    similarity: float
+    text_preview: str  # 200 chars
+
+
+@dataclass
+class StructuredRetrievalLog:
+    """4섹션 구조화 검색 로그"""
+    domain: Optional[DomainLog] = None
+    disputes: List[DisputeLog] = field(default_factory=list)
+    counsels: List[CounselLog] = field(default_factory=list)
+    laws: List[LawLog] = field(default_factory=list)
+    criteria: List[CriteriaLog] = field(default_factory=list)
+
+
 @dataclass
 class RAGLogEntry:
     """RAG 파이프라인 전체 로그 엔트리"""
@@ -74,6 +144,7 @@ class RAGLogEntry:
     timestamp: str
     query: str
     retrieval: RetrievalLog = field(default_factory=lambda: RetrievalLog(mode="", top_k=0))
+    structured_retrieval: Optional[StructuredRetrievalLog] = None  # 4-section structured results
     llm: LLMLog = field(default_factory=LLMLog)
     response: ResponseSummary = field(default_factory=ResponseSummary)
     total_time_ms: float = 0.0
@@ -153,6 +224,78 @@ class RAGLogger:
             dense_candidates=dense_candidates,
             lexical_candidates=lexical_candidates,
             chunks=chunk_logs
+        )
+
+    def log_structured_retrieval(
+        self,
+        entry: RAGLogEntry,
+        agency_info: Dict,
+        disputes: List[Dict],
+        counsels: List[Dict],
+        laws: List[Dict],
+        criteria: List[Dict]
+    ) -> None:
+        """Log 4-section structured retrieval results."""
+        domain_log = DomainLog(
+            agency=agency_info.get('agency', ''),
+            dispute_type=agency_info.get('dispute_type', ''),
+            reason=agency_info.get('reason', ''),
+            confidence=agency_info.get('confidence', 0.0),
+            matched_keywords=agency_info.get('matched_keywords', [])
+        )
+
+        dispute_logs = [
+            DisputeLog(
+                chunk_id=d.get('chunk_id', ''),
+                doc_id=d.get('doc_id', ''),
+                doc_title=d.get('doc_title', ''),
+                source_org=d.get('source_org', ''),
+                decision_date=d.get('decision_date'),
+                similarity=d.get('similarity', 0.0),
+                content_preview=(d.get('content') or '')[:200]
+            ) for d in disputes
+        ]
+
+        counsel_logs = [
+            CounselLog(
+                chunk_id=c.get('chunk_id', ''),
+                doc_id=c.get('doc_id', ''),
+                doc_title=c.get('doc_title', ''),
+                source_org=c.get('source_org', ''),
+                similarity=c.get('similarity', 0.0),
+                content_preview=(c.get('content') or '')[:200]
+            ) for c in counsels
+        ]
+
+        law_logs = [
+            LawLog(
+                unit_id=l.get('unit_id', ''),
+                law_name=l.get('law_name', ''),
+                full_path=l.get('full_path', ''),
+                similarity=l.get('similarity', 0.0),
+                text_preview=(l.get('text') or '')[:200]
+            ) for l in laws
+        ]
+
+        criteria_logs = [
+            CriteriaLog(
+                unit_id=cr.get('unit_id', ''),
+                source_label=cr.get('source_label', ''),
+                category=cr.get('category', ''),
+                industry=cr.get('industry', ''),
+                item_group=cr.get('item_group', ''),
+                item=cr.get('item', ''),
+                similarity=cr.get('similarity', 0.0),
+                text_preview=(cr.get('unit_text') or '')[:200]
+            ) for cr in criteria
+        ]
+
+        entry.structured_retrieval = StructuredRetrievalLog(
+            domain=domain_log,
+            disputes=dispute_logs,
+            counsels=counsel_logs,
+            laws=law_logs,
+            criteria=criteria_logs
         )
 
     def log_llm(
