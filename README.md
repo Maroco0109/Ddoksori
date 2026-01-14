@@ -509,25 +509,40 @@ Windows 환경에서는 Docker 네트워크 격리로 인해 임베딩 서버를
 
 > **Note**: 첫 실행 시 KURE-v1 임베딩 모델(~1GB) 다운로드에 2-5분 소요됩니다. 모델은 Docker 볼륨에 캐싱되어 재시작 시 다운로드를 생략합니다.
 
+> **Important**: backup.sql 복원 시 FK(Foreign Key) 순서 문제로 데이터 삽입이 실패할 수 있습니다. 반드시 아래 절차를 따라주세요.
+
 ```powershell
 # 1. 환경 변수 설정 (최초 1회)
 Copy-Item backend/.env.example backend/.env
 # .env 파일에 실제 API Key 설정 필요 (OPENAI_API_KEY 등)
 
-# 2. 전체 서비스 시작 (DB + Embedding + Backend + Frontend)
-docker-compose -f docker-compose.windows.yml up --build
+# 2. 기존 컨테이너/볼륨 완전 삭제 (깨끗한 상태에서 시작)
+docker-compose -f docker-compose.windows.yml down -v
 
-# 3. 임베딩 서버 준비 대기
-# embedding 컨테이너 로그에서 "Application startup complete" 메시지 확인
-# 또는 새 터미널에서 health check:
-curl http://localhost:8001/health
+# 3. DB만 먼저 시작
+docker-compose -f docker-compose.windows.yml up -d db
+Start-Sleep -Seconds 15  # DB 준비 대기
 
-# 4. DB 복원 (최초 1회, backup.sql 필요 - 새 터미널에서 실행)
+# 4. DB 복원 (FK 체크 비활성화 필수!)
 docker cp backup.sql ddoksori_db:/tmp/backup.sql
+docker exec ddoksori_db psql -U postgres -d ddoksori -c "SET session_replication_role = replica;"
 docker exec ddoksori_db psql -U postgres -d ddoksori -f /tmp/backup.sql
+docker exec ddoksori_db psql -U postgres -d ddoksori -c "SET session_replication_role = DEFAULT;"
 
-# 5. 복원 확인
+# 5. 복원 확인 (documents ~16,000, chunks ~74,000 예상)
 docker exec ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM documents;"
+docker exec ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM chunks;"
+
+# 6. 나머지 서비스 시작 (Embedding + Backend + Frontend)
+docker-compose -f docker-compose.windows.yml up -d
+
+# 7. 임베딩 서버 준비 대기 (모델 로딩에 2-5분 소요)
+# 로그 확인: docker logs -f ddoksori_embedding
+# "Application startup complete" 메시지가 나올 때까지 대기
+
+# 8. 서비스 상태 확인
+curl http://localhost:8001/health  # 임베딩 서버
+curl http://localhost:8000/health  # 백엔드
 ```
 
 **서비스 구성 (Windows):**

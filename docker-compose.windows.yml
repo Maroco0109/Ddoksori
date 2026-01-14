@@ -2,6 +2,8 @@ version: '3.8'
 
 services:
   # PostgreSQL 데이터베이스 with pgvector
+  # Note: backup.sql 복원 시 FK 순서 문제를 방지하기 위해 init.sql 마운트 제거
+  # 스키마는 backup.sql에 포함되어 있음
   db:
     image: pgvector/pgvector:pg16
     container_name: ddoksori_db
@@ -13,8 +15,9 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
-      - ./backend/database/schema_v2_final.sql:/docker-entrypoint-initdb.d/02_schema_v2_final.sql
+      # backup.sql 복원 방식 사용 시 아래 마운트 불필요 (스키마 충돌 방지)
+      # - ./backend/database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      # - ./backend/database/schema_v2_final.sql:/docker-entrypoint-initdb.d/02_schema_v2_final.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
