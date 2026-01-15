@@ -16,6 +16,19 @@ from .checkpointer import (
     get_checkpointer,
     get_checkpointer_mode,
 )
+from .nodes import (
+    query_analysis_node,
+    retrieval_node,
+    generation_node,
+    review_node,
+    ask_clarification_node,
+)
+from .graph import (
+    create_chat_graph,
+    get_compiled_graph,
+    get_graph,
+    reset_graph,
+)
 
 __all__ = [
     # State schemas
@@ -28,4 +41,15 @@ __all__ = [
     # Checkpointer
     'get_checkpointer',
     'get_checkpointer_mode',
+    # Node functions
+    'query_analysis_node',
+    'retrieval_node',
+    'generation_node',
+    'review_node',
+    'ask_clarification_node',
+    # Graph
+    'create_chat_graph',
+    'get_compiled_graph',
+    'get_graph',
+    'reset_graph',
 ]
