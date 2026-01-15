@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""
+Review Agent 평가 CLI
+
+Usage:
+    python -m scripts.evaluation.evaluate_review \
+      --golden-set ./data/golden_set/review.jsonl \
+      --output ./results/review_eval.json
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+from datetime import datetime
+from typing import List, Dict
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
+from rag.evaluation import (
+    ReviewMetrics,
+    aggregate_review_results,
+)
+
+
+def load_golden_set(path: str) -> List[Dict]:
+    dataset = []
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if line.strip():
+                dataset.append(json.loads(line))
+    return dataset
+
+
+def print_progress(current: int, total: int, verbose: bool = False):
+    pct = (current / total) * 100
+    if not verbose:
+        bar_len = 30
+        filled = int(bar_len * current / total)
+        bar = '=' * filled + '-' * (bar_len - filled)
+        print(f"\r[{bar}] {pct:.1f}%", end='', flush=True)
+
+
+def print_summary(summary: Dict, elapsed_sec: float):
+    print("\n" + "=" * 55)
+    print("=== Review Agent Evaluation Results ===")
+    print("=" * 55)
+
+    print(f"\nDataset: {summary.get('sample_count', 0)} samples")
+    print(f"Time: {elapsed_sec:.1f}s")
+
+    print(f"\n{'Metric':<35} {'Score':>10} {'Target':>10}")
+    print("-" * 60)
+
+    targets = {
+        'violation_detection_precision': (0.85, '>='),
+        'violation_detection_recall': (0.90, '>='),
+        'false_positive_rate': (0.10, '<='),
+        'binary_accuracy': (0.85, '>='),
+    }
+
+    for metric, (target, op) in targets.items():
+        if metric in summary:
+            score = summary[metric]
+            if op == '>=':
+                status = "OK" if score >= target else "FAIL"
+            else:
+                status = "OK" if score <= target else "FAIL"
+            print(f"{metric:<35} {score:>10.4f} {op}{target:<8.2f}  [{status}]")
+
+    print("=" * 60)
+
+
+def save_results(output_path: str, summary: Dict, detailed_results: List[Dict]):
+    output_data = {
+        'summary': summary,
+        'detailed_results': detailed_results
+    }
+
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
+
+    print(f"\nResults saved to: {output_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Review Agent 평가')
+    parser.add_argument('--golden-set', required=True, help='Golden Set 파일 경로 (JSONL)')
+    parser.add_argument('--output', default='results/review_eval.json', help='결과 저장 경로')
+    parser.add_argument('--verbose', action='store_true', help='상세 로그 출력')
+
+    args = parser.parse_args()
+
+    print(f"Loading golden set: {args.golden_set}")
+    try:
+        golden_set = load_golden_set(args.golden_set)
+    except FileNotFoundError:
+        print(f"Error: Golden set not found: {args.golden_set}")
+        sys.exit(1)
+
+    print(f"Loaded {len(golden_set)} evaluation items")
+
+    metrics = ReviewMetrics()
+    start_time = time.time()
+    results = []
+
+    for i, item in enumerate(golden_set):
+        print_progress(i + 1, len(golden_set), args.verbose)
+
+        try:
+            result = metrics.evaluate_item(
+                item_id=item['id'],
+                answer_text=item['answer_text'],
+                expected_violations=item.get('expected_violations', []),
+                expected_is_violation=item.get('is_violation', False),
+            )
+
+            results.append(result)
+
+            if args.verbose:
+                status = "OK" if result.is_violation_predicted == result.is_violation_expected else "FAIL"
+                print(f"\n  [{item['id']}] Binary: {status}, "
+                      f"Precision: {result.precision:.3f}, "
+                      f"Recall: {result.recall:.3f}")
+
+        except Exception as e:
+            print(f"\n  Error evaluating {item['id']}: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+
+    print()
+
+    total_time = time.time() - start_time
+    summary = aggregate_review_results(results)
+    summary.update({
+        'run_id': f"review_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        'timestamp': datetime.now().isoformat(),
+        'golden_set': args.golden_set,
+        'total_time_seconds': round(total_time, 2),
+    })
+
+    print_summary(summary, total_time)
+
+    detailed_results = [r.to_dict() for r in results]
+    save_results(args.output, summary, detailed_results)
+
+
+if __name__ == "__main__":
+    main()
