@@ -1,12 +1,7 @@
 """
 똑소리 프로젝트 - 답변생성 노드
-작성일: 2026-01-14
 S2-3: RAGGenerator를 활용한 구조화된 답변 생성
-
-답변생성 노드의 역할:
-1. retrieval 결과와 user_query를 기반으로 LLM 답변 생성
-2. RAGGenerator.generate_structured_answer() 호출
-3. 생성된 답변을 draft_answer로 저장 (review 전 초안)
+S2-4: 제한 모드(FSS/K-Medi) 응답 분기 추가
 """
 
 import os
@@ -15,19 +10,41 @@ from typing import Dict, List
 from langchain_core.messages import AIMessage
 
 from ..state import ChatState
+from ...domain import classify_domain, AGENCY_INFO
+
+
+RESTRICTED_RESPONSE_TEMPLATE = """
+본 답변은 정보 제공 목적이며 법률 자문이 아닙니다.
+
+## 주의: 전문가 상담이 필요한 영역입니다
+
+**{agency_full_name}** 관련 분쟁으로 판단됩니다.
+
+### 1. 담당 기관 정보
+- **기관**: {agency_full_name}
+- **웹사이트**: {agency_url}
+- **분야**: {agency_description}
+
+### 2. 관련 유사 사례
+{similar_cases_section}
+
+### 3. 권장 다음 단계
+1. 전문가(변호사, 해당 분야 상담사)와 상담
+2. 관련 서류 및 증빙자료 정리
+3. {agency_name}에 정식 상담/조정 신청 검토
+
+---
+**{restriction_reason}**
+
+본 서비스는 {agency_description} 분쟁에 대해 정보 제공만 가능하며, 구체적인 법률 판단이나 조정 결과를 예측하지 않습니다.
+""".strip()
 
 
 def _get_llm_model() -> str:
-    """LLM 모델명 반환"""
     return os.getenv('LLM_MODEL', 'gpt-4o-mini')
 
 
 def _build_general_response(user_query: str) -> str:
-    """
-    일반 대화에 대한 응답 생성
-    
-    분쟁 상담이 아닌 일반 인사/대화에 대한 응답.
-    """
     greetings = ['안녕', '반가', 'hello', 'hi']
     thanks = ['감사', '고마', 'thanks', 'thank']
     
@@ -44,30 +61,68 @@ def _build_general_response(user_query: str) -> str:
     return "네, 무엇을 도와드릴까요? 소비자 분쟁 관련 상담을 원하시면 자세한 상황을 알려주세요."
 
 
+def _format_similar_cases(disputes: List[Dict], counsels: List[Dict]) -> str:
+    if not disputes and not counsels:
+        return "관련 사례가 없습니다."
+    
+    lines = []
+    
+    if disputes:
+        lines.append("**분쟁조정사례**")
+        for i, case in enumerate(disputes[:2], 1):
+            title = case.get('doc_title', '제목 없음')
+            org = case.get('source_org', '')
+            lines.append(f"{i}. [{org}] {title}")
+    
+    if counsels:
+        if lines:
+            lines.append("")
+        lines.append("**상담사례 (참고용)**")
+        for i, case in enumerate(counsels[:2], 1):
+            title = case.get('doc_title', '제목 없음')
+            lines.append(f"{i}. {title}")
+    
+    return "\n".join(lines)
+
+
+def _build_restricted_response(
+    user_query: str,
+    classification_result,
+    retrieval,
+) -> Dict:
+    agency_code = classification_result.agency
+    agency_info = AGENCY_INFO.get(agency_code, AGENCY_INFO['KCA'])
+    
+    disputes = retrieval.get('disputes', [])[:2] if retrieval else []
+    counsels = retrieval.get('counsels', [])[:2] if retrieval else []
+    
+    similar_cases_section = _format_similar_cases(disputes, counsels)
+    
+    answer = RESTRICTED_RESPONSE_TEMPLATE.format(
+        agency_name=agency_info.get('name', ''),
+        agency_full_name=agency_info.get('full_name', ''),
+        agency_url=agency_info.get('url', ''),
+        agency_description=agency_info.get('description', ''),
+        similar_cases_section=similar_cases_section,
+        restriction_reason=agency_info.get('restriction_reason', ''),
+    )
+    
+    return {
+        'draft_answer': answer,
+        'final_answer': answer,
+        'has_sufficient_evidence': False,
+        'clarifying_questions': [],
+        'messages': [AIMessage(content=answer)],
+        'is_restricted': True,
+        'agency_code': agency_code,
+    }
+
+
 def generation_node(state: ChatState) -> Dict:
-    """
-    답변생성 노드 함수
-    
-    RAGGenerator를 사용하여 구조화된 답변 생성.
-    retrieval 결과가 없으면 빈 답변 생성.
-    
-    Args:
-        state: 현재 ChatState
-        
-    Returns:
-        부분 상태 업데이트 dict:
-        {
-            'draft_answer': str,
-            'has_sufficient_evidence': bool,
-            'clarifying_questions': List[str],
-            'messages': List[AIMessage]  # add_messages reducer로 추가
-        }
-    """
     user_query = state.get('user_query', '')
     query_analysis = state.get('query_analysis')
     retrieval = state.get('retrieval')
     
-    # 일반 대화인 경우
     if query_analysis and query_analysis.get('query_type') == 'general':
         general_response = _build_general_response(user_query)
         return {
@@ -77,7 +132,10 @@ def generation_node(state: ChatState) -> Dict:
             'messages': [AIMessage(content=general_response)],
         }
     
-    # retrieval 결과가 없으면 빈 답변
+    classification = classify_domain(user_query)
+    if classification.is_restricted:
+        return _build_restricted_response(user_query, classification, retrieval or {})
+    
     if not retrieval:
         no_result_msg = "죄송합니다. 관련 정보를 찾을 수 없습니다. 질문을 더 구체적으로 작성해 주시면 도움이 될 것 같습니다."
         return {
@@ -92,16 +150,13 @@ def generation_node(state: ChatState) -> Dict:
         }
     
     try:
-        # RAGGenerator import (지연 import)
         from rag.generator import RAGGenerator
         
         model = _get_llm_model()
         generator = RAGGenerator(model=model, use_llm=True)
         
-        # agency_info 구성
         agency_info = retrieval.get('agency', {})
         if not agency_info:
-            # 기본 agency_info
             agency_info = {
                 'agency': 'KCA',
                 'agency_info': {
@@ -115,7 +170,6 @@ def generation_node(state: ChatState) -> Dict:
                 'confidence': 0.7
             }
         
-        # 구조화된 답변 생성
         result = generator.generate_structured_answer(
             query=user_query,
             agency_info=agency_info,
@@ -137,7 +191,6 @@ def generation_node(state: ChatState) -> Dict:
         }
         
     except Exception as e:
-        # LLM 호출 실패 시 fallback
         print(f"[generation_node] Error: {e}")
         fallback_msg = "죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
         return {

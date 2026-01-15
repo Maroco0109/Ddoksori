@@ -312,12 +312,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setDisputeMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMessageId
-            ? { ...msg, content: response.answer, citations }
+            ? { 
+                ...msg, 
+                content: response.answer, 
+                citations,
+                isRestricted: response.is_restricted,
+                agencyCode: response.agency_code,
+                agencyInfo: response.agency_info,
+              }
             : msg
         )
       );
 
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
+      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,
           type: 'ai' as const,
@@ -392,12 +399,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setDisputeMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMessageId
-            ? { ...msg, content: response.answer, citations }
+            ? { 
+                ...msg, 
+                content: response.answer, 
+                citations,
+                isRestricted: response.is_restricted,
+                agencyCode: response.agency_code,
+                agencyInfo: response.agency_info,
+              }
             : msg
         )
       );
 
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
+      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,
           type: 'ai' as const,
@@ -474,12 +488,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setGeneralMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMessageId
-            ? { ...msg, content: response.answer, citations }
+            ? { 
+                ...msg, 
+                content: response.answer, 
+                citations,
+                isRestricted: response.is_restricted,
+                agencyCode: response.agency_code,
+                agencyInfo: response.agency_info,
+              }
             : msg
         )
       );
 
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
+      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,
           type: 'ai' as const,

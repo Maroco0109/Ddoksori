@@ -48,9 +48,15 @@ export interface SourceMetadata {
   similarity: number;
 }
 
-/**
- * Backend response payload from /chat endpoint
- */
+export interface AgencyInfo {
+  name: string;
+  full_name: string;
+  description: string;
+  url: string;
+  is_restricted?: boolean;
+  restriction_reason?: string;
+}
+
 export interface ChatAPIResponse {
   session_id: string;
   answer: string;
@@ -59,6 +65,9 @@ export interface ChatAPIResponse {
   sources: SourceMetadata[];
   has_sufficient_evidence: boolean;
   clarifying_questions: string[];
+  is_restricted?: boolean;
+  agency_code?: string;
+  agency_info?: AgencyInfo;
 }
 
 // ============================================================================
@@ -88,14 +97,13 @@ export interface Message {
   timestamp: Date;
 }
 
-/**
- * Enhanced message with citation support and safety warnings
- * Extends base Message with API-specific fields
- */
 export interface MessageWithCitations extends Message {
-  citations?: Citation[];           // Extracted citations from answer
-  hasSafetyWarning?: boolean;       // true if this is a safety warning message
-  clarifyingQuestions?: string[];   // Questions to display in warning
+  citations?: Citation[];
+  hasSafetyWarning?: boolean;
+  clarifyingQuestions?: string[];
+  isRestricted?: boolean;
+  agencyCode?: string;
+  agencyInfo?: AgencyInfo;
 }
 
 // ============================================================================
