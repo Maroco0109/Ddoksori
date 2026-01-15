@@ -5,9 +5,10 @@ S2-4: 키워드 기반 기관 분류 로직
 우선순위:
 1. FSS (금융) - 전문가 상담 권유
 2. K_MEDI (의료) - 전문가 상담 권유
-3. KCDRC (콘텐츠)
-4. ECMC (개인간 거래)
-5. KCA (기본값)
+3. KOPICO (개인정보) - 전문가 상담 권유
+4. KCDRC (콘텐츠)
+5. ECMC (개인간 거래)
+6. KCA (기본값)
 """
 
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from .config import (
     INDIVIDUAL_KEYWORDS,
     FINANCE_KEYWORDS,
     MEDICAL_KEYWORDS,
+    PRIVACY_KEYWORDS,
 )
 
 
@@ -36,6 +38,7 @@ class ClassificationResult:
 class DomainClassifier:
     FINANCE_THRESHOLD = 2
     MEDICAL_THRESHOLD = 2
+    PRIVACY_THRESHOLD = 2
     CONTENT_THRESHOLD = 1
     INDIVIDUAL_THRESHOLD = 1
 
@@ -61,6 +64,17 @@ class DomainClassifier:
                 reason=f"의료 관련 분쟁으로 판단됩니다 (키워드: {', '.join(medical_matches[:3])})",
                 confidence=min(0.6 + len(medical_matches) * 0.08, 0.95),
                 matched_keywords=medical_matches,
+                is_restricted=True,
+            )
+
+        privacy_matches = self._find_matches(query_lower, PRIVACY_KEYWORDS)
+        if len(privacy_matches) >= self.PRIVACY_THRESHOLD:
+            return ClassificationResult(
+                agency='KOPICO',
+                dispute_type='privacy',
+                reason=f"개인정보 관련 분쟁으로 판단됩니다 (키워드: {', '.join(privacy_matches[:3])})",
+                confidence=min(0.6 + len(privacy_matches) * 0.08, 0.95),
+                matched_keywords=privacy_matches,
                 is_restricted=True,
             )
 

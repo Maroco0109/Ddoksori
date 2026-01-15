@@ -15,9 +15,9 @@ class AgencyInfoDict(TypedDict, total=False):
     restriction_reason: str
 
 
-AgencyCode = Literal['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI']
+AgencyCode = Literal['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO']
 
-AGENCY_CODES: List[AgencyCode] = ['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI']
+AGENCY_CODES: List[AgencyCode] = ['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO']
 
 AGENCY_INFO: Dict[AgencyCode, AgencyInfoDict] = {
     'KCA': {
@@ -56,6 +56,14 @@ AGENCY_INFO: Dict[AgencyCode, AgencyInfoDict] = {
         'url': 'https://www.k-medi.or.kr',
         'is_restricted': True,
         'restriction_reason': '의료 분쟁은 복잡하고 전문적인 영역으로, 전문가 상담 후 진행을 권장합니다.',
+    },
+    'KOPICO': {
+        'name': '개인정보분쟁조정위원회',
+        'full_name': '개인정보분쟁조정위원회',
+        'description': '개인정보 침해 관련 분쟁 조정 (정보유출, 무단수집, 동의 없는 제3자 제공 등)',
+        'url': 'https://www.kopico.go.kr',
+        'is_restricted': True,
+        'restriction_reason': '개인정보 분쟁은 복잡하고 전문적인 영역으로, 전문가 상담 후 진행을 권장합니다.',
     },
 }
 
@@ -107,4 +115,14 @@ LAW_KEYWORDS: List[str] = [
 CRITERIA_KEYWORDS: List[str] = [
     "기준", "분쟁조정기준", "별표", "해제", "해지", "위약금",
     "환불", "보상", "배상", "수리", "교환", "반품",
+]
+
+PRIVACY_KEYWORDS: List[str] = [
+    "개인정보", "정보유출", "정보침해", "개인정보보호",
+    "유출", "해킹", "스팸", "스미싱", "보이스피싱",
+    "동의", "정보동의", "마케팅동의", "수집동의",
+    "정보삭제", "정보파기", "정보열람", "정보정정",
+    "CCTV", "얼굴인식", "위치정보", "통화기록",
+    "주민번호", "신용정보", "민감정보", "건강정보",
+    "제3자제공", "정보이전", "정보처리",
 ]

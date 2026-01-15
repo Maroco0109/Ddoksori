@@ -36,13 +36,27 @@ GOLDEN_SET: List[GoldenSetItem] = [
     {"query": "진료비 영수증이 실제와 다릅니다", "expected_agency": "K_MEDI", "is_restricted": True},
     {"query": "마취 후유증으로 고통받고 있어요", "expected_agency": "K_MEDI", "is_restricted": True},
 
+    # KOPICO (개인정보) - 12개
+    {"query": "회사에서 내 개인정보를 동의 없이 제3자에게 제공했어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "앱에서 개인정보 정보삭제 요청했는데 거부당함", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "쇼핑몰에서 정보유출 당했어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "마케팅동의 안했는데 광고 문자가 와요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "CCTV 영상이 개인정보 유출로 무단 유포됐어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "회원탈퇴 했는데 개인정보 정보삭제가 안됐어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "동의 없이 위치정보를 수집했어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "개인정보 정보열람 청구 거부당함", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "회사에서 민감정보를 개인정보 무단 수집했어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "해킹으로 개인정보가 유출됐어요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "스팸 문자가 계속 오는데 개인정보 수신거부가 안돼요", "expected_agency": "KOPICO", "is_restricted": True},
+    {"query": "개인정보 정보정정 요청을 거부당했어요", "expected_agency": "KOPICO", "is_restricted": True},
+
     # KCDRC (콘텐츠) - 8개
     {"query": "게임 아이템 결제 환불 요청", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "미성년자 앱 결제 취소하고 싶어요", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "넷플릭스 구독 해지가 안돼요", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "웹툰 서비스 환불 거부당함", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "인앱결제 취소 요청했는데 거절", "expected_agency": "KCDRC", "is_restricted": False},
-    {"query": "OTT 서비스 자동결제 취소 방법", "expected_agency": "KCDRC", "is_restricted": False},
+    {"query": "OTT 서비스 넷플릭스 자동결제 취소 방법", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "모바일 게임 캐시 환불 문제", "expected_agency": "KCDRC", "is_restricted": False},
     {"query": "e북 구매 후 환불이 안됩니다", "expected_agency": "KCDRC", "is_restricted": False},
 
