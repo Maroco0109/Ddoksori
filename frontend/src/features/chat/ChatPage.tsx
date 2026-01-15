@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
-import type { ChatSession, ChatType, DisputeForm, MessageWithCitations } from '@/shared/types';
+import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
 import { Send } from 'lucide-react';
 import { useChatStore } from '@/features/chat/chat.store';
 import { useChatMutation } from './hooks/useChatMutation';
@@ -19,6 +19,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const setStoreSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setStoreChatType = useChatStore((state) => state.setActiveChatType);
   const setChatSessions = useChatStore((state) => state.setChatSessions);
+  const setDisputeFormData = useChatStore((state) => state.setDisputeFormData);
+  const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
 
   // 현재 세션 ID
@@ -126,12 +128,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         console.error('Failed to load session:', e);
       }
     } else {
-      // 새 채팅 시작 - 초기 상태로 리셋
       setSessionId(null);
       setActiveChatType(null);
       setIsFormSubmitted(false);
       setStoreSessionId(null);
       setStoreChatType(null);
+      setBackendSessionId(null);
+      setDisputeFormData(null);
       setDisputeMessages([
         {
           id: 1,
@@ -156,7 +159,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         purchaseAmount: '',
         disputeDetail: ''
       });
-      // 새 상담 시작 시 스크롤은 RootLayout에서 처리
     }
   }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, storeSessionId]);
 
@@ -254,6 +256,16 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       return;
     }
 
+    const formDataForBackend: DisputeFormData = {
+      purchaseDate: disputeForm.purchaseDate,
+      purchasePlace: disputeForm.purchasePlace,
+      purchasePlatform: disputeForm.platform,
+      purchaseItem: disputeForm.purchaseItem,
+      purchaseAmount: disputeForm.purchaseAmount.replace(/,/g, ''),
+      disputeDetails: disputeForm.disputeDetail,
+    };
+    setDisputeFormData(formDataForBackend);
+
     // 폼 데이터를 메시지로 변환
     const platformInfo = disputeForm.platform ? `\n플랫폼: ${disputeForm.platform}` : '';
     const formMessage: MessageWithCitations = {
@@ -280,13 +292,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      // Call backend API
       const response = await chatMutation.mutateAsync({
         message: formMessage.content,
+        chat_type: 'dispute',
         top_k: 5,
       });
 
-      // Simulate streaming for better UX
       let streamedText = '';
       await simulateStreaming(response.answer, (chunk) => {
         streamedText += chunk;
@@ -297,7 +308,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         );
       });
 
-      // After streaming, extract citations
       const citations = extractCitations(response.answer, response.sources);
       setDisputeMessages((prev) =>
         prev.map((msg) =>
@@ -307,7 +317,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         )
       );
 
-      // Handle safety guardrails
       if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,
@@ -363,13 +372,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      // Call backend API
       const response = await chatMutation.mutateAsync({
         message: newMessage.content,
+        chat_type: 'dispute',
         top_k: 5,
       });
 
-      // Simulate streaming for better UX
       let streamedText = '';
       await simulateStreaming(response.answer, (chunk) => {
         streamedText += chunk;
@@ -380,7 +388,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         );
       });
 
-      // After streaming, extract citations
       const citations = extractCitations(response.answer, response.sources);
       setDisputeMessages((prev) =>
         prev.map((msg) =>
@@ -390,7 +397,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         )
       );
 
-      // Handle safety guardrails
       if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,
@@ -448,13 +454,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setGeneralMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      // Call backend API
       const response = await chatMutation.mutateAsync({
         message: newMessage.content,
+        chat_type: 'general',
         top_k: 5,
       });
 
-      // Simulate streaming for better UX
       let streamedText = '';
       await simulateStreaming(response.answer, (chunk) => {
         streamedText += chunk;
@@ -465,7 +470,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         );
       });
 
-      // After streaming, extract citations
       const citations = extractCitations(response.answer, response.sources);
       setGeneralMessages((prev) =>
         prev.map((msg) =>
@@ -475,7 +479,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         )
       );
 
-      // Handle safety guardrails
       if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0) {
         const warningMessage: MessageWithCitations = {
           id: aiMessageId + 1,

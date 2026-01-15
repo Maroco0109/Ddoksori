@@ -1,11 +1,12 @@
 import os
 import time
 import asyncio
+import uuid
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict, Any, Generator
+from typing import Optional, List, Dict, Any, Generator, Literal, cast
 from dotenv import load_dotenv
 # from fastmcp import FastMCP
 
@@ -13,6 +14,7 @@ from rag import RAGRetriever, HybridRetriever, RAGGenerator, SearchResult
 from rag.specialized_retrievers import StructuredRetriever
 from rag.logger import get_rag_logger
 from utils.embedding_connection import get_embedding_api_url
+from app.orchestrator import get_graph, create_initial_state
 
 # 환경 변수 로드
 load_dotenv()
@@ -94,6 +96,9 @@ def _serialize_search_result(chunk: SearchResult) -> Dict[str, Any]:
 # Request/Response 모델
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, description="사용자 질문")
+    session_id: Optional[str] = Field(default=None, description="멀티턴 세션 ID (없으면 새 세션 생성)")
+    chat_type: Literal['dispute', 'general'] = Field(default='dispute', description="상담 유형")
+    onboarding: Optional[Dict[str, str]] = Field(default=None, description="온보딩 폼 데이터")
     top_k: Optional[int] = Field(default=5, ge=1, le=100, description="검색 결과 수")
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
@@ -155,14 +160,13 @@ class SimilarCases(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    session_id: str = Field(..., description="세션 ID (멀티턴 대화용)")
     answer: str
     chunks_used: int
     model: str
     sources: List[dict]
-    # S1-1 Safety Guardrails
     has_sufficient_evidence: bool = True
     clarifying_questions: List[str] = []
-    # 4섹션 구조화 응답
     domain: Optional[AgencyRecommendation] = None
     similar_cases: Optional[SimilarCases] = None
     related_laws: Optional[List[LawReference]] = None
@@ -259,50 +263,37 @@ async def search(
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(
-    request: ChatRequest,
-    retriever=Depends(get_retriever)
-):
+async def chat(request: ChatRequest):
     """
-    RAG 기반 챗봇 응답 생성 (4섹션 구조화 응답)
-
-    응답 구조:
-    1. 추천 기관 (domain): KCA/ECMC/KCDRC
-    2. 유사 사례 (similar_cases): disputes + counsels
-    3. 관련 법령 (related_laws): 2단계 검색
-    4. 관련 기준 (related_criteria): 2단계 검색
+    LangGraph 기반 멀티턴 챗봇 응답 생성
+    
+    워크플로우: query_analysis → retrieval → generation → review → END
+    session_id가 없으면 새 세션 생성, 있으면 기존 세션 이어서 대화
     """
     start_time = time.time()
     log_entry = rag_logger.create_entry(query=request.message)
 
     try:
-        # StructuredRetriever를 사용하여 4개 섹션 일괄 검색
-        structured_retriever = StructuredRetriever(db_config, embed_api_url)
-        structured_retriever.connect()
-
-        try:
-            # 4개 섹션 데이터 일괄 검색
-            search_results = structured_retriever.search_all_sections(
-                query=request.message,
-                dispute_k=3,
-                counsel_k=3,
-                law_k=3,
-                criteria_k=3
-            )
-        finally:
-            structured_retriever.close()
-
-        # 기관 추천
-        agency_info = search_results['agency']
-
-        # 검색 결과 추출
-        disputes = search_results['disputes']
-        counsels = search_results['counsels']
-        laws = search_results['laws']
-        criteria = search_results['criteria']
-
-        # 로깅: 4섹션 구조화 검색 결과
-        total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        initial_state = create_initial_state(
+            user_query=request.message,
+            chat_type=request.chat_type,
+            onboarding=cast(Any, request.onboarding),
+        )
+        
+        graph = get_graph()
+        config = cast(Any, {"configurable": {"thread_id": session_id}})
+        
+        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+        
+        retrieval = final_state.get('retrieval') or {}
+        agency_info = retrieval.get('agency', {})
+        disputes = retrieval.get('disputes', [])
+        counsels = retrieval.get('counsels', [])
+        laws = retrieval.get('laws', [])
+        criteria = retrieval.get('criteria', [])
+        
         rag_logger.log_structured_retrieval(
             entry=log_entry,
             agency_info=agency_info,
@@ -311,93 +302,47 @@ async def chat(
             laws=laws,
             criteria=criteria
         )
-
-        if total_chunks == 0:
-            rag_logger.log_response(
-                entry=log_entry,
-                answer="",
-                chunks_used=0,
-                sources_count=0,
-                status="no_results"
-            )
-            rag_logger.finalize(log_entry, start_time)
-            rag_logger.save(log_entry)
-
-            return ChatResponse(
-                answer="죄송합니다. 관련된 분쟁조정 사례를 찾을 수 없습니다. 다른 질문을 해주시겠어요?",
-                chunks_used=0,
-                model=generator.model,
-                sources=[],
-                domain=AgencyRecommendation(**agency_info)
-            )
-
-        # LLM으로 구조화된 답변 생성
-        result = generator.generate_structured_answer(
-            query=request.message,
-            agency_info=agency_info,
-            disputes=disputes,
-            counsels=counsels,
-            laws=laws,
-            criteria=criteria
-        )
-
-        rag_logger.log_llm(
-            entry=log_entry,
-            model=result['model'],
-            system_prompt=result.get('system_prompt', ''),
-            user_prompt=result.get('user_prompt', ''),
-            response_time_ms=result.get('response_time_ms', 0),
-            prompt_tokens=result.get('prompt_tokens', 0),
-            completion_tokens=result.get('completion_tokens', 0),
-            has_sufficient_evidence=result.get('has_sufficient_evidence', True),
-            clarifying_questions=result.get('clarifying_questions', [])
-        )
-
-        # 기존 sources 형식으로도 제공 (하위 호환성)
-        sources = []
-        for d in disputes:
-            sources.append({
-                'doc_id': d.get('doc_id'),
-                'chunk_id': d.get('chunk_id'),
-                'chunk_type': d.get('chunk_type'),
-                'source_org': d.get('source_org'),
-                'url': d.get('url'),
-                'decision_date': d.get('decision_date'),
-                'doc_title': d.get('doc_title'),
-                'similarity': d.get('similarity', 0)
-            })
-
-        # 4섹션 구조화 응답 변환
-        domain_response = AgencyRecommendation(**agency_info)
-
-        similar_cases_response = SimilarCases(
-            disputes=[CaseReference(**d) for d in disputes],
-            counsels=[CaseReference(**c) for c in counsels]
-        )
-
-        laws_response = [LawReference(**l) for l in laws]
-        criteria_response = [CriteriaReference(**c) for c in criteria]
-
-        # Log response
+        
+        answer = final_state.get('final_answer', '')
+        sources = final_state.get('sources', [])
+        has_evidence = final_state.get('has_sufficient_evidence', True)
+        questions = final_state.get('clarifying_questions', [])
+        
         rag_logger.log_response(
             entry=log_entry,
-            answer=result['answer'],
-            chunks_used=result['chunks_used'],
+            answer=answer,
+            chunks_used=len(sources),
             sources_count=len(sources),
             status="success"
         )
-
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
-
+        
+        domain_response = None
+        if agency_info:
+            try:
+                domain_response = AgencyRecommendation(**agency_info)
+            except Exception:
+                pass
+        
+        similar_cases_response = None
+        if disputes or counsels:
+            similar_cases_response = SimilarCases(
+                disputes=[CaseReference(**d) for d in disputes],
+                counsels=[CaseReference(**c) for c in counsels]
+            )
+        
+        laws_response = [LawReference(**law) for law in laws] if laws else None
+        criteria_response = [CriteriaReference(**c) for c in criteria] if criteria else None
+        
         return ChatResponse(
-            answer=result['answer'],
-            chunks_used=result['chunks_used'],
-            model=result['model'],
+            session_id=session_id,
+            answer=answer,
+            chunks_used=len(sources),
+            model='gpt-4o-mini',
             sources=sources,
-            has_sufficient_evidence=result.get('has_sufficient_evidence', True),
-            clarifying_questions=result.get('clarifying_questions', []),
-            # 4섹션 구조화 응답
+            has_sufficient_evidence=has_evidence,
+            clarifying_questions=questions,
             domain=domain_response,
             similar_cases=similar_cases_response,
             related_laws=laws_response,

@@ -8,10 +8,26 @@
 // ============================================================================
 
 /**
+ * Onboarding data for backend API (snake_case)
+ * Maps from frontend DisputeFormData (camelCase) to backend format
+ */
+export interface OnboardingAPIData {
+  purchase_date?: string;
+  purchase_place?: string;
+  purchase_platform?: string;
+  purchase_item?: string;
+  purchase_amount?: string;
+  dispute_details?: string;
+}
+
+/**
  * Backend request payload for /chat endpoint
  */
 export interface ChatAPIRequest {
   message: string;
+  session_id?: string;
+  chat_type?: 'dispute' | 'general';
+  onboarding?: OnboardingAPIData;
   top_k?: number;
   chunk_types?: string[];
   agencies?: string[];
@@ -36,6 +52,7 @@ export interface SourceMetadata {
  * Backend response payload from /chat endpoint
  */
 export interface ChatAPIResponse {
+  session_id: string;
   answer: string;
   chunks_used: number;
   model: string;
