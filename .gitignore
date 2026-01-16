@@ -42,6 +42,7 @@ Thumbs.db
 logs/
 *.log
 backend/results/
+backend/reports/
 
 # Database
 *.db
