@@ -1,9 +1,5 @@
-/**
- * MessageBubble Component - Sprint 1 S1-4
- * Renders chat messages with inline citation support and markdown formatting
- */
-
 import React, { useState } from 'react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
 import type { MessageWithCitations } from '@/shared/types';
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer';
 import { CitationModal } from './CitationModal';
@@ -13,17 +9,6 @@ interface MessageBubbleProps {
   chatType?: 'dispute' | 'general';
 }
 
-/**
- * Chat message bubble with support for:
- * - AI vs User styling
- * - Markdown rendering for AI messages (bold, italic, lists, code blocks)
- * - Inline clickable citations [1], [2], [3]
- * - Citation modal on click
- * - Different colors per chat type
- *
- * @param message - Message with optional citations
- * @param chatType - Chat type for styling (dispute = teal, general = mint-green)
- */
 export function MessageBubble({
   message,
   chatType = 'dispute',
@@ -33,14 +18,68 @@ export function MessageBubble({
   );
 
   const isAI = message.type === 'ai';
+  const isRestricted = message.isRestricted;
 
-  // Find selected citation metadata
   const selectedCitation = selectedCitationId
     ? message.citations?.find((c) => c.id === selectedCitationId)
     : null;
 
-  // User message background color varies by chat type
   const userBgColor = chatType === 'dispute' ? 'bg-deep-teal' : 'bg-mint-green';
+
+  if (isAI && isRestricted && message.agencyInfo) {
+    return (
+      <div className="mb-4 md:mb-6 flex flex-col items-start">
+        <div className="max-w-[90%] sm:max-w-[85%] md:max-w-[80%] rounded-2xl overflow-hidden border-2 border-amber-400 shadow-lg">
+          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <span className="font-semibold text-amber-800">
+              전문가 상담이 필요한 영역입니다
+            </span>
+          </div>
+          
+          <div className="bg-white px-4 sm:px-6 py-4">
+            <div className="mb-4 p-3 bg-amber-50 rounded-lg">
+              <p className="font-medium text-dark-navy mb-1">
+                {message.agencyInfo.full_name}
+              </p>
+              <p className="text-sm text-gray-600">
+                {message.agencyInfo.description}
+              </p>
+              <a
+                href={message.agencyInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-2 text-sm text-deep-teal hover:underline"
+              >
+                <ExternalLink className="w-4 h-4" />
+                공식 웹사이트 방문
+              </a>
+            </div>
+            
+            <div className="prose prose-sm max-w-none">
+              <MarkdownRenderer
+                content={message.content}
+                onCitationClick={setSelectedCitationId}
+              />
+            </div>
+            
+            {message.agencyInfo.restriction_reason && (
+              <div className="mt-4 p-3 bg-gray-100 rounded-lg text-sm text-gray-700">
+                <strong>안내:</strong> {message.agencyInfo.restriction_reason}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="text-xs text-gray-purple mt-1 md:mt-2 px-2">
+          {message.timestamp.toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -49,7 +88,6 @@ export function MessageBubble({
           isAI ? 'items-start' : 'items-end'
         }`}
       >
-        {/* Message Bubble */}
         <div
           className={`max-w-[85%] sm:max-w-[75%] md:max-w-[70%] px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl leading-relaxed text-sm sm:text-base ${
             isAI
@@ -57,7 +95,6 @@ export function MessageBubble({
               : `${userBgColor} text-white rounded-br-sm whitespace-pre-line`
           }`}
         >
-          {/* AI messages render with markdown formatting and interactive citations */}
           {isAI ? (
             <MarkdownRenderer
               content={message.content}
@@ -68,7 +105,6 @@ export function MessageBubble({
           )}
         </div>
 
-        {/* Timestamp */}
         <div className="text-xs text-gray-purple mt-1 md:mt-2 px-2">
           {message.timestamp.toLocaleTimeString('ko-KR', {
             hour: '2-digit',
@@ -77,7 +113,6 @@ export function MessageBubble({
         </div>
       </div>
 
-      {/* Citation Modal */}
       {selectedCitation && (
         <CitationModal
           citation={selectedCitation.source}

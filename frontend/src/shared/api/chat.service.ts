@@ -13,7 +13,10 @@ export const chatService = {
    * @returns Promise<ChatAPIResponse> - Answer with citations and safety guardrails
    */
   sendMessage: async (request: ChatAPIRequest): Promise<ChatAPIResponse> => {
-    return apiClient.post<ChatAPIResponse>('/chat', request);
+    console.log('[ChatService] Sending request to /chat:', request);
+    const response = await apiClient.post<ChatAPIResponse>('/chat', request);
+    console.log('[ChatService] Received response:', response);
+    return response;
   },
 
   /**

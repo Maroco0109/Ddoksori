@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatSession, MessageWithCitations, ChatType } from '@/shared/types';
+import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData } from '@/shared/types';
 import { storage } from '@/shared/lib/storage';
 import { STORAGE_KEYS } from '@/shared/config/storage-keys';
 import { SESSION_EXPIRY_DURATION } from '@/shared/config';
@@ -14,6 +14,8 @@ interface ChatState {
   isDisputeLoading: boolean;
   isGeneralLoading: boolean;
   isFormSubmitted: boolean;
+  backendSessionId: string | null;
+  disputeFormData: DisputeFormData | null;
 
   // Actions
   setCurrentSessionId: (id: string | null) => void;
@@ -24,6 +26,8 @@ interface ChatState {
   setIsDisputeLoading: (loading: boolean) => void;
   setIsGeneralLoading: (loading: boolean) => void;
   setIsFormSubmitted: (submitted: boolean) => void;
+  setBackendSessionId: (id: string | null) => void;
+  setDisputeFormData: (data: DisputeFormData | null) => void;
 
   loadChatSessions: (isLoggedIn: boolean) => void;
   saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean) => void;
@@ -50,6 +54,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isDisputeLoading: false,
   isGeneralLoading: false,
   isFormSubmitted: false,
+  backendSessionId: null,
+  disputeFormData: null,
 
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setActiveChatType: (type) => set({ activeChatType: type }),
@@ -59,6 +65,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsDisputeLoading: (loading) => set({ isDisputeLoading: loading }),
   setIsGeneralLoading: (loading) => set({ isGeneralLoading: loading }),
   setIsFormSubmitted: (submitted) => set({ isFormSubmitted: submitted }),
+  setBackendSessionId: (id) => set({ backendSessionId: id }),
+  setDisputeFormData: (data) => set({ disputeFormData: data }),
 
   loadChatSessions: (isLoggedIn) => {
     const storageKey = isLoggedIn
@@ -172,6 +180,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isFormSubmitted: false,
       disputeMessages: [...initialMessages],
       generalMessages: [...initialMessages],
+      backendSessionId: null,
+      disputeFormData: null,
     });
   },
 }));

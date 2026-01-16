@@ -1,33 +1,43 @@
-/**
- * useChatMutation - React Query hook for chat API
- * Sprint 1 S1-4 Integration
- */
-
 import { useMutation } from '@tanstack/react-query';
 import { chatService } from '@/shared/api/chat.service';
-import type { ChatAPIRequest, ChatAPIResponse } from '@/shared/types';
+import { useChatStore } from '@/features/chat/chat.store';
+import type { ChatAPIRequest, ChatAPIResponse, OnboardingAPIData } from '@/shared/types';
 
-/**
- * React Query mutation hook for sending chat messages
- *
- * @example
- * const chatMutation = useChatMutation();
- *
- * // Send message
- * const response = await chatMutation.mutateAsync({
- *   message: "내 문제를 해결해주세요",
- *   top_k: 5
- * });
- *
- * // Check loading state
- * if (chatMutation.isPending) { ... }
- *
- * // Handle errors
- * if (chatMutation.isError) { console.error(chatMutation.error); }
- */
+function convertDisputeFormToOnboarding(): OnboardingAPIData | undefined {
+  const disputeFormData = useChatStore.getState().disputeFormData;
+  if (!disputeFormData) return undefined;
+  
+  return {
+    purchase_date: disputeFormData.purchaseDate || undefined,
+    purchase_place: disputeFormData.purchasePlace || undefined,
+    purchase_platform: disputeFormData.purchasePlatform || undefined,
+    purchase_item: disputeFormData.purchaseItem || undefined,
+    purchase_amount: disputeFormData.purchaseAmount || undefined,
+    dispute_details: disputeFormData.disputeDetails || undefined,
+  };
+}
+
 export function useChatMutation() {
+  const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
+
   return useMutation<ChatAPIResponse, Error, ChatAPIRequest>({
-    mutationFn: (request: ChatAPIRequest) => chatService.sendMessage(request),
+    mutationFn: async (request: ChatAPIRequest) => {
+      const backendSessionId = useChatStore.getState().backendSessionId;
+      // Use onboarding from request if provided, otherwise try to get from store
+      const onboarding = request.onboarding || convertDisputeFormToOnboarding();
+      
+      const enhancedRequest: ChatAPIRequest = {
+        ...request,
+        session_id: backendSessionId || undefined,
+        chat_type: request.chat_type || 'dispute',
+        onboarding: onboarding,
+      };
+      
+      return chatService.sendMessage(enhancedRequest);
+    },
+    onSuccess: (response) => {
+      setBackendSessionId(response.session_id);
+    },
     onError: (error) => {
       console.error('Chat API error:', error);
     },

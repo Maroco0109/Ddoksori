@@ -138,16 +138,26 @@ class StructuredRetrievalLog:
 
 
 @dataclass
+class NodeTimingLog:
+    """노드 실행 시간 로그"""
+    node_name: str
+    duration_ms: float
+    start_time: str
+    end_time: str
+
+
+@dataclass
 class RAGLogEntry:
     """RAG 파이프라인 전체 로그 엔트리"""
     request_id: str
     timestamp: str
     query: str
     retrieval: RetrievalLog = field(default_factory=lambda: RetrievalLog(mode="", top_k=0))
-    structured_retrieval: Optional[StructuredRetrievalLog] = None  # 4-section structured results
+    structured_retrieval: Optional[StructuredRetrievalLog] = None
     llm: LLMLog = field(default_factory=LLMLog)
     response: ResponseSummary = field(default_factory=ResponseSummary)
     total_time_ms: float = 0.0
+    node_timings: List[NodeTimingLog] = field(default_factory=list)
 
 
 class RAGLogger:
@@ -339,6 +349,24 @@ class RAGLogger:
             status=status,
             error_message=error_message
         )
+
+    def log_node_timings(
+        self,
+        entry: RAGLogEntry,
+        node_timings: Dict[str, Dict]
+    ) -> None:
+        """Log node execution timings from LangGraph state."""
+        timing_logs = []
+        for node_name, timing in node_timings.items():
+            start_ts = timing.get('start', 0)
+            end_ts = timing.get('end', 0)
+            timing_logs.append(NodeTimingLog(
+                node_name=node_name,
+                duration_ms=timing.get('duration_ms', 0.0),
+                start_time=datetime.fromtimestamp(start_ts).isoformat() if start_ts else '',
+                end_time=datetime.fromtimestamp(end_ts).isoformat() if end_ts else ''
+            ))
+        entry.node_timings = timing_logs
 
     def finalize(self, entry: RAGLogEntry, start_time: float) -> None:
         """Finalize the log entry with total time."""

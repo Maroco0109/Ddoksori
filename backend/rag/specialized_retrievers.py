@@ -256,7 +256,7 @@ class CriteriaRetriever:
         2단계 기준 검색
 
         1단계: chunks 테이블에서 criteria 관련 벡터 검색
-        2단계: criteria_units와 조인하여 구조화된 메타데이터 포함
+        2단계: documents 테이블에서 doc_type으로 source_label 추출
 
         Returns:
             List[CriteriaSearchResult]: 기준명, 카테고리, 품목, 본문 포함
@@ -264,57 +264,63 @@ class CriteriaRetriever:
         query_embedding = self.embed_query(query)
 
         with self.conn.cursor() as cur:
-            # chunks 테이블에서 벡터 검색 후 criteria_units와 조인
             cur.execute(
                 """
-                WITH vector_search AS (
-                    SELECT
-                        ch.chunk_id,
-                        ch.content,
-                        1 - (ch.embedding <=> %s::vector) AS similarity
-                    FROM chunks ch
-                    JOIN documents d ON ch.doc_id = d.doc_id
-                    WHERE ch.embedding IS NOT NULL
-                      AND ch.drop = FALSE
-                      AND d.doc_type LIKE 'criteria_%%'
-                    ORDER BY ch.embedding <=> %s::vector
-                    LIMIT %s
-                )
                 SELECT
-                    cu.unit_id,
-                    cu.source_id,
-                    c.source_label,
-                    cu.category,
-                    cu.industry,
-                    cu.item_group,
-                    cu.item,
-                    cu.dispute_type,
-                    COALESCE(cu.unit_text, vs.content) as unit_text,
-                    vs.similarity
-                FROM vector_search vs
-                LEFT JOIN criteria_units cu ON vs.chunk_id = 'criteria_' || cu.unit_id
-                LEFT JOIN criteria c ON cu.source_id = c.source_id
-                ORDER BY vs.similarity DESC
+                    ch.chunk_id,
+                    ch.doc_id,
+                    d.doc_type,
+                    d.title,
+                    ch.content,
+                    1 - (ch.embedding <=> %s::vector) AS similarity
+                FROM chunks ch
+                JOIN documents d ON ch.doc_id = d.doc_id
+                WHERE ch.embedding IS NOT NULL
+                  AND ch.drop = FALSE
+                  AND d.doc_type LIKE 'criteria_%%'
+                ORDER BY ch.embedding <=> %s::vector
+                LIMIT %s
                 """,
                 (query_embedding, query_embedding, top_k * 3)
             )
 
             results = []
             for row in cur.fetchall():
+                chunk_id = row[0]
+                doc_id = row[1]
+                doc_type = row[2]
+                title = row[3]
+                content = row[4]
+                similarity = float(row[5])
+
+                source_label = self._get_source_label(doc_type)
+
                 results.append(CriteriaSearchResult(
-                    unit_id=row[0],
-                    source_id=row[1],
-                    source_label=row[2],
-                    category=row[3],
-                    industry=row[4],
-                    item_group=row[5],
-                    item=row[6],
-                    dispute_type=row[7],
-                    unit_text=row[8],
-                    similarity=float(row[9])
+                    unit_id=chunk_id,
+                    source_id=doc_id,
+                    source_label=source_label,
+                    category=title,
+                    industry=None,
+                    item_group=None,
+                    item=None,
+                    dispute_type=None,
+                    unit_text=content,
+                    similarity=similarity
                 ))
 
-            return results
+            return results[:top_k]
+
+    def _get_source_label(self, doc_type: str) -> str:
+        """doc_type에서 사람이 읽기 좋은 source_label 생성"""
+        labels = {
+            'criteria_table1': '소비자분쟁해결기준 별표1 (품목별 분류)',
+            'criteria_table2': '소비자분쟁해결기준 별표2 (일반적 기준)',
+            'criteria_table3': '소비자분쟁해결기준 별표3 (품목별 기준)',
+            'criteria_table4': '소비자분쟁해결기준 별표4 (특수거래)',
+            'criteria_content_guideline': '콘텐츠이용자보호지침',
+            'criteria_ecommerce_guideline': '전자상거래 소비자보호지침',
+        }
+        return labels.get(doc_type, doc_type)
 
     def search_by_category(
         self,
