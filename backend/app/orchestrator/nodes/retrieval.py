@@ -58,15 +58,26 @@ def _build_search_query(state: ChatState) -> str:
 
 
 def _convert_to_retrieval_result(raw_result: Dict[str, Any]) -> RetrievalResult:
-    """
-    StructuredRetriever 결과를 RetrievalResult로 변환
-    """
+    disputes = raw_result.get('disputes', [])
+    counsels = raw_result.get('counsels', [])
+    
+    all_similarities = []
+    for d in disputes:
+        all_similarities.append(d.get('similarity', 0))
+    for c in counsels:
+        all_similarities.append(c.get('similarity', 0))
+    
+    max_sim = max(all_similarities) if all_similarities else 0.0
+    avg_sim = sum(all_similarities) / len(all_similarities) if all_similarities else 0.0
+    
     return RetrievalResult(
         agency=raw_result.get('agency', {}),
-        disputes=raw_result.get('disputes', []),
-        counsels=raw_result.get('counsels', []),
+        disputes=disputes,
+        counsels=counsels,
         laws=raw_result.get('laws', []),
         criteria=raw_result.get('criteria', []),
+        max_similarity=max_sim,
+        avg_similarity=avg_sim,
     )
 
 
@@ -145,7 +156,6 @@ def retrieval_node(state: ChatState) -> Dict:
             'sources': List[Dict]  # operator.add로 누적됨
         }
     """
-    # query_analysis가 general이면 검색 스킵
     query_analysis = state.get('query_analysis')
     if query_analysis and query_analysis.get('query_type') == 'general':
         empty_retrieval: RetrievalResult = {
@@ -154,6 +164,8 @@ def retrieval_node(state: ChatState) -> Dict:
             'counsels': [],
             'laws': [],
             'criteria': [],
+            'max_similarity': 0.0,
+            'avg_similarity': 0.0,
         }
         return {
             'retrieval': empty_retrieval,
@@ -195,7 +207,6 @@ def retrieval_node(state: ChatState) -> Dict:
         }
         
     except Exception as e:
-        # DB 연결 실패 등 예외 시 빈 결과
         print(f"[retrieval_node] Error: {e}")
         empty_retrieval: RetrievalResult = {
             'agency': {},
@@ -203,6 +214,8 @@ def retrieval_node(state: ChatState) -> Dict:
             'counsels': [],
             'laws': [],
             'criteria': [],
+            'max_similarity': 0.0,
+            'avg_similarity': 0.0,
         }
         return {
             'retrieval': empty_retrieval,

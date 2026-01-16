@@ -59,6 +59,122 @@ RECOMMENDED_DISPUTE_FIELDS = [
     "purchase_amount",     # 구매 금액
 ]
 
+# 필드별 한국어 이름 매핑
+FIELD_KOREAN_NAMES = {
+    'purchase_item': '구매 품목',
+    'dispute_details': '분쟁 상세 내용',
+    'purchase_date': '구매일자',
+    'purchase_place': '구매처',
+    'purchase_platform': '플랫폼',
+    'purchase_amount': '구매금액',
+}
+
+
+COMMON_PRODUCTS = [
+    "노트북", "컴퓨터", "PC", "스마트폰", "휴대폰", "핸드폰", "아이폰", "갤럭시",
+    "태블릿", "아이패드", "에어팟", "이어폰", "헤드폰", "스피커", "TV", "텔레비전",
+    "냉장고", "세탁기", "에어컨", "청소기", "전자레인지", "오븐", "건조기",
+    "모니터", "키보드", "마우스", "프린터", "카메라", "렌즈", "드론", "로봇청소기",
+    "공기청정기", "제습기", "가습기", "전기밥솥", "믹서기", "커피머신",
+    "침대", "소파", "책상", "의자", "옷장", "매트리스", "가구",
+    "헬스장", "PT", "피티", "수영장", "필라테스", "요가", "학원", "영어",
+    "웨딩", "결혼", "스튜디오", "여행", "항공권", "호텔", "숙박",
+    "옷", "신발", "가방", "지갑", "시계", "악세서리",
+    "자동차", "차량", "중고차", "오토바이", "자전거", "킥보드", "전동킥보드",
+]
+
+DISPUTE_VERBS = [
+    "환불", "반품", "교환", "수리", "취소", "해지", "해약",
+    "피해", "하자", "불량", "고장", "파손",
+    "분쟁", "보상", "배상", "위약금",
+]
+
+
+def _extract_info_from_message(query: str) -> Dict[str, str]:
+    """
+    메시지 내용에서 온보딩 정보 추출
+    "[분쟁 정보]" 형식 또는 자연어에서 정보 추출
+    """
+    info: Dict[str, str] = {}
+    
+    patterns = {
+        'purchase_item': [
+            r'구매\s*품목[:\s]+([^\n,]+)',
+            r'품목[:\s]+([^\n,]+)',
+            r'제품[:\s]+([^\n,]+)',
+        ],
+        'dispute_details': [
+            r'분쟁\s*상세[:\s]+([^\n]+)',
+            r'문제[:\s]+([^\n]+)',
+            r'상황[:\s]+([^\n]+)',
+        ],
+        'purchase_date': [
+            r'구매\s*일자[:\s]+([^\n,]+)',
+            r'구매일[:\s]+([^\n,]+)',
+        ],
+        'purchase_place': [
+            r'구매처[:\s]+([^\n,]+)',
+            r'판매처[:\s]+([^\n,]+)',
+        ],
+        'purchase_platform': [
+            r'플랫폼[:\s]+([^\n,]+)',
+        ],
+        'purchase_amount': [
+            r'구매\s*금액[:\s]+([^\n,]+)',
+            r'금액[:\s]+([^\n,]+)',
+        ],
+    }
+    
+    for field, field_patterns in patterns.items():
+        for pattern in field_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+                if value and value not in ['없음', '모름', '-']:
+                    info[field] = value
+                break
+    
+    if 'purchase_item' not in info:
+        query_lower = query.lower()
+        for product in COMMON_PRODUCTS:
+            if product.lower() in query_lower:
+                info['purchase_item'] = product
+                break
+    
+    if 'dispute_details' not in info:
+        found_verbs = [v for v in DISPUTE_VERBS if v in query]
+        if found_verbs and 'purchase_item' in info:
+            verb = found_verbs[0]
+            item = info['purchase_item']
+            info['dispute_details'] = f"{item} {verb} 관련 문의"
+    
+    return info
+
+
+def _get_missing_fields_description(
+    missing_fields: List[str],
+    extracted_info: Dict[str, str]
+) -> str:
+    """
+    부족한 정보에 대한 구체적인 설명 생성
+    """
+    lines = []
+    
+    if extracted_info:
+        lines.append("📋 **입력하신 정보:**")
+        for field, value in extracted_info.items():
+            korean_name = FIELD_KOREAN_NAMES.get(field, field)
+            lines.append(f"  • {korean_name}: {value}")
+        lines.append("")
+    
+    if missing_fields:
+        lines.append("❓ **추가로 필요한 정보:**")
+        for field in missing_fields:
+            korean_name = FIELD_KOREAN_NAMES.get(field, field)
+            lines.append(f"  • {korean_name}")
+    
+    return "\n".join(lines)
+
 
 def _classify_query_type(query: str) -> Literal['dispute', 'general', 'law', 'criteria']:
     """
@@ -157,13 +273,14 @@ def _determine_agency_hint(query: str) -> Optional[str]:
 
 def _check_missing_onboarding_fields(
     chat_type: Literal['dispute', 'general'],
-    onboarding: Optional[OnboardingInfo]
+    onboarding: Optional[OnboardingInfo],
+    extracted_info: Optional[Dict[str, str]] = None
 ) -> List[str]:
     """
     온보딩 필수 정보 누락 확인
     
     분쟁 상담(dispute)일 때만 체크.
-    일반 대화(general)는 온보딩 불필요.
+    onboarding과 메시지에서 추출한 정보를 합쳐서 확인.
     
     Returns:
         누락된 필드명 리스트
@@ -171,12 +288,20 @@ def _check_missing_onboarding_fields(
     if chat_type == 'general':
         return []
     
-    if not onboarding:
+    combined: Dict[str, str] = {}
+    if onboarding:
+        for k, v in dict(onboarding).items():
+            if v and isinstance(v, str):
+                combined[k] = v
+    if extracted_info:
+        combined.update(extracted_info)
+    
+    if not combined:
         return REQUIRED_DISPUTE_FIELDS.copy()
     
     missing = []
     for field in REQUIRED_DISPUTE_FIELDS:
-        value = onboarding.get(field)  # type: ignore[literal-required]
+        value = combined.get(field)
         if not value or (isinstance(value, str) and not value.strip()):
             missing.append(field)
     
@@ -189,44 +314,39 @@ def query_analysis_node(state: ChatState) -> Dict:
     
     ChatState에서 user_query, chat_type, onboarding을 분석하여
     QueryAnalysisResult를 생성.
-    
-    Args:
-        state: 현재 ChatState
-        
-    Returns:
-        부분 상태 업데이트 dict:
-        {
-            'query_analysis': QueryAnalysisResult
-        }
     """
     user_query = state.get('user_query', '')
     chat_type = state.get('chat_type', 'general')
     onboarding = state.get('onboarding')
     
-    # 1. 질의 유형 분류
     query_type = _classify_query_type(user_query)
     
-    # chat_type이 'general'이면 query_type도 'general'로 강제
     if chat_type == 'general':
         query_type = 'general'
     
-    # 2. 키워드 추출
     keywords = _extract_keywords(user_query)
-    
-    # 3. 기관 힌트
     agency_hint = _determine_agency_hint(user_query) if query_type == 'dispute' else None
     
-    # 4. 누락 필드 확인
-    missing_fields = _check_missing_onboarding_fields(chat_type, onboarding)
-    needs_clarification = len(missing_fields) > 0
+    extracted_info = _extract_info_from_message(user_query)
     
-    # QueryAnalysisResult 생성
+    missing_fields = _check_missing_onboarding_fields(chat_type, onboarding, extracted_info)
+    missing_fields_description = _get_missing_fields_description(missing_fields, extracted_info)
+    
+    has_minimal_info = bool(
+        extracted_info.get('purchase_item') or 
+        extracted_info.get('dispute_details') or
+        (onboarding and (onboarding.get('purchase_item') or onboarding.get('dispute_details')))
+    )
+    needs_clarification = not has_minimal_info
+    
     analysis_result: QueryAnalysisResult = {
         'query_type': query_type,
         'keywords': keywords,
         'agency_hint': agency_hint,
         'needs_clarification': needs_clarification,
         'missing_fields': missing_fields,
+        'extracted_info': extracted_info,
+        'missing_fields_description': missing_fields_description,
     }
     
     return {

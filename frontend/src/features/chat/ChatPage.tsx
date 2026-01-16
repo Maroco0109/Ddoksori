@@ -296,6 +296,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         message: formMessage.content,
         chat_type: 'dispute',
         top_k: 5,
+        onboarding: {
+          purchase_date: disputeForm.purchaseDate,
+          purchase_place: disputeForm.purchasePlace,
+          purchase_platform: disputeForm.platform || undefined,
+          purchase_item: disputeForm.purchaseItem,
+          purchase_amount: disputeForm.purchaseAmount.replace(/,/g, ''),
+          dispute_details: disputeForm.disputeDetail,
+        },
       });
 
       let streamedText = '';

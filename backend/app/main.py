@@ -2,22 +2,28 @@ import os
 import time
 import asyncio
 import uuid
+import logging
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Generator, Literal, cast
 from dotenv import load_dotenv
-# from fastmcp import FastMCP
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 from rag import RAGRetriever, HybridRetriever, RAGGenerator, SearchResult
 from rag.specialized_retrievers import StructuredRetriever
 from rag.logger import get_rag_logger
 from utils.embedding_connection import get_embedding_api_url
 from app.orchestrator import get_graph, create_initial_state
-
-# 환경 변수 로드
-load_dotenv()
 
 app = FastAPI(
     title="똑소리 API",
@@ -307,6 +313,10 @@ async def chat(request: ChatRequest):
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
         questions = final_state.get('clarifying_questions', [])
+        
+        node_timings = final_state.get('_node_timings', {})
+        if node_timings:
+            rag_logger.log_node_timings(log_entry, node_timings)
         
         rag_logger.log_response(
             entry=log_entry,

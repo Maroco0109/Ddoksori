@@ -8,7 +8,10 @@ query_analysis → (조건) → retrieval → generation → review → (조건)
                     ↘ ask_clarification → END
 """
 
-from typing import Literal
+import os
+from typing import Literal, Dict, Any, Callable
+import time
+import logging
 
 from langgraph.graph import StateGraph, END
 
@@ -20,20 +23,85 @@ from .nodes import (
     generation_node,
     review_node,
     ask_clarification_node,
+    low_similarity_prompt_node,
 )
+
+logger = logging.getLogger(__name__)
+
+NODE_TIMINGS_KEY = '_node_timings'
+
+
+def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
+    """노드 함수를 감싸서 실행 시간을 측정하는 래퍼 생성"""
+    def timed_wrapper(state: ChatState) -> Dict[str, Any]:
+        start_time = time.time()
+        logger.info(f"[NODE START] {node_name}")
+        
+        result = node_fn(state)
+        
+        end_time = time.time()
+        duration_ms = round((end_time - start_time) * 1000, 2)
+        logger.info(f"[NODE END] {node_name} - {duration_ms}ms")
+        
+        existing_timings = state.get(NODE_TIMINGS_KEY)
+        timings = dict(existing_timings) if existing_timings else {}
+        timings[node_name] = {
+            'start': start_time,
+            'end': end_time,
+            'duration_ms': duration_ms
+        }
+        result[NODE_TIMINGS_KEY] = timings
+        
+        return result
+    
+    return timed_wrapper
+
+
+SIMILARITY_THRESHOLD_HIGH = 0.55
 
 
 def _route_after_query_analysis(state: ChatState) -> Literal['ask_clarification', 'retrieval']:
-    """
-    query_analysis 이후 라우팅
-    
-    - needs_clarification=True → ask_clarification (추가 정보 요청)
-    - else → retrieval (검색 진행)
-    """
     query_analysis = state.get('query_analysis')
-    if query_analysis and query_analysis.get('needs_clarification'):
+    
+    if not query_analysis:
+        return 'retrieval'
+    
+    if query_analysis.get('query_type') == 'general':
+        return 'retrieval'
+    
+    extracted_info = query_analysis.get('extracted_info', {})
+    has_minimal_info = bool(
+        extracted_info.get('purchase_item') or 
+        extracted_info.get('dispute_details')
+    )
+    
+    if not has_minimal_info and query_analysis.get('needs_clarification'):
         return 'ask_clarification'
+    
     return 'retrieval'
+
+
+def _route_after_retrieval(state: ChatState) -> Literal['generation', 'low_similarity_prompt']:
+    retrieval = state.get('retrieval')
+    query_analysis = state.get('query_analysis')
+    
+    if query_analysis and query_analysis.get('query_type') == 'general':
+        return 'generation'
+    
+    if not retrieval:
+        return 'low_similarity_prompt'
+    
+    max_sim = retrieval.get('max_similarity', 0.0)
+    disputes = retrieval.get('disputes', [])
+    counsels = retrieval.get('counsels', [])
+    
+    if not disputes and not counsels:
+        return 'low_similarity_prompt'
+    
+    if max_sim >= SIMILARITY_THRESHOLD_HIGH:
+        return 'generation'
+    
+    return 'low_similarity_prompt'
 
 
 def _route_after_review(state: ChatState) -> Literal['generation', '__end__']:
@@ -52,26 +120,14 @@ def _route_after_review(state: ChatState) -> Literal['generation', '__end__']:
 
 
 def create_chat_graph() -> StateGraph:
-    """
-    LangGraph StateGraph 생성
-    
-    노드:
-    - query_analysis: 질의 분류, 키워드 추출, 누락 필드 탐지
-    - retrieval: 4섹션 검색 (disputes, counsels, laws, criteria)
-    - generation: LLM 답변 생성
-    - review: 규칙 기반 검토 (금지 표현, 출처 검사)
-    - ask_clarification: 추가 정보 요청 메시지 생성
-    
-    Returns:
-        구성된 StateGraph (컴파일 전)
-    """
     graph = StateGraph(ChatState)
     
-    graph.add_node('query_analysis', query_analysis_node)
-    graph.add_node('retrieval', retrieval_node)
-    graph.add_node('generation', generation_node)
-    graph.add_node('review', review_node)
-    graph.add_node('ask_clarification', ask_clarification_node)
+    graph.add_node('query_analysis', _create_timed_node(query_analysis_node, 'query_analysis'))
+    graph.add_node('retrieval', _create_timed_node(retrieval_node, 'retrieval'))
+    graph.add_node('generation', _create_timed_node(generation_node, 'generation'))
+    graph.add_node('review', _create_timed_node(review_node, 'review'))
+    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
+    graph.add_node('low_similarity_prompt', _create_timed_node(low_similarity_prompt_node, 'low_similarity_prompt'))
     
     graph.set_entry_point('query_analysis')
     
@@ -84,7 +140,15 @@ def create_chat_graph() -> StateGraph:
         }
     )
     
-    graph.add_edge('retrieval', 'generation')
+    graph.add_conditional_edges(
+        'retrieval',
+        _route_after_retrieval,
+        {
+            'generation': 'generation',
+            'low_similarity_prompt': 'low_similarity_prompt',
+        }
+    )
+    
     graph.add_edge('generation', 'review')
     
     graph.add_conditional_edges(
@@ -97,6 +161,7 @@ def create_chat_graph() -> StateGraph:
     )
     
     graph.add_edge('ask_clarification', END)
+    graph.add_edge('low_similarity_prompt', END)
     
     return graph
 

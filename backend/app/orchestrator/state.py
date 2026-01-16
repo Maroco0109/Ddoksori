@@ -37,37 +37,27 @@ class OnboardingInfo(TypedDict, total=False):
 class QueryAnalysisResult(TypedDict, total=False):
     """
     질의분석 에이전트 결과
-    
-    S2-1 질의분석 에이전트가 생성:
-    - query_type: 질의 유형 분류
-    - keywords: 검색에 사용할 핵심 키워드
-    - agency_hint: 추천 기관 힌트 (KCA/ECMC/KCDRC)
-    - needs_clarification: 추가 정보 필요 여부
-    - missing_fields: 누락된 필수 정보 목록
     """
     query_type: Literal['dispute', 'general', 'law', 'criteria']
     keywords: List[str]
     agency_hint: Optional[str]
     needs_clarification: bool
     missing_fields: List[str]
+    extracted_info: Dict[str, str]
+    missing_fields_description: str
 
 
 class RetrievalResult(TypedDict, total=False):
     """
     정보검색 에이전트 결과 (4섹션 구조)
-    
-    StructuredRetriever.search_all_sections() 결과와 매핑:
-    - agency: 추천 기관 정보
-    - disputes: 분쟁조정사례 (법적 효력 있음)
-    - counsels: 상담사례 (참고용)
-    - laws: 관련 법령
-    - criteria: 분쟁조정기준
     """
     agency: Dict
     disputes: List[Dict]
     counsels: List[Dict]
     laws: List[Dict]
     criteria: List[Dict]
+    max_similarity: float
+    avg_similarity: float
 
 
 class ReviewResult(TypedDict, total=False):
@@ -134,6 +124,11 @@ class ChatState(MessagesState):
     
     # 제어 플래그
     retry_count: int
+    awaiting_user_choice: bool
+    low_similarity_mode: bool
+    
+    # 노드 타이밍 정보
+    _node_timings: Optional[Dict[str, Dict]]
 
 
 def create_initial_state(
@@ -173,4 +168,7 @@ def create_initial_state(
         has_sufficient_evidence=True,
         clarifying_questions=[],
         retry_count=0,
+        awaiting_user_choice=False,
+        low_similarity_mode=False,
+        _node_timings={},
     )

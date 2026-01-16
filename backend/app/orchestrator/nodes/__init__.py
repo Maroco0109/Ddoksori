@@ -11,6 +11,7 @@ from .retrieval import retrieval_node
 from .generation import generation_node
 from .review import review_node
 from .ask_clarification import ask_clarification_node
+from .low_similarity_prompt import low_similarity_prompt_node
 
 __all__ = [
     'query_analysis_node',
@@ -18,4 +19,5 @@ __all__ = [
     'generation_node',
     'review_node',
     'ask_clarification_node',
+    'low_similarity_prompt_node',
 ]

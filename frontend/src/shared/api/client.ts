@@ -29,6 +29,7 @@ export const apiClient = {
   },
 
   post: async <T>(endpoint: string, data?: any): Promise<T> => {
+    console.log('[API Client] POST', endpoint, data);
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: {
@@ -37,11 +38,15 @@ export const apiClient = {
       body: data ? JSON.stringify(data) : undefined,
     });
 
+    console.log('[API Client] Response status:', response.status);
+
     if (!response.ok) {
       throw new Error(`API Error: ${response.statusText}`);
     }
 
-    return response.json();
+    const json = await response.json();
+    console.log('[API Client] Response data:', json);
+    return json;
   },
 
   put: async <T>(endpoint: string, data?: any): Promise<T> => {

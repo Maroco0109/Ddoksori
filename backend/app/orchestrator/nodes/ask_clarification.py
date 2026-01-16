@@ -16,7 +16,6 @@ from langchain_core.messages import AIMessage
 from ..state import ChatState
 
 
-# 필드별 질문 템플릿
 FIELD_QUESTIONS = {
     'purchase_item': {
         'question': '어떤 제품이나 서비스에 대한 분쟁인가요?',
@@ -45,33 +44,53 @@ FIELD_QUESTIONS = {
     },
 }
 
+FIELD_KOREAN_NAMES = {
+    'purchase_item': '구매 품목',
+    'dispute_details': '분쟁 상세 내용',
+    'purchase_date': '구매일자',
+    'purchase_place': '구매처',
+    'purchase_platform': '플랫폼',
+    'purchase_amount': '구매금액',
+}
 
-def _build_clarification_message(missing_fields: List[str]) -> str:
+
+def _build_clarification_message(
+    missing_fields: List[str],
+    extracted_info: Dict[str, str] = {}
+) -> str:
     """
     누락 필드에 대한 추가 질문 메시지 생성
+    이미 입력된 정보와 부족한 정보를 명확히 구분하여 표시
     """
-    if not missing_fields:
+    if not missing_fields and not extracted_info:
         return ""
     
-    # 우선순위로 정렬
-    sorted_fields = sorted(
-        missing_fields,
-        key=lambda f: FIELD_QUESTIONS.get(f, {}).get('priority', 99)
-    )
+    lines = ["정확한 안내를 위해 몇 가지 추가 정보가 필요합니다.", ""]
     
-    lines = [
-        "정확한 안내를 위해 몇 가지 추가 정보가 필요합니다.",
-        ""
-    ]
+    if extracted_info:
+        lines.append("✅ **입력하신 정보:**")
+        for field, value in extracted_info.items():
+            korean_name = FIELD_KOREAN_NAMES.get(field, field)
+            lines.append(f"   • {korean_name}: {value}")
+        lines.append("")
     
-    for i, field in enumerate(sorted_fields[:3], 1):  # 최대 3개
-        field_info = FIELD_QUESTIONS.get(field, {})
-        question = field_info.get('question', f'{field}에 대해 알려주세요.')
-        examples = field_info.get('examples', '')
+    if missing_fields:
+        lines.append("❓ **추가로 알려주세요:**")
         
-        lines.append(f"{i}. {question}")
-        if examples:
-            lines.append(f"   ({examples})")
+        sorted_fields = sorted(
+            missing_fields,
+            key=lambda f: FIELD_QUESTIONS.get(f, {}).get('priority', 99)
+        )
+        
+        for i, field in enumerate(sorted_fields[:3], 1):
+            field_info = FIELD_QUESTIONS.get(field, {})
+            question = field_info.get('question', f'{field}에 대해 알려주세요.')
+            examples = field_info.get('examples', '')
+            
+            lines.append(f"{i}. {question}")
+            if examples:
+                lines.append(f"   ({examples})")
+        
         lines.append("")
     
     lines.append("알려주시면 더 정확한 정보를 안내해 드릴 수 있습니다.")
@@ -101,26 +120,10 @@ def _extract_clarifying_questions(missing_fields: List[str]) -> List[str]:
 def ask_clarification_node(state: ChatState) -> Dict:
     """
     추가 질문 노드 함수
-    
-    query_analysis에서 확인된 누락 필드에 대해
-    사용자에게 추가 정보를 요청하는 메시지 생성.
-    
-    조건부 엣지에서 needs_clarification=True일 때 호출됨.
-    
-    Args:
-        state: 현재 ChatState
-        
-    Returns:
-        부분 상태 업데이트 dict:
-        {
-            'final_answer': str,
-            'clarifying_questions': List[str],
-            'messages': List[AIMessage]
-        }
+    이미 입력된 정보와 부족한 정보를 구체적으로 안내
     """
     query_analysis = state.get('query_analysis')
     
-    # query_analysis가 없으면 기본 질문
     if not query_analysis:
         default_message = (
             "분쟁 상담을 위해 몇 가지 정보가 필요합니다.\n\n"
@@ -139,9 +142,9 @@ def ask_clarification_node(state: ChatState) -> Dict:
         }
     
     missing_fields = query_analysis.get('missing_fields', [])
+    extracted_info = query_analysis.get('extracted_info', {})
     
-    if not missing_fields:
-        # 누락 필드 없음 - 이 노드가 호출되면 안 됨 (방어 코드)
+    if not missing_fields and not extracted_info:
         fallback = "추가 정보가 필요하지 않습니다. 질문을 입력해 주세요."
         return {
             'final_answer': fallback,
@@ -149,8 +152,7 @@ def ask_clarification_node(state: ChatState) -> Dict:
             'messages': [AIMessage(content=fallback)],
         }
     
-    # 추가 질문 메시지 생성
-    clarification_message = _build_clarification_message(missing_fields)
+    clarification_message = _build_clarification_message(missing_fields, extracted_info or {})
     clarifying_questions = _extract_clarifying_questions(missing_fields)
     
     return {

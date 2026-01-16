@@ -23,7 +23,8 @@ export function useChatMutation() {
   return useMutation<ChatAPIResponse, Error, ChatAPIRequest>({
     mutationFn: async (request: ChatAPIRequest) => {
       const backendSessionId = useChatStore.getState().backendSessionId;
-      const onboarding = convertDisputeFormToOnboarding();
+      // Use onboarding from request if provided, otherwise try to get from store
+      const onboarding = request.onboarding || convertDisputeFormToOnboarding();
       
       const enhancedRequest: ChatAPIRequest = {
         ...request,
