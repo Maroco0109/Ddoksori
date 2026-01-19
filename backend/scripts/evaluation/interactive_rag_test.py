@@ -2,28 +2,40 @@
 """
 Interactive RAG Test Tool (Lite Version for S1-D3)
 - Supports interactive search for criteria (S1-D3)
-- Placeholder for full RAG system test
+- Uses refactored agents/retrieval tools
 """
 
 import sys
 import os
 import argparse
+from dotenv import load_dotenv
 
-# Add examples directory to sys.path to import query_criteria
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../examples'))
+# Add backend directory to sys.path to allow importing app
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.abspath(os.path.join(current_dir, '../../'))
+sys.path.insert(0, backend_dir)
 
 try:
-    from query_criteria import hierarchical_search, get_criteria_statistics
-except ImportError:
-    print("❌ Error: Could not import query_criteria. Make sure backend/scripts/examples/query_criteria.py exists.")
+    from app.agents.retrieval.tools.specialized_retrievers import CriteriaRetriever
+except ImportError as e:
+    print(f"❌ Error: Could not import CriteriaRetriever: {e}")
     sys.exit(1)
+
+def get_db_config():
+    return {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': os.getenv('DB_PORT', '5432'),
+        'dbname': os.getenv('DB_NAME', 'ddoksori'),
+        'user': os.getenv('DB_USER', 'postgres'),
+        'password': os.getenv('DB_PASSWORD', 'postgres'),
+    }
 
 def print_separator():
     print("=" * 60)
 
-def search_loop():
+def search_loop(retriever: CriteriaRetriever):
     print_separator()
-    print("🤖 Interactive RAG Test (S1-D3 Logic)")
+    print("🤖 Interactive RAG Test (Refactored Agents)")
     print("Type 'exit' or 'quit' to stop.")
     print_separator()
 
@@ -43,41 +55,42 @@ def search_loop():
         print(f"\nSearching for: '{query}'...")
         
         try:
-            result = hierarchical_search(query, limit=3)
+            # Using search_two_stage from CriteriaRetriever
+            results = retriever.search_two_stage(query, top_k=3)
             
-            print(f"\n[Stage 1: Classification] Found {len(result['stage1'])} candidates")
-            for item in result['stage1']:
-                print(f"  - {item.get('path_hint')}: {item.get('item_group')}")
-                
-            print(f"\n[Stage 2: Criteria] Found {len(result['stage2'])} related rules")
-            for criteria in result['stage2']:
-                 text = criteria.get('unit_text', '')
-                 print(f"  - {text[:80]}..." if len(text) > 80 else f"  - {text}")
+            print(f"\n[Criteria Search Results] Found {len(results)} matches")
+            for i, result in enumerate(results, 1):
+                print(f"\nResult {i}:")
+                print(f"  - Source: {result.source_label}")
+                path = f"{result.category or ''} > {result.item or ''}"
+                print(f"  - Path: {path}")
+                text = result.unit_text if result.unit_text else ""
+                print(f"  - Content: {text[:80]}..." if len(text) > 80 else f"  - Content: {text}")
 
-            if not result['stage1'] and not result['stage2']:
+            if not results:
                 print("  (No results found)")
                 
         except Exception as e:
             print(f"❌ Error during search: {e}")
 
-def show_stats():
-    print("\n📊 Current DB Statistics:")
-    try:
-        stats = get_criteria_statistics()
-        for row in stats['criteria_units']:
-            print(f"  - {row['source_id']}: {row['unit_count']} units")
-    except Exception as e:
-        print(f"❌ Error fetching stats: {e}")
-
 def main():
     parser = argparse.ArgumentParser(description="Interactive RAG Test Tool")
-    parser.add_argument("--stats", action="store_true", help="Show database statistics on startup")
     args = parser.parse_args()
-
-    if args.stats:
-        show_stats()
-        
-    search_loop()
+    
+    load_dotenv()
+    
+    db_config = get_db_config()
+    embed_api_url = os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
+    
+    print(f"Connecting to DB at {db_config['host']}:{db_config['port']}...")
+    retriever = CriteriaRetriever(db_config, embed_api_url)
+    
+    try:
+        retriever.connect()
+        search_loop(retriever)
+    finally:
+        retriever.close()
+    
     print("\nBye! 👋")
 
 if __name__ == "__main__":

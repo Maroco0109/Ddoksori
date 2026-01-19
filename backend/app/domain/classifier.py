@@ -2,17 +2,16 @@
 똑소리 프로젝트 - 도메인 분류기
 S2-4: 키워드 기반 기관 분류 로직
 
-우선순위:
-1. FSS (금융) - 전문가 상담 권유
-2. K_MEDI (의료) - 전문가 상담 권유
-3. KOPICO (개인정보) - 전문가 상담 권유
-4. KCDRC (콘텐츠)
-5. ECMC (개인간 거래)
-6. KCA (기본값)
+분류 우선순위:
+1. Restricted 도메인 (FSS, K_MEDI, KOPICO) - 동등 우선순위, 매칭 점수 기반 결정
+2. KCDRC (콘텐츠)
+3. ECMC (개인간 거래)
+4. KCA (기본값)
 """
 
+import re
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .config import (
     AgencyCode,
@@ -36,49 +35,24 @@ class ClassificationResult:
 
 
 class DomainClassifier:
-    FINANCE_THRESHOLD = 2
-    MEDICAL_THRESHOLD = 2
-    PRIVACY_THRESHOLD = 2
+    RESTRICTED_THRESHOLD = 2
     CONTENT_THRESHOLD = 1
     INDIVIDUAL_THRESHOLD = 1
+
+    RESTRICTED_DOMAINS: List[Tuple[AgencyCode, str, str, List[str]]] = [
+        ('FSS', 'finance', '금융', FINANCE_KEYWORDS),
+        ('K_MEDI', 'medical', '의료', MEDICAL_KEYWORDS),
+        ('KOPICO', 'privacy', '개인정보', PRIVACY_KEYWORDS),
+    ]
 
     def classify(self, query: str) -> ClassificationResult:
         query_lower = query.lower()
 
-        finance_matches = self._find_matches(query_lower, FINANCE_KEYWORDS)
-        if len(finance_matches) >= self.FINANCE_THRESHOLD:
-            return ClassificationResult(
-                agency='FSS',
-                dispute_type='finance',
-                reason=f"금융 관련 분쟁으로 판단됩니다 (키워드: {', '.join(finance_matches[:3])})",
-                confidence=min(0.6 + len(finance_matches) * 0.08, 0.95),
-                matched_keywords=finance_matches,
-                is_restricted=True,
-            )
+        restricted_result = self._classify_restricted_domains(query_lower)
+        if restricted_result:
+            return restricted_result
 
-        medical_matches = self._find_matches(query_lower, MEDICAL_KEYWORDS)
-        if len(medical_matches) >= self.MEDICAL_THRESHOLD:
-            return ClassificationResult(
-                agency='K_MEDI',
-                dispute_type='medical',
-                reason=f"의료 관련 분쟁으로 판단됩니다 (키워드: {', '.join(medical_matches[:3])})",
-                confidence=min(0.6 + len(medical_matches) * 0.08, 0.95),
-                matched_keywords=medical_matches,
-                is_restricted=True,
-            )
-
-        privacy_matches = self._find_matches(query_lower, PRIVACY_KEYWORDS)
-        if len(privacy_matches) >= self.PRIVACY_THRESHOLD:
-            return ClassificationResult(
-                agency='KOPICO',
-                dispute_type='privacy',
-                reason=f"개인정보 관련 분쟁으로 판단됩니다 (키워드: {', '.join(privacy_matches[:3])})",
-                confidence=min(0.6 + len(privacy_matches) * 0.08, 0.95),
-                matched_keywords=privacy_matches,
-                is_restricted=True,
-            )
-
-        content_matches = self._find_matches(query_lower, CONTENT_KEYWORDS)
+        content_matches = self._find_matches_with_boundary(query_lower, CONTENT_KEYWORDS)
         if len(content_matches) >= self.CONTENT_THRESHOLD:
             return ClassificationResult(
                 agency='KCDRC',
@@ -89,7 +63,7 @@ class DomainClassifier:
                 is_restricted=False,
             )
 
-        individual_matches = self._find_matches(query_lower, INDIVIDUAL_KEYWORDS)
+        individual_matches = self._find_matches_with_boundary(query_lower, INDIVIDUAL_KEYWORDS)
         if len(individual_matches) >= self.INDIVIDUAL_THRESHOLD:
             return ClassificationResult(
                 agency='ECMC',
@@ -109,8 +83,36 @@ class DomainClassifier:
             is_restricted=False,
         )
 
-    def _find_matches(self, query: str, keywords: List[str]) -> List[str]:
-        return [kw for kw in keywords if kw in query]
+    def _classify_restricted_domains(self, query: str) -> Optional[ClassificationResult]:
+        candidates: List[Tuple[AgencyCode, str, str, List[str], float]] = []
+
+        for agency, dispute_type, domain_name, keywords in self.RESTRICTED_DOMAINS:
+            matches = self._find_matches_with_boundary(query, keywords)
+            if len(matches) >= self.RESTRICTED_THRESHOLD:
+                score = len(matches) + sum(len(m) for m in matches) * 0.01
+                candidates.append((agency, dispute_type, domain_name, matches, score))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda x: x[4], reverse=True)
+        agency, dispute_type, domain_name, matches, score = candidates[0]
+
+        return ClassificationResult(
+            agency=agency,
+            dispute_type=dispute_type,
+            reason=f"{domain_name} 관련 분쟁으로 판단됩니다 (키워드: {', '.join(matches[:3])})",
+            confidence=min(0.6 + len(matches) * 0.08, 0.95),
+            matched_keywords=matches,
+            is_restricted=True,
+        )
+
+    def _find_matches_with_boundary(self, query: str, keywords: List[str]) -> List[str]:
+        matches = []
+        for kw in keywords:
+            if kw in query:
+                matches.append(kw)
+        return matches
 
     def get_agency_info(self, agency: AgencyCode) -> dict:
         return dict(AGENCY_INFO.get(agency, AGENCY_INFO['KCA']))

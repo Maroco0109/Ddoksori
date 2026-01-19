@@ -19,11 +19,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from rag import RAGRetriever, HybridRetriever, RAGGenerator, SearchResult
-from rag.specialized_retrievers import StructuredRetriever
-from rag.logger import get_rag_logger
+if os.getenv('LANGCHAIN_TRACING_V2', 'false').lower() == 'true':
+    logger.info(f"[Langsmith] Tracing enabled - Project: {os.getenv('LANGCHAIN_PROJECT', 'default')}")
+
+from app.agents.retrieval.tools.retriever import RAGRetriever, SearchResult
+from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
+from app.agents.answer_generation.tools.generator import RAGGenerator
+
+from app.common.logger import get_rag_logger
 from utils.embedding_connection import get_embedding_api_url
-from app.orchestrator import get_graph, create_initial_state
+from app.orchestrator import get_graph, get_graph_for_chat_type, create_initial_state, create_simple_state
 
 app = FastAPI(
     title="똑소리 API",
@@ -108,6 +113,7 @@ class ChatRequest(BaseModel):
     top_k: Optional[int] = Field(default=5, ge=1, le=100, description="검색 결과 수")
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
+    debug: bool = Field(default=False, description="디버그 모드 (타이밍 정보 포함)")
 
     @field_validator('message')
     @classmethod
@@ -165,6 +171,14 @@ class SimilarCases(BaseModel):
     counsels: List[CaseReference] = []
 
 
+class NodeTiming(BaseModel):
+    """에이전트 노드 실행 시간 (debug 모드용)"""
+    node_name: str
+    duration_ms: float
+    start_time: str
+    end_time: str
+
+
 class ChatResponse(BaseModel):
     session_id: str = Field(..., description="세션 ID (멀티턴 대화용)")
     answer: str
@@ -177,6 +191,10 @@ class ChatResponse(BaseModel):
     similar_cases: Optional[SimilarCases] = None
     related_laws: Optional[List[LawReference]] = None
     related_criteria: Optional[List[CriteriaReference]] = None
+    # debug 모드 필드
+    node_timings: Optional[List[NodeTiming]] = None
+    request_id: Optional[str] = None
+    total_time_ms: Optional[float] = None
 
 
 class SearchRequest(BaseModel):
@@ -278,20 +296,34 @@ async def chat(request: ChatRequest):
     """
     start_time = time.time()
     log_entry = rag_logger.create_entry(query=request.message)
+    
+    rag_logger.log_input(
+        entry=log_entry,
+        message=request.message,
+        session_id=request.session_id,
+        chat_type=request.chat_type,
+        onboarding=request.onboarding,
+        top_k=request.top_k or 5,
+        chunk_types=request.chunk_types,
+        agencies=request.agencies
+    )
 
     try:
         session_id = request.session_id or str(uuid.uuid4())
         
-        initial_state = create_initial_state(
-            user_query=request.message,
-            chat_type=request.chat_type,
-            onboarding=cast(Any, request.onboarding),
-        )
+        graph = get_graph_for_chat_type(request.chat_type)
         
-        graph = get_graph()
-        config = cast(Any, {"configurable": {"thread_id": session_id}})
-        
-        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+        if request.chat_type == 'general':
+            initial_state = create_simple_state(user_query=request.message)
+            final_state = await asyncio.to_thread(graph.invoke, initial_state)
+        else:
+            initial_state = create_initial_state(
+                user_query=request.message,
+                chat_type=request.chat_type,
+                onboarding=cast(Any, request.onboarding),
+            )
+            config = cast(Any, {"configurable": {"thread_id": session_id}})
+            final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
         
         retrieval = final_state.get('retrieval') or {}
         agency_info = retrieval.get('agency', {})
@@ -344,7 +376,20 @@ async def chat(request: ChatRequest):
         
         laws_response = [LawReference(**law) for law in laws] if laws else None
         criteria_response = [CriteriaReference(**c) for c in criteria] if criteria else None
-        
+
+        # debug 모드일 때 타이밍 정보 변환
+        timing_response = None
+        if request.debug and node_timings:
+            timing_response = [
+                NodeTiming(
+                    node_name=name,
+                    duration_ms=info.get('duration_ms', 0),
+                    start_time=info.get('start_time', ''),
+                    end_time=info.get('end_time', '')
+                )
+                for name, info in node_timings.items()
+            ]
+
         return ChatResponse(
             session_id=session_id,
             answer=answer,
@@ -356,7 +401,11 @@ async def chat(request: ChatRequest):
             domain=domain_response,
             similar_cases=similar_cases_response,
             related_laws=laws_response,
-            related_criteria=criteria_response
+            related_criteria=criteria_response,
+            # debug 모드 필드
+            node_timings=timing_response if request.debug else None,
+            request_id=log_entry.request_id if request.debug else None,
+            total_time_ms=log_entry.total_time_ms if request.debug else None
         )
 
     except Exception as e:
