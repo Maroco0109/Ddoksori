@@ -224,7 +224,8 @@ python -m scripts.evaluation.run_evaluation \
 ### 4.1 데이터 품질 테스트
 ```bash
 conda activate dsr
-pytest backend/scripts/testing/data/test_data_quality.py -v
+cd backend
+python -m pytest scripts/testing/data/test_data_quality.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -234,7 +235,8 @@ pytest backend/scripts/testing/data/test_data_quality.py -v
 
 ### 4.2 Retrieval 노드 테스트
 ```bash
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestRetrievalNode -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestRetrievalNode -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -401,15 +403,13 @@ python -m scripts.evaluation.run_evaluation \
   --dataset data/evaluation/eval_dataset.jsonl \
   --output results/retrieval_eval.json
 
-# 테스트 실행
-pytest backend/scripts/testing/data/test_data_quality.py -v
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestRetrievalNode -v
+# 테스트 실행 (backend 디렉토리에서)
+cd backend
+python -m pytest scripts/testing/data/test_data_quality.py -v -p no:asyncio
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestRetrievalNode -v -p no:asyncio
 
 # DB 확인 (Docker)
 docker exec -it ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM law_units;"
 docker exec -it ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM chunks WHERE embedding IS NULL;"
 ```
 
----
-
-*이 문서는 팀원 A가 독립적으로 작업할 수 있도록 구성되었습니다.*

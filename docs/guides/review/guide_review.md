@@ -215,7 +215,8 @@ frontend/src/
 ### 5.1 Review 노드 테스트
 ```bash
 conda activate dsr
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -228,7 +229,8 @@ pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode -v
 
 ### 5.2 Clarification 노드 테스트
 ```bash
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificationNode -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificationNode -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -239,7 +241,8 @@ pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificat
 
 ### 5.3 에러 처리 테스트
 ```bash
-pytest backend/scripts/testing/api/test_api_error_handling.py -v
+cd backend
+python -m pytest scripts/testing/api/test_api_error_handling.py -v -p no:asyncio
 ```
 
 ### 5.4 프론트엔드 개발 서버
@@ -515,14 +518,15 @@ export function SafetyWarning({ questions, onQuestionClick }: SafetyWarningProps
 # 환경 활성화
 conda activate dsr
 
-# Review 노드 테스트
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode -v
+# Review 노드 테스트 (backend 디렉토리에서)
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode -v -p no:asyncio
 
 # Clarification 노드 테스트
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificationNode -v
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificationNode -v -p no:asyncio
 
 # 에러 처리 테스트
-pytest backend/scripts/testing/api/test_api_error_handling.py -v
+python -m pytest scripts/testing/api/test_api_error_handling.py -v -p no:asyncio
 
 # Review 평가
 python -m scripts.evaluation.evaluate_review \
@@ -577,6 +581,3 @@ if re.search(pattern, text):
     print("탐지됨!")
 ```
 
----
-
-*이 문서는 팀원 D가 독립적으로 작업할 수 있도록 구성되었습니다.*

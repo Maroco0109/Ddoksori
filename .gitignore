@@ -59,6 +59,7 @@ models/
 # archives
 backend/data/law/scripts/_archive
 backend/_archive
+docs/guides/_archive
 
 # documents
 docs/diagram
@@ -70,6 +71,7 @@ backend/data/criteria/
 backend/data/dispute/
 backend/data/law/raw
 backend/data/evaluation
+backend/data/golden_set
 
 
 # Backup Data
