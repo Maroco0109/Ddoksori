@@ -41,8 +41,6 @@ Thumbs.db
 # Logs directory
 logs/
 *.log
-backend/results/
-backend/reports/
 
 # Database
 *.db
@@ -63,6 +61,7 @@ docs/guides/_archive
 
 # documents
 docs/diagram
+plans/
 
 
 # Data
