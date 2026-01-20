@@ -71,6 +71,25 @@ CRITERIA_KEYWORDS = [
     "환불", "보상", "배상", "수리", "교환", "반품"
 ]
 
+# Phase 4: 시스템/봇 관련 질문 키워드 (검색 불필요) - 소문자로 통일
+SYSTEM_META_KEYWORDS = [
+    "모델명", "모델 이름", "어떤 모델", "버전", "네 이름", "니 이름", "너 이름",
+    "만든 사람", "개발자", "누가 만들", "네가 뭐야", "니가 뭐야", "너 뭐야",
+    "뭐하는 봇", "뭐하는 ai", "어떤 ai", "어떤 봇",
+    "기능", "할 수 있", "할수있", "사용법", "사용 방법",
+    "gpt", "chatgpt", "클로드", "claude", "gemini", "제미나이",
+    "exaone", "llm", "언어모델", "챗봇", "ai야", "ai인지"
+]
+
+# 시스템/봇 관련 질문 패턴 (정규식)
+SYSTEM_META_PATTERNS = [
+    r'(네가?|니가?|당신|너|넌)\s*(누구|뭐|무엇)',
+    r'(무슨|어떤|뭔)\s*(모델|AI|봇|챗봇)',
+    r'모델\s*이?름|모델명',
+    r'(네|니|당신)\s*(정체|이름)',
+    r'(소개|자기소개)\s*(해|좀)',
+]
+
 # 분쟁 상담 필수 정보 필드 (dispute 타입일 때)
 REQUIRED_DISPUTE_FIELDS = [
     "purchase_item",       # 구매 품목 (필수)
@@ -136,6 +155,33 @@ FAST_PATH_PROMOTION_KEYWORDS = [
 
 ENABLE_FAST_PATH_PROMOTION = os.getenv('ENABLE_FAST_PATH_PROMOTION', 'true').lower() == 'true'
 
+# ============================================================
+# Phase: Hybrid Ambiguous Query Detection (Pattern + LLM Fallback)
+# ============================================================
+
+# Feature Flag for ambiguous detection
+ENABLE_AMBIGUOUS_DETECTION = os.getenv('ENABLE_AMBIGUOUS_DETECTION', 'true').lower() == 'true'
+
+# Layer 1: 명시적 패턴 (빠른 매칭)
+AMBIGUOUS_QUERY_PATTERNS = [
+    r'^(요약|정리|알려줘|알려주세요|도와줘|도와주세요)$',  # 단독 모호 동사
+    r'^(이거|저거|그거)\s*(어떻게|뭐야|뭐예요|어떡해)\??$',  # 지시대명사+질문
+    r'^(뭐|뭘|어떻게|어떡해|무엇|무엇을)\s*해?\??$',  # 단일 질문어
+    r'^.{1,2}$',  # 매우 짧은 쿼리 (1-2자)
+]
+
+# Layer 2: 의도 명확 키워드 (있으면 NOT ambiguous)
+DISPUTE_INTENT_KEYWORDS = [
+    "환불", "반품", "교환", "수리", "취소", "해지", "해약",
+    "피해", "하자", "불량", "고장", "파손", "사기",
+    "배송", "지연", "미배송", "오배송", "누락",
+    "계약", "위약금", "보상", "배상", "청약철회",
+    "카드", "결제", "청구", "문의", "상담",
+]
+
+# Layer 3: LLM fallback 트리거 조건
+LLM_AMBIGUITY_CHECK_MAX_LENGTH = 30  # 30자 이하면 LLM 판단 요청
+
 
 def _should_promote_to_rag(query: str) -> bool:
     if not ENABLE_FAST_PATH_PROMOTION:
@@ -144,20 +190,113 @@ def _should_promote_to_rag(query: str) -> bool:
     return any(kw in query_lower for kw in FAST_PATH_PROMOTION_KEYWORDS)
 
 
+def _check_ambiguity_with_llm(query: str) -> bool:
+    """
+    LLM을 사용해 쿼리가 모호한지 판단 (Layer 3 fallback)
+
+    Args:
+        query: 사용자 쿼리
+
+    Returns:
+        True if query is ambiguous and needs clarification
+    """
+    try:
+        from app.llm.exaone_client import ExaoneLLMClient, LLMUnavailableError
+
+        client = ExaoneLLMClient()
+        if not client.is_available():
+            logger.warning("[QueryAnalysis] LLM not available for ambiguity check")
+            return False  # LLM 불가 시 conservatively proceed to RAG
+
+        system_prompt = "당신은 소비자 분쟁 상담 시스템의 쿼리 분류기입니다. 사용자 질문이 구체적인지 모호한지 판단하세요."
+        user_prompt = f"""사용자 질문: "{query}"
+
+판단 기준:
+- 구체적: 제품/서비스 종류, 문제 상황(환불/교환/배송 등)이 명확함
+- 모호함: 무엇을 원하는지 불명확, 맥락 없는 단순 요청
+
+응답: "구체적" 또는 "모호함" 중 하나만 출력하세요."""
+
+        response = client.generate(system_prompt, user_prompt)
+        is_ambiguous = "모호" in response.lower()
+        logger.info(f"[QueryAnalysis] LLM ambiguity check: '{query[:20]}...' -> {response.strip()} (ambiguous={is_ambiguous})")
+        return is_ambiguous
+
+    except Exception as e:
+        logger.warning(f"[QueryAnalysis] LLM ambiguity check failed: {e}")
+        return False  # 실패 시 conservatively proceed to RAG
+
+
+def _is_ambiguous_query(query: str) -> bool:
+    """
+    하이브리드 방식으로 모호한 쿼리 탐지
+
+    Layer 0: Intent 키워드/제품명 체크 (있으면 즉시 NOT ambiguous)
+    Layer 1: Pattern 매칭 (명시적 모호 패턴)
+    Layer 2: LLM fallback (짧은 쿼리, 의도 불명확)
+
+    Args:
+        query: 사용자 쿼리
+
+    Returns:
+        True if query is ambiguous and needs pre-clarification
+    """
+    if not ENABLE_AMBIGUOUS_DETECTION:
+        return False
+
+    query_stripped = query.strip()
+    query_lower = query_stripped.lower()
+
+    # Layer 0: 의도 키워드 있으면 → 즉시 NOT ambiguous (최우선 체크)
+    has_intent = any(kw in query_lower for kw in DISPUTE_INTENT_KEYWORDS)
+    if has_intent:
+        return False
+
+    # Layer 0.5: 제품명 있으면 → NOT ambiguous (제품 + 문제없음도 일단 RAG 시도)
+    has_product = any(p.lower() in query_lower for p in COMMON_PRODUCTS)
+    if has_product:
+        return False
+
+    # Layer 1: 명시적 패턴 매칭 (의도/제품 없는 경우에만)
+    for pattern in AMBIGUOUS_QUERY_PATTERNS:
+        if re.search(pattern, query_stripped, re.IGNORECASE):
+            logger.info(f"[QueryAnalysis] Ambiguous by pattern: '{query[:20]}'")
+            return True
+
+    # Layer 2: 짧은 쿼리인데 의도 불명확 → LLM 판단
+    if len(query_stripped) <= LLM_AMBIGUITY_CHECK_MAX_LENGTH:
+        is_ambiguous = _check_ambiguity_with_llm(query)
+        if is_ambiguous:
+            logger.info(f"[QueryAnalysis] Ambiguous by LLM: '{query[:20]}'")
+        return is_ambiguous
+
+    return False
+
+
 def _classify_mode(
-    query_type: Literal['dispute', 'general', 'law', 'criteria'],
+    query_type: Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous'],
     needs_clarification: bool,
     query: str,
 ) -> RoutingMode:
+    # Phase 4: 시스템 관련 질문은 검색 불필요
+    if query_type == 'system_meta':
+        logger.info("[QueryAnalysis] System meta query detected, skipping retrieval")
+        return 'NO_RETRIEVAL'
+
+    # NEW: 모호한 쿼리는 사전 명확화 필요
+    if query_type == 'ambiguous':
+        logger.info("[QueryAnalysis] Ambiguous query detected, requesting pre-clarification")
+        return 'NEED_USER_CLARIFICATION'
+
     if query_type == 'general':
         if _should_promote_to_rag(query):
             logger.info("[QueryAnalysis] Fast Path promotion triggered for general query")
             return 'NEED_RAG'
         return 'NO_RETRIEVAL'
-    
+
     if needs_clarification:
         return 'NEED_USER_CLARIFICATION'
-    
+
     return 'NEED_RAG'
 
 
@@ -247,38 +386,70 @@ def _get_missing_fields_description(
     return "\n".join(lines)
 
 
-def _classify_query_type(query: str) -> Literal['dispute', 'general', 'law', 'criteria']:
+def _is_system_meta_query(query: str) -> bool:
+    """
+    시스템/봇 관련 질문인지 확인 (Phase 4)
+
+    예: "네 모델명이 뭐야?", "니가 뭔데?", "어떤 AI야?"
+    """
+    query_lower = query.lower()
+
+    # 키워드 기반 체크
+    meta_keyword_count = sum(1 for kw in SYSTEM_META_KEYWORDS if kw in query_lower)
+    if meta_keyword_count >= 1:
+        return True
+
+    # 패턴 기반 체크
+    for pattern in SYSTEM_META_PATTERNS:
+        if re.search(pattern, query_lower):
+            return True
+
+    return False
+
+
+def _classify_query_type(query: str) -> Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']:
     """
     질의 유형 분류
-    
+
     Returns:
         'dispute': 분쟁 상담 (환불, 피해 등)
         'general': 일반 대화 (인사, 안부 등)
         'law': 법령 문의
         'criteria': 분쟁조정기준 문의
+        'system_meta': 시스템/봇 관련 질문 (Phase 4)
+        'ambiguous': 모호한 질의 (사전 명확화 필요)
     """
     query_lower = query.lower()
-    
+
+    # Phase 4: 시스템/봇 관련 질문 (검색 불필요)
+    if _is_system_meta_query(query):
+        return 'system_meta'
+
     # 일반 대화 패턴 (인사, 감사 등)
     general_patterns = [
         r'^안녕', r'^반갑', r'^감사', r'^고마', r'^네$', r'^예$',
-        r'^알겠', r'^ㅋ+$', r'^ㅎ+$', r'^ㅇㅇ$', r'^오케이', r'^ok',
+        r'^알겠', r'^네\s*알겠', r'^네,?\s*알겠',  # "네 알겠어요" 패턴 추가
+        r'^ㅋ+$', r'^ㅎ+$', r'^ㅇㅇ$', r'^오케이', r'^ok',
         r'^hello', r'^hi$', r'^bye', r'^thanks'
     ]
     for pattern in general_patterns:
         if re.search(pattern, query_lower):
             return 'general'
-    
+
     # 법령 문의 (법령 키워드가 명시적으로 포함)
     law_count = sum(1 for kw in LAW_KEYWORDS if kw in query_lower)
     if law_count >= 2 or any(kw in query_lower for kw in ["몇조", "법 조항", "법령 조회"]):
         return 'law'
-    
+
     # 분쟁조정기준 문의
     criteria_count = sum(1 for kw in CRITERIA_KEYWORDS if kw in query_lower)
     if criteria_count >= 2 or "분쟁조정기준" in query_lower:
         return 'criteria'
-    
+
+    # NEW: 하이브리드 ambiguous 체크 (dispute default 전에)
+    if _is_ambiguous_query(query):
+        return 'ambiguous'
+
     # 기본값: 분쟁 상담
     return 'dispute'
 
@@ -345,7 +516,7 @@ def _normalize_query(query: str) -> str:
 
 def _expand_query_by_type(
     query: str,
-    query_type: Literal['dispute', 'general', 'law', 'criteria'],
+    query_type: Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous'],
     onboarding: Optional[OnboardingInfo],
     extracted_info: Dict[str, str],
     keywords: List[str],
@@ -370,8 +541,16 @@ def _expand_query_by_type(
     Returns:
         (확장된 쿼리, 적용된 확장 방식)
     """
+    # Phase 4: 시스템 관련 질문은 확장 불필요
+    if query_type == 'system_meta':
+        return query, "system_meta_no_expansion"
+
     if query_type == 'general':
         return query, "general_no_expansion"
+
+    # 모호한 쿼리는 확장 불필요 (clarification 먼저)
+    if query_type == 'ambiguous':
+        return query, "ambiguous_no_expansion"
 
     # S2-10: LLM 기반 쿼리 재작성 시도
     if use_llm and USE_LLM_REWRITE and LLM_REWRITE_AVAILABLE:
@@ -508,8 +687,15 @@ def query_analysis_node(state: ChatState) -> Dict:
     # Step 2: 질의 유형 분류
     query_type = _classify_query_type(normalized_query)
     
+    # PR-7: 일반 채팅에서도 분쟁 의도 키워드가 있으면 dispute로 처리
     if chat_type == 'general':
-        query_type = 'general'
+        has_dispute_intent = any(kw in normalized_query for kw in DISPUTE_INTENT_KEYWORDS)
+        if has_dispute_intent:
+            query_type = 'dispute'
+            logger.info(f"[QueryAnalysis] General chat with dispute intent: '{normalized_query[:30]}'")
+        elif query_type not in ('law', 'criteria'):
+            # 법령/기준 쿼리는 유지, 나머지는 general
+            query_type = 'general'
     
     # Step 3: 키워드 추출
     keywords = _extract_keywords(normalized_query)

@@ -261,3 +261,36 @@ def review_node(state: ChatState) -> Dict:
             'review': review_result,
             'final_answer': final,
         }
+
+
+def review_node_wrapper(state: ChatState) -> Dict:
+    """
+    PR-2: 통합 그래프용 리뷰 노드 래퍼
+
+    chat_type에 따라 리뷰 동작을 분기:
+    - general: 자동 통과 (draft_answer → final_answer)
+    - dispute: 전체 리뷰 수행
+
+    Args:
+        state: 현재 ChatState (또는 UnifiedState)
+
+    Returns:
+        부분 상태 업데이트 dict
+    """
+    chat_type = state.get('chat_type', 'dispute')
+
+    if chat_type == 'general':
+        # 일반 채팅: 리뷰 스킵, draft_answer를 final_answer로 직접 설정
+        draft_answer = state.get('draft_answer', '')
+        review_result: ReviewResult = {
+            'passed': True,
+            'violations': [],
+            'filtered_answer': None,
+        }
+        return {
+            'review': review_result,
+            'final_answer': draft_answer,
+        }
+
+    # 분쟁 상담: 전체 리뷰 수행
+    return review_node(state)

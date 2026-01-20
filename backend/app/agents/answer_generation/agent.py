@@ -170,6 +170,10 @@ def generation_node(state: ChatState) -> Dict:
                 'confidence': 0.7
             }
         
+        # PR-2: mode가 NEED_RAG일 때만 면책 문구 포함
+        mode = state.get('mode', 'NEED_RAG')
+        include_disclaimer = (mode == 'NEED_RAG')
+
         result = generator.generate_structured_answer(
             query=user_query,
             agency_info=agency_info,
@@ -177,6 +181,7 @@ def generation_node(state: ChatState) -> Dict:
             counsels=retrieval.get('counsels', []),
             laws=retrieval.get('laws', []),
             criteria=retrieval.get('criteria', []),
+            include_disclaimer=include_disclaimer,
         )
         
         draft_answer = result.get('answer', '')

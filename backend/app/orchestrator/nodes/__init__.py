@@ -1,15 +1,11 @@
 """
-Orchestrator nodes for v2 chat graph.
-
-Sprint 2: Control Plane nodes
-- search_plan: Compile SearchPlan from QueryAnalysisResult_v2
-- sufficiency: Generate RetrievalReport_v2 and determine stop/continue/ask-user
+똑소리 프로젝트 - 오케스트레이터 노드 모듈
+작성일: 2026-01-20
+PR-4: Clarify 노드 추가
 """
 
-from .search_plan import search_plan_node
-from .sufficiency import sufficiency_node
+from .clarify import ask_clarification_node
 
 __all__ = [
-    'search_plan_node',
-    'sufficiency_node',
+    'ask_clarification_node',
 ]

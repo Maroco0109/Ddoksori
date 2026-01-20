@@ -22,12 +22,12 @@ SECTIONS = [
     "4. 다음 행동 체크리스트"
 ]
 
-# 4섹션 구조화 응답용 섹션
+# 3섹션 구조화 응답용 섹션 (PR-6: 2026-01-20)
+# 변경: 유사 사례 → 법령/기준 → 추가 안내 (권장 조치 제외)
 STRUCTURED_SECTIONS = [
-    "1. 추천 기관",
-    "2. 유사 사례",
-    "3. 관련 법령",
-    "4. 관련 기준"
+    "1. 유사 사례 분석",
+    "2. 관련 법령 및 기준",
+    "3. 추가 안내"
 ]
 
 # 기관 추천을 위한 키워드
@@ -379,7 +379,8 @@ class RAGGenerator:
         disputes: List[Dict],
         counsels: List[Dict],
         laws: List[Dict],
-        criteria: List[Dict]
+        criteria: List[Dict],
+        include_disclaimer: bool = True,
     ) -> Dict:
         """
         4개 섹션을 포함한 구조화된 응답 생성
@@ -391,6 +392,7 @@ class RAGGenerator:
             counsels: 상담사례 리스트
             laws: 관련 법령 리스트
             criteria: 관련 기준 리스트
+            include_disclaimer: 면책 문구 포함 여부 (PR-2: mode==NEED_RAG일 때만 True)
 
         Returns:
             {
@@ -428,7 +430,8 @@ class RAGGenerator:
 
         if not self.use_llm:
             result = self._generate_structured_stub(
-                query, agency_info, disputes, counsels, laws, criteria
+                query, agency_info, disputes, counsels, laws, criteria,
+                include_disclaimer=include_disclaimer
             )
             # Add empty logging metadata for stub mode
             result.update({
@@ -441,7 +444,7 @@ class RAGGenerator:
             return result
 
         # LLM 프롬프트 생성
-        system_prompt = self._get_structured_system_prompt()
+        system_prompt = self._get_structured_system_prompt(include_disclaimer=include_disclaimer)
         user_prompt = self._build_structured_prompt(
             query, agency_info, disputes, counsels, laws, criteria
         )
@@ -487,31 +490,40 @@ class RAGGenerator:
             'response_time_ms': response_time_ms
         }
 
-    def _get_structured_system_prompt(self) -> str:
-        """4섹션 구조화 응답용 시스템 프롬프트"""
-        return """당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
+    def _get_structured_system_prompt(self, include_disclaimer: bool = True) -> str:
+        """3섹션 구조화 응답용 시스템 프롬프트 (PR-6: 2026-01-20)
+
+        Args:
+            include_disclaimer: 면책 문구 포함 여부 (PR-2: mode==NEED_RAG일 때만 True)
+
+        PR-6 변경사항:
+        - 섹션 순서: 유사 사례 → 법령/기준 → 추가 안내 (3섹션)
+        - 면책 문구 위치: 맨 위 → 맨 아래
+        """
+        # PR-6: 면책 문구는 답변 끝에 배치
+        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if include_disclaimer else ""
+
+        return f"""당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
 
 역할:
 - 검색된 사례, 법령, 기준을 기반으로 정보를 제공합니다
 - 법률 자문이나 확정적인 판단을 하지 않습니다
 - 근거가 부족할 경우 추가 질문을 통해 정보를 수집합니다
 
-답변 구조:
-""" + DISCLAIMER + """
+답변 구조 (반드시 아래 순서와 형식을 따르세요):
 
-1. 추천 기관
-   - 제공된 기관 정보를 바탕으로 추천 이유를 설명합니다
+## 1. 유사 사례 분석
+   - 분쟁조정사례: 법적 효력이 있는 조정 결과 (출처, 결정일 명시)
+   - 상담사례: 참고용 정보
 
-2. 유사 사례
-   - 분쟁조정사례: 법적 효력이 있는 조정 결과입니다
-   - 상담사례: 참고용 정보입니다
+## 2. 관련 법령 및 기준
+   - 관련 법령: 법령명과 조항을 정확히 인용
+   - 분쟁해결기준: 해당 품목의 분쟁조정기준(별표) 안내
 
-3. 관련 법령
-   - 해당 분쟁에 적용될 수 있는 법령을 설명합니다
-   - 법령명과 조항을 정확히 인용합니다
-
-4. 관련 기준
-   - 분쟁조정기준(별표)에서 관련 내용을 안내합니다
+## 3. 추가 안내
+   - 담당 기관: 분쟁 유형에 맞는 기관 안내
+   - 연락처 및 웹사이트 정보
+{disclaimer_section}
 
 금지 사항:
 - "~해야 합니다", "~입니다" 같은 단정적 표현
@@ -528,23 +540,20 @@ class RAGGenerator:
         laws: List[Dict],
         criteria: List[Dict]
     ) -> str:
-        """4섹션 구조화 프롬프트 생성"""
+        """3섹션 구조화 프롬프트 생성 (PR-6: 2026-01-20)
+
+        섹션 순서:
+        1. 유사 사례 분석 (disputes + counsels)
+        2. 관련 법령 및 기준 (laws + criteria)
+        3. 추가 안내 (agency_info)
+        """
         lines = [f"사용자 질문: {query}\n"]
 
-        # 섹션 1: 추천 기관
+        # 섹션 1: 유사 사례 분석 (disputes + counsels)
         lines.append("=" * 50)
-        lines.append("[섹션 1: 추천 기관 정보]")
-        lines.append(f"추천 기관: {agency_info.get('agency', 'KCA')}")
-        lines.append(f"기관명: {agency_info.get('agency_info', {}).get('full_name', '')}")
-        lines.append(f"분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
-        lines.append(f"추천 이유: {agency_info.get('reason', '')}")
-        lines.append("")
+        lines.append("[섹션 1: 유사 사례 분석]")
 
-        # 섹션 2: 유사 사례
-        lines.append("=" * 50)
-        lines.append("[섹션 2: 유사 사례]")
-
-        lines.append("\n## 분쟁조정사례 (법적 효력 있음)")
+        lines.append("\n### 분쟁조정사례 (법적 효력 있음)")
         if disputes:
             for i, case in enumerate(disputes[:3], 1):
                 lines.append(f"\n{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}")
@@ -556,7 +565,7 @@ class RAGGenerator:
         else:
             lines.append("   관련 분쟁조정사례를 찾지 못했습니다.")
 
-        lines.append("\n## 상담사례 (참고용)")
+        lines.append("\n### 상담사례 (참고용)")
         if counsels:
             for i, case in enumerate(counsels[:3], 1):
                 lines.append(f"\n{i}. {case.get('doc_title', '제목 없음')}")
@@ -566,9 +575,11 @@ class RAGGenerator:
         else:
             lines.append("   관련 상담사례를 찾지 못했습니다.")
 
-        # 섹션 3: 관련 법령
+        # 섹션 2: 관련 법령 및 기준 (laws + criteria 병합)
         lines.append("\n" + "=" * 50)
-        lines.append("[섹션 3: 관련 법령]")
+        lines.append("[섹션 2: 관련 법령 및 기준]")
+
+        lines.append("\n### 관련 법령")
         if laws:
             for i, law in enumerate(laws[:3], 1):
                 law_name = law.get('law_name', '법령')
@@ -580,9 +591,7 @@ class RAGGenerator:
         else:
             lines.append("   관련 법령을 찾지 못했습니다.")
 
-        # 섹션 4: 관련 기준
-        lines.append("\n" + "=" * 50)
-        lines.append("[섹션 4: 관련 기준 (분쟁조정기준)]")
+        lines.append("\n### 분쟁해결기준")
         if criteria:
             for i, crit in enumerate(criteria[:3], 1):
                 source_label = crit.get('source_label', '기준')
@@ -597,9 +606,20 @@ class RAGGenerator:
         else:
             lines.append("   관련 기준을 찾지 못했습니다.")
 
+        # 섹션 3: 추가 안내 (agency_info)
+        lines.append("\n" + "=" * 50)
+        lines.append("[섹션 3: 추가 안내]")
+        lines.append(f"\n담당 기관: {agency_info.get('agency_info', {}).get('full_name', '한국소비자원')}")
+        lines.append(f"분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
+        lines.append(f"추천 이유: {agency_info.get('reason', '')}")
+        agency_url = agency_info.get('agency_info', {}).get('url', '')
+        if agency_url:
+            lines.append(f"웹사이트: {agency_url}")
+
         lines.append("\n" + "=" * 50)
         lines.append("\n위 정보를 바탕으로 사용자의 질문에 답변해 주세요.")
         lines.append("각 섹션별로 정리하여 답변하고, 출처를 명확히 밝혀 주세요.")
+        lines.append("답변 마지막에 면책 문구를 포함하세요.")
 
         return "\n".join(lines)
 
@@ -671,23 +691,27 @@ class RAGGenerator:
         disputes: List[Dict],
         counsels: List[Dict],
         laws: List[Dict],
-        criteria: List[Dict]
+        criteria: List[Dict],
+        include_disclaimer: bool = True,
     ) -> Dict:
-        """Stub 모드 (LLM 없이) 구조화된 응답 생성"""
-        lines = [DISCLAIMER, "\n"]
+        """Stub 모드 (LLM 없이) 구조화된 응답 생성 (PR-6: 2026-01-20)
 
-        # 섹션 1: 추천 기관
-        lines.append("## 1. 추천 기관")
-        lines.append(f"- 기관: {agency_info.get('agency_info', {}).get('full_name', '한국소비자원')}")
-        lines.append(f"- 분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
-        lines.append(f"- 추천 이유: {agency_info.get('reason', '일반 소비자 분쟁')}")
-        lines.append("")
+        Args:
+            include_disclaimer: 면책 문구 포함 여부 (PR-2: mode==NEED_RAG일 때만 True)
 
-        # 섹션 2: 유사 사례
-        lines.append("## 2. 유사 사례")
+        PR-6 변경사항:
+        - 섹션 순서: 유사 사례 → 법령/기준 → 추가 안내 (3섹션)
+        - 면책 문구 위치: 맨 위 → 맨 아래
+        """
+        lines = []
+
+        # 섹션 1: 유사 사례 분석
+        lines.append("## 1. 유사 사례 분석")
         lines.append("\n### 분쟁조정사례 (법적 효력 있음)")
         for i, case in enumerate(disputes[:3], 1):
             lines.append(f"{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}")
+            if case.get('decision_date'):
+                lines.append(f"   결정일: {case['decision_date']}")
             lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
         if not disputes:
             lines.append("   관련 사례 없음")
@@ -700,8 +724,9 @@ class RAGGenerator:
             lines.append("   관련 사례 없음")
         lines.append("")
 
-        # 섹션 3: 관련 법령
-        lines.append("## 3. 관련 법령")
+        # 섹션 2: 관련 법령 및 기준
+        lines.append("## 2. 관련 법령 및 기준")
+        lines.append("\n### 관련 법령")
         for i, law in enumerate(laws[:3], 1):
             law_name = law.get('law_name', '법령')
             full_path = law.get('full_path', '')
@@ -709,10 +734,8 @@ class RAGGenerator:
             lines.append(f"   유사도: {law.get('similarity', 0):.2%}")
         if not laws:
             lines.append("   관련 법령 없음")
-        lines.append("")
 
-        # 섹션 4: 관련 기준
-        lines.append("## 4. 관련 기준")
+        lines.append("\n### 분쟁해결기준")
         for i, crit in enumerate(criteria[:3], 1):
             source_label = crit.get('source_label', '기준')
             category = crit.get('category', '')
@@ -721,6 +744,21 @@ class RAGGenerator:
             lines.append(f"   유사도: {crit.get('similarity', 0):.2%}")
         if not criteria:
             lines.append("   관련 기준 없음")
+        lines.append("")
+
+        # 섹션 3: 추가 안내
+        lines.append("## 3. 추가 안내")
+        lines.append(f"- 담당 기관: {agency_info.get('agency_info', {}).get('full_name', '한국소비자원')}")
+        lines.append(f"- 분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
+        lines.append(f"- 추천 이유: {agency_info.get('reason', '일반 소비자 분쟁')}")
+        agency_url = agency_info.get('agency_info', {}).get('url', '')
+        if agency_url:
+            lines.append(f"- 웹사이트: {agency_url}")
+
+        # PR-6: 면책 문구는 맨 아래에 배치
+        if include_disclaimer:
+            lines.append("\n---")
+            lines.append(f"*{DISCLAIMER}*")
 
         total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
 

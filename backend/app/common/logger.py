@@ -83,7 +83,7 @@ class DomainLog:
 
 @dataclass
 class DisputeLog:
-    """분쟁조정 사례 로그"""
+    """분쟁조정 사례 로그 (메타데이터 포함)"""
     chunk_id: str
     doc_id: str
     doc_title: str
@@ -91,6 +91,11 @@ class DisputeLog:
     decision_date: Optional[str]
     similarity: float
     content_preview: str  # 200 chars
+    # Phase 2: 실시간 LLM 추출 메타데이터
+    product_item: Optional[str] = None        # 품목 (예: "키보드", "헬스회원권")
+    dispute_amount: Optional[str] = None      # 금액 (예: "120,000원")
+    transaction_date: Optional[str] = None    # 거래/구매 일자
+    mediation_result: Optional[str] = None    # 조정결과 (예: "인용", "기각", "조정성립")
 
 
 @dataclass
@@ -139,11 +144,15 @@ class StructuredRetrievalLog:
 
 @dataclass
 class NodeTimingLog:
-    """노드 실행 시간 로그"""
+    """노드 실행 시간 로그 (I/O 추적 포함)"""
     node_name: str
     duration_ms: float
     start_time: str
     end_time: str
+    # I/O 추적 필드 (Phase 1 개선)
+    input_snapshot: Optional[Dict] = None      # 노드 입력 상태 스냅샷
+    output_snapshot: Optional[Dict] = None     # 노드 출력 상태 스냅샷
+    state_changes: List[str] = field(default_factory=list)  # 변경된 필드 목록
 
 
 @dataclass
@@ -286,7 +295,12 @@ class RAGLogger:
                 source_org=d.get('source_org', ''),
                 decision_date=d.get('decision_date'),
                 similarity=d.get('similarity', 0.0),
-                content_preview=(d.get('content') or '')[:200]
+                content_preview=(d.get('content') or '')[:200],
+                # Phase 2: 메타데이터 필드
+                product_item=d.get('product_item'),
+                dispute_amount=d.get('dispute_amount'),
+                transaction_date=d.get('transaction_date'),
+                mediation_result=d.get('mediation_result'),
             ) for d in disputes
         ]
 
@@ -379,7 +393,7 @@ class RAGLogger:
         entry: RAGLogEntry,
         node_timings: Dict[str, Dict]
     ) -> None:
-        """Log node execution timings from LangGraph state."""
+        """Log node execution timings from LangGraph state (with I/O snapshots)."""
         timing_logs = []
         for node_name, timing in node_timings.items():
             start_ts = timing.get('start', 0)
@@ -388,7 +402,10 @@ class RAGLogger:
                 node_name=node_name,
                 duration_ms=timing.get('duration_ms', 0.0),
                 start_time=datetime.fromtimestamp(start_ts).isoformat() if start_ts else '',
-                end_time=datetime.fromtimestamp(end_ts).isoformat() if end_ts else ''
+                end_time=datetime.fromtimestamp(end_ts).isoformat() if end_ts else '',
+                input_snapshot=timing.get('input_snapshot'),
+                output_snapshot=timing.get('output_snapshot'),
+                state_changes=timing.get('state_changes', [])
             ))
         entry.node_timings = timing_logs
 

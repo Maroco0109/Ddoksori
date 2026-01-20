@@ -133,3 +133,68 @@ export interface DisputeFormData {
   purchaseAmount: string;
   disputeDetails: string;
 }
+
+// ============================================================================
+// PR-5: SSE Streaming Types
+// ============================================================================
+
+/**
+ * SSE Event Types from /chat/stream endpoint
+ */
+export type SSEEventType = 'status' | 'complete' | 'error';
+
+/**
+ * SSE Status Event - Node progress update
+ */
+export interface SSEStatusData {
+  node: string;
+  status: string;
+  progress: number;
+}
+
+/**
+ * SSE Source info for complete event
+ */
+export interface SSESourceInfo {
+  type: 'dispute' | 'law' | 'counsel' | 'criteria';
+  title: string;
+  source_org?: string;
+  similarity: number;
+}
+
+/**
+ * SSE Complete Event - Final result
+ */
+export interface SSECompleteData {
+  session_id: string;
+  answer: string;
+  sources: SSESourceInfo[];
+  awaiting_user_choice: boolean;
+  clarifying_questions: string[];
+}
+
+/**
+ * SSE Error Event
+ */
+export interface SSEErrorData {
+  message: string;
+}
+
+/**
+ * SSE Event Union Type
+ */
+export type SSEEvent =
+  | { type: 'status'; data: SSEStatusData }
+  | { type: 'complete'; data: SSECompleteData }
+  | { type: 'error'; data: SSEErrorData };
+
+/**
+ * Streaming state for UI
+ */
+export interface StreamingState {
+  isStreaming: boolean;
+  currentNode: string | null;
+  status: string;
+  progress: number;
+  error: string | null;
+}

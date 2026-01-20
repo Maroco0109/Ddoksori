@@ -4,10 +4,12 @@ import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCi
 import { Send } from 'lucide-react';
 import { useChatStore } from '@/features/chat/chat.store';
 import { useChatMutation } from './hooks/useChatMutation';
+import { useStreamingChat } from './hooks/useStreamingChat';
 import { extractCitations } from '@/shared/lib/citation';
 import { simulateStreaming } from '@/shared/lib/streaming';
 import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
+import { StatusIndicator } from './components/StatusIndicator';
 
 interface ChatPageProps {
   currentSessionId?: string | null;
@@ -26,8 +28,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   // 현재 세션 ID
   const [sessionId, setSessionId] = useState<string | null>(resolvedSessionId);
 
-  // React Query mutation for API calls
+  // React Query mutation for API calls (fallback)
   const chatMutation = useChatMutation();
+
+  // PR-7: SSE Streaming hook for real-time agent status
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat();
+  const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
   const [disputeMessages, setDisputeMessages] = useState<MessageWithCitations[]>([
@@ -361,9 +367,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   };
 
-  // 분쟁 상담 메시지 전송 핸들러
+  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
   const handleDisputeSend = async () => {
-    if (!disputeInputValue.trim() || isDisputeLoading) return;
+    if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
 
     const newMessage: MessageWithCitations = {
       id: disputeMessages.length + 1,
@@ -374,9 +380,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
     setDisputeMessages([...disputeMessages, newMessage]);
     setDisputeInputValue('');
-    setIsDisputeLoading(true);
 
-    // Create placeholder AI message for streaming
+    // Create placeholder AI message
     const aiMessageId = disputeMessages.length + 2;
     const placeholderAI: MessageWithCitations = {
       id: aiMessageId,
@@ -387,48 +392,38 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      const response = await chatMutation.mutateAsync({
+      // PR-7: Use SSE streaming API for real-time progress
+      const response = await startDisputeStream({
         message: newMessage.content,
         chat_type: 'dispute',
         top_k: 5,
       });
 
-      let streamedText = '';
-      await simulateStreaming(response.answer, (chunk) => {
-        streamedText += chunk;
+      if (response) {
+        const citations = extractCitations(response.answer, response.sources);
         setDisputeMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
+            msg.id === aiMessageId
+              ? {
+                  ...msg,
+                  content: response.answer,
+                  citations,
+                }
+              : msg
           )
         );
-      });
 
-      const citations = extractCitations(response.answer, response.sources);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? { 
-                ...msg, 
-                content: response.answer, 
-                citations,
-                isRestricted: response.is_restricted,
-                agencyCode: response.agency_code,
-                agencyInfo: response.agency_info,
-              }
-            : msg
-        )
-      );
-
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
-        const warningMessage: MessageWithCitations = {
-          id: aiMessageId + 1,
-          type: 'ai' as const,
-          content: '',
-          timestamp: new Date(),
-          hasSafetyWarning: true,
-          clarifyingQuestions: response.clarifying_questions,
-        };
-        setDisputeMessages((prev) => [...prev, warningMessage]);
+        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
+          const warningMessage: MessageWithCitations = {
+            id: aiMessageId + 1,
+            type: 'ai' as const,
+            content: '',
+            timestamp: new Date(),
+            hasSafetyWarning: true,
+            clarifyingQuestions: response.clarifying_questions,
+          };
+          setDisputeMessages((prev) => [...prev, warningMessage]);
+        }
       }
     } catch (error) {
       console.error('Chat API error:', error);
@@ -443,14 +438,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             : msg
         )
       );
-    } finally {
-      setIsDisputeLoading(false);
     }
   };
 
-  // 일반 상담 메시지 전송 핸들러
+  // 일반 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
   const handleGeneralSend = async () => {
-    if (!generalInputValue.trim() || isGeneralLoading) return;
+    if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
     const newMessage: MessageWithCitations = {
       id: generalMessages.length + 1,
@@ -463,9 +456,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setGeneralInputValue('');
     setActiveChatType('general');
     setStoreChatType('general');
-    setIsGeneralLoading(true);
 
-    // Create placeholder AI message for streaming
+    // Create placeholder AI message
     const aiMessageId = generalMessages.length + 2;
     const placeholderAI: MessageWithCitations = {
       id: aiMessageId,
@@ -476,48 +468,38 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setGeneralMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      const response = await chatMutation.mutateAsync({
+      // PR-7: Use SSE streaming API for real-time progress
+      const response = await startGeneralStream({
         message: newMessage.content,
         chat_type: 'general',
         top_k: 5,
       });
 
-      let streamedText = '';
-      await simulateStreaming(response.answer, (chunk) => {
-        streamedText += chunk;
+      if (response) {
+        const citations = extractCitations(response.answer, response.sources);
         setGeneralMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
+            msg.id === aiMessageId
+              ? {
+                  ...msg,
+                  content: response.answer,
+                  citations,
+                }
+              : msg
           )
         );
-      });
 
-      const citations = extractCitations(response.answer, response.sources);
-      setGeneralMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? { 
-                ...msg, 
-                content: response.answer, 
-                citations,
-                isRestricted: response.is_restricted,
-                agencyCode: response.agency_code,
-                agencyInfo: response.agency_info,
-              }
-            : msg
-        )
-      );
-
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
-        const warningMessage: MessageWithCitations = {
-          id: aiMessageId + 1,
-          type: 'ai' as const,
-          content: '',
-          timestamp: new Date(),
-          hasSafetyWarning: true,
-          clarifyingQuestions: response.clarifying_questions,
-        };
-        setGeneralMessages((prev) => [...prev, warningMessage]);
+        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
+          const warningMessage: MessageWithCitations = {
+            id: aiMessageId + 1,
+            type: 'ai' as const,
+            content: '',
+            timestamp: new Date(),
+            hasSafetyWarning: true,
+            clarifyingQuestions: response.clarifying_questions,
+          };
+          setGeneralMessages((prev) => [...prev, warningMessage]);
+        }
       }
     } catch (error) {
       console.error('Chat API error:', error);
@@ -532,8 +514,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             : msg
         )
       );
-    } finally {
-      setIsGeneralLoading(false);
     }
   };
 
@@ -731,14 +711,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                     <MessageBubble key={msg.id} message={msg} chatType="dispute" />
                   )
                 )}
-                {isDisputeLoading && (
+                {/* PR-7: StatusIndicator for real-time agent progress */}
+                {disputeStreamingState.isStreaming && (
                   <div className="flex items-start mb-4 md:mb-6">
-                    <div className="bg-lavender/30 px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl rounded-bl-sm">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                      </div>
+                    <div className="bg-lavender/30 px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl rounded-bl-sm w-full max-w-md">
+                      <StatusIndicator streamingState={disputeStreamingState} />
                     </div>
                   </div>
                 )}
@@ -754,11 +731,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   onChange={(e) => setDisputeInputValue(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleDisputeSend()}
                   className="flex-1 px-4 sm:px-5 md:px-6 py-3 md:py-4 border-2 border-ivory rounded-full outline-none focus:border-deep-teal transition-all text-sm sm:text-base"
-                  disabled={isDisputeLoading}
+                  disabled={disputeStreamingState.isStreaming}
                 />
                 <button
                   onClick={handleDisputeSend}
-                  disabled={isDisputeLoading}
+                  disabled={disputeStreamingState.isStreaming}
                   className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] md:w-[50px] md:h-[50px] bg-deep-teal text-white rounded-full flex items-center justify-center hover:bg-mint-green hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                 >
                   <Send size={18} className="sm:w-5 sm:h-5" />
@@ -792,14 +769,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                 <MessageBubble key={msg.id} message={msg} chatType="general" />
               )
             )}
-            {isGeneralLoading && (
+            {/* PR-7: StatusIndicator for real-time agent progress */}
+            {generalStreamingState.isStreaming && (
               <div className="flex items-start mb-4 md:mb-6">
-                <div className="bg-lavender/30 px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl rounded-bl-sm">
-                  <div className="flex gap-2">
-                    <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-gray-purple rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
+                <div className="bg-lavender/30 px-4 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl rounded-bl-sm w-full max-w-md">
+                  <StatusIndicator streamingState={generalStreamingState} />
                 </div>
               </div>
             )}
@@ -815,11 +789,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
               onChange={(e) => setGeneralInputValue(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleGeneralSend()}
               className="flex-1 px-4 sm:px-5 md:px-6 py-3 md:py-4 border-2 border-ivory rounded-full outline-none focus:border-mint-green transition-all text-sm sm:text-base"
-              disabled={isGeneralLoading}
+              disabled={generalStreamingState.isStreaming}
             />
             <button
               onClick={handleGeneralSend}
-              disabled={isGeneralLoading}
+              disabled={generalStreamingState.isStreaming}
               className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] md:w-[50px] md:h-[50px] bg-mint-green text-white rounded-full flex items-center justify-center hover:bg-deep-teal hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               <Send size={18} className="sm:w-5 sm:h-5" />

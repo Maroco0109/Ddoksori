@@ -3,6 +3,7 @@ import time
 import asyncio
 import uuid
 import logging
+import json
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -29,6 +30,23 @@ from app.agents.answer_generation.tools.generator import RAGGenerator
 from app.common.logger import get_rag_logger
 from utils.embedding_connection import get_embedding_api_url
 from app.orchestrator import get_graph, get_graph_for_chat_type, create_initial_state, create_simple_state
+from app.orchestrator.memory import ConversationMemory, should_use_memory
+
+# PR-3: 세션별 대화 메모리 저장소 (in-memory, 프로덕션에서는 Redis 등 사용 권장)
+_session_memories: Dict[str, ConversationMemory] = {}
+
+# PR-5: SSE 실시간 상태 표시용 노드 라벨 및 진행률
+# (노드 이름, 한글 라벨, 진행률 %)
+NODE_LABELS: Dict[str, tuple[str, int]] = {
+    'input_guardrail': ('입력 검증중...', 5),
+    'query_analysis': ('질의 분석중...', 15),
+    'ask_clarification': ('추가 정보 요청중...', 20),
+    'react_think': ('추론중...', 25),
+    'react_act': ('정보 검색중...', 50),
+    'generation': ('답변 생성중...', 80),
+    'review': ('검토중...', 95),
+    'output_guardrail': ('완료', 100),
+}
 
 app = FastAPI(
     title="똑소리 API",
@@ -133,7 +151,7 @@ class AgencyRecommendation(BaseModel):
 
 
 class CaseReference(BaseModel):
-    """사례 참조 정보"""
+    """사례 참조 정보 (Phase 2: 메타데이터 포함)"""
     chunk_id: Optional[str] = None
     doc_id: Optional[str] = None
     doc_title: Optional[str] = None
@@ -142,6 +160,11 @@ class CaseReference(BaseModel):
     similarity: float = 0.0
     content: Optional[str] = None
     url: Optional[str] = None
+    # Phase 2: 실시간 LLM 추출 메타데이터
+    product_item: Optional[str] = None        # 품목 (예: "키보드", "헬스회원권")
+    dispute_amount: Optional[str] = None      # 금액 (예: "120,000원")
+    transaction_date: Optional[str] = None    # 거래/구매 일자
+    mediation_result: Optional[str] = None    # 조정결과 (예: "인용", "기각", "조정성립")
 
 
 class LawReference(BaseModel):
@@ -310,20 +333,46 @@ async def chat(request: ChatRequest):
 
     try:
         session_id = request.session_id or str(uuid.uuid4())
-        
+
         graph = get_graph_for_chat_type(request.chat_type)
-        
-        if request.chat_type == 'general':
-            initial_state = create_simple_state(user_query=request.message)
-            final_state = await asyncio.to_thread(graph.invoke, initial_state)
-        else:
-            initial_state = create_initial_state(
-                user_query=request.message,
-                chat_type=request.chat_type,
-                onboarding=cast(Any, request.onboarding),
-            )
-            config = cast(Any, {"configurable": {"thread_id": session_id}})
-            final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+
+        # Phase 5: Recursion limit 증가 (기본 25 → 50)
+        # V2 그래프의 sufficiency 및 review 루프로 인해 기본값이 부족할 수 있음
+        GRAPH_RECURSION_LIMIT = 50
+
+        # PR-3: 세션 메모리 가져오기/생성
+        memory_context = {}
+        if should_use_memory(request.chat_type):
+            if session_id not in _session_memories:
+                _session_memories[session_id] = ConversationMemory(chat_type=request.chat_type)
+            session_memory = _session_memories[session_id]
+
+            # 사용자 메시지를 메모리에 추가
+            session_memory.add_turn(role='user', content=request.message)
+
+            # 메모리 컨텍스트 가져오기
+            memory_context = session_memory.get_context_for_llm()
+
+        # PR-2: 통합 상태 초기화 (chat_type에 따라 max_iterations 자동 설정)
+        initial_state = create_initial_state(
+            user_query=request.message,
+            chat_type=request.chat_type,
+            onboarding=cast(Any, request.onboarding),
+            # max_iterations는 create_initial_state에서 chat_type 기반으로 자동 설정
+            # general: 1, dispute: 2
+        )
+
+        # PR-3: 메모리 컨텍스트를 초기 상태에 병합
+        if memory_context:
+            initial_state['conversation_history'] = memory_context.get('conversation_history', [])
+            initial_state['compact_summary'] = memory_context.get('compact_summary')
+            initial_state['total_turn_count'] = _session_memories[session_id].get_total_turn_count()
+
+        config = cast(Any, {
+            "configurable": {"thread_id": session_id},
+            "recursion_limit": GRAPH_RECURSION_LIMIT
+        })
+        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
         
         retrieval = final_state.get('retrieval') or {}
         agency_info = retrieval.get('agency', {})
@@ -345,6 +394,10 @@ async def chat(request: ChatRequest):
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
         questions = final_state.get('clarifying_questions', [])
+
+        # PR-3: 어시스턴트 응답을 메모리에 추가
+        if should_use_memory(request.chat_type) and session_id in _session_memories:
+            _session_memories[session_id].add_turn(role='assistant', content=answer)
         
         node_timings = final_state.get('_node_timings', {})
         if node_timings:
@@ -424,53 +477,132 @@ async def chat(request: ChatRequest):
 
 
 @app.post("/chat/stream")
-async def chat_stream(
-    request: ChatRequest,
-    retriever=Depends(get_retriever)
-):
+async def chat_stream_sse(request: ChatRequest):
     """
-    RAG 기반 스트리밍 챗봇 응답 생성
+    PR-5: LangGraph astream 기반 SSE 스트리밍 챗봇 응답 생성
+
+    SSE 이벤트 타입:
+    - status: 노드별 진행 상태 (node, status, progress)
+    - complete: 최종 결과 (session_id, answer, sources)
+    - error: 오류 발생 시
+
+    Example SSE events:
+        data: {"type": "status", "data": {"node": "query_analysis", "status": "질의 분석중...", "progress": 15}}
+        data: {"type": "status", "data": {"node": "react_act", "status": "정보 검색중...", "progress": 50}}
+        data: {"type": "complete", "data": {"session_id": "...", "answer": "...", "sources": [...]}}
     """
-    try:
-        # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
-        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+    async def event_generator():
+        session_id = request.session_id or str(uuid.uuid4())
+        final_state = None
 
-        # 유사 청크 검색
-        if hasattr(retriever, 'search') and retrieval_mode == 'hybrid':
-            chunks = retriever.search(
-                query=request.message,
-                top_k=request.top_k,
-                chunk_type_filter=chunk_type_filter
+        try:
+            graph = get_graph_for_chat_type(request.chat_type)
+            GRAPH_RECURSION_LIMIT = 50
+
+            # PR-3: 세션 메모리 가져오기/생성
+            memory_context = {}
+            if should_use_memory(request.chat_type):
+                if session_id not in _session_memories:
+                    _session_memories[session_id] = ConversationMemory(chat_type=request.chat_type)
+                session_memory = _session_memories[session_id]
+                session_memory.add_turn(role='user', content=request.message)
+                memory_context = session_memory.get_context_for_llm()
+
+            # 초기 상태 생성
+            initial_state = create_initial_state(
+                user_query=request.message,
+                chat_type=request.chat_type,
+                onboarding=cast(Any, request.onboarding),
             )
-        else:
-            chunks = retriever.vector_search(
-                query=request.message,
-                top_k=request.top_k,
-                chunk_type_filter=chunk_type_filter
-            )
 
-        if not chunks:
-            async def no_results():
-                yield "죄송합니다. 관련된 분쟁조정 사례를 찾을 수 없습니다."
-            return StreamingResponse(no_results(), media_type="text/plain")
+            # PR-3: 메모리 컨텍스트 병합
+            if memory_context:
+                initial_state['conversation_history'] = memory_context.get('conversation_history', [])
+                initial_state['compact_summary'] = memory_context.get('compact_summary')
+                initial_state['total_turn_count'] = _session_memories[session_id].get_total_turn_count()
 
-        # SearchResult를 dict로 변환
-        chunks_dict = [_serialize_search_result(chunk) for chunk in chunks]
+            config = cast(Any, {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": GRAPH_RECURSION_LIMIT
+            })
 
-        # 스트리밍 답변 생성 (동기 함수를 비동기로 실행)
-        async def stream_response():
-            result = await asyncio.to_thread(
-                generator.generate_answer, request.message, chunks_dict
-            )
-            yield result['answer']
+            # PR-5: LangGraph astream으로 노드별 진행 상황 스트리밍
+            async for event in graph.astream(initial_state, config):
+                # event는 {노드이름: 노드출력상태} 형태의 dict
+                if event:
+                    node_name = list(event.keys())[0]
+                    final_state = event[node_name]  # 최신 상태 저장
 
-        return StreamingResponse(
-            stream_response(),
-            media_type="text/plain"
-        )
+                    # 노드 라벨 및 진행률 가져오기
+                    label, progress = NODE_LABELS.get(node_name, ('처리중...', 0))
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"답변 생성 중 오류 발생: {str(e)}")
+                    # SSE status 이벤트 전송
+                    status_event = {
+                        'type': 'status',
+                        'data': {
+                            'node': node_name,
+                            'status': label,
+                            'progress': progress
+                        }
+                    }
+                    yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+
+            # 최종 결과 전송
+            if final_state:
+                answer = final_state.get('final_answer', '')
+                retrieval = final_state.get('retrieval') or {}
+
+                # PR-3: 어시스턴트 응답을 메모리에 추가
+                if should_use_memory(request.chat_type) and session_id in _session_memories:
+                    _session_memories[session_id].add_turn(role='assistant', content=answer)
+
+                # 소스 정보 수집
+                sources = []
+                for dispute in retrieval.get('disputes', [])[:3]:
+                    sources.append({
+                        'type': 'dispute',
+                        'title': dispute.get('doc_title', ''),
+                        'source_org': dispute.get('source_org', ''),
+                        'similarity': dispute.get('similarity', 0)
+                    })
+                for law in retrieval.get('laws', [])[:3]:
+                    sources.append({
+                        'type': 'law',
+                        'title': f"{law.get('law_name', '')} {law.get('full_path', '')}",
+                        'similarity': law.get('similarity', 0)
+                    })
+
+                complete_event = {
+                    'type': 'complete',
+                    'data': {
+                        'session_id': session_id,
+                        'answer': answer,
+                        'sources': sources,
+                        'awaiting_user_choice': final_state.get('awaiting_user_choice', False),
+                        'clarifying_questions': final_state.get('clarifying_questions', [])
+                    }
+                }
+                yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error(f"[chat_stream_sse] Error: {e}")
+            error_event = {
+                'type': 'error',
+                'data': {
+                    'message': f"답변 생성 중 오류 발생: {str(e)}"
+                }
+            }
+            yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Nginx buffering 비활성화
+        }
+    )
 
 
 @app.get("/case/{case_uid}")

@@ -4,6 +4,7 @@
 S2-3: 멀티턴 대화를 위한 상태 정의
 S2-7: ReAct 패턴 지원 필드 추가
 Sprint 0: 에이전트 I/O 스키마 확정 (_v2 스키마 추가)
+PR-3: 메모리 관리 필드 추가 (conversation_history, compact_summary)
 
 LangGraph StateGraph에서 사용하는 TypedDict 기반 상태 스키마.
 MessagesState를 상속하여 add_messages reducer를 자동 적용.
@@ -21,7 +22,8 @@ import operator
 from langgraph.graph import MessagesState
 
 
-RoutingMode = Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION']
+# PR-4: NEED_CLARIFICATION 추가 (통합 그래프용, NEED_USER_CLARIFICATION과 동일 의미)
+RoutingMode = Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
 
 
 class SlotStatus(TypedDict):
@@ -119,7 +121,7 @@ class QueryAnalysisResult_v2(TypedDict, total=False):
     required_slots: List[str]
     filters_candidate: Dict[str, Any]
     sql_params_candidate: SqlParamsCandidate
-    query_type: Literal['dispute', 'general', 'law', 'criteria']
+    query_type: Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']
     keywords: List[str]
     agency_hint: Optional[str]
     rewritten_query: str
@@ -183,13 +185,13 @@ class OnboardingInfo(TypedDict, total=False):
 class QueryAnalysisResult(TypedDict, total=False):
     """
     질의분석 에이전트 결과
-    
+
     S2-5 확장: 쿼리 재생성(Query Rewriting) 필드 추가
     - rewritten_query: 정규화 + 확장된 최종 검색 쿼리
     - search_queries: Multi-Query 검색용 쿼리 리스트
     - expansion_applied: 적용된 확장 규칙 설명
     """
-    query_type: Literal['dispute', 'general', 'law', 'criteria']
+    query_type: Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']
     keywords: List[str]
     agency_hint: Optional[str]
     needs_clarification: bool
@@ -301,6 +303,11 @@ class ChatState(MessagesState):
     awaiting_user_choice: bool
     low_similarity_mode: bool
 
+    # === 라우팅 및 가드레일 필드 (PR-2 통합) ===
+    mode: RoutingMode
+    guardrail_blocked: bool
+    guardrail_type: Optional[str]
+
     # === ReAct 패턴 필드 (S2-7) ===
     react_steps: Annotated[List[ReActStep], operator.add]  # ReAct 히스토리 (누적)
     current_iteration: int          # 현재 ReAct 반복 횟수 (0-based)
@@ -313,23 +320,30 @@ class ChatState(MessagesState):
     # 노드 타이밍 정보
     _node_timings: Optional[Dict[str, Dict]]
 
+    # === 메모리 관리 필드 (PR-3) ===
+    conversation_history: List[Dict[str, Any]]  # 대화 히스토리 [{role, content, turn}]
+    compact_summary: Optional[Dict[str, Any]]   # Compact 요약 데이터
+    total_turn_count: int                       # 전체 대화 턴 수 (Compact 포함)
+
 
 def create_initial_state(
     user_query: str,
     chat_type: Literal['dispute', 'general'] = 'general',
     onboarding: Optional[OnboardingInfo] = None,
+    max_iterations: Optional[int] = None,
 ) -> ChatState:
     """
     초기 ChatState 생성 헬퍼 함수
-    
+
     Args:
         user_query: 사용자 질문
         chat_type: 상담 유형
         onboarding: 온보딩 데이터 (분쟁 상담용)
-        
+        max_iterations: ReAct 최대 반복 횟수 (None이면 chat_type에 따라 자동 설정)
+
     Returns:
         초기화된 ChatState
-        
+
     Example:
         >>> state = create_initial_state(
         ...     user_query="헬스장 환불 규정 알려줘",
@@ -337,6 +351,10 @@ def create_initial_state(
         ...     onboarding={'purchase_item': '헬스장 회원권'}
         ... )
     """
+    # chat_type에 따른 max_iterations 기본값 설정
+    if max_iterations is None:
+        max_iterations = 1 if chat_type == 'general' else 2
+
     return ChatState(
         messages=[],
         chat_type=chat_type,
@@ -354,15 +372,26 @@ def create_initial_state(
         retry_count=0,
         awaiting_user_choice=False,
         low_similarity_mode=False,
+        mode='NEED_RAG',
+        guardrail_blocked=False,
+        guardrail_type=None,
         react_steps=[],
         current_iteration=0,
-        max_iterations=2,
+        max_iterations=max_iterations,
         should_continue=True,
         last_thought=None,
         last_action=None,
         last_observation=None,
         _node_timings={},
+        # PR-3: 메모리 필드 초기화
+        conversation_history=[],
+        compact_summary=None,
+        total_turn_count=0,
     )
+
+
+# PR-2: 통합 상태 스키마 (ChatState 재사용)
+UnifiedState = ChatState
 
 
 class SimpleState(TypedDict):
@@ -470,6 +499,7 @@ __all__ = [
     'ChatState',
     'ChatState_v2',
     'SimpleState',
+    'UnifiedState',
     'create_initial_state',
     'create_initial_state_v2',
     'create_simple_state',

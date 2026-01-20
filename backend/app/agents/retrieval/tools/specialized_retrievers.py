@@ -2,15 +2,31 @@
 똑소리 프로젝트 - 전문 검색기 (Specialized Retrievers)
 작성일: 2026-01-13
 법령, 기준, 사례의 2단계 계층 검색 지원
+Phase 2: 분쟁조정사례 메타데이터 실시간 LLM 추출 추가
+Phase 3: 문서 수준 유사도 검색 (Document-Level Similarity)
 """
 
 import psycopg2
+import json
+import logging
+import os
 from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from collections import defaultdict
 import requests
 
 if TYPE_CHECKING:
     from .base import Document
+
+logger = logging.getLogger(__name__)
+
+# 메타데이터 추출 활성화 여부
+ENABLE_DISPUTE_METADATA_EXTRACTION = os.getenv('ENABLE_DISPUTE_METADATA_EXTRACTION', 'true').lower() == 'true'
+
+# Phase 3: 문서 수준 유사도 검색 활성화 여부
+ENABLE_DOCUMENT_LEVEL_SIMILARITY = os.getenv('ENABLE_DOCUMENT_LEVEL_SIMILARITY', 'true').lower() == 'true'
+# 문서 수준 유사도 계산을 위한 후보 청크 배수 (top_k * N개 검색)
+DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER = int(os.getenv('DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER', '5'))
 
 
 @dataclass
@@ -42,6 +58,26 @@ class CriteriaSearchResult:
     dispute_type: Optional[str]
     unit_text: str
     similarity: float
+
+
+@dataclass
+class DocumentLevelResult:
+    """
+    문서 수준 유사도 검색 결과 (Phase 3)
+
+    하나의 문서(doc_id)에 속한 모든 청크의 유사도를 집계하여
+    문서 전체의 관련성을 평가
+    """
+    doc_id: str
+    doc_title: str
+    source_org: str
+    avg_similarity: float          # 모든 청크의 평균 유사도
+    max_similarity: float          # 가장 높은 청크 유사도
+    min_similarity: float          # 가장 낮은 청크 유사도
+    chunk_count: int               # 검색된 청크 수
+    total_doc_chunks: int          # 문서 전체 청크 수
+    best_chunk: Dict               # 가장 유사한 청크 정보
+    all_chunks: List[Dict] = field(default_factory=list)  # 검색된 모든 청크
 
 
 class LawRetriever:
@@ -463,13 +499,194 @@ class CaseRetriever:
 
             return results
 
+    def _search_with_candidate_pool(
+        self,
+        query: str,
+        doc_type: str,
+        candidate_count: int
+    ) -> List[Dict]:
+        """
+        문서 수준 유사도 계산을 위한 후보 청크 검색 (확대된 후보군)
+
+        Args:
+            query: 검색 쿼리
+            doc_type: 문서 유형
+            candidate_count: 검색할 후보 청크 수
+
+        Returns:
+            청크 목록 (더 많은 후보)
+        """
+        query_embedding = self.embed_query(query)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.chunk_id,
+                    c.doc_id,
+                    c.chunk_type,
+                    c.chunk_index,
+                    c.content,
+                    d.title,
+                    d.source_org,
+                    d.url,
+                    d.metadata,
+                    1 - (c.embedding <=> %s::vector) AS similarity,
+                    (SELECT COUNT(*) FROM chunks c2 WHERE c2.doc_id = c.doc_id AND c2.drop = FALSE) AS total_chunks
+                FROM chunks c
+                JOIN documents d ON c.doc_id = d.doc_id
+                WHERE
+                    d.doc_type = %s
+                    AND c.embedding IS NOT NULL
+                    AND c.drop = FALSE
+                ORDER BY c.embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (query_embedding, doc_type, query_embedding, candidate_count)
+            )
+
+            results = []
+            for row in cur.fetchall():
+                metadata = row[8] if row[8] else {}
+                results.append({
+                    'chunk_id': row[0],
+                    'doc_id': row[1],
+                    'chunk_type': row[2],
+                    'chunk_index': row[3],
+                    'content': row[4],
+                    'doc_title': row[5],
+                    'source_org': row[6],
+                    'url': row[7],
+                    'decision_date': metadata.get('decision_date'),
+                    'similarity': float(row[9]),
+                    'total_doc_chunks': row[10]
+                })
+
+            return results
+
+    def _aggregate_by_document(
+        self,
+        chunks: List[Dict],
+        top_k: int
+    ) -> List[DocumentLevelResult]:
+        """
+        청크들을 문서별로 그룹화하고 평균 유사도 계산
+
+        Args:
+            chunks: 검색된 청크 목록
+            top_k: 반환할 문서 수
+
+        Returns:
+            평균 유사도 기준 상위 문서 목록
+        """
+        # doc_id별 청크 그룹화
+        doc_chunks = defaultdict(list)
+        doc_metadata = {}
+
+        for chunk in chunks:
+            doc_id = chunk['doc_id']
+            doc_chunks[doc_id].append(chunk)
+
+            # 문서 메타데이터 저장 (첫 번째 청크 기준)
+            if doc_id not in doc_metadata:
+                doc_metadata[doc_id] = {
+                    'doc_title': chunk['doc_title'],
+                    'source_org': chunk['source_org'],
+                    'url': chunk.get('url'),
+                    'decision_date': chunk.get('decision_date'),
+                    'total_doc_chunks': chunk.get('total_doc_chunks', 1)
+                }
+
+        # 문서별 유사도 통계 계산
+        doc_results = []
+        for doc_id, chunks_list in doc_chunks.items():
+            similarities = [c['similarity'] for c in chunks_list]
+            avg_similarity = sum(similarities) / len(similarities)
+            max_similarity = max(similarities)
+            min_similarity = min(similarities)
+
+            # 가장 유사한 청크 선택
+            best_chunk = max(chunks_list, key=lambda c: c['similarity'])
+
+            meta = doc_metadata[doc_id]
+            doc_results.append(DocumentLevelResult(
+                doc_id=doc_id,
+                doc_title=meta['doc_title'],
+                source_org=meta['source_org'],
+                avg_similarity=avg_similarity,
+                max_similarity=max_similarity,
+                min_similarity=min_similarity,
+                chunk_count=len(chunks_list),
+                total_doc_chunks=meta['total_doc_chunks'],
+                best_chunk=best_chunk,
+                all_chunks=chunks_list
+            ))
+
+        # 평균 유사도로 정렬
+        doc_results.sort(key=lambda d: d.avg_similarity, reverse=True)
+
+        return doc_results[:top_k]
+
+    def _document_results_to_chunks(
+        self,
+        doc_results: List[DocumentLevelResult]
+    ) -> List[Dict]:
+        """
+        DocumentLevelResult를 기존 chunk dict 형식으로 변환
+
+        각 문서의 best_chunk를 반환하며, 문서 수준 유사도 정보 추가
+
+        Args:
+            doc_results: 문서 수준 검색 결과
+
+        Returns:
+            청크 목록 (기존 형식 호환)
+        """
+        results = []
+        for doc_result in doc_results:
+            chunk = doc_result.best_chunk.copy()
+
+            # 문서 수준 유사도 정보 추가
+            chunk['doc_similarity'] = doc_result.avg_similarity
+            chunk['doc_chunk_count'] = doc_result.chunk_count
+            chunk['doc_total_chunks'] = doc_result.total_doc_chunks
+
+            # 원래 similarity는 청크 수준, doc_similarity가 문서 수준
+            # 정렬/표시를 위해 similarity도 문서 평균으로 대체 가능
+            # chunk['original_chunk_similarity'] = chunk['similarity']
+            # chunk['similarity'] = doc_result.avg_similarity
+
+            results.append(chunk)
+
+        return results
+
     def search_disputes(self, query: str, top_k: int = 3) -> List[Dict]:
         """
         분쟁조정사례 검색 (doc_type='mediation_case')
 
         법적 효력이 있는 분쟁조정 결과
+
+        Phase 3: 문서 수준 유사도 검색이 활성화된 경우:
+        - 더 많은 후보 청크를 검색하고
+        - doc_id별로 그룹화하여 평균 유사도 계산
+        - 평균 유사도가 높은 문서의 best chunk 반환
         """
-        return self._search_by_doc_type(query, 'mediation_case', top_k)
+        if ENABLE_DOCUMENT_LEVEL_SIMILARITY:
+            # 더 많은 후보 검색
+            candidate_count = top_k * DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER
+            candidates = self._search_with_candidate_pool(query, 'mediation_case', candidate_count)
+
+            if not candidates:
+                return []
+
+            # 문서별 집계
+            doc_results = self._aggregate_by_document(candidates, top_k)
+
+            # 기존 형식으로 변환
+            return self._document_results_to_chunks(doc_results)
+        else:
+            # 기존 방식: 개별 청크 유사도
+            return self._search_by_doc_type(query, 'mediation_case', top_k)
 
     def search_counsels(self, query: str, top_k: int = 3) -> List[Dict]:
         """
@@ -489,10 +706,110 @@ class CaseRetriever:
                 'counsels': [...]
             }
         """
+        disputes = self.search_disputes(query, dispute_k)
+
+        # Phase 2: 분쟁조정사례 메타데이터 추출
+        if ENABLE_DISPUTE_METADATA_EXTRACTION and disputes:
+            disputes = self.extract_dispute_metadata(disputes)
+
         return {
-            'disputes': self.search_disputes(query, dispute_k),
+            'disputes': disputes,
             'counsels': self.search_counsels(query, counsel_k)
         }
+
+    def extract_dispute_metadata(self, disputes: List[Dict]) -> List[Dict]:
+        """
+        분쟁조정사례에서 품목, 금액, 일시, 조정결과 메타데이터 추출 (실시간 LLM)
+
+        Args:
+            disputes: 검색된 분쟁조정사례 목록
+
+        Returns:
+            메타데이터가 추가된 분쟁조정사례 목록
+        """
+        try:
+            from ...llm.exaone_client import ExaoneLLMClient, LLMUnavailableError
+
+            client = ExaoneLLMClient()
+            if not client.is_available():
+                logger.warning("[CaseRetriever] LLM unavailable, skipping metadata extraction")
+                return disputes
+
+            system_prompt = """당신은 분쟁조정사례에서 핵심 정보를 추출하는 전문가입니다.
+주어진 텍스트에서 다음 정보를 추출하여 JSON 형식으로 반환하세요:
+- product_item: 분쟁 대상 품목 (예: "키보드", "헬스회원권", "냄비세트")
+- dispute_amount: 분쟁 금액 (예: "120,000원", "587,450원")
+- transaction_date: 거래/구매 일자 (예: "2024.01.15", "2024년 1월")
+- mediation_result: 조정 결과 (예: "인용", "기각", "조정성립", "환불 결정")
+
+정보가 없으면 null로 표시하세요. 반드시 유효한 JSON만 반환하세요."""
+
+            for dispute in disputes:
+                content = dispute.get('content', '')[:1500]  # 1500자 제한
+                if not content:
+                    continue
+
+                try:
+                    user_prompt = f"""다음 분쟁조정사례에서 정보를 추출하세요:
+
+{content}
+
+JSON 형식으로 반환:"""
+
+                    response = client.generate(system_prompt, user_prompt)
+
+                    # JSON 파싱 시도
+                    metadata = self._parse_metadata_json(response)
+                    if metadata:
+                        dispute['product_item'] = metadata.get('product_item')
+                        dispute['dispute_amount'] = metadata.get('dispute_amount')
+                        dispute['transaction_date'] = metadata.get('transaction_date')
+                        dispute['mediation_result'] = metadata.get('mediation_result')
+
+                except LLMUnavailableError:
+                    logger.warning("[CaseRetriever] LLM became unavailable during extraction")
+                    break
+                except Exception as e:
+                    logger.debug(f"[CaseRetriever] Metadata extraction failed for {dispute.get('doc_id')}: {e}")
+                    continue
+
+            return disputes
+
+        except ImportError:
+            logger.warning("[CaseRetriever] ExaoneLLMClient not available")
+            return disputes
+        except Exception as e:
+            logger.warning(f"[CaseRetriever] Metadata extraction error: {e}")
+            return disputes
+
+    def _parse_metadata_json(self, response: str) -> Optional[Dict]:
+        """LLM 응답에서 JSON 추출 및 파싱"""
+        try:
+            # JSON 블록 찾기
+            response = response.strip()
+
+            # ```json ... ``` 형식 처리
+            if '```json' in response:
+                start = response.find('```json') + 7
+                end = response.find('```', start)
+                if end > start:
+                    response = response[start:end].strip()
+            elif '```' in response:
+                start = response.find('```') + 3
+                end = response.find('```', start)
+                if end > start:
+                    response = response[start:end].strip()
+
+            # { ... } 찾기
+            if '{' in response and '}' in response:
+                start = response.find('{')
+                end = response.rfind('}') + 1
+                json_str = response[start:end]
+                return json.loads(json_str)
+
+            return None
+        except json.JSONDecodeError:
+            return None
 
     def invoke(
         self,

@@ -6,13 +6,14 @@ import time
 import sys
 
 # Configuration - KURE-v1 (Default Dense Embedding)
+# RunPod uses 9000-range ports to avoid conflicts with Jupyter/other services
 REMOTE_EMBED_URL = os.getenv("REMOTE_EMBED_URL")
-LOCAL_PORT = 8001
+LOCAL_PORT = int(os.getenv("KURE_LOCAL_PORT", 9001))
 LOCAL_EMBED_URL = f"http://localhost:{LOCAL_PORT}"
 
 # Configuration - BGE-M3 (Dense + Sparse Embedding)
 BGE_M3_REMOTE_URL = os.getenv("BGE_M3_REMOTE_URL")
-BGE_M3_LOCAL_PORT = 8003
+BGE_M3_LOCAL_PORT = int(os.getenv("BGE_M3_LOCAL_PORT", 9003))
 BGE_M3_LOCAL_URL = f"http://localhost:{BGE_M3_LOCAL_PORT}"
 
 # Embedding Model Selection
@@ -38,10 +39,10 @@ def start_local_server():
     
     # Path to python interpreter in current conda env
     python_executable = sys.executable
-    # Assume script is at backend/embedding_server.py
+    # Script is at backend/app/agents/retrieval/services/embedding_server.py
     # This file is backend/utils/embedding_connection.py
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    script_path = os.path.join(base_dir, "embedding_server.py")
+    script_path = os.path.join(base_dir, "app", "agents", "retrieval", "services", "embedding_server.py")
     
     if not os.path.exists(script_path):
         print(f"❌ Error: Embedding server script not found at {script_path}")

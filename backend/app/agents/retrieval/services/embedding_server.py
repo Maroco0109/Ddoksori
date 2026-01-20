@@ -79,11 +79,12 @@ async def lifespan(app: FastAPI):
             # Do not raise here, allow server to start but fail requests
             pass
 
+    port = int(os.getenv("PORT", 9001))
     print("=" * 60)
     print("✅ Embedding Server Ready")
     print("=" * 60)
-    print(f"   Health endpoint: http://localhost:8001/health")
-    print(f"   Embed endpoint:  http://localhost:8001/embed")
+    print(f"   Health endpoint: http://localhost:{port}/health")
+    print(f"   Embed endpoint:  http://localhost:{port}/embed")
     print("=" * 60)
 
     yield
@@ -143,5 +144,5 @@ async def health():
     }
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8001))
+    port = int(os.getenv("PORT", 9001))
     uvicorn.run(app, host="0.0.0.0", port=port)

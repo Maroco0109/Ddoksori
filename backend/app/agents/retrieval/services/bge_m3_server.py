@@ -2,7 +2,7 @@
 BGE-M3 Embedding Server for Ddoksori
 
 Provides Dense (1024D) + Sparse embeddings using BAAI/bge-m3 model.
-Port: 8003 (default)
+Port: 9003 (default)
 
 Features:
 - Dense embedding: 1024 dimensions
@@ -127,11 +127,12 @@ async def lifespan(app: FastAPI):
         print(f"Failed to load BGE-M3: {e}")
         raise
 
+    port = int(os.getenv("BGE_M3_PORT", 9003))
     print("=" * 60)
     print("BGE-M3 Server Ready")
     print("=" * 60)
-    print(f"   Health endpoint: http://localhost:8003/health")
-    print(f"   Embed endpoint:  http://localhost:8003/embed")
+    print(f"   Health endpoint: http://localhost:{port}/health")
+    print(f"   Embed endpoint:  http://localhost:{port}/embed")
     print("=" * 60)
 
     yield
@@ -255,5 +256,5 @@ async def root():
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("BGE_M3_PORT", 8003))
+    port = int(os.getenv("BGE_M3_PORT", 9003))
     uvicorn.run(app, host="0.0.0.0", port=port)
