@@ -24,7 +24,7 @@ from .nodes.search_plan import search_plan_node
 from .nodes.sufficiency import sufficiency_node
 from ..agents.query_analysis.agent import query_analysis_node
 from ..agents.query_analysis.tools import ask_clarification_node as legacy_ask_clarification_node
-from .nodes.clarify import ask_clarification_node as clarify_node
+from .nodes.clarify import ask_clarification_node
 from ..agents.retrieval.agent import retrieval_node, retrieval_node_v2
 from ..agents.answer_generation.agent import generation_node
 from ..agents.answer_generation.tools.prompts import low_similarity_prompt_node
@@ -688,7 +688,7 @@ def create_unified_chat_graph() -> StateGraph:
     graph.add_node('review', _create_timed_node(review_node_wrapper, 'review'))
     graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
     # PR-4: Clarify 노드
-    graph.add_node('ask_clarification', _create_timed_node(clarify_node, 'ask_clarification'))
+    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
 
     # 진입점
     graph.set_entry_point('input_guardrail')
