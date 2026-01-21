@@ -1,6 +1,10 @@
 import pytest
+import sys
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from unittest.mock import MagicMock, patch
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from app.orchestrator import (
     ChatState,

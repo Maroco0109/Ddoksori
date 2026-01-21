@@ -51,13 +51,28 @@ class ExaoneLLMClient:
     def __init__(self):
         self.runpod_url = os.getenv('EXAONE_RUNPOD_URL')
         self.api_key = os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy')
-        self.model = os.getenv('EXAONE_MODEL', 'LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct')
+        self.model = os.getenv('EXAONE_MODEL', 'LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct')
+        self.model_size = os.getenv('EXAONE_MODEL_SIZE', '7.8B')
         self.timeout = int(os.getenv('EXAONE_TIMEOUT', '10'))
-        self.temperature = float(os.getenv('EXAONE_TEMPERATURE', '0.1'))
-        self.max_tokens = int(os.getenv('EXAONE_MAX_TOKENS', '512'))
+        
+        # 모델 크기에 따른 파라미터 자동 조정
+        if self.model_size == '7.8B' or '7.8B' in self.model:
+            self.temperature = float(os.getenv('EXAONE_TEMPERATURE', '0.3'))
+            self.max_tokens = int(os.getenv('EXAONE_MAX_TOKENS', '1024'))
+        elif self.model_size == '32B' or '32B' in self.model:
+            self.temperature = float(os.getenv('EXAONE_TEMPERATURE', '0.3'))
+            self.max_tokens = int(os.getenv('EXAONE_MAX_TOKENS', '2048'))
+        else:  # 2.4B 또는 기본값
+            self.temperature = float(os.getenv('EXAONE_TEMPERATURE', '0.1'))
+            self.max_tokens = int(os.getenv('EXAONE_MAX_TOKENS', '512'))
 
         self._client: Optional[OpenAI] = None
         self._is_available: Optional[bool] = None
+        
+        logger.info(
+            f"[ExaoneLLMClient] Initialized with model={self.model}, "
+            f"size={self.model_size}, temp={self.temperature}, max_tokens={self.max_tokens}"
+        )
 
     def health_check(self) -> bool:
         """
@@ -165,9 +180,11 @@ class ExaoneLLMClient:
             )
 
             content = response.choices[0].message.content
+            if content is None:
+                raise LLMUnavailableError("LLM returned empty response")
+            
             logger.debug(f"[ExaoneLLMClient] Generated response: {content[:100]}...")
 
-            # 토큰 사용량 로깅
             if hasattr(response, 'usage') and response.usage:
                 logger.info(
                     f"[ExaoneLLMClient] Tokens - prompt: {response.usage.prompt_tokens}, "

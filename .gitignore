@@ -59,11 +59,10 @@ backend/data/law/scripts/_archive
 backend/_archive
 docs/guides/_archive
 
+
 # documents
-docs/diagram
-docs/ralph
-docs/sprint/
-plans/
+docs/_archive
+docs/plans
 
 
 # Data
@@ -85,8 +84,8 @@ backup_v3.sql
 Agents
 .agent
 .claude
+.sisyphus
 .cursorrules
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
-AI_MEMO_S1.md

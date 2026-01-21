@@ -7,8 +7,57 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Generator
+from prometheus_client import Histogram, Counter, REGISTRY
 
 logger = logging.getLogger(__name__)
+
+# S3-PR5: Prometheus Metrics Definition
+# Initialize metrics eagerly to ensure they appear in the registry
+PROM_AGENT_LATENCY = Histogram(
+    'agent_execution_seconds',
+    'Time spent in agent execution',
+    ['agent_name']
+)
+PROM_AGENT_REQUESTS = Counter(
+    'agent_requests_total',
+    'Total number of agent requests',
+    ['agent_name', 'status']
+)
+PROM_LLM_TOKENS = Counter(
+    'llm_tokens_total',
+    'Total LLM tokens used',
+    ['model', 'type']
+)
+PROM_TOOL_USAGE = Counter(
+    'agent_tool_usage_total',
+    'Total tool usage by mode',
+    ['tool_name', 'mode']
+)
+
+# S3-PR5: Cache Metrics
+PROM_CACHE_HITS = Counter(
+    'cache_hits_total',
+    'Total cache hits'
+)
+PROM_CACHE_MISSES = Counter(
+    'cache_misses_total',
+    'Total cache misses'
+)
+PROM_CACHE_ERRORS = Counter(
+    'cache_errors_total',
+    'Total cache errors'
+)
+
+# S3-PR5: Cost Metrics
+PROM_LLM_COST = Counter(
+    'llm_cost_usd_total',
+    'Total LLM API cost in USD',
+    ['model']
+)
+PROM_EMBEDDING_COST = Counter(
+    'embedding_cost_usd_total',
+    'Total embedding API cost in USD'
+)
 
 
 @dataclass
@@ -57,6 +106,11 @@ class AgentMetrics:
             
             cls._record(agent_name, record)
             
+            # S3-PR5: Prometheus observation
+            PROM_AGENT_LATENCY.labels(agent_name=agent_name).observe(duration_ms / 1000.0)
+            status = 'success' if error is None else 'error'
+            PROM_AGENT_REQUESTS.labels(agent_name=agent_name, status=status).inc()
+            
             log_msg = f"[metrics] {agent_name}.{operation}: {duration_ms:.2f}ms"
             if error:
                 log_msg += f" (ERROR: {error})"
@@ -92,6 +146,11 @@ class AgentMetrics:
             metadata=metadata or {},
         )
         cls._record(agent_name, record)
+        
+        # S3-PR5: Prometheus observation (Manual)
+        PROM_AGENT_LATENCY.labels(agent_name=agent_name).observe(duration_ms / 1000.0)
+        status = 'success' if success else 'error'
+        PROM_AGENT_REQUESTS.labels(agent_name=agent_name, status=status).inc()
     
     @classmethod
     def get_stats(cls, agent_name: Optional[str] = None) -> Dict[str, Any]:

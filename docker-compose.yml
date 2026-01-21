@@ -101,8 +101,42 @@ services:
       timeout: 5s
       retries: 3
 
+  # Prometheus (S3-PR5: Monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ddoksori_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./backend/monitoring/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - backend
+
+  # Grafana (S3-PR5: Monitoring)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ddoksori_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./backend/monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
   cloudbeaver_data:
   bge_m3_model_cache:
   redis_data:
+  prometheus_data:
+  grafana_data:

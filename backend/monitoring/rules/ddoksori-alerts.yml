@@ -1,0 +1,69 @@
+groups:
+  - name: ddoksori-alerts
+    rules:
+      # 에러율 급증
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(agent_requests_total{status="error"}[5m]))
+          / sum(rate(agent_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}% over the last 5 minutes"
+
+      # 응답 시간 지연
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95, sum(rate(agent_execution_seconds_bucket[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow response time detected"
+          description: "95th percentile response time is {{ $value | printf \"%.2f\" }}s"
+
+      # 캐시 에러 급증
+      - alert: CacheErrors
+        expr: rate(cache_errors_total[5m]) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache errors detected"
+          description: "Cache errors occurring at {{ $value | printf \"%.2f\" }} per second"
+
+      # 캐시 히트율 저하
+      - alert: LowCacheHitRate
+        expr: |
+          100 * sum(cache_hits_total)
+          / (sum(cache_hits_total) + sum(cache_misses_total)) < 50
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | printf \"%.1f\" }}%"
+
+      # LLM 도구 선택 폴백 빈도
+      - alert: HighFallbackRate
+        expr: |
+          sum(rate(agent_tool_usage_total{mode="fallback"}[5m]))
+          / sum(rate(agent_tool_usage_total[5m])) > 0.3
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "High LLM tool fallback rate"
+          description: "Fallback rate is {{ $value | printf \"%.2f\" }}%"
+
+      # 백엔드 다운
+      - alert: BackendDown
+        expr: up{job="fastapi"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend service is down"
+          description: "FastAPI backend has been unreachable for more than 1 minute"

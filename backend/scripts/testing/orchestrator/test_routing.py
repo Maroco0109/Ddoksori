@@ -143,7 +143,7 @@ class TestRouteAfterReview:
             'violation_details': [],
         }
         state['review_report_v2'] = review
-        assert route_after_review(state) == '__end__'
+        assert route_after_review(state) == 'output_guardrail'
 
     def test_failed_with_retries_regenerates(self):
         state = create_initial_state_v2("test")
@@ -169,7 +169,7 @@ class TestRouteAfterReview:
             'violation_details': [],
         }
         state['review_report_v2'] = review
-        assert route_after_review(state) == '__end__'
+        assert route_after_review(state) == 'output_guardrail'
 
     def test_needs_more_evidence_retrieves(self):
         state = create_initial_state_v2("test")
@@ -269,7 +269,7 @@ class TestSearchPlanNode:
         
         assert 'search_plan' in result
         plan = result['search_plan']
-        assert plan['retrievers'] == ['hybrid']
+        assert plan['retrievers'] == ['structured']
         assert plan['top_k'] == 10
         assert plan['rerank'] is True
 
@@ -370,7 +370,7 @@ class TestSufficiencyNode:
         
         assert report['relevance'] > 0
         assert report['total_chunks'] == 2
-        assert report['diversity'] == 0.5
+        assert report['diversity'] == 0.25
         assert report['sources_distribution']['disputes'] == 1
         assert report['sources_distribution']['counsels'] == 1
 

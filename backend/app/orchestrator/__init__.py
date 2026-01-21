@@ -23,17 +23,6 @@ from .checkpointer import (
     get_checkpointer,
     get_checkpointer_mode,
 )
-from .graph import (
-    create_chat_graph,
-    create_simple_chat_graph,
-    create_v2_chat_graph,
-    get_compiled_graph,
-    get_simple_compiled_graph,
-    get_graph,
-    get_simple_graph,
-    get_graph_for_chat_type,
-    reset_graph,
-)
 from .validators import (
     SchemaValidationError,
     SchemaValidator,
@@ -89,3 +78,24 @@ __all__ = [
     'get_validator',
     'STRICT_MODE',
 ]
+
+
+_graph_functions = {
+    'create_chat_graph',
+    'create_simple_chat_graph',
+    'create_v2_chat_graph',
+    'get_compiled_graph',
+    'get_simple_compiled_graph',
+    'get_graph',
+    'get_simple_graph',
+    'get_graph_for_chat_type',
+    'reset_graph',
+}
+
+
+def __getattr__(name):
+    if name in _graph_functions:
+        import importlib
+        graph_module = importlib.import_module('.graph', __name__)
+        return getattr(graph_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

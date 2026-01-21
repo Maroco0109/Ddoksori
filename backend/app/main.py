@@ -32,6 +32,9 @@ from utils.embedding_connection import get_embedding_api_url
 from app.orchestrator import get_graph, get_graph_for_chat_type, create_initial_state, create_simple_state
 from app.orchestrator.memory import ConversationMemory, should_use_memory
 
+# S3-PR4: A/B Testing Framework
+from app.experiments.api import router as experiments_router
+
 # PR-3: 세션별 대화 메모리 저장소 (in-memory, 프로덕션에서는 Redis 등 사용 권장)
 _session_memories: Dict[str, ConversationMemory] = {}
 
@@ -48,11 +51,16 @@ NODE_LABELS: Dict[str, tuple[str, int]] = {
     'output_guardrail': ('완료', 100),
 }
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 app = FastAPI(
     title="똑소리 API",
     version="0.4.1",  # Refactored for concurrency safety
     description="한국 소비자 분쟁 조정 RAG 챗봇 API"
 )
+
+# S3-PR5: Prometheus Monitoring
+Instrumentator().instrument(app).expose(app)
 
 # CORS 설정
 cors_origins = [origin.strip() for origin in os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')]
@@ -63,6 +71,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# S3-PR4: Register A/B Testing API Router
+app.include_router(experiments_router)
 
 # DB 설정
 db_config = {

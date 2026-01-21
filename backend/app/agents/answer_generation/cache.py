@@ -9,6 +9,8 @@ import os
 import time
 from typing import Optional, Dict, Any
 
+from app.common.metrics import PROM_CACHE_HITS, PROM_CACHE_MISSES, PROM_CACHE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,15 +70,18 @@ class AnswerCache:
             
             if cached:
                 self._hit_count += 1
+                PROM_CACHE_HITS.inc()
                 logger.debug(f"[AnswerCache] Cache HIT: {key}")
                 return json.loads(cached)
-            
+
             self._miss_count += 1
+            PROM_CACHE_MISSES.inc()
             logger.debug(f"[AnswerCache] Cache MISS: {key}")
             return None
-            
+
         except Exception as e:
             self._error_count += 1
+            PROM_CACHE_ERRORS.inc()
             logger.warning(f"[AnswerCache] Redis get error: {e}")
             return None
     
@@ -93,6 +98,7 @@ class AnswerCache:
             
         except Exception as e:
             self._error_count += 1
+            PROM_CACHE_ERRORS.inc()
             logger.warning(f"[AnswerCache] Redis set error: {e}")
             return False
     
@@ -107,6 +113,7 @@ class AnswerCache:
             return deleted > 0
         except Exception as e:
             self._error_count += 1
+            PROM_CACHE_ERRORS.inc()
             logger.warning(f"[AnswerCache] Redis delete error: {e}")
             return False
     
@@ -124,6 +131,7 @@ class AnswerCache:
             return 0
         except Exception as e:
             self._error_count += 1
+            PROM_CACHE_ERRORS.inc()
             logger.warning(f"[AnswerCache] Redis clear error: {e}")
             return 0
     
