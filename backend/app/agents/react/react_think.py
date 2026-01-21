@@ -38,17 +38,25 @@ def _analyze_retrieval_status(state: ChatState) -> Dict[str, bool]:
     }
 
 
-def _check_similarity_threshold(state: ChatState, threshold: float = 0.55) -> bool:
+def _check_similarity_threshold(state: ChatState, threshold: float = None) -> bool:
     """
     검색 결과의 유사도가 임계값 이상인지 확인
 
     Args:
         state: 현재 상태
-        threshold: 유사도 임계값 (기본 0.55)
+        threshold: 유사도 임계값 (None이면 AgentConfig에서 가져옴)
 
     Returns:
         최대 유사도가 임계값 이상이면 True
     """
+    from ...common.config import AgentConfig
+    
+    if threshold is None:
+        # 쿼리 타입에 따른 동적 임계값 적용
+        query_analysis = state.get('query_analysis') or {}
+        query_type = query_analysis.get('query_type')
+        threshold = AgentConfig.get_similarity_threshold(query_type)
+    
     retrieval = state.get('retrieval') or {}
     max_similarity = retrieval.get('max_similarity', 0.0)
     return max_similarity >= threshold
@@ -250,9 +258,21 @@ def _parse_llm_response(response: str) -> Optional[Dict]:
         return None
 
 
+MAX_LLM_RETRIES = int(os.getenv('REACT_LLM_MAX_RETRIES', '2'))
+RETRY_DELAY_MS = int(os.getenv('REACT_LLM_RETRY_DELAY_MS', '100'))
+
+
 def _llm_based_think(state: ChatState) -> Dict:
     """
-    LLM 기반 추론 (EXAONE 3.5 2.4B)
+    LLM 기반 추론 (EXAONE 3.5 2.4B) - 재시도 로직 포함
+
+    재시도 정책:
+    - 파싱 실패, 일시적 오류: 최대 MAX_LLM_RETRIES회 재시도
+    - LLM 서버 불가: 재시도 없이 즉시 규칙 기반 폴백
+
+    환경 변수:
+        REACT_LLM_MAX_RETRIES: 최대 재시도 횟수 (기본: 2)
+        REACT_LLM_RETRY_DELAY_MS: 재시도 간 대기 시간 (기본: 100ms)
 
     Args:
         state: 현재 ChatState
@@ -260,45 +280,54 @@ def _llm_based_think(state: ChatState) -> Dict:
     Returns:
         부분 상태 업데이트 dict
     """
+    import time
     from ...llm import ExaoneLLMClient, LLMUnavailableError
 
     iteration = state.get('current_iteration', 0)
+    last_error = None
 
-    try:
-        client = ExaoneLLMClient()
-        user_prompt = _build_think_prompt(state)
+    for attempt in range(MAX_LLM_RETRIES):
+        try:
+            client = ExaoneLLMClient()
+            user_prompt = _build_think_prompt(state)
 
-        logger.info("[react_think] Using LLM-based reasoning")
-        response = client.generate(REACT_THINK_SYSTEM_PROMPT, user_prompt)
+            logger.info(f"[react_think] LLM attempt {attempt + 1}/{MAX_LLM_RETRIES}")
+            response = client.generate(REACT_THINK_SYSTEM_PROMPT, user_prompt)
 
-        result = _parse_llm_response(response)
+            result = _parse_llm_response(response)
 
-        if result:
-            action = result['action']
-            should_continue = result['should_continue']
+            if result:
+                action = result['action']
+                should_continue = result['should_continue']
 
-            # action이 generate이면 should_continue는 False
-            if action == 'generate':
-                should_continue = False
-                action = None
+                if action == 'generate':
+                    should_continue = False
+                    action = None
 
-            return {
-                'last_thought': result['thought'],
-                'last_action': action if should_continue else None,
-                'should_continue': should_continue,
-                'current_iteration': iteration + 1,
-            }
+                return {
+                    'last_thought': result['thought'],
+                    'last_action': action if should_continue else None,
+                    'should_continue': should_continue,
+                    'current_iteration': iteration + 1,
+                }
 
-        # 파싱 실패 시 규칙 기반 폴백
-        logger.warning("[react_think] LLM response parsing failed, falling back to rule-based")
-        return _rule_based_think(state)
+            logger.warning(f"[react_think] Parse failed on attempt {attempt + 1}")
+            last_error = "Parse error"
 
-    except LLMUnavailableError as e:
-        logger.warning(f"[react_think] LLM unavailable: {e}, falling back to rule-based")
-        return _rule_based_think(state)
-    except Exception as e:
-        logger.error(f"[react_think] LLM error: {e}, falling back to rule-based")
-        return _rule_based_think(state)
+        except LLMUnavailableError as e:
+            logger.warning(f"[react_think] LLM unavailable on attempt {attempt + 1}: {e}")
+            last_error = e
+            break
+
+        except Exception as e:
+            logger.warning(f"[react_think] Error on attempt {attempt + 1}: {e}")
+            last_error = e
+
+        if attempt < MAX_LLM_RETRIES - 1:
+            time.sleep(RETRY_DELAY_MS / 1000)
+
+    logger.info(f"[react_think] All LLM attempts failed (last_error: {last_error}), falling back to rule-based")
+    return _rule_based_think(state)
 
 
 def _rule_based_think(state: ChatState) -> Dict:
@@ -311,8 +340,10 @@ def _rule_based_think(state: ChatState) -> Dict:
     Returns:
         부분 상태 업데이트 dict
     """
+    from ...common.config import AgentConfig
+    
     iteration = state.get('current_iteration', 0)
-    max_iterations = state.get('max_iterations', 2)
+    max_iterations = state.get('max_iterations', AgentConfig.MAX_REACT_ITERATIONS)
 
     query_analysis = state.get('query_analysis') or {}
     query_type = query_analysis.get('query_type')
