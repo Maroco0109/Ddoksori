@@ -86,7 +86,23 @@ services:
       start_period: 120s
       retries: 3
 
+  # Redis (S2-PR3: Answer Caching)
+  redis:
+    image: redis:7-alpine
+    container_name: ddoksori_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres_data:
   cloudbeaver_data:
   bge_m3_model_cache:
+  redis_data:
