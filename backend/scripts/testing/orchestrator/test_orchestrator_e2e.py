@@ -51,11 +51,11 @@ class TestOrchestratorGraphStructure:
         
         expected_nodes = [
             'query_analysis',
-            'retrieval',
+            'react_think',
+            'react_act',
             'generation',
             'review',
             'ask_clarification',
-            'low_similarity_prompt',
         ]
         
         for node in expected_nodes:
@@ -76,35 +76,8 @@ class TestOrchestratorGraphStructure:
 
 class TestHappyPathDispute:
 
-    @patch('app.orchestrator.nodes.retrieval.retrieval_node')
-    @patch('app.orchestrator.nodes.generation.generation_node')
-    @patch('app.orchestrator.nodes.review.review_node')
-    def test_full_sequence_with_mocks(
-        self,
-        mock_review,
-        mock_generation,
-        mock_retrieval,
-        mock_retrieval_result,
-        mock_query_analysis_result,
-    ):
-        mock_retrieval.return_value = {
-            'retrieval': mock_retrieval_result,
-            'sources': mock_retrieval_result['disputes'] + mock_retrieval_result['counsels'],
-        }
-        mock_generation.return_value = {
-            'draft_answer': '노트북 환불 관련 답변입니다. [1]',
-            'final_answer': '노트북 환불 관련 답변입니다. [1]',
-            'has_sufficient_evidence': True,
-        }
-        mock_review.return_value = {
-            'review': {'passed': True, 'violations': []},
-            'final_answer': '노트북 환불 관련 답변입니다. [1]',
-        }
-        
-        reset_graph()
-        from langgraph.checkpoint.memory import MemorySaver
-        graph = create_chat_graph().compile(checkpointer=MemorySaver())
-        
+    def test_dispute_query_analysis_completes(self, compiled_graph):
+        """분쟁 질의에 대해 query_analysis가 정상 완료되는지 확인 (ReAct 그래프)"""
         state = create_initial_state(
             user_query="노트북 환불받고 싶어요",
             chat_type='dispute',
@@ -112,7 +85,7 @@ class TestHappyPathDispute:
         )
         
         config = {"configurable": {"thread_id": "test-happy-path"}}
-        result = graph.invoke(state, config)
+        result = compiled_graph.invoke(state, config)
         
         assert result.get('query_analysis') is not None
         assert result['query_analysis']['query_type'] == 'dispute'
@@ -139,25 +112,8 @@ class TestAskClarificationBranch:
 
 class TestLowSimilarityBranch:
 
-    @patch('app.orchestrator.nodes.retrieval.retrieval_node')
-    def test_no_results_triggers_low_similarity(self, mock_retrieval, compiled_graph):
-        mock_retrieval.return_value = {
-            'retrieval': {
-                'agency': {'agency': 'KCA', 'dispute_type': '1:N', 'reason': 'test', 'confidence': 0.7},
-                'disputes': [],
-                'counsels': [],
-                'laws': [],
-                'criteria': [],
-                'max_similarity': 0.0,
-                'avg_similarity': 0.0,
-            },
-            'sources': [],
-        }
-        
-        reset_graph()
-        from langgraph.checkpoint.memory import MemorySaver
-        graph = create_chat_graph().compile(checkpointer=MemorySaver())
-        
+    def test_unusual_product_query_analysis(self, compiled_graph):
+        """특이한 제품 질의도 query_analysis 노드를 정상 통과하는지 확인"""
         state = create_initial_state(
             user_query="아무도 모르는 특이한 제품 환불",
             chat_type='dispute',
@@ -165,7 +121,7 @@ class TestLowSimilarityBranch:
         )
         
         config = {"configurable": {"thread_id": "test-low-sim"}}
-        result = graph.invoke(state, config)
+        result = compiled_graph.invoke(state, config)
         
         assert result.get('query_analysis') is not None
 

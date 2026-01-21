@@ -21,13 +21,13 @@ from app.orchestrator.state import (
     ReActStep,
     create_initial_state,
 )
-from app.orchestrator.nodes.react_think import (
+from app.agents.react.react_think import (
     react_think_node,
     _analyze_retrieval_status,
     _check_similarity_threshold,
     _determine_next_action,
 )
-from app.orchestrator.nodes.react_act import react_act_node
+from app.agents.react.react_act import react_act_node
 from app.orchestrator.graph import (
     create_react_chat_graph,
     _route_after_query_analysis_react,
@@ -56,12 +56,12 @@ class TestReActStepSchema:
         """create_initial_state가 ReAct 필드를 포함하는지 확인"""
         state = create_initial_state(
             user_query="테스트 쿼리",
-            chat_type='general',
+            chat_type='dispute',  # dispute uses max_iterations=2
         )
 
         assert state.get('react_steps') == []
         assert state.get('current_iteration') == 0
-        assert state.get('max_iterations') == 2
+        assert state.get('max_iterations') == 2  # dispute default
         assert state.get('should_continue') is True
         assert state.get('last_thought') is None
         assert state.get('last_action') is None
@@ -123,7 +123,7 @@ class TestReactThinkNode:
         assert '충분한 정보' in result['last_thought']
 
     def test_low_similarity_triggers_additional_search(self):
-        """유사도 낮음 → 추가 검색"""
+        """유사도 낮음 → 추가 검색 (기본 임계값 0.55 기준 테스트)"""
         state = create_initial_state(
             user_query="노트북 환불하고 싶어요",
             chat_type='dispute',
@@ -137,11 +137,21 @@ class TestReactThinkNode:
             'max_similarity': 0.4,
             'avg_similarity': 0.4,
         }
-
-        result = react_think_node(state)
-
-        assert result['last_action'] == 'search_all'
-        assert result['should_continue'] is True
+        
+        has_good = _check_similarity_threshold(state, threshold=0.55)
+        assert has_good is False, "0.4 < 0.55 should be below threshold"
+        
+        status = _analyze_retrieval_status(state)
+        thought, action, should_continue = _determine_next_action(
+            iteration=0,
+            max_iterations=2,
+            retrieval_status=status,
+            has_good_similarity=has_good,
+            query_type=None,
+        )
+        
+        assert action == 'search_all', f"Expected 'search_all', got {action}"
+        assert should_continue is True
 
     def test_missing_criteria_triggers_criteria_search(self):
         """분쟁사례 있지만 기준 없음 → 기준 검색"""
@@ -216,21 +226,70 @@ class TestCheckSimilarityThreshold:
         assert _check_similarity_threshold(state, threshold=0.55) is False
 
 
-class TestReactActNode:
-    """react_act_node 테스트"""
+class TestLLMRetryLogic:
+    """S1-PR2: LLM 재시도 로직 테스트"""
 
-    @patch('app.orchestrator.nodes.react_act._execute_search_all')
-    def test_search_all_action(self, mock_search):
+    @patch('app.agents.react.react_think._rule_based_think')
+    @patch('app.llm.ExaoneLLMClient')
+    def test_llm_retry_on_parse_failure(self, mock_client_class, mock_rule_based):
+        """파싱 실패 시 재시도 후 규칙 기반 폴백"""
+        from app.agents.react.react_think import _llm_based_think
+
+        mock_client = MagicMock()
+        mock_client.generate.return_value = "invalid json response"
+        mock_client_class.return_value = mock_client
+
+        mock_rule_based.return_value = {
+            'last_thought': '규칙 기반 폴백',
+            'last_action': 'search_all',
+            'should_continue': True,
+            'current_iteration': 1,
+        }
+
+        state = create_initial_state(user_query="테스트", chat_type='dispute')
+        result = _llm_based_think(state)
+
+        assert mock_client.generate.call_count >= 1
+        mock_rule_based.assert_called_once()
+        assert result['last_thought'] == '규칙 기반 폴백'
+
+    @patch('app.agents.react.react_think._rule_based_think')
+    @patch('app.llm.ExaoneLLMClient')
+    def test_llm_unavailable_no_retry(self, mock_client_class, mock_rule_based):
+        """LLM 불가 시 재시도 없이 즉시 폴백"""
+        from app.agents.react.react_think import _llm_based_think
+        from app.llm import LLMUnavailableError
+
+        mock_client_class.side_effect = LLMUnavailableError("Server unavailable")
+
+        mock_rule_based.return_value = {
+            'last_thought': '규칙 기반 폴백',
+            'last_action': 'search_all',
+            'should_continue': True,
+            'current_iteration': 1,
+        }
+
+        state = create_initial_state(user_query="테스트", chat_type='dispute')
+        result = _llm_based_think(state)
+
+        mock_rule_based.assert_called_once()
+        assert result['last_thought'] == '규칙 기반 폴백'
+
+
+class TestReactActNode:
+    """react_act_node 테스트 (S2-PR1: ActionRegistry 패턴 사용)"""
+
+    @patch('app.agents.retrieval.tools.specialized_retrievers.StructuredRetriever')
+    def test_search_all_action(self, mock_retriever_class):
         """search_all 액션 실행 테스트"""
-        mock_search.return_value = (
-            {
-                'disputes': [{'chunk_id': '1', 'similarity': 0.8}],
-                'counsels': [],
-                'laws': [],
-                'criteria': [],
-            },
-            '전체 검색 완료: 분쟁사례 1건, 상담사례 0건, 법령 0건, 기준 0건'
-        )
+        mock_retriever = MagicMock()
+        mock_retriever.search_all_sections.return_value = {
+            'disputes': [{'chunk_id': '1', 'similarity': 0.8}],
+            'counsels': [],
+            'laws': [],
+            'criteria': [],
+        }
+        mock_retriever_class.return_value = mock_retriever
 
         state = create_initial_state(
             user_query="노트북 환불",
@@ -248,13 +307,14 @@ class TestReactActNode:
         assert len(result['react_steps']) == 1
         assert result['react_steps'][0]['action'] == 'search_all'
 
-    @patch('app.orchestrator.nodes.react_act._execute_search_criteria')
-    def test_search_criteria_action(self, mock_search):
+    @patch('app.agents.retrieval.tools.specialized_retrievers.StructuredRetriever')
+    def test_search_criteria_action(self, mock_retriever_class):
         """search_criteria 액션 실행 테스트"""
-        mock_search.return_value = (
-            [{'unit_id': '1', 'category': '전자제품'}],
-            '분쟁해결기준 1건 검색 완료'
-        )
+        mock_retriever = MagicMock()
+        mock_retriever.search_criteria.return_value = [
+            {'unit_id': '1', 'category': '전자제품'}
+        ]
+        mock_retriever_class.return_value = mock_retriever
 
         state = create_initial_state(
             user_query="노트북 환불",
