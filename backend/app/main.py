@@ -631,6 +631,39 @@ async def get_case(
         raise HTTPException(status_code=500, detail=f"사례 조회 중 오류 발생: {str(e)}")
 
 
+@app.get("/metrics/agents")
+async def get_agent_metrics(agent_name: Optional[str] = None):
+    """
+    S2-PR5: 에이전트 성능 메트릭스 조회
+    
+    Args:
+        agent_name: 특정 에이전트 이름 (없으면 전체)
+    
+    Returns:
+        성능 통계 (count, success_rate, avg/min/max/p95 duration)
+    """
+    from app.common.metrics import AgentMetrics
+    return AgentMetrics.get_stats(agent_name)
+
+
+@app.get("/metrics/agents/summary")
+async def get_agent_metrics_summary():
+    """
+    S2-PR5: 전체 에이전트 성능 요약
+    """
+    from app.common.metrics import AgentMetrics
+    return AgentMetrics.get_summary()
+
+
+@app.get("/metrics/agents/recent")
+async def get_recent_metrics(agent_name: Optional[str] = None, limit: int = 100):
+    """
+    S2-PR5: 최근 메트릭 레코드 조회
+    """
+    from app.common.metrics import AgentMetrics
+    return AgentMetrics.get_recent_records(agent_name, limit)
+
+
 # mcp = FastMCP.from_fastapi(app)
 
 # if __name__ == "__main__":

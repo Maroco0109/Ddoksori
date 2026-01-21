@@ -119,11 +119,14 @@ def _build_restricted_response(
 
 
 def generation_node(state: ChatState) -> Dict:
+    from .cache import get_answer_cache
+    
     user_query = state.get('user_query', '')
     query_analysis = state.get('query_analysis')
     retrieval = state.get('retrieval')
+    query_type = query_analysis.get('query_type', 'dispute') if query_analysis else 'dispute'
     
-    if query_analysis and query_analysis.get('query_type') == 'general':
+    if query_analysis and query_type == 'general':
         general_response = _build_general_response(user_query)
         return {
             'draft_answer': general_response,
@@ -149,60 +152,60 @@ def generation_node(state: ChatState) -> Dict:
             'messages': [AIMessage(content=no_result_msg)],
         }
     
-    try:
-        from .tools.generator import RAGGenerator
-        
-        model = _get_llm_model()
-        generator = RAGGenerator(model=model, use_llm=True)
-        
-        agency_info = retrieval.get('agency', {})
-        if not agency_info:
-            agency_info = {
-                'agency': 'KCA',
-                'agency_info': {
-                    'name': '한국소비자원',
-                    'full_name': '한국소비자원 소비자분쟁조정위원회',
-                    'description': '일반 소비자 분쟁 조정',
-                    'url': 'https://www.kca.go.kr'
-                },
-                'dispute_type': '1:N',
-                'reason': '일반 소비자 분쟁으로 판단됩니다',
-                'confidence': 0.7
-            }
-        
-        # PR-2: mode가 NEED_RAG일 때만 면책 문구 포함
-        mode = state.get('mode', 'NEED_RAG')
-        include_disclaimer = (mode == 'NEED_RAG')
-
-        result = generator.generate_structured_answer(
-            query=user_query,
-            agency_info=agency_info,
-            disputes=retrieval.get('disputes', []),
-            counsels=retrieval.get('counsels', []),
-            laws=retrieval.get('laws', []),
-            criteria=retrieval.get('criteria', []),
-            include_disclaimer=include_disclaimer,
-        )
-        
-        draft_answer = result.get('answer', '')
-        has_evidence = result.get('has_sufficient_evidence', True)
-        questions = result.get('clarifying_questions', [])
-        claim_evidence_map = result.get('claim_evidence_map', [])
-        
+    cache = get_answer_cache()
+    cached = cache.get(user_query, query_type)
+    if cached:
         return {
-            'draft_answer': draft_answer,
-            'has_sufficient_evidence': has_evidence,
-            'clarifying_questions': questions,
-            'claim_evidence_map': claim_evidence_map,
-            'messages': [AIMessage(content=draft_answer)],
-        }
-        
-    except Exception as e:
-        print(f"[generation_node] Error: {e}")
-        fallback_msg = "죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
-        return {
-            'draft_answer': fallback_msg,
-            'has_sufficient_evidence': False,
+            'draft_answer': cached['answer'],
+            'has_sufficient_evidence': cached.get('has_evidence', True),
             'clarifying_questions': [],
-            'messages': [AIMessage(content=fallback_msg)],
+            'claim_evidence_map': cached.get('claim_evidence_map', []),
+            'messages': [AIMessage(content=cached['answer'])],
+            'generation_model_used': 'cache',
+            '_cache_hit': True,
         }
+    
+    from .fallback import AnswerGenerationFallback
+    
+    agency_info = retrieval.get('agency', {})
+    if not agency_info:
+        agency_info = {
+            'agency': 'KCA',
+            'agency_info': {
+                'name': '한국소비자원',
+                'full_name': '한국소비자원 소비자분쟁조정위원회',
+                'description': '일반 소비자 분쟁 조정',
+                'url': 'https://www.kca.go.kr'
+            },
+            'dispute_type': '1:N',
+            'reason': '일반 소비자 분쟁으로 판단됩니다',
+            'confidence': 0.7
+        }
+    
+    mode = state.get('mode', 'NEED_RAG')
+    include_disclaimer = (mode == 'NEED_RAG')
+
+    draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
+        query=user_query,
+        retrieval=retrieval,
+        agency_info=agency_info,
+        include_disclaimer=include_disclaimer,
+    )
+    
+    has_evidence = model_used not in ('rule_based', 'safe_fallback')
+    
+    cache.set(user_query, query_type, {
+        'answer': draft_answer,
+        'claim_evidence_map': claim_evidence_map,
+        'has_evidence': has_evidence,
+    })
+    
+    return {
+        'draft_answer': draft_answer,
+        'has_sufficient_evidence': has_evidence,
+        'clarifying_questions': [],
+        'claim_evidence_map': claim_evidence_map,
+        'messages': [AIMessage(content=draft_answer)],
+        'generation_model_used': model_used,
+        '_cache_hit': False,
+    }
