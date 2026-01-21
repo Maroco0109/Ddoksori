@@ -220,8 +220,12 @@ def review_node(state: ChatState) -> Dict:
     )
     
     # 결과 판정
-    # 금지 표현이 3개 이상이면 재생성 필요
-    needs_retry = len(prohibited_violations) >= 3 and retry_count < 2
+    from ...common.config import AgentConfig
+    
+    needs_retry = (
+        len(prohibited_violations) >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD 
+        and retry_count < AgentConfig.MAX_REVIEW_RETRIES
+    )
     
     # 경미한 위반은 필터링으로 처리
     if prohibited_violations and not needs_retry:
