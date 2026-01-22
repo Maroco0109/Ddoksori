@@ -41,8 +41,6 @@ Thumbs.db
 # Logs directory
 logs/
 *.log
-backend/results/
-backend/reports/
 
 # Database
 *.db
@@ -57,11 +55,15 @@ backend/reports/
 models/
 
 # archives
+_archive
 backend/data/law/scripts/_archive
 backend/_archive
+docs/guides/_archive
+
 
 # documents
-docs/diagram
+docs/_archive
+docs/plans
 
 
 # Data
@@ -70,6 +72,7 @@ backend/data/criteria/
 backend/data/dispute/
 backend/data/law/raw
 backend/data/evaluation
+backend/data/golden_set
 
 
 # Backup Data
@@ -82,9 +85,8 @@ backup_v3.sql
 Agents
 .agent
 .claude
+.sisyphus
 .cursorrules
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
-AI_MEMO_S1.md
-docs/sprint/

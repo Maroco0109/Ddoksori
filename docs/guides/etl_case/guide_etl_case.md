@@ -330,7 +330,8 @@ python backend/scripts/testing/validate_hybrid_retrieval.py
 
 ### 4.2 동시성 테스트
 ```bash
-pytest backend/scripts/testing/api/test_api_concurrent.py -v
+cd backend
+python -m pytest scripts/testing/api/test_api_concurrent.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -345,7 +346,8 @@ python backend/scripts/data_loading/load_all_test_data.py --all
 
 ### 4.4 사례 로딩 테스트
 ```bash
-pytest backend/scripts/evaluation/test_load_cases.py -v
+cd backend
+python -m pytest scripts/evaluation/test_load_cases.py -v -p no:asyncio
 ```
 
 ---
@@ -493,8 +495,9 @@ python backend/scripts/testing/validate_hybrid_retrieval.py
 # 성능 벤치마크
 python -m scripts.evaluation.benchmark_performance --url http://localhost:8000
 
-# 동시성 테스트
-pytest backend/scripts/testing/api/test_api_concurrent.py -v
+# 동시성 테스트 (backend 디렉토리에서)
+cd backend
+python -m pytest scripts/testing/api/test_api_concurrent.py -v -p no:asyncio
 
 # DB 확인 (임베딩 현황)
 docker exec -it ddoksori_db psql -U postgres -d ddoksori -c \
@@ -531,6 +534,3 @@ class StructuredRetriever:
         criteria = self.criteria_retriever.search(query, top_k=3)
 ```
 
----
-
-*이 문서는 팀원 B가 독립적으로 작업할 수 있도록 구성되었습니다.*

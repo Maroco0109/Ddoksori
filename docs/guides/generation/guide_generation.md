@@ -227,7 +227,8 @@ RESTRICTED_RESPONSE_KOPICO = """
 ### 6.1 Generation 노드 테스트
 ```bash
 conda activate dsr
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNode -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNode -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -238,7 +239,8 @@ pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNod
 
 ### 6.2 API 엔드포인트 테스트
 ```bash
-pytest backend/scripts/testing/api/test_api_endpoints.py -v
+cd backend
+python -m pytest scripts/testing/api/test_api_endpoints.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -400,11 +402,12 @@ CITATION_INSTRUCTION = """
 # 환경 활성화
 conda activate dsr
 
-# Generation 노드 테스트
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNode -v
+# Generation 노드 테스트 (backend 디렉토리에서)
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNode -v -p no:asyncio
 
 # API 테스트
-pytest backend/scripts/testing/api/test_api_endpoints.py -v
+python -m pytest scripts/testing/api/test_api_endpoints.py -v -p no:asyncio
 
 # 대화식 테스트
 python backend/scripts/evaluation/interactive_rag_test.py
@@ -470,6 +473,3 @@ def _handle_general_query(self, query: str) -> str:
     # ...
 ```
 
----
-
-*이 문서는 팀원 C가 독립적으로 작업할 수 있도록 구성되었습니다.*

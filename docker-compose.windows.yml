@@ -93,7 +93,29 @@ services:
       - VITE_API_URL=http://localhost:8000
     command: npm run dev -- --host
 
+  # BGE-M3 임베딩 서버 (Dense + Sparse)
+  bge_m3_embedding:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bge_m3
+    container_name: ddoksori_bge_m3
+    ports:
+      - "8003:8003"
+    environment:
+      - BGE_M3_PORT=8003
+      - CUDA_VISIBLE_DEVICES=
+    volumes:
+      - bge_m3_model_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 3
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   cloudbeaver_data:
   embedding_model_cache:
+  bge_m3_model_cache:

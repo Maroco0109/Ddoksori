@@ -181,7 +181,8 @@ PRIVACY_KEYWORDS = ['개인정보', '유출', '해킹', '동의', ...]
 ### 4.1 State 테스트
 ```bash
 conda activate dsr
-pytest backend/scripts/testing/orchestrator/test_pr1_state.py -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr1_state.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -192,7 +193,8 @@ pytest backend/scripts/testing/orchestrator/test_pr1_state.py -v
 
 ### 4.2 Graph 테스트
 ```bash
-pytest backend/scripts/testing/orchestrator/test_pr3_graph.py -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr3_graph.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -203,7 +205,8 @@ pytest backend/scripts/testing/orchestrator/test_pr3_graph.py -v
 
 ### 4.3 도메인 분류 테스트
 ```bash
-pytest backend/scripts/testing/domain/test_domain_classification.py -v
+cd backend
+python -m pytest scripts/testing/domain/test_domain_classification.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -215,7 +218,8 @@ pytest backend/scripts/testing/domain/test_domain_classification.py -v
 
 ### 4.4 노드 단위 테스트
 ```bash
-pytest backend/scripts/testing/orchestrator/test_pr2_nodes.py::TestQueryAnalysisNode -v
+cd backend
+python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestQueryAnalysisNode -v -p no:asyncio
 ```
 
 **테스트 항목**:
@@ -298,22 +302,19 @@ python -m scripts.evaluation.evaluate_query_analysis \
 # 환경 활성화
 conda activate dsr
 
-# 전체 오케스트레이터 테스트
-pytest backend/scripts/testing/orchestrator/ -v
+# 전체 오케스트레이터 테스트 (backend 디렉토리에서)
+cd backend
+python -m pytest scripts/testing/orchestrator/ -v -p no:asyncio
 
 # 도메인 테스트만
-pytest backend/scripts/testing/domain/ -v
+python -m pytest scripts/testing/domain/ -v -p no:asyncio
 
 # 특정 테스트 클래스만
-pytest backend/scripts/testing/orchestrator/test_pr1_state.py::TestChatState -v
+python -m pytest scripts/testing/orchestrator/test_pr1_state.py::TestChatState -v -p no:asyncio
 
 # 상세 로그 출력
-pytest backend/scripts/testing/orchestrator/ -vv -s
+python -m pytest scripts/testing/orchestrator/ -vv -s -p no:asyncio
 
 # 전체 테스트 (API, 통합, 데이터)
 ./backend/run_local_rag_tests.sh all
 ```
-
----
-
-*이 문서는 팀장이 독립적으로 작업할 수 있도록 구성되었습니다.*
