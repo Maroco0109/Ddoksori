@@ -55,6 +55,7 @@ logs/
 models/
 
 # archives
+_archive
 backend/data/law/scripts/_archive
 backend/_archive
 docs/guides/_archive
