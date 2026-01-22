@@ -1,12 +1,19 @@
 """
-똑소리 프로젝트 - LangGraph 그래프 정의
-작성일: 2026-01-14
-S2-3: 오케스트레이터 워크플로우 정의 및 컴파일
-S2-7: ReAct 패턴 적용 (Thought-Action-Observation 루프)
+똑소리 프로젝트 - LangGraph 그래프 정의 (Orchestrator Graph)
 
-워크플로우 (ReAct):
-query_analysis → react_think ⟷ react_act → generation → review → END
-                    ↘ ask_clarification → END
+작성일: 2026-01-14
+최종 수정: 2026-01-22 (PR#2 Unified Graph)
+
+[역할]
+전체 시스템의 워크플로우를 정의합니다. LangGraph를 사용하여 노드(Node)와 엣지(Edge)를 연결하고,
+상태(State) 흐름을 제어합니다.
+
+[주요 그래프]
+- create_unified_chat_graph(): 현재 운영 중인 메인 그래프.
+  ReAct 패턴, Fast Path, Clarification 기능을 모두 포함합니다.
+
+[워크플로우 요약]
+InputGuard -> QueryAnalysis -> [Routing] -> (ReAct Loop / Generation / Clarify) -> Review -> OutputGuard
 """
 
 import os
@@ -592,11 +599,13 @@ def _route_unified_after_query_analysis(
     state: UnifiedState
 ) -> Literal['react_think', 'generation', 'ask_clarification']:
     """
-    query_analysis 이후 라우팅 (통합 버전)
-
-    - NO_RETRIEVAL 모드 → generation (직접 생성)
-    - NEED_CLARIFICATION 모드 → ask_clarification (역질문)
-    - NEED_RAG 모드 → react_think (ReAct 루프)
+    [Query Analysis 후 라우팅] (통합 그래프용)
+    
+    질의 분석 결과를 바탕으로 다음 단계를 결정합니다.
+    
+    1. NO_RETRIEVAL: 검색 불필요 (일반 대화, 시스템 질문) -> 즉시 답변 생성 (Generation)
+    2. NEED_CLARIFICATION: 정보 부족/모호 -> 사용자에게 되묻기 (Ask Clarification)
+    3. NEED_RAG (Default): 정보 검색 필요 -> ReAct 추론 루프 시작 (ReAct Think)
     """
     mode = state.get('mode', 'NEED_RAG')
     query_analysis = state.get('query_analysis')
@@ -633,10 +642,12 @@ def _route_unified_after_react_think(
     state: UnifiedState
 ) -> Literal['react_act', 'generation']:
     """
-    react_think 이후 라우팅 (통합 버전)
-
-    - should_continue=True AND action 있음 → react_act
-    - should_continue=False → generation
+    [ReAct Think 후 라우팅]
+    
+    ReAct 에이전트의 사고(Thought) 결과에 따라 행동을 결정합니다.
+    
+    1. should_continue=True: 도구 사용 필요 -> 도구 실행 (ReAct Act)
+    2. should_continue=False: 충분한 정보 수집 완료 -> 답변 생성 (Generation)
     """
     should_continue = state.get('should_continue', False)
     last_action = state.get('last_action')
@@ -652,10 +663,13 @@ def _route_unified_after_react_think(
 
 def _route_unified_after_review(state: UnifiedState) -> str:
     """
-    review 이후 라우팅 (통합 버전)
-
-    - retry 필요 시 → generation
-    - 그 외 → output_guardrail
+    [Legal Review 후 라우팅]
+    
+    검토 결과를 확인하고 재시도 여부를 결정합니다.
+    
+    1. 검토 통과 (Passed): 출력 가드레일(Output Guardrail)로 이동
+    2. 검토 실패 & 재시도 횟수 남음: 다시 생성(Generation)으로 회귀
+    3. 검토 실패 & 재시도 초과: 그냥 출력 (Output Guardrail) - 실패 사유 포함될 수 있음
     """
     review = state.get('review')
     retry_count = state.get('retry_count', 0)
@@ -674,20 +688,20 @@ def _route_unified_after_review(state: UnifiedState) -> str:
 
 def create_unified_chat_graph() -> StateGraph:
     """
-    PR-2: 통합 ReAct 그래프 + PR-4: Clarify 기능
-
-    분쟁상담/일반채팅 모두 단일 그래프로 처리.
-    chat_type과 mode에 따라 동적으로 경로 결정.
-
-    아키텍처:
-    input_guardrail → query_analysis → [라우팅]
-        ├─ NO_RETRIEVAL: generation → review → output_guardrail → END
-        ├─ NEED_CLARIFICATION: ask_clarification → END
-        └─ NEED_RAG: react_think ↔ react_act → generation → review → output_guardrail → END
-
-    - review: chat_type=general이면 자동 통과 (review_node_wrapper)
-    - max_iterations: general=1, dispute=2 (state 초기화 시 설정)
-    - ask_clarification: 유사도 낮거나 필수 정보 누락 시 역질문
+    [통합 ReAct 그래프 생성]
+    
+    PR-2에서 도입된 통합 그래프입니다. 분쟁상담과 일반채팅을 모두 처리할 수 있는 단일 그래프 구조를 가집니다.
+    
+    [Architecture]
+    1. Input Guardrail: 사용자 입력 필터링
+    2. Query Analysis: 의도 파악 및 라우팅 결정
+    3. Branching (분기):
+       - NO_RETRIEVAL -> Generation (바로 답변)
+       - NEED_CLARIFICATION -> Ask Clarification (되묻기)
+       - NEED_RAG -> ReAct Loop (Think <-> Act) -> Generation
+    4. Generation: 답변 생성
+    5. Legal Review: 법률/정책 위반 검토 (실패 시 Retry Loop)
+    6. Output Guardrail: 최종 출력 필터링
     """
     graph = StateGraph(UnifiedState)
 

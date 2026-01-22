@@ -207,3 +207,16 @@ grep -E "01[0-9]-|@|동|로|길" backend/data/training/training_data.jsonl
 - **사용자 가이드**: `/docs/data_collection_guide.md`
 - **AI_MEMO**: `/AI_MEMO.md` (최신 상태)
 - **테스트 커버리지**: 29개 단위 테스트 (100% 통과)
+
+---
+
+## 🏗️ 아키텍처 및 에이전트 가이드
+
+각 에이전트의 상세 설계, 코드 구조, 테스트 방법은 아래 문서를 참고하세요.
+
+- **[Orchestrator Guide](/backend/app/orchestrator/README_orchestrator.md)**: 전체 워크플로우 및 상태 관리
+- **[Query Analysis Guide](/backend/app/agents/query_analysis/README_query_analysis.md)**: 의도 분류 및 키워드 추출
+- **[Retrieval Guide](/backend/app/agents/retrieval/README_retrieval.md)**: 정보 검색 및 하이브리드 전략
+- **[Answer Generation Guide](/backend/app/agents/answer_generation/README_generation.md)**: 답변 생성 및 안전 장치
+- **[Legal Review Guide](/backend/app/agents/legal_review/README_review.md)**: 법률 검토 및 품질 관리
+

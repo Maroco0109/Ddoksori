@@ -1,3 +1,27 @@
+"""
+똑소리 프로젝트 - 정보검색 에이전트 (Retrieval Agent)
+
+작성일: 2026-01-14
+최종 수정: 2026-01-22
+
+[역할 및 책임]
+사용자 질문 및 검색 계획(Search Plan)을 바탕으로 관련 정보를 검색합니다.
+다양한 데이터 소스(분쟁사례, 상담사례, 법령, 기준)를 통합 검색하며, 
+벡터 검색(Vector)과 키워드 검색(Keyword)을 혼합한 하이브리드 검색을 수행할 수 있습니다.
+
+[지원하는 리트리버 타입]
+- structured: 4개 섹션(사례/상담/법령/기준)을 모두 검색하는 기본 리트리버
+- hybrid: 벡터 + 키워드 검색 결합 (RRF)
+- law: 법령 전문 검색
+- criteria: 분쟁조정기준 검색
+- dispute/counsel: 사례 검색
+- rdb: SQL 기반 정형 데이터 검색
+
+[Output]
+- RetrievalResult: 검색 결과 (유사도 점수 포함)
+- sources: 출처 메타데이터 목록 (답변 생성 시 인용에 사용)
+"""
+
 import logging
 import os
 from typing import Dict, List, Any, Optional, Union
@@ -145,10 +169,10 @@ def _build_sources_from_retrieval(retrieval: RetrievalResult) -> List[Dict]:
 
 def retrieval_node(state: ChatState) -> Dict:
     """
-    정보검색 노드 함수
+    [정보검색 노드 (Legacy)]
     
-    StructuredRetriever를 사용하여 4개 섹션 검색 수행.
-    DB 연결 실패 시 빈 결과 반환.
+    기본적인 StructuredRetriever를 사용하여 4개 섹션(분쟁/상담/법령/기준)을 모두 검색합니다.
+    검색 계획(Search Plan) 없이 고정된 Top-K(3)로 검색합니다.
     
     Args:
         state: 현재 ChatState
@@ -247,6 +271,14 @@ def _execute_retrieval_by_type(
     embed_api_url: str,
     filters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    """
+    지정된 리트리버 타입에 따라 검색을 실행합니다.
+    
+    - structured: 기본 4-섹션 검색
+    - hybrid: 벡터 + 키워드 검색 (RRF Fusion)
+    - law/criteria/dispute/counsel: 특정 도메인 전용 검색
+    - rdb: SQL 쿼리 기반 정형 데이터 검색
+    """
     from .tools.specialized_retrievers import (
         StructuredRetriever,
         LawRetriever,
@@ -440,6 +472,17 @@ def _merge_retrieval_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def retrieval_node_v2(state: ChatState_v2) -> Dict[str, Any]:
+    """
+    [정보검색 노드 (V2)]
+    
+    ReAct Agent 또는 Search Plan이 결정한 검색 전략(retrievers, top_k, filters)에 따라
+    유연하게 검색을 수행합니다. 여러 리트리버를 조합하여 실행할 수 있습니다.
+    
+    [동작 흐름]
+    1. State에서 search_plan 확인 (없으면 Default StructuredRetriever)
+    2. 지정된 리트리버들을 순차 실행
+    3. 결과 병합 (Merge) 및 포맷 변환
+    """
     search_plan: Optional[SearchPlan] = state.get('search_plan')
     mode = state.get('mode', 'NEED_RAG')
     

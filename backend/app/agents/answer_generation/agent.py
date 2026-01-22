@@ -1,7 +1,19 @@
 """
-똑소리 프로젝트 - 답변생성 노드
-S2-3: RAGGenerator를 활용한 구조화된 답변 생성
-S2-4: 제한 모드(FSS/K-Medi) 응답 분기 추가
+똑소리 프로젝트 - 답변생성 에이전트 (Answer Generation Agent)
+
+작성일: 2026-01-14
+최종 수정: 2026-01-22
+
+[역할 및 책임]
+검색된 정보(RetrievalResult)를 바탕으로 사용자에게 제공할 최종 답변 초안(Draft)을 생성합니다.
+LLM(GPT-4o, Claude 등)을 활용하여 문맥에 맞는 자연스러운 답변을 작성하며,
+답변의 근거(Claim-Evidence Mapping)를 함께 생성하여 신뢰성을 높입니다.
+
+[주요 로직]
+1. 일반 대화 처리: "안녕", "고마워" 등 단순 대화는 LLM 없이 규칙 기반으로 즉시 응답.
+2. 제한 영역 감지: 금융(FSS), 의료(K-Medi) 등 특수 전문 영역은 정보 제공만 하고 법적 판단을 회피(Restricted Response).
+3. 답변 생성 (Fallback): LLM 호출 실패 시 백업 로직(Rule-based)으로 안전한 답변 생성.
+4. 캐싱: 동일한 질문에 대해 빠르게 응답하기 위한 답변 캐시 적용.
 """
 
 import os
@@ -13,6 +25,8 @@ from ...orchestrator.state import ChatState
 from ...domain import classify_domain, AGENCY_INFO
 
 
+# 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
+# 법적 책임 회피를 위해 LLM 생성 대신 미리 정의된 안전한 문구를 사용합니다.
 RESTRICTED_RESPONSE_TEMPLATE = """
 본 답변은 정보 제공 목적이며 법률 자문이 아닙니다.
 
@@ -41,10 +55,15 @@ RESTRICTED_RESPONSE_TEMPLATE = """
 
 
 def _get_llm_model() -> str:
+    """사용할 LLM 모델명 반환"""
     return os.getenv('LLM_MODEL', 'gpt-4o-mini')
 
 
 def _build_general_response(user_query: str) -> str:
+    """
+    일반 대화(인사, 감사)에 대한 규칙 기반 응답 생성
+    LLM 비용 절감을 위해 단순 패턴 매칭 사용.
+    """
     greetings = ['안녕', '반가', 'hello', 'hi']
     thanks = ['감사', '고마', 'thanks', 'thank']
     
@@ -62,6 +81,7 @@ def _build_general_response(user_query: str) -> str:
 
 
 def _format_similar_cases(disputes: List[Dict], counsels: List[Dict]) -> str:
+    """유사 사례 목록을 마크다운 리스트로 포맷팅"""
     if not disputes and not counsels:
         return "관련 사례가 없습니다."
     
@@ -90,6 +110,7 @@ def _build_restricted_response(
     classification_result,
     retrieval,
 ) -> Dict:
+    """제한된 영역(Restricted Domain)에 대한 안전한 응답 생성"""
     agency_code = classification_result.agency
     agency_info = AGENCY_INFO.get(agency_code, AGENCY_INFO['KCA'])
     
@@ -119,6 +140,15 @@ def _build_restricted_response(
 
 
 def generation_node(state: ChatState) -> Dict:
+    """
+    [답변생성 노드 진입점]
+    
+    1. 일반 대화 처리: Query Analysis 결과가 'general'이면 규칙 기반 응답.
+    2. 제한 영역 확인: 금융/의료 등 특수 분야는 Restricted Response 반환.
+    3. 검색 결과 확인: 결과가 없으면 추가 정보 요청.
+    4. 캐시 확인: 동일 질문에 대한 캐시된 답변 반환.
+    5. 답변 생성: LLM(AnswerGenerationFallback)을 사용하여 초안 생성.
+    """
     from .cache import get_answer_cache
     
     user_query = state.get('user_query', '')
@@ -126,6 +156,7 @@ def generation_node(state: ChatState) -> Dict:
     retrieval = state.get('retrieval')
     query_type = query_analysis.get('query_type', 'dispute') if query_analysis else 'dispute'
     
+    # 1. 일반 대화 처리
     if query_analysis and query_type == 'general':
         general_response = _build_general_response(user_query)
         return {
@@ -135,10 +166,12 @@ def generation_node(state: ChatState) -> Dict:
             'messages': [AIMessage(content=general_response)],
         }
     
+    # 2. 도메인 분류 및 제한 영역 처리
     classification = classify_domain(user_query)
     if classification.is_restricted:
         return _build_restricted_response(user_query, classification, retrieval or {})
     
+    # 3. 검색 결과 없음 처리
     if not retrieval:
         no_result_msg = "죄송합니다. 관련 정보를 찾을 수 없습니다. 질문을 더 구체적으로 작성해 주시면 도움이 될 것 같습니다."
         return {
@@ -152,6 +185,7 @@ def generation_node(state: ChatState) -> Dict:
             'messages': [AIMessage(content=no_result_msg)],
         }
     
+    # 4. 캐시 확인
     cache = get_answer_cache()
     cached = cache.get(user_query, query_type)
     if cached:
@@ -165,6 +199,7 @@ def generation_node(state: ChatState) -> Dict:
             '_cache_hit': True,
         }
     
+    # 5. LLM 답변 생성 (Fallback 포함)
     from .fallback import AnswerGenerationFallback
     
     agency_info = retrieval.get('agency', {})
@@ -185,6 +220,7 @@ def generation_node(state: ChatState) -> Dict:
     mode = state.get('mode', 'NEED_RAG')
     include_disclaimer = (mode == 'NEED_RAG')
 
+    # LLM 호출 (실패 시 Fallback)
     draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
         query=user_query,
         retrieval=retrieval,
@@ -194,6 +230,7 @@ def generation_node(state: ChatState) -> Dict:
     
     has_evidence = model_used not in ('rule_based', 'safe_fallback')
     
+    # 캐시 저장
     cache.set(user_query, query_type, {
         'answer': draft_answer,
         'claim_evidence_map': claim_evidence_map,
