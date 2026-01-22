@@ -18,7 +18,12 @@ from langgraph.graph import StateGraph, END
 
 from .state import ChatState, ChatState_v2, SimpleState, UnifiedState
 from .checkpointer import get_checkpointer
-from .routing import route_after_query_analysis, route_after_sufficiency, route_after_review as route_after_review_v2
+from .routing import (
+    route_after_query_analysis,
+    route_after_sufficiency,
+    route_after_review as route_after_review_v2,
+    route_after_generation,
+)
 from .budget import check_budget, BudgetTracker
 from .nodes.search_plan import search_plan_node
 from .nodes.sufficiency import sufficiency_node
@@ -463,7 +468,14 @@ def create_v2_chat_graph() -> StateGraph:
         }
     )
 
-    graph.add_edge('generation', 'review')
+    graph.add_conditional_edges(
+        'generation',
+        route_after_generation,
+        {
+            'review': 'review',
+            'output_guardrail': 'output_guardrail',
+        }
+    )
 
     graph.add_conditional_edges(
         'review',

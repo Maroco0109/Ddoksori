@@ -83,6 +83,39 @@ def route_after_sufficiency(
     return 'generation'
 
 
+def route_after_generation(
+    state: ChatState_v2
+) -> Literal['review', 'output_guardrail']:
+    """
+    Generation 이후 라우팅 로직 (PR 1: Fast Path)
+    - 일반 대화(general) -> Review 생략
+    - 시스템 메타 질문(system_meta) -> Review 생략
+    - 분쟁(dispute)이고 신뢰도 낮음 -> Review 수행
+    """
+    query_analysis = state.get('query_analysis_v2') or state.get('query_analysis') or {}
+    query_type = query_analysis.get('query_type', 'dispute')
+    
+    # 1. 일반 대화는 Review 생략
+    if query_type == 'general':
+        logger.info("[Routing] General chat detected, skipping review")
+        return 'output_guardrail'
+        
+    # 2. 시스템 메타 질문도 Review 생략
+    if query_type == 'system_meta':
+        logger.info("[Routing] System meta query detected, skipping review")
+        return 'output_guardrail'
+
+    # 3. 검색 신뢰도 기반 Skip (선택 사항 - 주석 처리)
+    # retrieval_report = state.get('retrieval_report_v2')
+    # if retrieval_report and retrieval_report.get('relevance', 0) > 0.8:
+    #     logger.info("[Routing] High relevance search, skipping review")
+    #     return 'output_guardrail'
+
+    # 기본: Review 수행
+    logger.info(f"[Routing] Query type={query_type}, proceeding to review")
+    return 'review'
+
+
 def route_after_review(
     state: ChatState_v2
 ) -> Literal['generation', 'retrieval', 'output_guardrail']:
