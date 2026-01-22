@@ -140,10 +140,11 @@ QUERY_EXPANSION_TEMPLATES = {
 }
 
 VERB_SYNONYMS = {
-    "환불": ["환불", "반환", "취소", "청약철회"],
-    "교환": ["교환", "대체", "바꿈"],
-    "수리": ["수리", "A/S", "AS", "무상수리", "유상수리"],
-    "해지": ["해지", "해약", "중도해지", "계약해지", "취소"],
+    "환불": ["환불", "반환", "취소", "청약철회", "돈 돌려받기", "환급", "반품", "결제 취소", "환불받기"],
+    "교환": ["교환", "대체", "바꿈", "다른 제품으로", "교체", "변경", "바꿔줘"],
+    "수리": ["수리", "고침", "AS", "애프터서비스", "보수", "고장", "수선", "무상수리", "유상수리", "고쳐줘"],
+    "해지": ["해지", "해약", "중도해지", "계약해지", "취소", "탈퇴", "그만두기"],
+    "보상": ["보상", "배상", "물어내", "변상", "보상받기", "배상받기"],
 }
 
 FAST_PATH_PROMOTION_KEYWORDS = [
@@ -428,11 +429,21 @@ def _classify_query_type(query: str) -> Literal['dispute', 'general', 'law', 'cr
     # 일반 대화 패턴 (인사, 감사 등)
     general_patterns = [
         r'^안녕', r'^반갑', r'^감사', r'^고마', r'^네$', r'^예$',
-        r'^알겠', r'^네\s*알겠', r'^네,?\s*알겠',  # "네 알겠어요" 패턴 추가
+        r'^알겠', r'^네\s*알겠', r'^네,?\s*알겠',
         r'^ㅋ+$', r'^ㅎ+$', r'^ㅇㅇ$', r'^오케이', r'^ok',
         r'^hello', r'^hi$', r'^bye', r'^thanks'
     ]
     for pattern in general_patterns:
+        if re.search(pattern, query_lower):
+            return 'general'
+    
+    definitional_patterns = [
+        r'(이|가|는|란)\s*(뭐예요|뭐야|무엇|무슨|어떤)\??',
+        r'(이|가)\s*뭔가요\??',
+        r'(이|가|는)\s*무엇인가요\??',
+        r'(은|는)\s*어떻게\s+되나요\??',
+    ]
+    for pattern in definitional_patterns:
         if re.search(pattern, query_lower):
             return 'general'
 
@@ -456,13 +467,13 @@ def _classify_query_type(query: str) -> Literal['dispute', 'general', 'law', 'cr
 
 def _extract_keywords(query: str) -> List[str]:
     """
-    검색에 사용할 핵심 키워드 추출
+    검색에 사용할 핵심 키워드 추출 (PR 2: 동의어 인식 강화)
     
-    간단한 규칙 기반 추출:
+    규칙 기반 추출:
     - 명사형 단어 추출 (2글자 이상)
     - 불용어 제거
+    - 동의어를 표준 용어로 정규화 (어간 기반 매칭 포함)
     """
-    # 불용어
     stopwords = {
         "저", "제", "것", "수", "등", "더", "좀", "잘", "못", "안",
         "이", "그", "저", "때", "경우", "어떻게", "무엇", "어디", "왜",
@@ -470,21 +481,47 @@ def _extract_keywords(query: str) -> List[str]:
         "하고", "그리고", "그래서", "하지만", "그런데", "근데"
     }
     
-    # 특수문자 제거 및 공백 분리
-    words = re.sub(r'[^\w\s]', ' ', query).split()
+    query_normalized = query.replace(' ', '')
     
-    # 2글자 이상, 불용어 제외
+    matched_base_verbs = set()
+    for base_verb, synonyms in VERB_SYNONYMS.items():
+        for synonym in synonyms:
+            synonym_stem = synonym.replace(' ', '').rstrip('기').rstrip('줘')
+            if len(synonym_stem) >= 3 and synonym_stem in query_normalized:
+                matched_base_verbs.add(base_verb)
+                break
+    
+    words = re.sub(r'[^\w\s]', ' ', query).split()
     keywords = [w for w in words if len(w) >= 2 and w not in stopwords]
     
-    # 중복 제거, 순서 유지
+    normalized_keywords = list(matched_base_verbs)
+    
+    for kw in keywords:
+        matched = False
+        for base_verb, synonyms in VERB_SYNONYMS.items():
+            if kw in synonyms:
+                normalized_keywords.append(base_verb)
+                matched = True
+                break
+            for synonym in synonyms:
+                if synonym in kw and len(synonym) >= 2:
+                    normalized_keywords.append(base_verb)
+                    matched = True
+                    break
+            if matched:
+                break
+        
+        if not matched:
+            normalized_keywords.append(kw)
+    
     seen = set()
     unique_keywords = []
-    for kw in keywords:
+    for kw in normalized_keywords:
         if kw not in seen:
             seen.add(kw)
             unique_keywords.append(kw)
     
-    return unique_keywords[:10]  # 최대 10개
+    return unique_keywords[:10]
 
 
 def _determine_agency_hint(query: str) -> Optional[str]:
@@ -615,6 +652,14 @@ def _generate_search_queries(
     expanded: str,
     keywords: List[str]
 ) -> List[str]:
+    """
+    Multi-Query Expansion (PR 2)
+    다양한 검색 전략으로 Recall 향상:
+    1. 원본 쿼리
+    2. 확장 쿼리 (법률 용어 추가)
+    3. 키워드 조합 쿼리
+    4. 동의어 변형 쿼리 (새로 추가)
+    """
     queries = [original]
     
     if expanded and expanded != original:
@@ -625,7 +670,29 @@ def _generate_search_queries(
         if keyword_query not in queries:
             queries.append(keyword_query)
     
-    return queries[:3]
+    synonym_query = _create_synonym_variant_query(original, keywords)
+    if synonym_query and synonym_query not in queries:
+        queries.append(synonym_query)
+    
+    return queries[:4]
+
+
+def _create_synonym_variant_query(original: str, keywords: List[str]) -> Optional[str]:
+    """
+    동의어 변형 쿼리 생성
+    
+    예: "노트북 환불" -> "노트북 반환 청약철회"
+    """
+    variant_parts = []
+    for kw in keywords[:3]:
+        if kw in VERB_SYNONYMS:
+            synonyms = VERB_SYNONYMS[kw][:2]
+            variant_parts.append(' '.join(synonyms))
+        else:
+            variant_parts.append(kw)
+    
+    variant = ' '.join(variant_parts)
+    return variant if variant != original else None
 
 
 def _check_missing_onboarding_fields(
