@@ -295,7 +295,8 @@ class TestChatEndpoint:
         payload = {"message": "환불 조건은?", "top_k": 3}
         with api_client.stream("POST", "/chat/stream", json=payload, timeout=10) as resp:
             assert resp.status_code == 200
-            assert "text/plain" in resp.headers.get("content-type", "")
+            # PR-T4: /chat/stream returns text/event-stream, not text/plain
+            assert "text/event-stream" in resp.headers.get("content-type", "")
 
             # Read some chunks
             chunk_count = 0
