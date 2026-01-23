@@ -35,7 +35,8 @@ class TestGraphDefinition:
         
         expected_nodes = [
             'query_analysis',
-            'retrieval', 
+            'react_think',
+            'react_act',
             'generation',
             'review',
             'ask_clarification',

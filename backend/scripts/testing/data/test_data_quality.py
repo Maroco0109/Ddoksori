@@ -135,5 +135,90 @@ class TestSearchQuality:
 
             print(f"\n📊 Materialized View: {count} chunks indexed")
 
-            # Should have at least law chunks (8,960) if data loaded
-            # Informational check
+            # PR-T1: With fixture, we should have at least the seeded data (12 chunks minimum)
+            assert count >= 12, \
+                f"MV should contain at least 12 seed chunks, found {count}. Fixture may have failed."
+
+
+class TestSeedDataValidation:
+    """PR-T1: Validate that ensure_test_data fixture creates proper seed data"""
+
+    def test_seed_documents_exist(self, db_connection):
+        """Seed documents are created by fixture"""
+        with db_connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM documents WHERE doc_id LIKE 'test_doc_%'")
+            seed_count = cur.fetchone()[0]
+            
+            # Fixture creates 6 seed documents
+            assert seed_count >= 6, \
+                f"Expected at least 6 seed documents, found {seed_count}"
+
+    def test_seed_documents_types(self, db_connection):
+        """Seed documents cover all required types"""
+        with db_connection.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT doc_type 
+                FROM documents 
+                WHERE doc_id LIKE 'test_doc_%'
+                ORDER BY doc_type
+            """)
+            doc_types = {row[0] for row in cur.fetchall()}
+            
+            # Fixture should create: counsel_case, mediation_case, law
+            required_types = {'counsel_case', 'mediation_case', 'law'}
+            assert required_types.issubset(doc_types), \
+                f"Seed data missing required doc types. Expected {required_types}, found {doc_types}"
+
+    def test_seed_chunks_exist(self, db_connection):
+        """Seed chunks are created with proper structure"""
+        with db_connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM chunks WHERE doc_id LIKE 'test_doc_%'")
+            chunk_count = cur.fetchone()[0]
+            
+            # Fixture creates 12 chunks (6 docs × 2 chunks each)
+            assert chunk_count >= 12, \
+                f"Expected at least 12 seed chunks, found {chunk_count}"
+
+    def test_seed_chunks_have_embeddings(self, db_connection):
+        """All seed chunks have non-NULL embeddings"""
+        with db_connection.cursor() as cur:
+            cur.execute("""
+                SELECT COUNT(*) 
+                FROM chunks 
+                WHERE doc_id LIKE 'test_doc_%' AND embedding IS NULL
+            """)
+            null_count = cur.fetchone()[0]
+            
+            # All seed chunks must have embeddings (required for MV inclusion)
+            assert null_count == 0, \
+                f"Found {null_count} seed chunks with NULL embeddings (should be 0)"
+
+    def test_seed_chunks_in_mv(self, db_connection):
+        """All seed chunks appear in mv_searchable_chunks"""
+        with db_connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM chunks WHERE doc_id LIKE 'test_doc_%'")
+            chunk_count = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM mv_searchable_chunks WHERE doc_id LIKE 'test_doc_%'")
+            mv_count = cur.fetchone()[0]
+            
+            # All seed chunks should be in MV (embedding NOT NULL + drop = FALSE)
+            assert mv_count == chunk_count, \
+                f"Seed chunks mismatch: {chunk_count} chunks but only {mv_count} in MV"
+
+    def test_seed_chunks_searchable(self, db_connection):
+        """Seed chunks are FTS-searchable"""
+        with db_connection.cursor() as cur:
+            # Test Korean FTS search for seed content
+            cur.execute("""
+                SELECT chunk_id, content
+                FROM mv_searchable_chunks
+                WHERE content_vector @@ to_tsquery('simple', '환불')
+                AND doc_id LIKE 'test_doc_%'
+                LIMIT 3
+            """)
+            results = cur.fetchall()
+            
+            # Should find at least one seed chunk with "환불" keyword
+            assert len(results) > 0, \
+                "FTS search for '환불' returned no seed chunks. MV may not be refreshed properly."

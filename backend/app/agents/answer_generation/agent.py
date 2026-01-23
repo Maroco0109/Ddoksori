@@ -23,6 +23,8 @@ from langchain_core.messages import AIMessage
 
 from ...orchestrator.state import ChatState
 from ...domain import classify_domain, AGENCY_INFO
+from .cache import get_answer_cache
+from .fallback import AnswerGenerationFallback
 
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
@@ -149,8 +151,6 @@ def generation_node(state: ChatState) -> Dict:
     4. 캐시 확인: 동일 질문에 대한 캐시된 답변 반환.
     5. 답변 생성: LLM(AnswerGenerationFallback)을 사용하여 초안 생성.
     """
-    from .cache import get_answer_cache
-    
     user_query = state.get('user_query', '')
     query_analysis = state.get('query_analysis')
     retrieval = state.get('retrieval')
@@ -200,8 +200,6 @@ def generation_node(state: ChatState) -> Dict:
         }
     
     # 5. LLM 답변 생성 (Fallback 포함)
-    from .fallback import AnswerGenerationFallback
-    
     agency_info = retrieval.get('agency', {})
     if not agency_info:
         agency_info = {

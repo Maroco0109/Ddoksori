@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir \
     peft>=0.11.0
 
 # Copy server code
-COPY bge_m3_server.py .
+# PR-T5: Fixed path - context is ./backend, actual file is in app/agents/retrieval/services/
+COPY app/agents/retrieval/services/bge_m3_server.py .
 
 EXPOSE 8003
 

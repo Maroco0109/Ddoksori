@@ -2,7 +2,10 @@
 Integration tests for A/B testing framework
 Sprint 3 - PR4
 
-Run with: pytest backend/scripts/testing/test_ab_framework.py
+Run with: pytest backend/scripts/testing/test_ab_framework.py -v
+Skip with: pytest -m "not integration"
+
+PR-T6: 통합 테스트 마커 추가 (DB 의존성 표시)
 """
 import pytest
 import os
@@ -13,6 +16,10 @@ from collections import Counter
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.experiments import ABTestManager, ExperimentCreate, OutcomeCreate
+
+
+# 통합 테스트 마커 - DB 필요
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
@@ -30,9 +37,12 @@ def db_config():
 
 @pytest.fixture
 def ab_manager(db_config):
-    """ABTestManager instance"""
+    """ABTestManager instance (requires PostgreSQL connection)"""
     manager = ABTestManager(db_config)
-    manager.connect()
+    try:
+        manager.connect()
+    except Exception as e:
+        pytest.skip(f"PostgreSQL 연결 실패: {e}")
     yield manager
     manager.close()
     # Clear cache after tests

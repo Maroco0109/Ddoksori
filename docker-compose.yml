@@ -68,7 +68,10 @@ services:
     command: npm run dev -- --host
 
   # BGE-M3 임베딩 서버 (Dense + Sparse)
+  # PR-T5: Added profiles to exclude from default 'docker compose up'
+  # Use: docker compose --profile bge-m3 up -d (to include BGE-M3)
   bge_m3_embedding:
+    profiles: ["bge-m3"]
     build:
       context: ./backend
       dockerfile: Dockerfile.bge_m3
