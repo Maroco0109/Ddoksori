@@ -83,14 +83,22 @@ class HybridToolExecutor:
         thought = state.get('last_thought') or ''
         query = _build_search_query(state)
         
-        # 1. 규칙 기반 액션 우선 확인 (명시적 액션이 있는 경우)
         registered_actions = ActionRegistry.get_action_names()
+        
+        # 1. Unknown action 조기 반환 (fallback 차단)
+        # 명시적으로 요청된 action이 있으나 레지스트리에 없으면 즉시 에러 반환
+        if action and action not in registered_actions:
+            logger.warning(f"[HybridToolExecutor] Unknown action requested: {action}")
+            # ActionRegistry가 올바른 에러 메시지 반환
+            return ActionRegistry.execute(action, state, query, thought)
+        
+        # 2. 규칙 기반 액션 실행
         if action and action in registered_actions:
             logger.debug(f"[HybridToolExecutor] Rule-based execution: {action}")
             PROM_TOOL_USAGE.labels(tool_name=action, mode="rule").inc()
             return self._execute_rule_based(action, state, query, thought)
         
-        # 2. LLM 기반 도구 선택 시도
+        # 3. LLM 기반 도구 선택 시도
         if self.use_llm_tools and self._ensure_tools_bound():
             logger.info("[HybridToolExecutor] Attempting LLM-based tool selection")
             try:
@@ -100,7 +108,7 @@ class HybridToolExecutor:
                 logger.warning(f"[HybridToolExecutor] LLM tool calling failed: {e}, falling back")
                 PROM_TOOL_USAGE.labels(tool_name="fallback_to_search_all", mode="fallback").inc()
         
-        # 3. 폴백: 기본 검색 (search_all)
+        # 4. 폴백: 기본 검색 (search_all) — action 없는 경우만
         default_action = 'search_all'
         logger.debug(f"[HybridToolExecutor] Fallback to rule-based: {default_action}")
         if not (action and action in registered_actions): # Don't double count if it was explicit rule
