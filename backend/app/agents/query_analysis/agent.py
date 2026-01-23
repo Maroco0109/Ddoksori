@@ -611,6 +611,7 @@ def _extract_info_from_message(query: str) -> Dict[str, str]:
         "purchase_amount": [
             r"구매\s*금액[:\s]+([^\n,]+)",
             r"금액[:\s]+([^\n,]+)",
+            r"(\d{1,}(?:만\s*)?원(?:에|에서|을|를)?)",
         ],
     }
 
@@ -638,6 +639,15 @@ def _extract_info_from_message(query: str) -> Dict[str, str]:
             verb = found_verbs[0]
             item = info["purchase_item"]
             info["dispute_details"] = f"{item} {verb} 관련 문의"
+    
+    # 금액 정규화: "150만원" → "1500000"
+    if "purchase_amount" in info:
+        amount_str = info["purchase_amount"]
+        if "만" in amount_str:
+            base_match = re.search(r'(\d+(?:\.\d+)?)', amount_str)
+            if base_match:
+                amount = int(float(base_match.group(1)) * 10000)
+                info["purchase_amount"] = str(amount)
 
     return info
 

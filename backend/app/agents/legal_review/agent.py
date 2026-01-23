@@ -21,6 +21,7 @@ import re
 from typing import Dict, List, Tuple
 
 from ...orchestrator.state import ChatState, ReviewResult
+from ...common.config import AgentConfig
 
 
 # ============================================================
@@ -31,14 +32,16 @@ from ...orchestrator.state import ChatState, ReviewResult
 # 금지 표현 패턴 (법적 단정/확정적 표현)
 # 변호사법 위반 소지가 있거나, 사용자에게 잘못된 확신을 줄 수 있는 표현들입니다.
 PROHIBITED_PATTERNS = [
-    # 법적 단정
-    (r'반드시\s+\S+해야\s*합니다', '반드시 ~해야 합니다'),
+    # 법적 단정 (개선: 다양한 어미 포함)
+    (r'반드시\s+\S+(해야\s*합니다|합니다|하세요|입니다)', '반드시 ~합니다'),
     (r'법적으로\s+\S+입니다', '법적으로 ~입니다'),
-    (r'위법입니다', '위법입니다'),
-    (r'불법입니다', '불법입니다'),
+    (r'(위법|불법)입니다', '위법/불법입니다'),
     (r'소송\s*(을|에서)\s*이길\s*(수\s*있|것)', '소송에서 이길 수 있다'),
-    (r'승소\s*할\s*(수\s*있|것)', '승소할 수 있다'),
-    (r'패소\s*할\s*(수\s*있|것)', '패소할 수 있다'),
+    
+    # 예측 표현 (개선: 승소/패소 표현 통합 및 완화)
+    (r'(승소|패소|이길)\s*수\s*있(습니다|어요)', '승소/패소할 수 있습니다'),
+    (r'(승소|패소)\s*할\s*(것|수\s*있)', '승소/패소 예측 표현'),
+    
     (r'확실히\s+\S+받을\s*수\s*있', '확실히 ~받을 수 있다'),
     (r'100%\s*\S+', '100% ~'),
     
@@ -236,8 +239,6 @@ def review_node(state: ChatState) -> Dict:
     )
     
     # 결과 판정
-    from ...common.config import AgentConfig
-    
     # 재생성(Retry) 조건:
     # 1. 금지 표현이 너무 많거나 (Threshold 초과)
     # 2. 아직 최대 재시도 횟수에 도달하지 않았을 때
