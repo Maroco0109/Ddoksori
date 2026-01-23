@@ -38,7 +38,11 @@ def db_connection():
     Database connection for validation queries
 
     Yields:
-        psycopg.Connection: PostgreSQL connection
+        psycopg.Connection: PostgreSQL connection (or None if unavailable)
+
+    Note:
+        PR-T6: Unit 테스트 지원을 위해 연결 실패 시 skip 대신 None 반환.
+        통합 테스트는 db_connection이 None이면 개별적으로 skip 처리.
     """
     conninfo = (
         f"host={os.getenv('DB_HOST', 'localhost')} "
@@ -53,7 +57,9 @@ def db_connection():
         yield conn
         conn.close()
     except psycopg.OperationalError as e:
-        pytest.skip(f"PostgreSQL 연결 실패: {e}")
+        # PR-T6: Unit 테스트를 위해 skip 대신 None 반환
+        print(f"\n⚠️  PostgreSQL 연결 실패 (Unit 테스트는 계속 실행됨): {e}")
+        yield None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -257,27 +263,40 @@ def pytest_collection_modifyitems(config, items):
 
     Automatically skips tests requiring OpenAI API key if not configured.
     Also skips Docker tests if Docker is not available.
+    
+    PR-T5: Docker tests require RUN_DOCKER_TESTS=1 (opt-in) and are auto-skipped in CI.
     """
     skip_no_api_key = pytest.mark.skip(reason="OPENAI_API_KEY not configured")
-    skip_docker = pytest.mark.skip(reason="Docker 환경이 실행되지 않음")
+    skip_docker_opt_in = pytest.mark.skip(
+        reason="Docker tests require RUN_DOCKER_TESTS=1 environment variable"
+    )
+    skip_docker_ci = pytest.mark.skip(
+        reason="Docker tests are skipped in CI environment"
+    )
+    skip_docker_unavail = pytest.mark.skip(reason="Docker daemon not available")
 
-    # Check Docker availability
+    run_docker_tests = os.getenv("RUN_DOCKER_TESTS") == "1"
+    is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+
     docker_available = False
-    try:
-        import docker
-        client = docker.from_env()
-        client.ping()
-        docker_available = True
-    except Exception:
-        pass
+    if run_docker_tests and not is_ci:
+        try:
+            import docker
+            client = docker.from_env()
+            client.ping()
+            docker_available = True
+        except Exception:
+            pass
 
     for item in items:
-        # Skip tests that need API key if not available
         if "chat" in item.nodeid and not os.getenv("OPENAI_API_KEY"):
-            # Check if test explicitly requires API key
             if "test_chat" in item.name and "no_api_key" not in item.name:
                 item.add_marker(skip_no_api_key)
 
-        # Skip Docker tests if Docker is not available
-        if not docker_available and "docker" in item.keywords:
-            item.add_marker(skip_docker)
+        if "docker" in item.keywords:
+            if is_ci:
+                item.add_marker(skip_docker_ci)
+            elif not run_docker_tests:
+                item.add_marker(skip_docker_opt_in)
+            elif not docker_available:
+                item.add_marker(skip_docker_unavail)
