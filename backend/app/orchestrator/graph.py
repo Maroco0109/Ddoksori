@@ -2,7 +2,7 @@
 똑소리 프로젝트 - LangGraph 그래프 정의 (Orchestrator Graph)
 
 작성일: 2026-01-14
-최종 수정: 2026-01-22 (PR#2 Unified Graph)
+최종 수정: 2026-01-23 (v2 스키마 제거)
 
 [역할]
 전체 시스템의 워크플로우를 정의합니다. LangGraph를 사용하여 노드(Node)와 엣지(Edge)를 연결하고,
@@ -23,21 +23,11 @@ import logging
 
 from langgraph.graph import StateGraph, END
 
-from .state import ChatState, ChatState_v2, SimpleState, UnifiedState
+from .state import ChatState, UnifiedState
 from .checkpointer import get_checkpointer
-from .routing import (
-    route_after_query_analysis,
-    route_after_sufficiency,
-    route_after_review as route_after_review_v2,
-    route_after_generation,
-)
-from .budget import check_budget, BudgetTracker
-from .nodes.search_plan import search_plan_node
-from .nodes.sufficiency import sufficiency_node
 from ..agents.query_analysis.agent import query_analysis_node
-from ..agents.query_analysis.tools import ask_clarification_node as legacy_ask_clarification_node
 from .nodes.clarify import ask_clarification_node
-from ..agents.retrieval.agent import retrieval_node, retrieval_node_v2
+from ..agents.retrieval.agent import retrieval_node
 from ..agents.answer_generation.agent import generation_node
 from ..agents.answer_generation.tools.prompts import low_similarity_prompt_node
 from ..agents.legal_review.agent import review_node, review_node_wrapper
@@ -53,7 +43,7 @@ NODE_TIMINGS_KEY = '_node_timings'
 NODE_SNAPSHOT_FIELDS = {
     'query_analysis': {
         'input': ['user_query', 'onboarding', 'chat_type'],
-        'output': ['query_analysis', 'mode', 'query_analysis_v2'],
+        'output': ['query_analysis', 'mode'],
     },
     'retrieval': {
         'input': ['user_query', 'query_analysis', 'onboarding'],
@@ -74,14 +64,6 @@ NODE_SNAPSHOT_FIELDS = {
     'review': {
         'input': ['final_answer', 'draft_answer', 'retrieval'],
         'output': ['review', 'retry_count'],
-    },
-    'search_plan': {
-        'input': ['user_query', 'query_analysis_v2'],
-        'output': ['search_plan', 'iteration_count'],
-    },
-    'sufficiency': {
-        'input': ['retrieval', 'search_plan'],
-        'output': ['is_sufficient', 'mode'],
     },
     'input_guardrail': {
         'input': ['user_query'],
@@ -172,45 +154,45 @@ SIMILARITY_THRESHOLD_HIGH = 0.55
 
 def _route_after_query_analysis(state: ChatState) -> Literal['ask_clarification', 'retrieval']:
     query_analysis = state.get('query_analysis')
-    
+
     if not query_analysis:
         return 'retrieval'
-    
+
     if query_analysis.get('query_type') == 'general':
         return 'retrieval'
-    
+
     extracted_info = query_analysis.get('extracted_info', {})
     has_minimal_info = bool(
-        extracted_info.get('purchase_item') or 
+        extracted_info.get('purchase_item') or
         extracted_info.get('dispute_details')
     )
-    
+
     if not has_minimal_info and query_analysis.get('needs_clarification'):
         return 'ask_clarification'
-    
+
     return 'retrieval'
 
 
 def _route_after_retrieval(state: ChatState) -> Literal['generation', 'low_similarity_prompt']:
     retrieval = state.get('retrieval')
     query_analysis = state.get('query_analysis')
-    
+
     if query_analysis and query_analysis.get('query_type') == 'general':
         return 'generation'
-    
+
     if not retrieval:
         return 'low_similarity_prompt'
-    
+
     max_sim = retrieval.get('max_similarity', 0.0)
     disputes = retrieval.get('disputes', [])
     counsels = retrieval.get('counsels', [])
-    
+
     if not disputes and not counsels:
         return 'low_similarity_prompt'
-    
+
     if max_sim >= SIMILARITY_THRESHOLD_HIGH:
         return 'generation'
-    
+
     return 'low_similarity_prompt'
 
 
@@ -403,189 +385,6 @@ def create_react_chat_graph() -> StateGraph:
     return graph
 
 
-def _route_after_input_guardrail_v2(state: ChatState_v2) -> str:
-    if state.get('guardrail_blocked'):
-        return END
-    return 'query_analysis'
-
-
-def _route_after_query_analysis_v2(state: ChatState_v2) -> str:
-    return route_after_query_analysis(state)
-
-
-def _route_after_sufficiency_v2(state: ChatState_v2) -> str:
-    return route_after_sufficiency(state)
-
-
-def _route_after_review_v2_wrapper(state: ChatState_v2) -> str:
-    return route_after_review_v2(state)
-
-
-def _budget_gate(state: ChatState_v2) -> str:
-    if not check_budget(state):
-        logger.warning("[BudgetGate] Budget exhausted, forcing generation")
-        return 'generation'
-    return 'continue'
-
-
-def create_v2_chat_graph() -> StateGraph:
-    graph = StateGraph(ChatState_v2)
-
-    graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
-    graph.add_node('query_analysis', _create_timed_node(query_analysis_node, 'query_analysis'))
-    graph.add_node('search_plan', _create_timed_node(search_plan_node, 'search_plan'))
-    graph.add_node('retrieval', _create_timed_node(retrieval_node_v2, 'retrieval'))
-    graph.add_node('sufficiency', _create_timed_node(sufficiency_node, 'sufficiency'))
-    graph.add_node('generation', _create_timed_node(generation_node, 'generation'))
-    graph.add_node('review', _create_timed_node(review_node, 'review'))
-    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
-    graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
-
-    graph.set_entry_point('input_guardrail')
-
-    graph.add_conditional_edges(
-        'input_guardrail',
-        _route_after_input_guardrail_v2,
-        {
-            END: END,
-            'query_analysis': 'query_analysis',
-        }
-    )
-
-    graph.add_conditional_edges(
-        'query_analysis',
-        _route_after_query_analysis_v2,
-        {
-            'generation': 'generation',
-            'search_plan': 'search_plan',
-            'ask_clarification': 'ask_clarification',
-        }
-    )
-
-    graph.add_edge('search_plan', 'retrieval')
-    graph.add_edge('retrieval', 'sufficiency')
-
-    graph.add_conditional_edges(
-        'sufficiency',
-        _route_after_sufficiency_v2,
-        {
-            'generation': 'generation',
-            'search_plan': 'search_plan',
-            'ask_clarification': 'ask_clarification',
-        }
-    )
-
-    graph.add_conditional_edges(
-        'generation',
-        route_after_generation,
-        {
-            'review': 'review',
-            'output_guardrail': 'output_guardrail',
-        }
-    )
-
-    graph.add_conditional_edges(
-        'review',
-        _route_after_review_v2_wrapper,
-        {
-            'generation': 'generation',
-            'retrieval': 'retrieval',
-            'output_guardrail': 'output_guardrail',
-        }
-    )
-
-    graph.add_edge('output_guardrail', END)
-    graph.add_edge('ask_clarification', END)
-
-    return graph
-
-
-def _simple_query_analysis_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    result = query_analysis_node(state)  # type: ignore
-    
-    query_analysis = result.get('query_analysis') or result.get('query_analysis_v2')
-    if query_analysis:
-        mode = query_analysis.get('mode', 'NEED_RAG')
-        if mode not in ['NO_RETRIEVAL', 'NEED_RAG']:
-            mode = 'NEED_RAG'
-        return {
-            'query_analysis_v2': query_analysis,
-            'mode': mode,
-        }
-    
-    return {
-        'query_analysis_v2': None,
-        'mode': 'NEED_RAG',
-    }
-
-
-def _simple_retrieval_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    result = retrieval_node(state)  # type: ignore
-    
-    retrieval = result.get('retrieval')
-    return {'retrieval': retrieval}
-
-
-def _simple_generation_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    result = generation_node(state)  # type: ignore
-
-    # draft_answer 또는 final_answer 중 하나 사용
-    final_answer = result.get('final_answer') or result.get('draft_answer', '')
-    if not final_answer:
-        final_answer = "죄송합니다. 답변을 생성할 수 없습니다."
-
-    return {'final_answer': final_answer}
-
-
-def _route_simple_after_guardrail(state: Dict[str, Any]) -> str:
-    if state.get('guardrail_blocked'):
-        return END
-    return 'query_analysis'
-
-
-def _route_simple_after_query_analysis(state: Dict[str, Any]) -> str:
-    mode = state.get('mode', 'NEED_RAG')
-    if mode == 'NO_RETRIEVAL':
-        return 'generation'
-    return 'retrieval'
-
-
-def create_simple_chat_graph() -> StateGraph:
-    graph = StateGraph(SimpleState)
-
-    graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
-    graph.add_node('query_analysis', _create_timed_node(_simple_query_analysis_node, 'query_analysis'))
-    graph.add_node('retrieval', _create_timed_node(_simple_retrieval_node, 'retrieval'))
-    graph.add_node('generation', _create_timed_node(_simple_generation_node, 'generation'))
-    graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
-
-    graph.set_entry_point('input_guardrail')
-
-    graph.add_conditional_edges(
-        'input_guardrail',
-        _route_simple_after_guardrail,
-        {
-            END: END,
-            'query_analysis': 'query_analysis',
-        }
-    )
-
-    graph.add_conditional_edges(
-        'query_analysis',
-        _route_simple_after_query_analysis,
-        {
-            'retrieval': 'retrieval',
-            'generation': 'generation',
-        }
-    )
-
-    graph.add_edge('retrieval', 'generation')
-    graph.add_edge('generation', 'output_guardrail')
-    graph.add_edge('output_guardrail', END)
-
-    return graph
-
-
 # === PR-2: 통합 그래프 라우팅 함수 ===
 
 def _route_unified_after_guardrail(state: UnifiedState) -> str:
@@ -600,9 +399,9 @@ def _route_unified_after_query_analysis(
 ) -> Literal['react_think', 'generation', 'ask_clarification']:
     """
     [Query Analysis 후 라우팅] (통합 그래프용)
-    
+
     질의 분석 결과를 바탕으로 다음 단계를 결정합니다.
-    
+
     1. NO_RETRIEVAL: 검색 불필요 (일반 대화, 시스템 질문) -> 즉시 답변 생성 (Generation)
     2. NEED_CLARIFICATION: 정보 부족/모호 -> 사용자에게 되묻기 (Ask Clarification)
     3. NEED_RAG (Default): 정보 검색 필요 -> ReAct 추론 루프 시작 (ReAct Think)
@@ -643,9 +442,9 @@ def _route_unified_after_react_think(
 ) -> Literal['react_act', 'generation']:
     """
     [ReAct Think 후 라우팅]
-    
+
     ReAct 에이전트의 사고(Thought) 결과에 따라 행동을 결정합니다.
-    
+
     1. should_continue=True: 도구 사용 필요 -> 도구 실행 (ReAct Act)
     2. should_continue=False: 충분한 정보 수집 완료 -> 답변 생성 (Generation)
     """
@@ -664,9 +463,9 @@ def _route_unified_after_react_think(
 def _route_unified_after_review(state: UnifiedState) -> str:
     """
     [Legal Review 후 라우팅]
-    
+
     검토 결과를 확인하고 재시도 여부를 결정합니다.
-    
+
     1. 검토 통과 (Passed): 출력 가드레일(Output Guardrail)로 이동
     2. 검토 실패 & 재시도 횟수 남음: 다시 생성(Generation)으로 회귀
     3. 검토 실패 & 재시도 초과: 그냥 출력 (Output Guardrail) - 실패 사유 포함될 수 있음
@@ -689,9 +488,9 @@ def _route_unified_after_review(state: UnifiedState) -> str:
 def create_unified_chat_graph() -> StateGraph:
     """
     [통합 ReAct 그래프 생성]
-    
+
     PR-2에서 도입된 통합 그래프입니다. 분쟁상담과 일반채팅을 모두 처리할 수 있는 단일 그래프 구조를 가집니다.
-    
+
     [Architecture]
     1. Input Guardrail: 사용자 입력 필터링
     2. Query Analysis: 의도 파악 및 라우팅 결정
@@ -799,9 +598,6 @@ def create_chat_graph() -> StateGraph:
     if mode == 'legacy':
         logger.info("Using legacy linear pipeline graph")
         return create_legacy_chat_graph()
-    elif mode == 'v2':
-        logger.info("Using v2 3-path routing graph")
-        return create_v2_chat_graph()
     else:
         logger.info("Using ReAct pattern graph")
         return create_react_chat_graph()
@@ -813,13 +609,7 @@ def get_compiled_graph():
     return graph.compile(checkpointer=checkpointer)
 
 
-def get_simple_compiled_graph():
-    graph = create_simple_chat_graph()
-    return graph.compile()
-
-
 _compiled_graph = None
-_simple_compiled_graph = None
 
 
 def get_graph():
@@ -827,13 +617,6 @@ def get_graph():
     if _compiled_graph is None:
         _compiled_graph = get_compiled_graph()
     return _compiled_graph
-
-
-def get_simple_graph():
-    global _simple_compiled_graph
-    if _simple_compiled_graph is None:
-        _simple_compiled_graph = get_simple_compiled_graph()
-    return _simple_compiled_graph
 
 
 def get_graph_for_chat_type(chat_type: str):
@@ -849,7 +632,6 @@ def get_graph_for_chat_type(chat_type: str):
 
 
 def reset_graph():
-    global _compiled_graph, _simple_compiled_graph, _unified_compiled_graph
+    global _compiled_graph, _unified_compiled_graph
     _compiled_graph = None
-    _simple_compiled_graph = None
     _unified_compiled_graph = None

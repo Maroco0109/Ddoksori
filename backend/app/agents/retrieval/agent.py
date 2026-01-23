@@ -24,13 +24,11 @@
 
 import logging
 import os
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from ...orchestrator.state import (
     ChatState,
-    ChatState_v2,
     RetrievalResult,
-    SearchPlan,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,7 +59,7 @@ RETRIEVER_TYPE_COUNSEL = 'counsel'
 RETRIEVER_TYPE_RDB = 'rdb'
 
 
-def _build_search_query(state: Union[ChatState, ChatState_v2]) -> str:
+def _build_search_query(state: ChatState) -> str:
     user_query = state.get('user_query', '')
     onboarding = state.get('onboarding')
     
@@ -80,8 +78,8 @@ def _build_search_query(state: Union[ChatState, ChatState_v2]) -> str:
 
 
 def _build_search_query_from_plan(
-    state: Union[ChatState, ChatState_v2],
-    search_plan: Optional[SearchPlan],
+    state: ChatState,
+    search_plan: Optional[Dict[str, Any]],
 ) -> str:
     if search_plan:
         query = search_plan.get('query')
@@ -469,84 +467,3 @@ def _merge_retrieval_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
                 merged['criteria'].append(crit)
     
     return merged
-
-
-def retrieval_node_v2(state: ChatState_v2) -> Dict[str, Any]:
-    """
-    [정보검색 노드 (V2)]
-    
-    ReAct Agent 또는 Search Plan이 결정한 검색 전략(retrievers, top_k, filters)에 따라
-    유연하게 검색을 수행합니다. 여러 리트리버를 조합하여 실행할 수 있습니다.
-    
-    [동작 흐름]
-    1. State에서 search_plan 확인 (없으면 Default StructuredRetriever)
-    2. 지정된 리트리버들을 순차 실행
-    3. 결과 병합 (Merge) 및 포맷 변환
-    """
-    search_plan: Optional[SearchPlan] = state.get('search_plan')
-    mode = state.get('mode', 'NEED_RAG')
-    
-    if mode == 'NO_RETRIEVAL':
-        logger.info("[retrieval_node_v2] NO_RETRIEVAL mode, skipping")
-        return {
-            'retrieval': _create_empty_retrieval(),
-            'sources': [],
-        }
-    
-    query = _build_search_query_from_plan(state, search_plan)
-    
-    if not search_plan:
-        logger.warning("[retrieval_node_v2] No search_plan, using StructuredRetriever")
-        retriever_types = [RETRIEVER_TYPE_STRUCTURED]
-        top_k = 10
-        filters = {}
-    else:
-        retriever_types = search_plan.get('retrievers', [RETRIEVER_TYPE_STRUCTURED])
-        top_k = search_plan.get('top_k', 10) or 10
-        filters = search_plan.get('filters', {})
-    
-    logger.info(
-        f"[retrieval_node_v2] query={query[:50]}..., "
-        f"retrievers={retriever_types}, top_k={top_k}"
-    )
-    
-    db_config = _get_db_config()
-    embed_api_url = _get_embed_api_url()
-    
-    try:
-        all_results: List[Dict[str, Any]] = []
-        
-        for retriever_type in retriever_types:
-            logger.debug(f"[retrieval_node_v2] Executing retriever: {retriever_type}")
-            result = _execute_retrieval_by_type(
-                retriever_type=retriever_type,
-                query=query,
-                top_k=top_k,
-                db_config=db_config,
-                embed_api_url=embed_api_url,
-                filters=filters,
-            )
-            all_results.append(result)
-        
-        merged = _merge_retrieval_results(all_results)
-        retrieval_result = _convert_to_retrieval_result(merged)
-        sources = _build_sources_from_retrieval(retrieval_result)
-        
-        logger.info(
-            f"[retrieval_node_v2] Results: disputes={len(retrieval_result.get('disputes', []))}, "
-            f"counsels={len(retrieval_result.get('counsels', []))}, "
-            f"laws={len(retrieval_result.get('laws', []))}, "
-            f"criteria={len(retrieval_result.get('criteria', []))}"
-        )
-        
-        return {
-            'retrieval': retrieval_result,
-            'sources': sources,
-        }
-        
-    except Exception as e:
-        logger.error(f"[retrieval_node_v2] Error: {e}", exc_info=True)
-        return {
-            'retrieval': _create_empty_retrieval(),
-            'sources': [],
-        }

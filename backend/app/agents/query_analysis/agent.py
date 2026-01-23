@@ -16,7 +16,7 @@ Input State:
 
 Output State:
     - query_analysis (QueryAnalysisResult): 분석 결과 (v1 호환)
-    - query_analysis_v2 (QueryAnalysisResult_v2): 분석 결과 (v2)
+    - mode (RoutingMode): 라우팅 모드
     - mode (RoutingMode): 다음 단계 라우팅 결정 (NEED_RAG, NO_RETRIEVAL, NEED_USER_CLARIFICATION)
 
 [주요 로직]
@@ -39,7 +39,6 @@ from typing import Dict, List, Literal, Optional, Any
 from ...orchestrator.state import (
     ChatState,
     QueryAnalysisResult,
-    QueryAnalysisResult_v2,
     OnboardingInfo,
     RoutingMode,
 )
@@ -1197,23 +1196,7 @@ def query_analysis_node(state: ChatState) -> Dict:
         "expansion_applied": expansion_applied,
     }
 
-    # v2 결과 구조 (신규 스키마)
-    analysis_result_v2: QueryAnalysisResult_v2 = {
-        "mode": mode,
-        "uncertainties": missing_fields,
-        "need_evidence": mode == "NEED_RAG",
-        "required_slots": missing_fields,
-        "filters_candidate": {},
-        "sql_params_candidate": {},
-        "query_type": query_type,
-        "keywords": keywords,
-        "agency_hint": agency_hint,
-        "rewritten_query": rewritten_query,
-        "search_queries": search_queries,
-    }
-
     return {
         "query_analysis": analysis_result,
-        "query_analysis_v2": analysis_result_v2,
         "mode": mode,
     }
