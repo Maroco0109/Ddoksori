@@ -94,7 +94,9 @@ services:
     command: npm run dev -- --host
 
   # BGE-M3 임베딩 서버 (Dense + Sparse)
+  # PR-T5: Added profiles - use 'docker compose --profile bge-m3 up -d' to include
   bge_m3_embedding:
+    profiles: ["bge-m3"]
     build:
       context: ./backend
       dockerfile: Dockerfile.bge_m3
