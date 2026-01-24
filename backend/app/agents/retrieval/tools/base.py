@@ -1,6 +1,10 @@
 """
-BaseRetriever - Abstract base class for all retrievers
-Sprint 3 - s3-4: Unified retriever interface
+똑소리 프로젝트 - 리트리버 베이스 클래스
+
+모든 리트리버가 구현해야 하는 추상 인터페이스를 정의합니다.
+통일된 검색 결과 타입(Document)과 공통 메서드 시그니처를 제공합니다.
+
+Sprint 3 - s3-4: 통합 리트리버 인터페이스 정의
 """
 
 from abc import ABC, abstractmethod
@@ -10,7 +14,25 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Document:
-    """Standard document representation for retriever outputs"""
+    """
+    리트리버 검색 결과 표준 표현
+
+    모든 리트리버가 반환하는 문서의 공통 스키마입니다.
+    다양한 데이터 소스(분쟁사례, 법령, 상담 등)를 동일한 형식으로 표현합니다.
+
+    Attributes:
+        chunk_id: 청크 고유 ID
+        doc_id: 원본 문서 ID
+        content: 청크 텍스트 내용
+        similarity: 유사도 점수 (0.0~1.0)
+        doc_type: 문서 유형 (law, counsel_case, mediation_case, criteria)
+        doc_title: 문서 제목
+        chunk_type: 청크 유형 (article, paragraph, etc.)
+        source_org: 출처 기관 (소비자원, 공정위 등)
+        url: 원문 URL
+        category_path: 카테고리 경로 (예: ['휘트니스', '헬스장'])
+        metadata: 추가 메타데이터
+    """
     chunk_id: str
     doc_id: str
     content: str
@@ -27,91 +49,107 @@ class Document:
 
 class BaseRetriever(ABC):
     """
-    Abstract base class for all retrievers.
-    
-    All retrievers must implement:
-    - invoke(query, **kwargs) -> List[Document]
-    - connect() / close() for database connections
-    
-    Optional methods:
-    - search_instrumented() for timing info
+    리트리버 추상 베이스 클래스
+
+    모든 리트리버가 구현해야 하는 인터페이스를 정의합니다.
+
+    필수 구현 메서드:
+        - invoke(query, **kwargs) -> List[Document]: 검색 실행
+        - connect(): 데이터베이스/API 연결
+        - close(): 연결 종료
+
+    선택적 메서드:
+        - search_instrumented(): 타이밍 정보가 포함된 검색
+
+    Example:
+        >>> with MyRetriever(config) as retriever:
+        ...     results = retriever.invoke("환불 규정", top_k=5)
+        ...     for doc in results:
+        ...         print(f"{doc.doc_title}: {doc.similarity:.2f}")
     """
-    
+
     @abstractmethod
     def invoke(self, query: str, top_k: int = 10, **kwargs) -> List[Document]:
         """
-        Main search interface.
-        
+        메인 검색 인터페이스
+
         Args:
-            query: Search query string
-            top_k: Number of results to return
-            **kwargs: Additional parameters (filters, etc.)
-            
+            query: 검색 쿼리 문자열
+            top_k: 반환할 결과 개수
+            **kwargs: 추가 파라미터 (필터, 설정 등)
+
         Returns:
-            List of Document objects sorted by relevance
+            관련도 순으로 정렬된 Document 리스트
         """
         pass
-    
+
     @abstractmethod
     def connect(self) -> None:
-        """Establish database/API connections"""
+        """데이터베이스/API 연결 수립"""
         pass
-    
+
     @abstractmethod
     def close(self) -> None:
-        """Close connections"""
+        """연결 종료"""
         pass
-    
+
     def search_instrumented(
-        self, 
-        query: str, 
-        top_k: int = 10, 
+        self,
+        query: str,
+        top_k: int = 10,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Search with timing and diagnostic info.
-        
-        Default implementation wraps invoke().
-        Override for detailed timing breakdown.
-        
+        타이밍 및 진단 정보가 포함된 검색
+
+        기본 구현은 invoke()를 래핑합니다.
+        상세한 타이밍 분석이 필요하면 오버라이드하세요.
+
         Returns:
             {
-                'results': List[Document],
-                'total_time_ms': float,
-                ...additional metrics...
+                'results': List[Document],  # 검색 결과
+                'total_time_ms': float,     # 총 소요 시간 (밀리초)
+                'result_count': int,        # 결과 개수
+                ...기타 메트릭...
             }
         """
         import time
         start = time.time()
         results = self.invoke(query, top_k, **kwargs)
         elapsed = (time.time() - start) * 1000
-        
+
         return {
             'results': results,
             'total_time_ms': elapsed,
             'result_count': len(results)
         }
-    
+
     def __enter__(self):
-        """Context manager entry"""
+        """컨텍스트 매니저 진입"""
         self.connect()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
+        """컨텍스트 매니저 종료"""
         self.close()
         return False
 
 
 def to_document(result: Any) -> Document:
     """
-    Convert various result types to Document.
-    
-    Handles:
-    - SearchResult (from retriever.py)
-    - LawSearchResult (from specialized_retrievers.py)
-    - CriteriaSearchResult (from specialized_retrievers.py)
-    - Dict with standard fields
+    다양한 검색 결과 타입을 Document로 변환
+
+    다음 타입들을 처리합니다:
+    - SearchResult (retriever.py에서 사용)
+    - LawSearchResult (specialized_retrievers.py 법령 검색 결과)
+    - CriteriaSearchResult (specialized_retrievers.py 기준 검색 결과)
+    - 표준 필드를 가진 Dict
+
+    Args:
+        result: 변환할 검색 결과 객체
+
+    Returns:
+        Document 인스턴스
     """
     if isinstance(result, Document):
         return result
@@ -173,5 +211,5 @@ def to_document(result: Any) -> Document:
 
 
 def to_documents(results: List[Any]) -> List[Document]:
-    """Convert list of results to Documents"""
+    """검색 결과 리스트를 Document 리스트로 변환"""
     return [to_document(r) for r in results]

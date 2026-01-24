@@ -1,132 +1,641 @@
 """
-똑소리 프로젝트 - 에이전트 공통 설정 모듈
-작성일: 2026-01-21
-S1-PR3: 설정값 외부화 (환경 변수)
+똑소리 프로젝트 - 통합 설정 모듈
 
-하드코딩된 설정값들을 환경 변수로 외부화하여 운영 환경에서 쉽게 조정 가능하게 함.
+작성일: 2026-01-24
+최종 수정: 2026-01-24
+
+[역할 및 책임]
+애플리케이션 전역에서 사용되는 설정을 중앙 관리합니다.
+Pydantic Settings를 활용하여 환경변수 기반 설정을 타입 안전하게 관리합니다.
+
+[사용 예시]
+    from app.common.config import get_config
+
+    config = get_config()
+    print(config.database.host)
+    print(config.llm.model)
+    print(config.agent.similarity_threshold)
+
+[설정 그룹]
+- DatabaseConfig: 데이터베이스 연결 설정
+- EmbeddingConfig: 임베딩 서버 설정
+- LLMConfig: LLM 모델 설정
+- AgentConfig: 에이전트 관련 설정
+- RedisConfig: Redis 캐시 설정
+- AppConfig: 애플리케이션 전역 설정
 """
 
 import os
-from typing import Dict
+from functools import lru_cache
+from typing import Dict, List, Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class AgentConfig:
+# ============================================================
+# 데이터베이스 설정
+# ============================================================
+
+class DatabaseConfig(BaseSettings):
     """
-    에이전트 공통 설정
-    
-    환경 변수로 설정 가능한 값들을 중앙 관리.
-    기본값은 기존 하드코딩 값과 동일하게 유지.
-    
-    사용 예시:
-        from app.common.config import AgentConfig
-        
-        threshold = AgentConfig.get_similarity_threshold('dispute')
-        max_iter = AgentConfig.MAX_REACT_ITERATIONS
+    데이터베이스 연결 설정.
+
+    PostgreSQL (pgvector) 연결에 필요한 설정을 관리합니다.
+
+    환경변수:
+        DB_HOST: 데이터베이스 호스트 (기본값: localhost)
+        DB_PORT: 데이터베이스 포트 (기본값: 5432)
+        DB_NAME: 데이터베이스 이름 (기본값: ddoksori)
+        DB_USER: 데이터베이스 사용자 (기본값: postgres)
+        DB_PASSWORD: 데이터베이스 비밀번호 (기본값: postgres)
     """
-    
-    # ==========================================================================
-    # ReAct 설정
-    # ==========================================================================
-    
-    # 유사도 임계값 (기본값: 0.55)
-    # 검색 결과의 유사도가 이 값 이상이면 "관련성 높음"으로 판단
-    SIMILARITY_THRESHOLD: float = float(os.getenv('SIMILARITY_THRESHOLD', '0.55'))
-    
-    # ReAct 최대 반복 횟수 (기본값: 2)
-    # 검색 결과가 불충분할 때 추가 검색을 시도하는 최대 횟수
-    MAX_REACT_ITERATIONS: int = int(os.getenv('MAX_REACT_ITERATIONS', '2'))
-    
-    # ==========================================================================
-    # Legal Review 설정
-    # ==========================================================================
-    
-    # 금지 표현 위반 임계값 (기본값: 3)
-    # 이 수 이상의 금지 표현이 발견되면 답변 재생성 필요로 판단
-    PROHIBITED_VIOLATION_THRESHOLD: int = int(os.getenv('PROHIBITED_VIOLATION_THRESHOLD', '3'))
-    
-    # 최대 재생성 시도 횟수 (기본값: 2)
-    # 금지 표현 위반 시 답변을 재생성하는 최대 횟수
-    MAX_REVIEW_RETRIES: int = int(os.getenv('MAX_REVIEW_RETRIES', '2'))
-    
-    # ==========================================================================
-    # 쿼리 타입별 유사도 임계값 (선택적)
-    # ==========================================================================
-    # 
-    # 쿼리 유형에 따라 다른 유사도 임계값을 적용할 수 있음.
-    # - dispute: 분쟁조정 관련 쿼리 (정확도 필요)
-    # - law: 법령 관련 쿼리 (더 엄격한 매칭)
-    # - criteria: 기준 관련 쿼리 (완화된 매칭)
-    # - general: 일반 대화 (가장 완화된 매칭)
-    #
-    SIMILARITY_THRESHOLDS: Dict[str, float] = {
-        'dispute': float(os.getenv('SIMILARITY_THRESHOLD_DISPUTE', '0.55')),
-        'law': float(os.getenv('SIMILARITY_THRESHOLD_LAW', '0.60')),
-        'criteria': float(os.getenv('SIMILARITY_THRESHOLD_CRITERIA', '0.50')),
-        'general': float(os.getenv('SIMILARITY_THRESHOLD_GENERAL', '0.45')),
-    }
-    
-    @classmethod
-    def get_similarity_threshold(cls, query_type: str = None) -> float:
+    model_config = SettingsConfigDict(env_prefix="DB_")
+
+    host: str = Field(default="localhost", description="데이터베이스 호스트")
+    port: int = Field(default=5432, description="데이터베이스 포트")
+    name: str = Field(default="ddoksori", description="데이터베이스 이름")
+    user: str = Field(default="postgres", description="데이터베이스 사용자")
+    password: str = Field(default="postgres", description="데이터베이스 비밀번호")
+
+    def get_connection_dict(self) -> Dict[str, str]:
         """
-        쿼리 타입별 유사도 임계값 반환
-        
+        psycopg2 연결에 사용할 딕셔너리를 반환합니다.
+
+        Returns:
+            연결 파라미터 딕셔너리
+        """
+        return {
+            "host": self.host,
+            "port": str(self.port),
+            "database": self.name,
+            "user": self.user,
+            "password": self.password,
+        }
+
+    def get_dsn(self) -> str:
+        """
+        데이터베이스 DSN 문자열을 반환합니다.
+
+        Returns:
+            PostgreSQL DSN 문자열
+        """
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
+# ============================================================
+# 임베딩 서버 설정
+# ============================================================
+
+class EmbeddingConfig(BaseSettings):
+    """
+    임베딩 서버 설정.
+
+    KURE-v1 또는 OpenAI 임베딩 서버 연결 설정을 관리합니다.
+
+    환경변수:
+        EMBED_API_URL: 임베딩 API URL (기본값: http://localhost:8001/embed)
+        EMBEDDING_MODEL_NAME: 임베딩 모델명 (기본값: nlpai-lab/KURE-v1)
+        USE_OPENAI_EMBEDDING: OpenAI 임베딩 사용 여부 (기본값: false)
+    """
+    model_config = SettingsConfigDict(env_prefix="EMBED_")
+
+    api_url: str = Field(
+        default="http://localhost:8001/embed",
+        alias="EMBED_API_URL",
+        description="임베딩 API URL"
+    )
+    model_name: str = Field(
+        default="nlpai-lab/KURE-v1",
+        alias="EMBEDDING_MODEL_NAME",
+        description="임베딩 모델명"
+    )
+    use_openai: bool = Field(
+        default=False,
+        alias="USE_OPENAI_EMBEDDING",
+        description="OpenAI 임베딩 사용 여부"
+    )
+
+
+# ============================================================
+# LLM 설정
+# ============================================================
+
+class LLMConfig(BaseSettings):
+    """
+    LLM 모델 설정.
+
+    OpenAI, EXAONE 등 LLM 모델 호출에 필요한 설정을 관리합니다.
+
+    환경변수:
+        LLM_MODEL: 기본 LLM 모델명 (기본값: gpt-4o-mini)
+        OPENAI_API_KEY: OpenAI API 키
+        LLM_TEMPERATURE: 생성 온도 (기본값: 0.7)
+        LLM_MAX_TOKENS: 최대 토큰 수 (기본값: 2048)
+        LLM_TOOL_TIMEOUT_MS: 도구 호출 타임아웃 (기본값: 5000ms)
+    """
+    model_config = SettingsConfigDict(env_prefix="LLM_")
+
+    model: str = Field(default="gpt-4o-mini", description="기본 LLM 모델명")
+    openai_api_key: Optional[str] = Field(
+        default=None,
+        alias="OPENAI_API_KEY",
+        description="OpenAI API 키"
+    )
+    temperature: float = Field(default=0.7, description="생성 온도")
+    max_tokens: int = Field(default=2048, description="최대 토큰 수")
+    tool_timeout_ms: int = Field(default=5000, description="도구 호출 타임아웃 (밀리초)")
+
+
+class ExaoneConfig(BaseSettings):
+    """
+    EXAONE 모델 설정.
+
+    RunPod에서 호스팅되는 EXAONE 모델 호출 설정을 관리합니다.
+
+    환경변수:
+        EXAONE_RUNPOD_URL: RunPod API URL
+        EXAONE_RUNPOD_API_KEY: RunPod API 키
+        EXAONE_MODEL: 모델명 (기본값: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct)
+        EXAONE_MODEL_SIZE: 모델 크기 (기본값: 7.8B)
+        EXAONE_TIMEOUT: 타임아웃 (기본값: 10초)
+        EXAONE_TEMPERATURE: 생성 온도 (기본값: 0.3)
+        EXAONE_MAX_TOKENS: 최대 토큰 수 (기본값: 1024)
+    """
+    model_config = SettingsConfigDict(env_prefix="EXAONE_")
+
+    runpod_url: Optional[str] = Field(default=None, description="RunPod API URL")
+    runpod_api_key: str = Field(default="dummy", description="RunPod API 키")
+    model: str = Field(
+        default="LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct",
+        description="EXAONE 모델명"
+    )
+    model_size: str = Field(default="7.8B", description="모델 크기")
+    timeout: int = Field(default=10, description="타임아웃 (초)")
+    temperature: float = Field(default=0.3, description="생성 온도")
+    max_tokens: int = Field(default=1024, description="최대 토큰 수")
+
+
+# ============================================================
+# 에이전트 설정
+# ============================================================
+
+class AgentSettings(BaseSettings):
+    """
+    에이전트 공통 설정 (Pydantic Settings).
+
+    ReAct, Legal Review 등 에이전트 동작에 필요한 설정을 관리합니다.
+    새 코드에서는 get_config().agent로 접근하세요.
+
+    환경변수:
+        SIMILARITY_THRESHOLD: 기본 유사도 임계값 (기본값: 0.55)
+        MAX_REACT_ITERATIONS: ReAct 최대 반복 횟수 (기본값: 2)
+        PROHIBITED_VIOLATION_THRESHOLD: 금지 표현 위반 임계값 (기본값: 3)
+        MAX_REVIEW_RETRIES: 최대 재검토 횟수 (기본값: 2)
+    """
+    model_config = SettingsConfigDict(env_prefix="")
+
+    # 유사도 설정
+    similarity_threshold: float = Field(
+        default=0.55,
+        alias="SIMILARITY_THRESHOLD",
+        description="기본 유사도 임계값"
+    )
+    similarity_threshold_dispute: float = Field(
+        default=0.55,
+        alias="SIMILARITY_THRESHOLD_DISPUTE",
+        description="분쟁 쿼리 유사도 임계값"
+    )
+    similarity_threshold_law: float = Field(
+        default=0.60,
+        alias="SIMILARITY_THRESHOLD_LAW",
+        description="법령 쿼리 유사도 임계값"
+    )
+    similarity_threshold_criteria: float = Field(
+        default=0.50,
+        alias="SIMILARITY_THRESHOLD_CRITERIA",
+        description="기준 쿼리 유사도 임계값"
+    )
+    similarity_threshold_general: float = Field(
+        default=0.45,
+        alias="SIMILARITY_THRESHOLD_GENERAL",
+        description="일반 쿼리 유사도 임계값"
+    )
+
+    # ReAct 설정
+    max_react_iterations: int = Field(
+        default=2,
+        alias="MAX_REACT_ITERATIONS",
+        description="ReAct 최대 반복 횟수"
+    )
+    react_llm_max_retries: int = Field(
+        default=2,
+        alias="REACT_LLM_MAX_RETRIES",
+        description="ReAct LLM 최대 재시도 횟수"
+    )
+    react_llm_retry_delay_ms: int = Field(
+        default=100,
+        alias="REACT_LLM_RETRY_DELAY_MS",
+        description="ReAct LLM 재시도 지연 (밀리초)"
+    )
+    react_think_mode: str = Field(
+        default="rule",
+        alias="REACT_THINK_MODE",
+        description="ReAct 사고 모드 (rule | llm)"
+    )
+    use_llm_tools: bool = Field(
+        default=False,
+        alias="USE_LLM_TOOLS",
+        description="LLM 도구 사용 여부"
+    )
+
+    # Legal Review 설정
+    prohibited_violation_threshold: int = Field(
+        default=3,
+        alias="PROHIBITED_VIOLATION_THRESHOLD",
+        description="금지 표현 위반 임계값"
+    )
+    max_review_retries: int = Field(
+        default=2,
+        alias="MAX_REVIEW_RETRIES",
+        description="최대 재검토 횟수"
+    )
+    enable_llm_review: bool = Field(
+        default=False,
+        alias="ENABLE_LLM_REVIEW",
+        description="LLM 검토 활성화 여부"
+    )
+
+    # Query Analysis 설정
+    query_rewrite_enabled: bool = Field(
+        default=True,
+        alias="QUERY_REWRITE_ENABLED",
+        description="쿼리 재작성 활성화 여부"
+    )
+    enable_fast_path_promotion: bool = Field(
+        default=True,
+        alias="ENABLE_FAST_PATH_PROMOTION",
+        description="빠른 경로 프로모션 활성화"
+    )
+    enable_ambiguous_detection: bool = Field(
+        default=True,
+        alias="ENABLE_AMBIGUOUS_DETECTION",
+        description="모호한 쿼리 감지 활성화"
+    )
+
+    # Retrieval 설정
+    enable_dispute_metadata_extraction: bool = Field(
+        default=True,
+        alias="ENABLE_DISPUTE_METADATA_EXTRACTION",
+        description="분쟁 메타데이터 추출 활성화"
+    )
+    enable_document_level_similarity: bool = Field(
+        default=True,
+        alias="ENABLE_DOCUMENT_LEVEL_SIMILARITY",
+        description="문서 레벨 유사도 활성화"
+    )
+    document_similarity_candidate_multiplier: int = Field(
+        default=5,
+        alias="DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER",
+        description="문서 유사도 후보 배수"
+    )
+    enable_retrieval_trace: bool = Field(
+        default=False,
+        alias="ENABLE_RETRIEVAL_TRACE",
+        description="검색 추적 활성화"
+    )
+
+    def get_similarity_threshold(self, query_type: Optional[str] = None) -> float:
+        """
+        쿼리 타입별 유사도 임계값을 반환합니다.
+
         Args:
             query_type: 쿼리 타입 (dispute, law, criteria, general)
                        None이면 기본 임계값 반환
-        
+
         Returns:
             해당 쿼리 타입의 유사도 임계값
-        
-        Example:
-            >>> AgentConfig.get_similarity_threshold('dispute')
-            0.55
-            >>> AgentConfig.get_similarity_threshold('law')
-            0.60
-            >>> AgentConfig.get_similarity_threshold()  # 기본값
-            0.55
         """
-        if query_type and query_type in cls.SIMILARITY_THRESHOLDS:
-            return cls.SIMILARITY_THRESHOLDS[query_type]
-        return cls.SIMILARITY_THRESHOLD
-    
+        thresholds = {
+            "dispute": self.similarity_threshold_dispute,
+            "law": self.similarity_threshold_law,
+            "criteria": self.similarity_threshold_criteria,
+            "general": self.similarity_threshold_general,
+        }
+        if query_type and query_type in thresholds:
+            return thresholds[query_type]
+        return self.similarity_threshold
+
+
+# ============================================================
+# Redis 설정
+# ============================================================
+
+class RedisConfig(BaseSettings):
+    """
+    Redis 캐시 설정.
+
+    답변 캐싱에 사용되는 Redis 연결 설정을 관리합니다.
+
+    환경변수:
+        REDIS_HOST: Redis 호스트 (기본값: localhost)
+        REDIS_PORT: Redis 포트 (기본값: 6379)
+        REDIS_DB: Redis 데이터베이스 번호 (기본값: 0)
+        ENABLE_ANSWER_CACHE: 답변 캐시 활성화 (기본값: false)
+        ANSWER_CACHE_TTL_HOURS: 캐시 TTL (기본값: 24시간)
+    """
+    model_config = SettingsConfigDict(env_prefix="REDIS_")
+
+    host: str = Field(default="localhost", description="Redis 호스트")
+    port: int = Field(default=6379, description="Redis 포트")
+    db: int = Field(default=0, description="Redis 데이터베이스 번호")
+    enable_answer_cache: bool = Field(
+        default=False,
+        alias="ENABLE_ANSWER_CACHE",
+        description="답변 캐시 활성화"
+    )
+    answer_cache_ttl_hours: int = Field(
+        default=24,
+        alias="ANSWER_CACHE_TTL_HOURS",
+        description="답변 캐시 TTL (시간)"
+    )
+
+
+# ============================================================
+# Query Rewriter 설정
+# ============================================================
+
+class QueryRewriterConfig(BaseSettings):
+    """
+    쿼리 재작성기 설정.
+
+    LLM을 활용한 쿼리 재작성 기능의 설정을 관리합니다.
+    """
+    model_config = SettingsConfigDict(env_prefix="QUERY_REWRITE_")
+
+    enabled: bool = Field(
+        default=True,
+        alias="QUERY_REWRITE_ENABLED",
+        description="쿼리 재작성 활성화"
+    )
+    cache_size: int = Field(
+        default=1000,
+        alias="QUERY_REWRITE_CACHE_SIZE",
+        description="캐시 크기"
+    )
+    timeout_ms: int = Field(
+        default=10000,
+        alias="QUERY_REWRITE_TIMEOUT",
+        description="타임아웃 (밀리초)"
+    )
+    min_complexity: int = Field(
+        default=1,
+        alias="QUERY_REWRITE_MIN_COMPLEXITY",
+        description="최소 복잡도"
+    )
+
+
+# ============================================================
+# Moderation 설정
+# ============================================================
+
+class ModerationConfig(BaseSettings):
+    """
+    콘텐츠 모더레이션 설정.
+
+    입출력 가드레일 설정을 관리합니다.
+    """
+    model_config = SettingsConfigDict(env_prefix="MODERATION_")
+
+    enabled: bool = Field(
+        default=True,
+        alias="MODERATION_ENABLED",
+        description="모더레이션 활성화"
+    )
+    model: str = Field(
+        default="omni-moderation-latest",
+        alias="MODERATION_MODEL",
+        description="모더레이션 모델"
+    )
+
+
+# ============================================================
+# 애플리케이션 전역 설정
+# ============================================================
+
+class AppConfig(BaseSettings):
+    """
+    애플리케이션 전역 설정.
+
+    모든 설정 그룹을 통합하여 관리합니다.
+
+    환경변수:
+        DEBUG: 디버그 모드 (기본값: false)
+        CORS_ORIGINS: CORS 허용 오리진 (기본값: http://localhost:5173)
+        ORCHESTRATOR_MODE: 오케스트레이터 모드 (기본값: react)
+        RETRIEVAL_MODE: 검색 모드 (기본값: dense)
+    """
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        env_nested_delimiter="__",
+        extra="ignore"
+    )
+
+    # 전역 설정
+    debug: bool = Field(default=False, alias="DEBUG", description="디버그 모드")
+    cors_origins: str = Field(
+        default="http://localhost:5173",
+        alias="CORS_ORIGINS",
+        description="CORS 허용 오리진 (쉼표 구분)"
+    )
+    orchestrator_mode: str = Field(
+        default="react",
+        alias="ORCHESTRATOR_MODE",
+        description="오케스트레이터 모드 (react | legacy)"
+    )
+    retrieval_mode: str = Field(
+        default="dense",
+        alias="RETRIEVAL_MODE",
+        description="검색 모드 (dense | hybrid)"
+    )
+
+    # LangSmith 추적
+    langchain_tracing_v2: bool = Field(
+        default=False,
+        alias="LANGCHAIN_TRACING_V2",
+        description="LangSmith 추적 활성화"
+    )
+    langchain_project: str = Field(
+        default="default",
+        alias="LANGCHAIN_PROJECT",
+        description="LangSmith 프로젝트명"
+    )
+
+    # 하위 설정 그룹
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    exaone: ExaoneConfig = Field(default_factory=ExaoneConfig)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
+    query_rewriter: QueryRewriterConfig = Field(default_factory=QueryRewriterConfig)
+    moderation: ModerationConfig = Field(default_factory=ModerationConfig)
+
+    def get_cors_origins_list(self) -> List[str]:
+        """
+        CORS 허용 오리진 목록을 반환합니다.
+
+        Returns:
+            오리진 문자열 리스트
+        """
+        return [origin.strip() for origin in self.cors_origins.split(",")]
+
+
+# ============================================================
+# 싱글톤 인스턴스 관리
+# ============================================================
+
+@lru_cache()
+def get_config() -> AppConfig:
+    """
+    애플리케이션 설정 싱글톤 인스턴스를 반환합니다.
+
+    Returns:
+        AppConfig 인스턴스
+
+    Example:
+        from app.common.config import get_config
+
+        config = get_config()
+        db_host = config.database.host
+        similarity = config.agent.similarity_threshold
+    """
+    return AppConfig()
+
+
+def reload_config() -> AppConfig:
+    """
+    설정을 다시 로드합니다.
+
+    환경변수가 변경된 후 호출하여 설정을 갱신합니다.
+    주로 테스트에서 사용됩니다.
+
+    Returns:
+        새로 로드된 AppConfig 인스턴스
+    """
+    get_config.cache_clear()
+    return get_config()
+
+
+# ============================================================
+# 하위 호환성을 위한 레거시 클래스
+# ============================================================
+
+class _LegacyAgentConfigMeta(type):
+    """
+    LegacyAgentConfig 클래스의 메타클래스.
+    클래스 속성 접근을 동적으로 처리하여 get_config()에서 값을 가져옵니다.
+    """
+
+    @property
+    def SIMILARITY_THRESHOLD(cls) -> float:
+        return get_config().agent.similarity_threshold
+
+    @property
+    def MAX_REACT_ITERATIONS(cls) -> int:
+        return get_config().agent.max_react_iterations
+
+    @property
+    def PROHIBITED_VIOLATION_THRESHOLD(cls) -> int:
+        return get_config().agent.prohibited_violation_threshold
+
+    @property
+    def MAX_REVIEW_RETRIES(cls) -> int:
+        return get_config().agent.max_review_retries
+
+    @property
+    def SIMILARITY_THRESHOLDS(cls) -> Dict[str, float]:
+        config = get_config().agent
+        return {
+            "dispute": config.similarity_threshold_dispute,
+            "law": config.similarity_threshold_law,
+            "criteria": config.similarity_threshold_criteria,
+            "general": config.similarity_threshold_general,
+        }
+
+
+class LegacyAgentConfig(metaclass=_LegacyAgentConfigMeta):
+    """
+    기존 AgentConfig 클래스와의 하위 호환성을 위한 래퍼.
+
+    [주의]
+    이 클래스는 하위 호환성을 위해 유지됩니다.
+    새 코드에서는 get_config().agent를 직접 사용하세요.
+
+    기존 사용법:
+        from app.common.config import AgentConfig
+        threshold = AgentConfig.get_similarity_threshold('dispute')
+        max_iter = AgentConfig.MAX_REACT_ITERATIONS
+
+    새 사용법:
+        from app.common.config import get_config
+        config = get_config()
+        threshold = config.agent.get_similarity_threshold('dispute')
+        max_iter = config.agent.max_react_iterations
+    """
+
+    @classmethod
+    def get_similarity_threshold(cls, query_type: Optional[str] = None) -> float:
+        """쿼리 타입별 유사도 임계값 반환 (레거시 호환)"""
+        return get_config().agent.get_similarity_threshold(query_type)
+
     @classmethod
     def reload(cls) -> None:
-        """
-        환경 변수에서 설정 다시 로드
-        
-        런타임 중 환경 변수가 변경된 경우 호출하여 설정 갱신.
-        주로 테스트에서 사용.
-        
-        Example:
-            >>> os.environ['SIMILARITY_THRESHOLD'] = '0.60'
-            >>> AgentConfig.reload()
-            >>> AgentConfig.SIMILARITY_THRESHOLD
-            0.60
-        """
-        cls.SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.55'))
-        cls.MAX_REACT_ITERATIONS = int(os.getenv('MAX_REACT_ITERATIONS', '2'))
-        cls.PROHIBITED_VIOLATION_THRESHOLD = int(os.getenv('PROHIBITED_VIOLATION_THRESHOLD', '3'))
-        cls.MAX_REVIEW_RETRIES = int(os.getenv('MAX_REVIEW_RETRIES', '2'))
-        
-        cls.SIMILARITY_THRESHOLDS = {
-            'dispute': float(os.getenv('SIMILARITY_THRESHOLD_DISPUTE', '0.55')),
-            'law': float(os.getenv('SIMILARITY_THRESHOLD_LAW', '0.60')),
-            'criteria': float(os.getenv('SIMILARITY_THRESHOLD_CRITERIA', '0.50')),
-            'general': float(os.getenv('SIMILARITY_THRESHOLD_GENERAL', '0.45')),
-        }
-    
+        """환경 변수에서 설정 다시 로드 (레거시 호환)"""
+        reload_config()
+
     @classmethod
     def to_dict(cls) -> Dict:
-        """
-        현재 설정을 딕셔너리로 반환 (로깅/디버깅용)
-        
-        Returns:
-            설정 딕셔너리
-        """
+        """현재 설정을 딕셔너리로 반환 (레거시 호환)"""
+        config = get_config().agent
         return {
-            'SIMILARITY_THRESHOLD': cls.SIMILARITY_THRESHOLD,
-            'MAX_REACT_ITERATIONS': cls.MAX_REACT_ITERATIONS,
-            'PROHIBITED_VIOLATION_THRESHOLD': cls.PROHIBITED_VIOLATION_THRESHOLD,
-            'MAX_REVIEW_RETRIES': cls.MAX_REVIEW_RETRIES,
-            'SIMILARITY_THRESHOLDS': cls.SIMILARITY_THRESHOLDS,
+            "SIMILARITY_THRESHOLD": config.similarity_threshold,
+            "MAX_REACT_ITERATIONS": config.max_react_iterations,
+            "PROHIBITED_VIOLATION_THRESHOLD": config.prohibited_violation_threshold,
+            "MAX_REVIEW_RETRIES": config.max_review_retries,
+            "SIMILARITY_THRESHOLDS": cls.SIMILARITY_THRESHOLDS,
         }
+
+
+# 하위 호환성을 위해 기존 이름으로도 사용 가능
+# (주의: 새 코드에서는 get_config()을 사용 권장)
+
+# 레거시 호환: AgentConfig는 LegacyAgentConfig의 별칭
+# 기존 코드: AgentConfig.MAX_REACT_ITERATIONS, AgentConfig.get_similarity_threshold()
+AgentConfig = LegacyAgentConfig
+
+
+# ============================================================
+# 모듈 공개 API
+# ============================================================
+
+__all__ = [
+    # 설정 클래스 (Pydantic)
+    "AppConfig",
+    "DatabaseConfig",
+    "EmbeddingConfig",
+    "LLMConfig",
+    "ExaoneConfig",
+    "AgentSettings",  # 새 이름 (get_config().agent 타입)
+    "RedisConfig",
+    "QueryRewriterConfig",
+    "ModerationConfig",
+
+    # 설정 접근 함수
+    "get_config",
+    "reload_config",
+
+    # 하위 호환성
+    "AgentConfig",  # LegacyAgentConfig 별칭 (클래스 속성 접근)
+    "LegacyAgentConfig",
+]

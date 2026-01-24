@@ -280,8 +280,8 @@ class TestDatabaseBGEM3:
     """Database BGE-M3 column tests"""
 
     @pytest.fixture
-    def db_connection(self):
-        """Create database connection"""
+    def local_db_connection(self):
+        """Create database connection (local fixture to avoid scope mismatch)"""
         import psycopg2
         try:
             conn = psycopg2.connect(**DB_CONFIG)
@@ -290,9 +290,9 @@ class TestDatabaseBGEM3:
         except Exception as e:
             pytest.skip(f"Database connection failed: {e}")
 
-    def test_bge_m3_columns_exist(self, db_connection):
+    def test_bge_m3_columns_exist(self, local_db_connection):
         """Test BGE-M3 columns exist in chunks table"""
-        with db_connection.cursor() as cur:
+        with local_db_connection.cursor() as cur:
             cur.execute("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
@@ -309,9 +309,9 @@ class TestDatabaseBGEM3:
 
         assert 'bge_dense_vector' in columns or 'bge_m3_encoded' in columns
 
-    def test_bge_m3_encoding_status(self, db_connection):
+    def test_bge_m3_encoding_status(self, local_db_connection):
         """Check BGE-M3 encoding status"""
-        with db_connection.cursor() as cur:
+        with local_db_connection.cursor() as cur:
             # Check if bge_m3_encoded column exists
             cur.execute("""
                 SELECT column_name FROM information_schema.columns

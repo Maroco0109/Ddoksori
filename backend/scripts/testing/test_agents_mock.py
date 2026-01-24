@@ -72,18 +72,24 @@ class TestLegalReviewFunctions:
             user_query='환불 가능?',
             chat_type='dispute'
         )
-        state['draft_answer'] = '환불이 가능할 수 있습니다.'
+        # 출처/근거가 포함된 답변으로 수정 (법률 검토 통과 조건)
+        state['draft_answer'] = '관련 사례(KCA-2024-001)에 따르면 환불이 가능할 수 있습니다. 전자상거래법 제17조를 참고하세요.'
         state['query_analysis'] = {'query_type': 'dispute'}
-        state['sources'] = [{'doc_id': '1'}]
-        state['retrieval'] = {'disputes': [{'doc_id': '1'}]}
-        
-        with patch('app.agents.legal_review.agent.AgentConfig') as MockConfig:
-            MockConfig.PROHIBITED_VIOLATION_THRESHOLD = 3
-            MockConfig.MAX_REVIEW_RETRIES = 2
-            
+        state['sources'] = [{'doc_id': '1', 'uid': 'KCA-2024-001'}]
+        state['retrieval'] = {'disputes': [{'doc_id': '1', 'uid': 'KCA-2024-001'}]}
+
+        # AgentSettings mock (Pydantic Settings 클래스)
+        mock_agent_settings = MagicMock()
+        mock_agent_settings.prohibited_violation_threshold = 3
+        mock_agent_settings.max_review_retries = 2
+
+        mock_config = MagicMock()
+        mock_config.agent = mock_agent_settings
+
+        with patch('app.common.config.get_config', return_value=mock_config):
             result = review_node(state)
             review_res = result['review']
-            
+
             assert review_res['passed'] is True
             assert 'final_answer' in result
 
@@ -97,14 +103,19 @@ class TestLegalReviewFunctions:
         state['query_analysis'] = {'query_type': 'dispute'}
         state['sources'] = [{'doc_id': '1'}]
         state['retrieval'] = {'disputes': [{'doc_id': '1'}]}
-        
-        with patch('app.agents.legal_review.agent.AgentConfig') as MockConfig:
-            MockConfig.PROHIBITED_VIOLATION_THRESHOLD = 1
-            MockConfig.MAX_REVIEW_RETRIES = 2
-            
+
+        # AgentSettings mock (Pydantic Settings 클래스)
+        mock_agent_settings = MagicMock()
+        mock_agent_settings.prohibited_violation_threshold = 1
+        mock_agent_settings.max_review_retries = 2
+
+        mock_config = MagicMock()
+        mock_config.agent = mock_agent_settings
+
+        with patch('app.common.config.get_config', return_value=mock_config):
             result = review_node(state)
             review_res = result['review']
-            
+
             assert review_res['passed'] is False
             assert result['retry_count'] == 1
 

@@ -6,9 +6,19 @@ End-to-end RAG workflow tests.
 Usage:
     conda activate dsr
     pytest backend/scripts/testing/test_api_integration.py -v -m integration
+
+마커:
+    @pytest.mark.integration - API 서버 연결 필요
+    @pytest.mark.api - API 엔드포인트 테스트
 """
 import pytest
 import os
+
+# 전체 모듈에 마커 적용
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.api,
+]
 
 
 class TestRAGWorkflow:
