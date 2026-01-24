@@ -6,8 +6,18 @@ Tests error handling and input validation for API endpoints.
 Usage:
     conda activate dsr
     pytest backend/scripts/testing/test_api_error_handling.py -v
+
+마커:
+    @pytest.mark.integration - API 서버 연결 필요
+    @pytest.mark.api - API 엔드포인트 테스트
 """
 import pytest
+
+# 전체 모듈에 마커 적용
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.api,
+]
 
 
 class TestInputValidation:

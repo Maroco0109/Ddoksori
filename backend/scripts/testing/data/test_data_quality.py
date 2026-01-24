@@ -6,8 +6,20 @@ Tests database integrity and data quality.
 Usage:
     conda activate dsr
     pytest backend/scripts/testing/test_data_quality.py -v
+
+마커:
+    @pytest.mark.integration - 모든 테스트가 PostgreSQL 필요
+    @pytest.mark.needs_db - DB 연결 필요
+    @pytest.mark.needs_data - 시드 데이터 필요
 """
 import pytest
+
+# 전체 모듈에 마커 적용
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.needs_db,
+    pytest.mark.needs_data,
+]
 
 
 class TestDataIntegrity:

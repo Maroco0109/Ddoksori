@@ -6,9 +6,21 @@ Tests concurrent request handling and connection pooling.
 Usage:
     conda activate dsr
     pytest backend/scripts/testing/test_api_concurrent.py -v -m slow
+
+마커:
+    @pytest.mark.integration - API 서버 연결 필요
+    @pytest.mark.api - API 엔드포인트 테스트
+    @pytest.mark.slow - 느린 테스트
 """
 import pytest
 import concurrent.futures
+
+# 전체 모듈에 마커 적용
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.api,
+    pytest.mark.slow,
+]
 
 
 class TestConcurrency:

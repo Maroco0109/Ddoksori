@@ -15,17 +15,27 @@ from app.agents.legal_review.llm_reviewer import (
     get_reviewer,
 )
 from app.orchestrator.state import ChatState
+from app.common.config import reload_config
+
+
+@pytest.fixture(autouse=True)
+def reset_config_cache():
+    """각 테스트 후 config 캐시를 클리어하여 환경변수 변경이 반영되도록 함"""
+    yield
+    reload_config()
 
 
 class TestHybridLegalReviewerInit:
 
     def test_init_default_llm_disabled(self):
-        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'false'}):
+        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'false'}, clear=False):
+            reload_config()
             reviewer = HybridLegalReviewer()
             assert reviewer.enable_llm is False
 
     def test_init_llm_enabled_via_env(self):
-        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'true'}, clear=False):
+            reload_config()
             reviewer = HybridLegalReviewer()
             assert reviewer.enable_llm is True
 
@@ -34,7 +44,8 @@ class TestHybridLegalReviewerInit:
         assert reviewer.enable_llm is True
 
     def test_init_explicit_disable_override(self):
-        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_LLM_REVIEW': 'true'}, clear=False):
+            reload_config()
             reviewer = HybridLegalReviewer(enable_llm=False)
             assert reviewer.enable_llm is False
 

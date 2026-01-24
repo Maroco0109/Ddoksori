@@ -17,6 +17,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Clean up problematic environment variables that conflict with Pydantic Settings
+if 'AGENT' in os.environ:
+    del os.environ['AGENT']
+
 
 @pytest.fixture(scope="session")
 def api_client():

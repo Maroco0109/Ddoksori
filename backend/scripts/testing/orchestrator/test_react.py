@@ -28,6 +28,14 @@ from app.agents.react.react_think import (
     _determine_next_action,
 )
 from app.agents.react.react_act import react_act_node
+from app.common.config import reload_config
+
+
+@pytest.fixture(autouse=True)
+def reset_config_cache():
+    """각 테스트 후 config 캐시를 클리어하여 환경변수 변경이 반영되도록 함"""
+    yield
+    reload_config()
 from app.orchestrator.graph import (
     create_react_chat_graph,
     _route_after_query_analysis_react,

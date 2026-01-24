@@ -7,6 +7,14 @@ from app.orchestrator import (
     reset_graph,
 )
 from app.orchestrator.graph import create_chat_graph
+from app.common.config import reload_config
+
+
+@pytest.fixture(autouse=True)
+def reset_config_cache():
+    """각 테스트 후 config 캐시를 클리어하여 환경변수 변경이 반영되도록 함"""
+    yield
+    reload_config()
 
 
 def create_mock_retrieval_node(retrieval_result: Dict[str, Any]):
