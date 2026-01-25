@@ -63,7 +63,8 @@ docs/guides/_archive
 
 # documents
 docs/_archive
-docs/plans
+# docs/plans
+docs/plans/manus
 
 
 # Data
