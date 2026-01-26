@@ -86,6 +86,37 @@ class RetrievalResult(TypedDict, total=False):
     avg_similarity: float
 
 
+class IndividualRetrievalResult(TypedDict, total=False):
+    """
+    개별 Retrieval Agent 결과 (Phase 5: MAS Supervisor)
+
+    4개의 독립된 Retrieval Agent(Law, Criteria, Case, Counsel)가
+    각각 반환하는 검색 결과입니다.
+
+    Attributes:
+        source: 검색 소스 ('law', 'criteria', 'case', 'counsel')
+        documents: 검색된 문서 리스트 (최대 5개)
+        max_similarity: 최고 유사도 점수
+        avg_similarity: 평균 유사도 점수
+        search_time_ms: 검색 소요 시간 (밀리초)
+        error: 검색 실패 시 에러 메시지
+
+    Example:
+        >>> result: IndividualRetrievalResult = {
+        ...     'source': 'law',
+        ...     'documents': [{'article': '제17조', 'content': '...'}],
+        ...     'max_similarity': 0.92,
+        ...     'search_time_ms': 150
+        ... }
+    """
+    source: str
+    documents: List[Dict]
+    max_similarity: float
+    avg_similarity: float
+    search_time_ms: float
+    error: Optional[str]
+
+
 class ReviewResult(TypedDict, total=False):
     """
     검토 에이전트 결과
@@ -141,6 +172,7 @@ class AgentResultsState(TypedDict, total=False):
 __all__ = [
     'QueryAnalysisResult',
     'RetrievalResult',
+    'IndividualRetrievalResult',
     'ReviewResult',
     'AgentResultsState',
 ]

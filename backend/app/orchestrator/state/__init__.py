@@ -38,6 +38,7 @@ from .session import (
 from .agent_results import (
     QueryAnalysisResult,
     RetrievalResult,
+    IndividualRetrievalResult,
     ReviewResult,
     AgentResultsState,
 )
@@ -189,8 +190,13 @@ class ChatState(MessagesState):
     last_action: Optional[str]
     last_observation: Optional[str]
 
-    # === Supervisor ===
+    # === Supervisor (Phase 5: MAS) ===
     supervisor: Optional[SupervisorState]
+
+    # === 개별 Retrieval 결과 (Phase 5: MAS) ===
+    # 4개 Retrieval Agent가 병렬로 실행되어 각각의 결과를 저장
+    # operator.add로 누적되어 retrieval_merge_node에서 병합됨
+    individual_retrieval_results: Annotated[List[IndividualRetrievalResult], operator.add]
 
     # === 노드 타이밍 ===
     _node_timings: Optional[Dict[str, Dict]]
@@ -267,8 +273,11 @@ def create_initial_state(
         last_action=None,
         last_observation=None,
 
-        # === Supervisor ===
+        # === Supervisor (Phase 5: MAS) ===
         supervisor=None,
+
+        # === 개별 Retrieval 결과 (Phase 5: MAS) ===
+        individual_retrieval_results=[],
 
         # 노드 타이밍
         _node_timings={},
@@ -294,6 +303,7 @@ __all__ = [
     # 에이전트 결과
     'QueryAnalysisResult',
     'RetrievalResult',
+    'IndividualRetrievalResult',
     'ReviewResult',
     'AgentResultsState',
 
