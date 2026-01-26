@@ -190,7 +190,7 @@ class SupervisorNode:
         """
         # 사용자 입력 sanitize
         user_query = self._sanitize_user_input(state.get("user_query", ""))
-        supervisor_state = state.get("supervisor", {})
+        supervisor_state = state.get("supervisor") or {}
         completed_tasks = supervisor_state.get("completed_tasks", [])
 
         # 각 필드 요약
@@ -344,10 +344,16 @@ class SupervisorNode:
         Returns:
             결정 딕셔너리
         """
-        supervisor_state = state.get("supervisor", {})
+        supervisor_state = state.get("supervisor") or {}
         completed = supervisor_state.get("completed_tasks", [])
 
-        if "query_analyst" not in completed and "query_analysis" not in completed:
+        # Prefer explicit state fields when available; completed_tasks may be stale.
+        query_analysis = state.get("query_analysis")
+        retrieval = state.get("retrieval")
+        draft_answer = state.get("draft_answer")
+        review = state.get("review")
+
+        if not query_analysis and ("query_analyst" not in completed and "query_analysis" not in completed):
             return {
                 "action": "call_agent",
                 "target_agent": "query_analyst",
@@ -355,7 +361,7 @@ class SupervisorNode:
                 "reasoning": "Rule-based: 질의 분석 필요"
             }
 
-        if "retrieval_team" not in completed and "retrieval" not in completed:
+        if not retrieval and ("retrieval_team" not in completed and "retrieval" not in completed):
             return {
                 "action": "call_agent",
                 "target_agent": "retrieval_team",
@@ -363,7 +369,7 @@ class SupervisorNode:
                 "reasoning": "Rule-based: 정보 검색 필요"
             }
 
-        if "answer_drafter" not in completed and "draft" not in completed:
+        if not draft_answer and ("answer_drafter" not in completed and "draft" not in completed):
             return {
                 "action": "call_agent",
                 "target_agent": "answer_drafter",
@@ -371,7 +377,7 @@ class SupervisorNode:
                 "reasoning": "Rule-based: 답변 초안 작성 필요"
             }
 
-        if "legal_reviewer" not in completed and "review" not in completed:
+        if not review and ("legal_reviewer" not in completed and "review" not in completed):
             return {
                 "action": "call_agent",
                 "target_agent": "legal_reviewer",
@@ -438,7 +444,7 @@ class SupervisorNode:
 
         async def supervisor_node(state: ChatState) -> Dict[str, Any]:
             """Supervisor 노드 함수"""
-            supervisor_state = state.get("supervisor", {})
+            supervisor_state = state.get("supervisor") or {}
             
             # 반복 횟수 증가
             iteration_count = supervisor_state.get("iteration_count", 0) + 1
@@ -510,7 +516,7 @@ def supervisor_router(state: ChatState) -> str:
     Returns:
         다음 노드 이름 (str)
     """
-    supervisor_state = state.get("supervisor", {})
+    supervisor_state = state.get("supervisor") or {}
     next_agent = supervisor_state.get("next_agent")
 
     if next_agent == "respond" or next_agent is None:

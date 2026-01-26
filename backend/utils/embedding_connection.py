@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import time
 import sys
+from typing import Optional
 
 # Configuration - KURE-v1 (Default Dense Embedding)
 # RunPod uses 9000-range ports to avoid conflicts with Jupyter/other services
@@ -19,6 +20,9 @@ BGE_M3_LOCAL_URL = f"http://localhost:{BGE_M3_LOCAL_PORT}"
 # Embedding Model Selection
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "kure-v1")  # kure-v1 | bge-m3
 ENABLE_SPARSE_SEARCH = os.getenv("ENABLE_SPARSE_SEARCH", "false").lower() == "true"
+
+# Docker/CI safety: avoid blocking startup by auto-starting a local embedding server.
+DISABLE_LOCAL_EMBED_AUTO_START = os.getenv("DISABLE_LOCAL_EMBED_AUTO_START", "false").lower() == "true"
 
 # RRF Weight Parameters (for A/B testing)
 RRF_WEIGHT_DENSE = float(os.getenv("RRF_WEIGHT_DENSE", "1.0"))
@@ -86,6 +90,10 @@ def get_embedding_api_url() -> str:
             return f"{base_remote}/embed"
         else:
             print(f"⚠️ Remote server at {base_remote} is not reachable.")
+            if DISABLE_LOCAL_EMBED_AUTO_START:
+                # In containerized environments, remote may still be warming up.
+                # Return remote URL without blocking startup.
+                return f"{base_remote}/embed"
     
     # 2. Check if Local is already running
     if check_url(LOCAL_EMBED_URL):
@@ -93,6 +101,9 @@ def get_embedding_api_url() -> str:
         return f"{LOCAL_EMBED_URL}/embed"
         
     # 3. Start Local Server
+    if DISABLE_LOCAL_EMBED_AUTO_START:
+        print("🛑 DISABLE_LOCAL_EMBED_AUTO_START=true: skipping local embedding server auto-start")
+        return f"{LOCAL_EMBED_URL}/embed"
     if start_local_server():
         return f"{LOCAL_EMBED_URL}/embed"
         
@@ -101,7 +112,7 @@ def get_embedding_api_url() -> str:
     return f"{LOCAL_EMBED_URL}/embed"  # Return default, will fail connection later
 
 
-def get_bge_m3_api_url() -> str:
+def get_bge_m3_api_url() -> Optional[str]:
     """
     Determines the best available BGE-M3 API URL using Adaptive Strategy.
     Order: Remote -> Local Running
