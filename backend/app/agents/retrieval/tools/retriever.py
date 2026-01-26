@@ -1,15 +1,57 @@
-"""
-똑소리 프로젝트 - RAG 검색 시스템
+"""똑소리 프로젝트 - RAG 검색 시스템
+
 작성일: 2026-01-05
 벡터 검색, 하이브리드 검색, 컨텍스트 확장 기능 제공
 """
 
+import os
 import psycopg2
 import time
-from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any, cast
 import requests
 from dataclasses import dataclass
 import re
+
+
+def _to_category_path(category: Optional[str]) -> List[str]:
+    if not category:
+        return []
+    # Common patterns: "A>B>C" or "A / B / C" or a single label.
+    for sep in (">", "/", "|"):
+        if sep in category:
+            return [p.strip() for p in category.split(sep) if p.strip()]
+    return [category]
+
+
+def _map_vector_chunks_doc_type(dataset_type: Optional[str], category: Optional[str]) -> str:
+    if dataset_type == 'law_guide':
+        return 'law'
+    if dataset_type == 'case':
+        if category == '조정':
+            return 'mediation_case'
+        if category == '상담':
+            return 'counsel_case'
+        if category == '해결':
+            # Not a true "criteria" dataset, but closest available in this schema.
+            return 'criteria'
+        return 'case'
+    return dataset_type or 'unknown'
+
+
+def _map_doc_type_filter_to_vector_chunks(doc_type_filter: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Returns (dataset_type_filter, category_filter) for vector_chunks."""
+    if not doc_type_filter:
+        return None, None
+    if doc_type_filter == 'law':
+        return 'law_guide', None
+    if doc_type_filter == 'mediation_case':
+        return 'case', '조정'
+    if doc_type_filter == 'counsel_case':
+        return 'case', '상담'
+    if doc_type_filter == 'criteria':
+        return 'case', '해결'
+    # Fallback: treat the filter as dataset_type
+    return doc_type_filter, None
 
 if TYPE_CHECKING:
     from .base import Document
@@ -43,7 +85,12 @@ class RAGRetriever:
     def __init__(self, db_config: Dict[str, str], embed_api_url: str = "http://localhost:8001/embed"):
         self.db_config = db_config
         self.embed_api_url = embed_api_url
-        self.conn = None
+        self.conn: Any = None
+
+        # Optional: OpenAI embedding (1536 dims) to match RDS vector dims.
+        # When enabled, we bypass the local/remote embedding HTTP server.
+        self._use_openai_embedding = os.getenv('USE_OPENAI_EMBEDDING', 'false').lower() == 'true'
+        self._openai_embedder: Any = None
         
         # 쿼리 유형별 데이터 소스 가중치
         self.QUERY_TYPE_WEIGHTS = {
@@ -66,7 +113,13 @@ class RAGRetriever:
     
     def connect(self):
         """데이터베이스 연결"""
-        self.conn = psycopg2.connect(**self.db_config)
+        self.conn = psycopg2.connect(**cast(Any, self.db_config))  # type: ignore[call-overload]
+        # Detect which schema is available.
+        # - Legacy schema: documents/chunks/mv_searchable_chunks
+        # - RDS schema: vector_chunks/search_quality_logs
+        with self.conn.cursor() as cur:
+            cur.execute("select to_regclass('public.vector_chunks')")
+            self._has_vector_chunks = cur.fetchone()[0] is not None
     
     def close(self):
         """데이터베이스 연결 종료"""
@@ -75,6 +128,14 @@ class RAGRetriever:
     
     def embed_query(self, query: str) -> List[float]:
         """쿼리 임베딩 생성"""
+        if self._use_openai_embedding:
+            try:
+                if self._openai_embedder is None:
+                    from .embedding_client import EmbeddingClient
+                    self._openai_embedder = EmbeddingClient()
+                return self._openai_embedder.embed_query(query)
+            except Exception as e:
+                raise Exception(f"OpenAI 임베딩 오류: {e}")
         try:
             response = requests.post(
                 self.embed_api_url,
@@ -122,60 +183,143 @@ class RAGRetriever:
         # Search with timing
         search_start = time.time()
 
+        assert self.conn is not None
+
         with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    c.chunk_id,
-                    c.doc_id,
-                    c.chunk_type,
-                    c.content,
-                    d.title AS doc_title,
-                    d.doc_type,
-                    d.category_path,
-                    1 - (c.embedding <=> %s::vector) AS similarity,
-                    d.source_org,
-                    d.url,
-                    d.collected_at,
-                    d.metadata
-                FROM chunks c
-                JOIN documents d ON c.doc_id = d.doc_id
-                WHERE
-                    c.embedding IS NOT NULL
-                    AND (%s IS NULL OR d.doc_type = %s)
-                    AND (%s IS NULL OR c.chunk_type = %s)
-                ORDER BY c.embedding <=> %s::vector
-                LIMIT %s
-                """,
-                (
-                    query_embedding,
-                    doc_type_filter, doc_type_filter,
-                    chunk_type_filter, chunk_type_filter,
-                    query_embedding,
-                    top_k
+            if getattr(self, '_has_vector_chunks', False):
+                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        1 - (vc.embedding <=> %s::vector) AS similarity
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.embedding IS NOT NULL
+                        AND (%s IS NULL OR vc.dataset_type = %s)
+                        AND (%s IS NULL OR vc.category = %s)
+                        AND (%s IS NULL OR vc.chunk_type = %s)
+                    ORDER BY vc.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (
+                        query_embedding,
+                        dataset_type_filter, dataset_type_filter,
+                        category_filter, category_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        query_embedding,
+                        top_k,
+                    )
                 )
-            )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        c.chunk_type,
+                        c.content,
+                        d.title AS doc_title,
+                        d.doc_type,
+                        d.category_path,
+                        1 - (c.embedding <=> %s::vector) AS similarity,
+                        d.source_org,
+                        d.url,
+                        d.collected_at,
+                        d.metadata
+                    FROM chunks c
+                    JOIN documents d ON c.doc_id = d.doc_id
+                    WHERE
+                        c.embedding IS NOT NULL
+                        AND (%s IS NULL OR d.doc_type = %s)
+                        AND (%s IS NULL OR c.chunk_type = %s)
+                    ORDER BY c.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (
+                        query_embedding,
+                        doc_type_filter, doc_type_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        query_embedding,
+                        top_k
+                    )
+                )
 
             results = []
             for row in cur.fetchall():
-                metadata_json = row[11] if len(row) > 11 and row[11] else {}
-                decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                if getattr(self, '_has_vector_chunks', False):
+                    # vector_chunks row layout:
+                    # chunk_id, dataset_type, text, law_name, chunk_type, category,
+                    # source_url, source_year, metadata, created_at, similarity
+                    metadata_json = row[8] if row[8] else {}
+                    dataset_type = row[1]
+                    category = row[5]
+                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+                    title = None
+                    if isinstance(metadata_json, dict):
+                        title = metadata_json.get('title')
+                    if not title and dataset_type == 'law_guide':
+                        if isinstance(metadata_json, dict):
+                            article_no = metadata_json.get('조문번호') or row[17] if len(row) > 17 else None
+                            article_title = metadata_json.get('조문제목')
+                        else:
+                            article_no, article_title = None, None
+                        parts = [p for p in [row[3], article_no, article_title] if p]
+                        title = ' '.join(parts) if parts else (row[3] or row[0])
+                    doc_id = row[0]
+                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                        doc_id = str(metadata_json.get('number'))
+                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                    source_org = None
+                    if dataset_type == 'law_guide':
+                        source_org = 'statute'
+                    elif isinstance(metadata_json, dict):
+                        source_org = metadata_json.get('source')
 
-                results.append(SearchResult(
-                    chunk_id=row[0],
-                    doc_id=row[1],
-                    chunk_type=row[2],
-                    content=row[3],
-                    doc_title=row[4],
-                    doc_type=row[5],
-                    category_path=row[6] or [],
-                    similarity=float(row[7]),
-                    source_org=row[8],
-                    url=row[9],
-                    collected_at=row[10].isoformat() if row[10] else None,
-                    decision_date=decision_date,
-                    metadata=metadata_json
-                ))
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=doc_id,
+                        chunk_type=row[4] or '',
+                        content=row[2] or '',
+                        doc_title=title or '',
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
+                    ))
+                else:
+                    metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        chunk_type=row[2],
+                        content=row[3],
+                        doc_title=row[4],
+                        doc_type=row[5],
+                        category_path=row[6] or [],
+                        similarity=float(row[7]),
+                        source_org=row[8],
+                        url=row[9],
+                        collected_at=row[10].isoformat() if row[10] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json
+                    ))
 
         search_time = (time.time() - search_start) * 1000
 
@@ -197,61 +341,143 @@ class RAGRetriever:
         query_embedding = self.embed_query(query)
         
         # 데이터베이스 검색
+        assert self.conn is not None
         with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    c.chunk_id,
-                    c.doc_id,
-                    c.chunk_type,
-                    c.content,
-                    d.title AS doc_title,
-                    d.doc_type,
-                    d.category_path,
-                    1 - (c.embedding <=> %s::vector) AS similarity,
-                    d.source_org,
-                    d.url,
-                    d.collected_at,
-                    d.metadata
-                FROM chunks c
-                JOIN documents d ON c.doc_id = d.doc_id
-                WHERE
-                    c.embedding IS NOT NULL
-                    AND (%s IS NULL OR d.doc_type = %s)
-                    AND (%s IS NULL OR c.chunk_type = %s)
-                ORDER BY c.embedding <=> %s::vector
-                LIMIT %s
-                """,
-                (
-                    query_embedding,
-                    doc_type_filter, doc_type_filter,
-                    chunk_type_filter, chunk_type_filter,
-                    query_embedding,
-                    top_k
+            if getattr(self, '_has_vector_chunks', False):
+                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        1 - (vc.embedding <=> %s::vector) AS similarity
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.embedding IS NOT NULL
+                        AND (%s IS NULL OR vc.dataset_type = %s)
+                        AND (%s IS NULL OR vc.category = %s)
+                        AND (%s IS NULL OR vc.chunk_type = %s)
+                    ORDER BY vc.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (
+                        query_embedding,
+                        dataset_type_filter, dataset_type_filter,
+                        category_filter, category_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        query_embedding,
+                        top_k,
+                    )
                 )
-            )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        c.chunk_type,
+                        c.content,
+                        d.title AS doc_title,
+                        d.doc_type,
+                        d.category_path,
+                        1 - (c.embedding <=> %s::vector) AS similarity,
+                        d.source_org,
+                        d.url,
+                        d.collected_at,
+                        d.metadata
+                    FROM chunks c
+                    JOIN documents d ON c.doc_id = d.doc_id
+                    WHERE
+                        c.embedding IS NOT NULL
+                        AND (%s IS NULL OR d.doc_type = %s)
+                        AND (%s IS NULL OR c.chunk_type = %s)
+                    ORDER BY c.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (
+                        query_embedding,
+                        doc_type_filter, doc_type_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        query_embedding,
+                        top_k
+                    )
+                )
 
             results = []
             for row in cur.fetchall():
-                # Parse decision_date from metadata if exists
-                metadata_json = row[11] if len(row) > 11 and row[11] else {}
-                decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                if getattr(self, '_has_vector_chunks', False):
+                    metadata_json = row[8] if row[8] else {}
+                    dataset_type = row[1]
+                    category = row[5]
+                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
 
-                results.append(SearchResult(
-                    chunk_id=row[0],
-                    doc_id=row[1],
-                    chunk_type=row[2],
-                    content=row[3],
-                    doc_title=row[4],
-                    doc_type=row[5],
-                    category_path=row[6] or [],
-                    similarity=float(row[7]),
-                    source_org=row[8],
-                    url=row[9],
-                    collected_at=row[10].isoformat() if row[10] else None,
-                    decision_date=decision_date,
-                    metadata=metadata_json
-                ))
+                    title = None
+                    if isinstance(metadata_json, dict):
+                        title = metadata_json.get('title')
+                    if not title and dataset_type == 'law_guide':
+                        if isinstance(metadata_json, dict):
+                            article_no = metadata_json.get('조문번호')
+                            article_title = metadata_json.get('조문제목')
+                        else:
+                            article_no, article_title = None, None
+                        parts = [p for p in [row[3], article_no, article_title] if p]
+                        title = ' '.join(parts) if parts else (row[3] or row[0])
+
+                    doc_id = row[0]
+                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                        doc_id = str(metadata_json.get('number'))
+
+                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                    source_org = None
+                    if dataset_type == 'law_guide':
+                        source_org = 'statute'
+                    elif isinstance(metadata_json, dict):
+                        source_org = metadata_json.get('source')
+
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=doc_id,
+                        chunk_type=row[4] or '',
+                        content=row[2] or '',
+                        doc_title=title or '',
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
+                    ))
+                else:
+                    # Parse decision_date from metadata if exists
+                    metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        chunk_type=row[2],
+                        content=row[3],
+                        doc_title=row[4],
+                        doc_type=row[5],
+                        category_path=row[6] or [],
+                        similarity=float(row[7]),
+                        source_org=row[8],
+                        url=row[9],
+                        collected_at=row[10].isoformat() if row[10] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json
+                    ))
 
             return results
     
@@ -289,58 +515,136 @@ class RAGRetriever:
         chunk_type_filter: Optional[str] = None
     ) -> List[SearchResult]:
         """FTS 기반 키워드 검색 (mv_searchable_chunks 사용)"""
+        assert self.conn is not None
         with self.conn.cursor() as cur:
-            # 토큰화: 공백으로 분리하고 '&'로 연결 (AND 검색)
-            tokens = query.split()
-            tsquery = ' & '.join(tokens)
-
-            cur.execute(
-                """
-                SELECT
-                    chunk_id,
-                    doc_id,
-                    chunk_type,
-                    content,
-                    doc_type,
-                    source_org,
-                    category_path,
-                    ts_rank(content_vector, to_tsquery('simple', %s)) AS rank_score
-                FROM mv_searchable_chunks
-                WHERE
-                    content_vector @@ to_tsquery('simple', %s)
-                    AND (%s IS NULL OR doc_type = %s)
-                    AND (%s IS NULL OR chunk_type = %s)
-                ORDER BY rank_score DESC
-                LIMIT %s
-                """,
-                (
-                    tsquery, tsquery,
-                    doc_type_filter, doc_type_filter,
-                    chunk_type_filter, chunk_type_filter,
-                    top_k
+            if getattr(self, '_has_vector_chunks', False):
+                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        ts_rank(vc.text_tsv, plainto_tsquery('simple', %s)) AS rank_score
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.text_tsv @@ plainto_tsquery('simple', %s)
+                        AND (%s IS NULL OR vc.dataset_type = %s)
+                        AND (%s IS NULL OR vc.category = %s)
+                        AND (%s IS NULL OR vc.chunk_type = %s)
+                    ORDER BY rank_score DESC
+                    LIMIT %s
+                    """,
+                    (
+                        query,
+                        query,
+                        dataset_type_filter, dataset_type_filter,
+                        category_filter, category_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        top_k,
+                    )
                 )
-            )
+            else:
+                # 토큰화: 공백으로 분리하고 '&'로 연결 (AND 검색)
+                tokens = query.split()
+                tsquery = ' & '.join(tokens)
+
+                cur.execute(
+                    """
+                    SELECT
+                        chunk_id,
+                        doc_id,
+                        chunk_type,
+                        content,
+                        doc_type,
+                        source_org,
+                        category_path,
+                        ts_rank(content_vector, to_tsquery('simple', %s)) AS rank_score
+                    FROM mv_searchable_chunks
+                    WHERE
+                        content_vector @@ to_tsquery('simple', %s)
+                        AND (%s IS NULL OR doc_type = %s)
+                        AND (%s IS NULL OR chunk_type = %s)
+                    ORDER BY rank_score DESC
+                    LIMIT %s
+                    """,
+                    (
+                        tsquery, tsquery,
+                        doc_type_filter, doc_type_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        top_k
+                    )
+                )
 
             results = []
             for row in cur.fetchall():
-                # 문서 제목 조회
-                cur.execute(
-                    "SELECT title FROM documents WHERE doc_id = %s",
-                    (row[1],)
-                )
-                doc_title_row = cur.fetchone()
-                doc_title = doc_title_row[0] if doc_title_row else "Unknown"
+                if getattr(self, '_has_vector_chunks', False):
+                    metadata_json = row[8] if row[8] else {}
+                    dataset_type = row[1]
+                    category = row[5]
+                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+                    title = None
+                    if isinstance(metadata_json, dict):
+                        title = metadata_json.get('title')
+                    if not title and dataset_type == 'law_guide':
+                        if isinstance(metadata_json, dict):
+                            article_no = metadata_json.get('조문번호')
+                            article_title = metadata_json.get('조문제목')
+                        else:
+                            article_no, article_title = None, None
+                        parts = [p for p in [row[3], article_no, article_title] if p]
+                        title = ' '.join(parts) if parts else (row[3] or row[0])
 
-                results.append(SearchResult(
-                    chunk_id=row[0],
-                    doc_id=row[1],
-                    chunk_type=row[2],
-                    content=row[3],
-                    doc_title=doc_title,
-                    doc_type=row[4],
-                    category_path=row[6] or [],
-                    similarity=float(row[7])  # ts_rank score
-                ))
+                    doc_id = row[0]
+                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                        doc_id = str(metadata_json.get('number'))
+                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                    source_org = None
+                    if dataset_type == 'law_guide':
+                        source_org = 'statute'
+                    elif isinstance(metadata_json, dict):
+                        source_org = metadata_json.get('source')
+
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=doc_id,
+                        chunk_type=row[4] or '',
+                        content=row[2] or '',
+                        doc_title=title or '',
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
+                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
+                    ))
+                else:
+                    # 문서 제목 조회
+                    cur.execute(
+                        "SELECT title FROM documents WHERE doc_id = %s",
+                        (row[1],)
+                    )
+                    doc_title_row = cur.fetchone()
+                    doc_title = doc_title_row[0] if doc_title_row else "Unknown"
+
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        chunk_type=row[2],
+                        content=row[3],
+                        doc_title=doc_title,
+                        doc_type=row[4],
+                        category_path=row[6] or [],
+                        similarity=float(row[7])  # ts_rank score
+                    ))
 
             return results
 
@@ -354,34 +658,66 @@ class RAGRetriever:
         # 한국어 키워드 추출 (간단한 토큰화)
         keywords = self._extract_keywords(query)
 
+        assert self.conn is not None
         with self.conn.cursor() as cur:
             # LIKE 검색 (간단한 구현)
             search_pattern = f"%{query}%"
 
-            cur.execute(
-                """
-                SELECT
-                    c.chunk_id,
-                    c.doc_id,
-                    c.chunk_type,
-                    c.content,
-                    d.title AS doc_title,
-                    d.doc_type,
-                    d.category_path,
-                    0.5 AS similarity
-                FROM chunks c
-                JOIN documents d ON c.doc_id = d.doc_id
-                WHERE
-                    (c.content LIKE %s OR d.title LIKE %s)
-                    AND (%s IS NULL OR d.doc_type = %s)
-                LIMIT %s
-                """,
-                (
-                    search_pattern, search_pattern,
-                    doc_type_filter, doc_type_filter,
-                    top_k
+            if getattr(self, '_has_vector_chunks', False):
+                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        0.5 AS similarity
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.text ILIKE %s
+                        AND (%s IS NULL OR vc.dataset_type = %s)
+                        AND (%s IS NULL OR vc.category = %s)
+                    LIMIT %s
+                    """,
+                    (
+                        search_pattern,
+                        dataset_type_filter, dataset_type_filter,
+                        category_filter, category_filter,
+                        top_k,
+                    )
                 )
-            )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        c.chunk_type,
+                        c.content,
+                        d.title AS doc_title,
+                        d.doc_type,
+                        d.category_path,
+                        0.5 AS similarity
+                    FROM chunks c
+                    JOIN documents d ON c.doc_id = d.doc_id
+                    WHERE
+                        (c.content LIKE %s OR d.title LIKE %s)
+                        AND (%s IS NULL OR d.doc_type = %s)
+                    LIMIT %s
+                    """,
+                    (
+                        search_pattern, search_pattern,
+                        doc_type_filter, doc_type_filter,
+                        top_k
+                    )
+                )
 
             results = []
             for row in cur.fetchall():
@@ -490,7 +826,68 @@ class RAGRetriever:
         window_size: int = 1
     ) -> List[SearchResult]:
         """청크와 주변 컨텍스트 조회"""
+        assert self.conn is not None
         with self.conn.cursor() as cur:
+            if getattr(self, '_has_vector_chunks', False):
+                # vector_chunks schema does not provide the legacy context function.
+                # Return the target chunk only.
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at
+                    FROM vector_chunks vc
+                    WHERE vc.chunk_id = %s
+                    LIMIT 1
+                    """,
+                    (chunk_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return []
+                metadata_json = row[8] if row[8] else {}
+                dataset_type = row[1]
+                category = row[5]
+                doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+                title = metadata_json.get('title') if isinstance(metadata_json, dict) else None
+                if not title and dataset_type == 'law_guide':
+                    if isinstance(metadata_json, dict):
+                        article_no = metadata_json.get('조문번호')
+                        article_title = metadata_json.get('조문제목')
+                    else:
+                        article_no, article_title = None, None
+                    parts = [p for p in [row[3], article_no, article_title] if p]
+                    title = ' '.join(parts) if parts else (row[3] or row[0])
+
+                doc_id = row[0]
+                if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                    doc_id = str(metadata_json.get('number'))
+                url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                source_org = 'statute' if dataset_type == 'law_guide' else (metadata_json.get('source') if isinstance(metadata_json, dict) else None)
+
+                return [SearchResult(
+                    chunk_id=row[0],
+                    doc_id=doc_id,
+                    chunk_type=row[4] or '',
+                    content=row[2] or '',
+                    doc_title=title or '',
+                    doc_type=doc_type,
+                    category_path=_to_category_path(category),
+                    similarity=1.0,
+                    source_org=source_org,
+                    url=url,
+                    collected_at=row[9].isoformat() if row[9] else None,
+                    metadata=metadata_json if isinstance(metadata_json, dict) else None,
+                )]
+
             cur.execute(
                 """
                 SELECT * FROM get_chunk_with_context(%s, %s)
@@ -562,7 +959,42 @@ class RAGRetriever:
         Returns:
             해당 사례의 모든 청크 정보 리스트
         """
+        assert self.conn is not None
         with self.conn.cursor() as cur:
+            if getattr(self, '_has_vector_chunks', False):
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.metadata
+                    FROM vector_chunks vc
+                    WHERE (vc.metadata->>'number') = %s
+                    ORDER BY vc.chunk_id ASC
+                    """,
+                    (case_uid,)
+                )
+
+                results = []
+                for row in cur.fetchall():
+                    meta = row[6] if row[6] else {}
+                    results.append({
+                        'chunk_id': row[0],
+                        'doc_id': str(case_uid),
+                        'chunk_type': row[3],
+                        'content': row[2],
+                        'doc_title': meta.get('title') if isinstance(meta, dict) else None,
+                        'doc_type': _map_vector_chunks_doc_type(row[1], row[4]),
+                        'source_org': meta.get('source') if isinstance(meta, dict) else None,
+                        'url': row[5] or (meta.get('url') if isinstance(meta, dict) else None),
+                        'metadata': meta if isinstance(meta, dict) else None,
+                    })
+                return results
+
             cur.execute(
                 """
                 SELECT

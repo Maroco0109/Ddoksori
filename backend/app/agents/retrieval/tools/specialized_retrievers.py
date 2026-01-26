@@ -20,6 +20,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_USE_OPENAI_EMBEDDING = os.getenv('USE_OPENAI_EMBEDDING', 'false').lower() == 'true'
+_openai_embedder = None
+
+
+def _embed_query(query: str, embed_api_url: str) -> List[float]:
+    """Returns an embedding vector for query.
+
+    - If USE_OPENAI_EMBEDDING=true, uses OpenAI (1536-dim) to match RDS vectors.
+    - Otherwise, calls the configured embedding HTTP server.
+    """
+    global _openai_embedder
+
+    if _USE_OPENAI_EMBEDDING:
+        try:
+            if _openai_embedder is None:
+                from .embedding_client import EmbeddingClient
+                _openai_embedder = EmbeddingClient()
+            return _openai_embedder.embed_query(query)
+        except Exception as e:
+            raise Exception(f"OpenAI 임베딩 오류: {e}")
+
+    try:
+        response = requests.post(
+            embed_api_url,
+            json={"texts": [query]},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()['embeddings'][0]
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"임베딩 API 오류: {e}")
+
 # 메타데이터 추출 활성화 여부
 ENABLE_DISPUTE_METADATA_EXTRACTION = os.getenv('ENABLE_DISPUTE_METADATA_EXTRACTION', 'true').lower() == 'true'
 
@@ -104,16 +136,7 @@ class LawRetriever:
 
     def embed_query(self, query: str) -> List[float]:
         """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url,
-                json={"texts": [query]},
-                timeout=10
-            )
-            response.raise_for_status()
-            return response.json()['embeddings'][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        return _embed_query(query, self.embed_api_url)
 
     def search_two_stage(self, query: str, top_k: int = 3) -> List[LawSearchResult]:
         """
@@ -284,16 +307,7 @@ class CriteriaRetriever:
 
     def embed_query(self, query: str) -> List[float]:
         """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url,
-                json={"texts": [query]},
-                timeout=10
-            )
-            response.raise_for_status()
-            return response.json()['embeddings'][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        return _embed_query(query, self.embed_api_url)
 
     def search_two_stage(self, query: str, top_k: int = 3) -> List[CriteriaSearchResult]:
         """
@@ -437,16 +451,7 @@ class CaseRetriever:
 
     def embed_query(self, query: str) -> List[float]:
         """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url,
-                json={"texts": [query]},
-                timeout=10
-            )
-            response.raise_for_status()
-            return response.json()['embeddings'][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        return _embed_query(query, self.embed_api_url)
 
     def _search_by_doc_type(
         self,

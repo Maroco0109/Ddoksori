@@ -4,7 +4,8 @@ import asyncio
 from typing import Dict, Any, List, ClassVar
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
-from .tools.specialized_retrievers import CriteriaRetriever, CriteriaSearchResult
+from .tools.hybrid_retriever import HybridRetriever
+from .tools.retriever import SearchResult
 
 
 class CriteriaRetrievalAgent(BaseRetrievalAgent):
@@ -13,46 +14,53 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
     agent_name: ClassVar[str] = "retrieval_criteria"
     agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
     
-    async def _execute_search(self, query: str, top_k: int) -> List[CriteriaSearchResult]:
+    async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
-        
-        retriever = CriteriaRetriever(db_config, embed_url)
+
+        retriever = HybridRetriever(db_config, embed_url)
         retriever.connect()
         
         try:
-            results = await asyncio.to_thread(retriever.search_two_stage, query, top_k)
-            return results
+            return await asyncio.to_thread(
+                retriever.search,
+                query=query,
+                top_k=top_k,
+                doc_type_filter='criteria',
+            )
         finally:
             retriever.close()
     
-    def _format_results(self, results: List[CriteriaSearchResult]) -> List[Dict[str, Any]]:
-        return [
-            {
-                "unit_id": r.unit_id,
-                "source_id": r.source_id,
-                "source_label": r.source_label,
-                "category": r.category,
-                "industry": r.industry,
-                "item_group": r.item_group,
-                "item": r.item,
-                "dispute_type": r.dispute_type,
-                "unit_text": r.unit_text,
-                "similarity": r.similarity,
-            }
-            for r in results
-        ]
+    def _format_results(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
+        formatted: List[Dict[str, Any]] = []
+        for r in results:
+            meta = r.metadata or {}
+            source_label = meta.get('source') if isinstance(meta, dict) else None
+            formatted.append({
+                'unit_id': None,
+                'source_id': None,
+                'source_label': source_label,
+                'category': (meta.get('category') if isinstance(meta, dict) else None) or (r.category_path[0] if r.category_path else None),
+                'industry': None,
+                'item_group': None,
+                'item': r.doc_title,
+                'dispute_type': None,
+                'unit_text': r.content,
+                'similarity': r.similarity,
+                'title': r.doc_title,
+            })
+        return formatted
     
-    def _build_sources(self, results: List[CriteriaSearchResult]) -> List[Dict[str, Any]]:
+    def _build_sources(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
         return [
             {
-                "type": "criteria",
-                "index": i + 1,
-                "unit_id": r.unit_id,
-                "source_label": r.source_label,
-                "category": r.category,
-                "item": r.item,
-                "similarity": r.similarity,
+                'type': 'criteria',
+                'index': i + 1,
+                'unit_id': None,
+                'source_label': (r.source_org),
+                'category': (r.category_path[0] if r.category_path else None),
+                'item': r.doc_title,
+                'similarity': r.similarity,
             }
             for i, r in enumerate(results)
         ]

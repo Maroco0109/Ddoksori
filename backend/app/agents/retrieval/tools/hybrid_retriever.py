@@ -12,9 +12,15 @@ import os
 import json
 import time
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, cast
 import psycopg2
-from .retriever import RAGRetriever, SearchResult
+from .retriever import (
+    RAGRetriever,
+    SearchResult,
+    _map_doc_type_filter_to_vector_chunks,
+    _map_vector_chunks_doc_type,
+    _to_category_path,
+)
 from .base import BaseRetriever, Document, to_documents
 
 # Import embedding configuration
@@ -46,8 +52,8 @@ class HybridRetriever:
         db_config: Dict[str, str],
         embed_api_url: str = "http://localhost:8001/embed",
         bge_api_url: Optional[str] = None,
-        embedding_model: str = None,
-        enable_sparse: bool = None
+        embedding_model: Optional[str] = None,
+        enable_sparse: Optional[bool] = None
     ):
         """
         Initialize hybrid retriever
@@ -61,7 +67,7 @@ class HybridRetriever:
         """
         self.db_config = db_config
         self.embed_api_url = embed_api_url
-        self.conn = None
+        self.conn: Any = None
 
         # BGE-M3 configuration
         self.bge_api_url = bge_api_url or get_bge_m3_api_url()
@@ -78,8 +84,9 @@ class HybridRetriever:
 
     def connect(self):
         """Connect to database"""
-        self.conn = psycopg2.connect(**self.db_config)
+        self.conn = psycopg2.connect(**cast(Any, self.db_config))  # type: ignore[call-overload]
         self.rag_retriever.connect()
+        self._has_vector_chunks = getattr(self.rag_retriever, '_has_vector_chunks', False)
 
     def close(self):
         """Close database connection"""
@@ -261,6 +268,126 @@ class HybridRetriever:
         Uses mv_searchable_chunks materialized view with ts_rank
         """
         with self.conn.cursor() as cur:
+            if getattr(self, '_has_vector_chunks', False):
+                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                cur.execute(
+                    """
+                    SELECT
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        ts_rank(vc.text_tsv, plainto_tsquery('simple', %s)) AS rank_score
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.text_tsv @@ plainto_tsquery('simple', %s)
+                        AND (%s IS NULL OR vc.dataset_type = %s)
+                        AND (%s IS NULL OR vc.category = %s)
+                        AND (%s IS NULL OR vc.chunk_type = %s)
+                    ORDER BY rank_score DESC
+                    LIMIT %s
+                    """,
+                    (
+                        query,
+                        query,
+                        dataset_type_filter, dataset_type_filter,
+                        category_filter, category_filter,
+                        chunk_type_filter, chunk_type_filter,
+                        top_k,
+                    )
+                )
+
+                rows = cur.fetchall()
+                if not rows:
+                    # FTS can return 0 for Korean depending on how text_tsv was built.
+                    # Fall back to ILIKE to keep retrieval functional.
+                    search_pattern = f"%{query}%"
+                    cur.execute(
+                        """
+                        SELECT
+                            vc.chunk_id,
+                            vc.dataset_type,
+                            vc.text,
+                            vc.law_name,
+                            vc.chunk_type,
+                            vc.category,
+                            vc.source_url,
+                            vc.source_year,
+                            vc.metadata,
+                            vc.created_at,
+                            0.5 AS rank_score
+                        FROM vector_chunks vc
+                        WHERE
+                            vc.text ILIKE %s
+                            AND (%s IS NULL OR vc.dataset_type = %s)
+                            AND (%s IS NULL OR vc.category = %s)
+                            AND (%s IS NULL OR vc.chunk_type = %s)
+                        LIMIT %s
+                        """,
+                        (
+                            search_pattern,
+                            dataset_type_filter, dataset_type_filter,
+                            category_filter, category_filter,
+                            chunk_type_filter, chunk_type_filter,
+                            top_k,
+                        )
+                    )
+                    rows = cur.fetchall()
+
+                results = []
+                for row in rows:
+                    metadata_json = row[8] if row[8] else {}
+                    dataset_type = row[1]
+                    category = row[5]
+                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+
+                    title = None
+                    if isinstance(metadata_json, dict):
+                        title = metadata_json.get('title')
+                    if not title and dataset_type == 'law_guide':
+                        if isinstance(metadata_json, dict):
+                            article_no = metadata_json.get('조문번호')
+                            article_title = metadata_json.get('조문제목')
+                        else:
+                            article_no, article_title = None, None
+                        parts = [p for p in [row[3], article_no, article_title] if p]
+                        title = ' '.join(parts) if parts else (row[3] or row[0])
+
+                    doc_id = row[0]
+                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                        doc_id = str(metadata_json.get('number'))
+                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                    source_org = None
+                    if dataset_type == 'law_guide':
+                        source_org = 'statute'
+                    elif isinstance(metadata_json, dict):
+                        source_org = metadata_json.get('source')
+                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+
+                    results.append(SearchResult(
+                        chunk_id=row[0],
+                        doc_id=doc_id,
+                        chunk_type=row[4] or '',
+                        content=row[2] or '',
+                        doc_title=title or '',
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
+                        decision_date=decision_date,
+                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
+                    ))
+
+                return results
+
             # Build tsquery from query string (using 'simple' parser for Korean)
             # Split query into tokens and join with '&' for AND search
             tokens = query.split()
