@@ -1,5 +1,6 @@
 from .agent import review_node, review_node_wrapper
 from .metrics import ReviewMetrics, ReviewEvalResult, detect_violations, aggregate_review_results
+from .reviewer_agent import LegalReviewerAgent, legal_reviewer_agent
 
 __all__ = [
     'review_node',
@@ -8,6 +9,8 @@ __all__ = [
     'ReviewEvalResult',
     'detect_violations',
     'aggregate_review_results',
+    'LegalReviewerAgent',
+    'legal_reviewer_agent',
 ]
 
 

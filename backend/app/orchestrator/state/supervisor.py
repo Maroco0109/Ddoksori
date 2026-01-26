@@ -102,6 +102,7 @@ class SupervisorState(TypedDict):
     completed_tasks: List[str]
     supervisor_reasoning: str
     next_agent: Optional[str]
+    iteration_count: int
 
 
 __all__ = [
