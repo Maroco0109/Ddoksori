@@ -50,6 +50,7 @@ from .control import (
     RoutingMode,
     ControlState,
 )
+# [DEPRECATED] ReAct 패턴 - MAS Supervisor로 대체됨. 하위 호환성 유지용.
 from .react import (
     ReActStep,
     ReActState,

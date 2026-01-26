@@ -1,5 +1,9 @@
 """
-똑소리 프로젝트 - ReAct 패턴 상태 스키마
+[DEPRECATED] 똑소리 프로젝트 - ReAct 패턴 상태 스키마
+
+Phase 7에서 MAS Supervisor로 전환됨.
+ReActStep, ReActState는 ChatState에서 하위 호환성을 위해 유지됩니다.
+새로운 코드는 SupervisorState를 사용하세요.
 
 ReAct(Reasoning + Acting) 패턴 실행을 위한 상태를 관리합니다.
 반복적 추론-행동 사이클의 히스토리와 제어 변수를 포함합니다.
