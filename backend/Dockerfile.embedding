@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir \
     numpy==2.2.1
 
 # 임베딩 서버 코드
-COPY embedding_server.py .
+# Reuse the repo's embedding server implementation.
+COPY app/agents/retrieval/services/embedding_server.py ./embedding_server.py
 
 EXPOSE 8001
 

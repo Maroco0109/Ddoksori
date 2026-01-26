@@ -22,24 +22,40 @@
 version: '3.8'
 
 services:
-  # Disable local DB container
-  db:
-    profiles: ["disabled"]  # Effectively removes this service
-
-  # Disable CloudBeaver (use RDS console instead)
-  cloudbeaver:
-    profiles: ["disabled"]
-
-  backend:
-    depends_on:
-      redis:
-        condition: service_healthy
+  # Embedding server container (CPU).
+  # This avoids backend blocking while trying to auto-start an embedding server.
+  embedding:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.embedding
+    container_name: ddoksori_embedding
+    ports:
+      - "8001:8001"
+    environment:
+      - CUDA_VISIBLE_DEVICES=
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  backend:
+    # In docker-compose.yml, backend sets DB_HOST=db for local containers.
+    # In RDS mode, override to use the external endpoint (typically from --env-file backend/.env).
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      # If your RDS embeddings are 1536-dim (e.g., OpenAI), enable this to avoid dimension mismatch.
+      USE_OPENAI_EMBEDDING: ${USE_OPENAI_EMBEDDING:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Use embedding service inside the compose network.
+      REMOTE_EMBED_URL: http://embedding:8001
+      DISABLE_LOCAL_EMBED_AUTO_START: "true"
+    # Keep depends_on untouched here; when bringing up the RDS stack,
+    # run `docker compose ... up --no-deps ...` to avoid starting local db/cloudbeaver.
+
 
 # Override volumes - remove postgres_data since using RDS
 volumes:
