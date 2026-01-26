@@ -58,6 +58,10 @@ from .memory import (
     CompactSummary,
     MemoryState,
 )
+from .supervisor import (
+    AgentMessage,
+    SupervisorState,
+)
 
 
 # === SlotStatus (분쟁 슬롯 채움 상태) ===
@@ -185,6 +189,9 @@ class ChatState(MessagesState):
     last_action: Optional[str]
     last_observation: Optional[str]
 
+    # === Supervisor ===
+    supervisor: Optional[SupervisorState]
+
     # === 노드 타이밍 ===
     _node_timings: Optional[Dict[str, Dict]]
 
@@ -260,6 +267,9 @@ def create_initial_state(
         last_action=None,
         last_observation=None,
 
+        # === Supervisor ===
+        supervisor=None,
+
         # 노드 타이밍
         _node_timings={},
 
@@ -303,6 +313,10 @@ __all__ = [
     'ConversationTurn',
     'CompactSummary',
     'MemoryState',
+
+    # 슈퍼바이저
+    'AgentMessage',
+    'SupervisorState',
 
     # 기타
     'SlotStatus',
