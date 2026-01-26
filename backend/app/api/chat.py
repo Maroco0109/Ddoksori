@@ -122,7 +122,12 @@ async def chat(request: ChatRequest):
             "configurable": {"thread_id": session_id},
             "recursion_limit": GRAPH_RECURSION_LIMIT
         })
-        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+
+        # MAS graph includes async nodes; prefer the async API when available.
+        if hasattr(graph, 'ainvoke'):
+            final_state = await graph.ainvoke(initial_state, config)
+        else:
+            final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
 
         retrieval = final_state.get('retrieval') or {}
         agency_info = retrieval.get('agency', {})
@@ -140,7 +145,7 @@ async def chat(request: ChatRequest):
             criteria=criteria
         )
 
-        answer = final_state.get('final_answer', '')
+        answer = final_state.get('final_answer') or ''
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
         questions = final_state.get('clarifying_questions', [])
@@ -212,6 +217,7 @@ async def chat(request: ChatRequest):
         )
 
     except Exception as e:
+        logger.exception("[chat] Unhandled error")
         rag_logger.log_response(
             entry=log_entry,
             answer="",
