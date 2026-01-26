@@ -1,12 +1,20 @@
 """
-똑소리 프로젝트 - 정보검색 에이전트 (Retrieval Agent)
+[DEPRECATED] 똑소리 프로젝트 - 통합 정보검색 에이전트 (Retrieval Agent)
+
+Phase 7에서 MAS Supervisor의 4개 전문 Retrieval Agent로 대체됨:
+- LawRetrievalAgent (law_agent.py)
+- CriteriaRetrievalAgent (criteria_agent.py)
+- CaseRetrievalAgent (case_agent.py)
+- CounselRetrievalAgent (counsel_agent.py)
+
+이 모듈은 graph_legacy.py (롤백용)에서만 사용됩니다.
 
 작성일: 2026-01-14
 최종 수정: 2026-01-22
 
 [역할 및 책임]
 사용자 질문 및 검색 계획(Search Plan)을 바탕으로 관련 정보를 검색합니다.
-다양한 데이터 소스(분쟁사례, 상담사례, 법령, 기준)를 통합 검색하며, 
+다양한 데이터 소스(분쟁사례, 상담사례, 법령, 기준)를 통합 검색하며,
 벡터 검색(Vector)과 키워드 검색(Keyword)을 혼합한 하이브리드 검색을 수행할 수 있습니다.
 
 [지원하는 리트리버 타입]

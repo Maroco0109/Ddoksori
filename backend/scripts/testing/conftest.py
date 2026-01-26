@@ -67,17 +67,26 @@ def db_connection():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_test_data(db_connection):
+def ensure_test_data(db_connection, request):
     """
     PR-T1: 테스트 실행 전 DB 준비 상태 점검 + 최소 시드 데이터 주입
-    
+
     동작 흐름:
     1. DB 연결 확인
     2. 필수 오브젝트 존재 확인 (documents, chunks, mv_searchable_chunks)
     3. 스키마 부재 시 즉시 Skip
     4. 데이터 부재 시 최소 시드 데이터 삽입
     5. MV 갱신 및 검증
+
+    Note:
+        PR-Phase5: Unit 테스트(-m unit)는 DB 체크 스킵
     """
+    # PR-Phase5: Unit 테스트만 실행 시 DB 체크 스킵
+    # -m unit 옵션이 있으면 DB 불필요
+    markexpr = request.config.getoption("-m", default="")
+    if markexpr == "unit":
+        return
+
     if db_connection is None:
         return
 
