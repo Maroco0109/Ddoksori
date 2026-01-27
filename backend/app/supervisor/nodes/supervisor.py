@@ -91,12 +91,20 @@ class AsyncLLMWrapper:
     
     async def generate(self, prompt: str) -> str:
         if self.provider == "openai":
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=512
-            )
+            # gpt-5.1, o1-*, o3-* 등 새 모델은 max_completion_tokens 사용
+            uses_new_api = self.model.startswith(("gpt-5", "o1-", "o3-"))
+
+            params = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+            }
+            if uses_new_api:
+                params["max_completion_tokens"] = 512
+            else:
+                params["max_tokens"] = 512
+
+            response = await self.client.chat.completions.create(**params)
             return response.choices[0].message.content or ""
         elif self.provider == "anthropic":
             response = await self.client.messages.create(
@@ -116,7 +124,7 @@ class AsyncLLMWrapper:
 MAX_SUPERVISOR_ITERATIONS = 10
 """최대 Supervisor 호출 횟수 (무한 루프 방지)"""
 
-LLM_TIMEOUT_SECONDS = 5.0
+LLM_TIMEOUT_SECONDS = 30.0
 """LLM 호출 타임아웃 (초)"""
 
 MAX_JSON_PARSE_RETRIES = 1
@@ -351,12 +359,12 @@ class SupervisorNode:
 ## 사용 가능한 Agent
 {self._format_agents()}
 
-## 지시사항
-현재 상태를 분석하고, 다음 중 하나를 선택하세요:
-
-1. Agent 호출: 추가 정보가 필요한 경우
-2. 사용자 응답: 충분한 정보로 답변 가능한 경우
-3. Clarification: 사용자에게 추가 질문이 필요한 경우
+## 중요 규칙 (반드시 준수)
+1. "질의 분석"이 없으면 → query_analyst 호출 필수
+2. "검색 결과"가 없으면 → retrieval_team 호출 필수
+3. "답변 초안"이 없으면 → answer_drafter 호출 필수
+4. "검토 결과"가 없으면 → legal_reviewer 호출 필수
+5. 모든 정보가 있을 때만 → respond 가능
 
 ## 출력 형식 (반드시 JSON으로 응답)
 {{
