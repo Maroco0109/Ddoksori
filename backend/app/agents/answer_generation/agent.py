@@ -25,6 +25,7 @@ from ...supervisor.state import ChatState
 from ...domain import classify_domain, AGENCY_INFO
 from .cache import get_answer_cache
 from .fallback import AnswerGenerationFallback
+from ...common.config import get_config
 
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
@@ -214,9 +215,13 @@ def generation_node(state: ChatState) -> Dict:
             'reason': '일반 소비자 분쟁으로 판단됩니다',
             'confidence': 0.7
         }
-    
+
     mode = state.get('mode', 'NEED_RAG')
     include_disclaimer = (mode == 'NEED_RAG')
+
+    # Track 2: 유연한 답변 형식 지원
+    config = get_config()
+    use_flexible_format = (config.chatbot_features.answer_format_mode == 'flexible')
 
     # LLM 호출 (실패 시 Fallback)
     draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
@@ -225,20 +230,39 @@ def generation_node(state: ChatState) -> Dict:
         agency_info=agency_info,
         include_disclaimer=include_disclaimer,
     )
-    
+
     has_evidence = model_used not in ('rule_based', 'safe_fallback')
-    
+
+    # Track 2: 후속 질문 생성
+    followup_questions = []
+    clarifying_questions = []
+
+    if config.chatbot_features.enable_followup_questions and query_analysis:
+        from ..followup import FollowupQuestionGenerator
+
+        followup_generator = FollowupQuestionGenerator()
+        questions_result = followup_generator.generate_questions(
+            query_analysis=query_analysis,
+            retrieval=retrieval,
+            answer=draft_answer
+        )
+        followup_questions = questions_result.get('followup_questions', [])
+        clarifying_questions = questions_result.get('clarifying_questions', [])
+
     # 캐시 저장
     cache.set(user_query, query_type, {
         'answer': draft_answer,
         'claim_evidence_map': claim_evidence_map,
         'has_evidence': has_evidence,
+        'followup_questions': followup_questions,
+        'clarifying_questions': clarifying_questions,
     })
-    
+
     return {
         'draft_answer': draft_answer,
         'has_sufficient_evidence': has_evidence,
-        'clarifying_questions': [],
+        'clarifying_questions': clarifying_questions,
+        'followup_questions': followup_questions,
         'claim_evidence_map': claim_evidence_map,
         'messages': [AIMessage(content=draft_answer)],
         'generation_model_used': model_used,

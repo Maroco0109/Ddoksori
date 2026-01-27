@@ -123,11 +123,39 @@ async def chat(request: ChatRequest):
             "recursion_limit": GRAPH_RECURSION_LIMIT
         })
 
-        # MAS graph includes async nodes; prefer the async API when available.
-        if hasattr(graph, 'ainvoke'):
-            final_state = await graph.ainvoke(initial_state, config)
+        # === PR-6: L1 Supervisor Response Cache Check ===
+        from app.supervisor.cache import SupervisorResponseCache
+        cached_response = SupervisorResponseCache.get(request.message, session_id)
+        if cached_response:
+            logger.info(f"[L1 Cache HIT] Returning cached response for: {request.message[:30]}...")
+            # 캐시에서 복원한 응답을 사용
+            final_state = {
+                'final_answer': cached_response.get('final_answer', ''),
+                'mode': cached_response.get('mode'),
+                'query_analysis': cached_response.get('query_analysis', {}),
+                'citations': cached_response.get('citations', []),
+                'sources': [],
+                'retrieval': {},
+                '_cache_hit': True,
+            }
         else:
-            final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+            # === PR-6 끝 ===
+            # MAS graph includes async nodes; prefer the async API when available.
+            if hasattr(graph, 'ainvoke'):
+                final_state = await graph.ainvoke(initial_state, config)
+            else:
+                final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+
+            # === PR-6: L1 Cache Save ===
+            if final_state.get('final_answer') and not final_state.get('guardrail_blocked'):
+                SupervisorResponseCache.set(request.message, {
+                    'final_answer': final_state.get('final_answer'),
+                    'mode': final_state.get('mode'),
+                    'query_analysis': final_state.get('query_analysis', {}),
+                    'citations': final_state.get('citations', []),
+                }, session_id)
+                logger.debug(f"[L1 Cache SAVE] Cached response for: {request.message[:30]}...")
+            # === PR-6 끝 ===
 
         retrieval = final_state.get('retrieval') or {}
         agency_info = retrieval.get('agency', {})
@@ -149,6 +177,7 @@ async def chat(request: ChatRequest):
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
         questions = final_state.get('clarifying_questions', [])
+        followup_questions = final_state.get('followup_questions', [])
 
         # 어시스턴트 응답을 메모리에 추가
         if should_use_memory(request.chat_type) and session_id in _session_memories:
@@ -207,6 +236,7 @@ async def chat(request: ChatRequest):
             sources=sources,
             has_sufficient_evidence=has_evidence,
             clarifying_questions=questions,
+            followup_questions=followup_questions,
             domain=domain_response,
             similar_cases=similar_cases_response,
             related_laws=laws_response,

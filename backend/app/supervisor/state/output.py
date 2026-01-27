@@ -56,9 +56,13 @@ class OutputState(TypedDict, total=False):
             - True: 검색 결과가 질문에 적합
             - False: 근거 부족 (규칙 기반 폴백 사용됨)
 
-        clarifying_questions: 추가 질문 목록
+        clarifying_questions: 명확화 질문 목록 (Track 2)
             - 정보 부족 시 사용자에게 되묻는 질문들
             - 예: ["구매 날짜를 알려주시겠어요?"]
+
+        followup_questions: 후속 질문 목록 (Track 2)
+            - 현재 답변 기반 추가 질문 제안
+            - 예: ["환불 처리 기간은 얼마나 걸리나요?"]
 
         claim_evidence_map: 주장-근거 매핑 리스트
             - 답변의 각 주장과 근거 연결
@@ -67,11 +71,16 @@ class OutputState(TypedDict, total=False):
     Note:
         sources 필드는 operator.add를 사용하여
         여러 노드에서 추가된 출처가 누적됩니다.
+
+    Track 2 변경사항 (2026-01-28):
+        - followup_questions 필드 추가
+        - clarifying_questions 의미 명확화
     """
     final_answer: Optional[str]
     sources: Annotated[List[Dict], operator.add]
     has_sufficient_evidence: bool
     clarifying_questions: List[str]
+    followup_questions: List[str]
     claim_evidence_map: List[ClaimEvidenceMapping]
 
 

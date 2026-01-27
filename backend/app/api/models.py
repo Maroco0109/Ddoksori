@@ -124,6 +124,10 @@ class ChatResponse(BaseModel):
     sources: List[dict]
     has_sufficient_evidence: bool = True
     clarifying_questions: List[str] = []
+    followup_questions: List[str] = Field(
+        default=[],
+        description="후속 질문 제안 목록 (Track 2)"
+    )
     domain: Optional[AgencyRecommendation] = None
     similar_cases: Optional[SimilarCases] = None
     related_laws: Optional[List[LawReference]] = None

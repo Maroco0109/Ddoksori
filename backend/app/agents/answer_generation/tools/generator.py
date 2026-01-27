@@ -498,12 +498,18 @@ class RAGGenerator:
     def _get_structured_system_prompt(self, include_disclaimer: bool = True) -> str:
         """3섹션 구조화 응답용 시스템 프롬프트 (PR-6: 2026-01-20)
 
+        [DEPRECATED] 이 메서드는 하위 호환성을 위해 유지됩니다.
+        새 코드는 formats.PromptBuilder를 사용하세요.
+
         Args:
             include_disclaimer: 면책 문구 포함 여부 (PR-2: mode==NEED_RAG일 때만 True)
 
         PR-6 변경사항:
         - 섹션 순서: 유사 사례 → 법령/기준 → 추가 안내 (3섹션)
         - 면책 문구 위치: 맨 위 → 맨 아래
+
+        Track 2 변경사항:
+        - formats.PromptBuilder로 통합 (backward compatibility 유지)
         """
         # PR-6: 면책 문구는 답변 끝에 배치
         disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if include_disclaimer else ""
@@ -778,4 +784,154 @@ class RAGGenerator:
             'model': 'stub',
             'has_sufficient_evidence': total_chunks > 0,
             'clarifying_questions': []
+        }
+
+    # ========================================
+    # Track 2: 유연한 답변 형식 지원 (2026-01-28)
+    # ========================================
+
+    def generate_flexible_answer(
+        self,
+        query: str,
+        query_analysis: Dict,
+        retrieval: Dict,
+        agency_info: Dict,
+    ) -> Dict:
+        """
+        유연한 답변 형식을 사용하여 답변 생성 (Track 2)
+
+        FormatSelector를 사용하여 쿼리 타입과 검색 결과에 따라
+        적절한 답변 형식을 자동 선택합니다.
+
+        Args:
+            query: 사용자 질문
+            query_analysis: 쿼리 분석 결과
+            retrieval: 검색 결과
+            agency_info: 기관 정보
+
+        Returns:
+            {
+                'answer': str,
+                'format_id': str,
+                'chunks_used': int,
+                'model': str,
+                'has_sufficient_evidence': bool,
+                'clarifying_questions': List[str],
+                'claim_evidence_map': List[Dict],
+                'system_prompt': str,
+                'user_prompt': str,
+                'prompt_tokens': int,
+                'completion_tokens': int,
+                'response_time_ms': float
+            }
+        """
+        from ..formats import FormatSelector, PromptBuilder
+
+        # 1. 형식 선택
+        selector = FormatSelector()
+        response_format = selector.select_format(query_analysis, retrieval)
+        context = selector.build_context(retrieval)
+
+        # 2. 프롬프트 생성
+        prompt_builder = PromptBuilder()
+        system_prompt = prompt_builder.build_system_prompt(response_format)
+        user_prompt = prompt_builder.build_user_prompt(
+            response_format, query, retrieval, agency_info, context
+        )
+
+        # 3. LLM 호출
+        if not self.use_llm:
+            # Stub 모드
+            return self._generate_flexible_stub(
+                query, response_format, retrieval, agency_info
+            )
+
+        start_time = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
+        )
+        response_time_ms = (time.time() - start_time) * 1000
+
+        answer_text = response.choices[0].message.content or ''
+
+        usage = response.usage
+        prompt_tokens = usage.prompt_tokens if usage else 0
+        completion_tokens = usage.completion_tokens if usage else 0
+
+        # 4. claim_evidence_map 생성
+        disputes = retrieval.get('disputes', [])
+        counsels = retrieval.get('counsels', [])
+        laws = retrieval.get('laws', [])
+        criteria = retrieval.get('criteria', [])
+
+        claim_evidence_map = self._extract_claim_evidence_map(
+            answer_text, disputes, counsels, laws, criteria
+        )
+
+        # 5. 충분한 근거 여부 판단
+        total_chunks = len(disputes) + len(counsels) + len(laws) + len(criteria)
+        has_evidence = total_chunks > 0 and (len(disputes) > 0 or len(laws) > 0)
+
+        return {
+            'answer': answer_text,
+            'format_id': response_format.format_id,
+            'chunks_used': total_chunks,
+            'model': self.model,
+            'has_sufficient_evidence': has_evidence,
+            'clarifying_questions': [],
+            'claim_evidence_map': claim_evidence_map,
+            'system_prompt': system_prompt,
+            'user_prompt': user_prompt,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
+            'response_time_ms': response_time_ms
+        }
+
+    def _generate_flexible_stub(
+        self,
+        query: str,
+        response_format,
+        retrieval: Dict,
+        agency_info: Dict
+    ) -> Dict:
+        """Stub 모드 (LLM 없이) 유연한 형식 답변 생성"""
+        # simple_general 형식인 경우
+        if response_format.format_id == 'simple_general':
+            answer = "안녕하세요! 똑소리입니다. (Stub 모드) 궁금하신 분쟁 관련 사항이 있으시면 말씀해 주세요."
+        elif response_format.format_id == 'info_only':
+            info = agency_info.get('agency_info', {})
+            answer = f"전문 기관 상담이 필요한 영역입니다.\n\n담당 기관: {info.get('full_name', '한국소비자원')}\n웹사이트: {info.get('url', '')}"
+        else:
+            # full_dispute (기본)
+            disputes = retrieval.get('disputes', [])
+            counsels = retrieval.get('counsels', [])
+            laws = retrieval.get('laws', [])
+            criteria = retrieval.get('criteria', [])
+
+            # 기존 stub 로직 재사용
+            result = self._generate_structured_stub(
+                query, agency_info, disputes, counsels, laws, criteria,
+                include_disclaimer=response_format.include_disclaimer
+            )
+            result['format_id'] = response_format.format_id
+            return result
+
+        return {
+            'answer': answer,
+            'format_id': response_format.format_id,
+            'chunks_used': 0,
+            'model': 'stub',
+            'has_sufficient_evidence': False,
+            'clarifying_questions': [],
+            'claim_evidence_map': [],
+            'system_prompt': '',
+            'user_prompt': '',
+            'prompt_tokens': 0,
+            'completion_tokens': 0,
+            'response_time_ms': 0.0
         }
