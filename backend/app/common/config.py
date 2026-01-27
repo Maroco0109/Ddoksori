@@ -235,6 +235,66 @@ class PortConfig(BaseSettings):
     )
 
 
+class RetrievalLLMConfig(BaseSettings):
+    """
+    Retrieval Agent별 LLM 엔드포인트 설정.
+
+    4개 Retrieval Agent(Law, Criteria, Case, Counsel)가 각각 독립된
+    EXAONE vLLM 인스턴스를 사용할 수 있도록 지원합니다.
+
+    환경변수:
+        RETRIEVAL_LLM_LAW_URL: Law Agent용 EXAONE URL
+        RETRIEVAL_LLM_CRITERIA_URL: Criteria Agent용 EXAONE URL
+        RETRIEVAL_LLM_CASE_URL: Case Agent용 EXAONE URL
+        RETRIEVAL_LLM_COUNSEL_URL: Counsel Agent용 EXAONE URL
+        RETRIEVAL_LLM_TIMEOUT: Query Rewrite 타임아웃 (기본값: 3.0초)
+    """
+    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_LLM_")
+
+    # 에이전트별 EXAONE URL (None이면 공통 EXAONE_RUNPOD_URL 사용)
+    law_url: Optional[str] = Field(
+        default=None,
+        description="Law Agent용 EXAONE vLLM URL"
+    )
+    criteria_url: Optional[str] = Field(
+        default=None,
+        description="Criteria Agent용 EXAONE vLLM URL"
+    )
+    case_url: Optional[str] = Field(
+        default=None,
+        description="Case Agent용 EXAONE vLLM URL"
+    )
+    counsel_url: Optional[str] = Field(
+        default=None,
+        description="Counsel Agent용 EXAONE vLLM URL"
+    )
+
+    # 공통 설정
+    timeout: float = Field(
+        default=3.0,
+        description="Query Rewrite 타임아웃 (초)"
+    )
+
+    def get_url_for_domain(self, domain: str) -> Optional[str]:
+        """
+        도메인별 EXAONE URL을 반환합니다.
+        설정되지 않은 경우 None 반환 (공통 URL 사용).
+
+        Args:
+            domain: 도메인 키 (law, criteria, case, counsel)
+
+        Returns:
+            해당 도메인의 EXAONE URL 또는 None
+        """
+        url_map = {
+            "law": self.law_url,
+            "criteria": self.criteria_url,
+            "case": self.case_url,
+            "counsel": self.counsel_url,
+        }
+        return url_map.get(domain)
+
+
 # ============================================================
 # 에이전트 설정
 # ============================================================
@@ -541,6 +601,7 @@ class AppConfig(BaseSettings):
     moderation: ModerationConfig = Field(default_factory=ModerationConfig)
     models: ModelConfig = Field(default_factory=ModelConfig)
     ports: PortConfig = Field(default_factory=PortConfig)
+    retrieval_llm: RetrievalLLMConfig = Field(default_factory=RetrievalLLMConfig)
 
     def get_cors_origins_list(self) -> List[str]:
         """
@@ -693,6 +754,7 @@ __all__ = [
     "ModerationConfig",
     "ModelConfig",
     "PortConfig",
+    "RetrievalLLMConfig",
 
     # 설정 접근 함수
     "get_config",

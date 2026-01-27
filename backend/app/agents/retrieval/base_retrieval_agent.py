@@ -3,6 +3,14 @@ BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 
 4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
 LLM: EXAONE-4.0-1.2B (쿼리 재작성), Fallback: gpt-4.1-nano
+
+각 에이전트는 독립된 EXAONE vLLM 인스턴스를 사용할 수 있습니다.
+환경변수 설정:
+    - RETRIEVAL_LLM_LAW_URL: Law Agent용 EXAONE URL
+    - RETRIEVAL_LLM_CRITERIA_URL: Criteria Agent용 EXAONE URL
+    - RETRIEVAL_LLM_CASE_URL: Case Agent용 EXAONE URL
+    - RETRIEVAL_LLM_COUNSEL_URL: Counsel Agent용 EXAONE URL
+설정되지 않은 경우 공통 EXAONE_RUNPOD_URL 사용 (싱글톤 fallback)
 """
 
 import asyncio
@@ -17,9 +25,6 @@ from ..base import BaseAgent
 from ...common.config import get_config
 
 logger = logging.getLogger(__name__)
-
-# Query rewriting timeout (seconds)
-QUERY_REWRITE_TIMEOUT = 3.0
 
 
 def _get_db_config() -> Dict[str, str]:
@@ -36,52 +41,95 @@ def _get_embed_api_url() -> str:
     return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
 
 
+# 도메인별 EXAONE 클라이언트 캐시 (독립 인스턴스)
+_domain_exaone_clients: Dict[str, OpenAI] = {}
+# 공통 fallback 클라이언트 (에이전트별 URL 미설정 시)
+_shared_exaone_client: Optional[OpenAI] = None
+_shared_openai_client: Optional[OpenAI] = None
+
+
 class BaseRetrievalAgent(BaseAgent):
     """Retrieval Agent 공통 베이스 - 검색 결과 포맷팅 및 에러 처리 공유"""
-    
+
     required_inputs: ClassVar[List[str]] = ["user_query"]
     provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
-    
+
     default_top_k: ClassVar[int] = 3
-    
+
+    # 서브클래스에서 오버라이드: 도메인 키 (law, criteria, case, counsel)
+    domain_key: ClassVar[str] = ""
+
     domain_rewrite_prompt: ClassVar[str] = ""
-    
-    _exaone_client: ClassVar[Optional[OpenAI]] = None
-    _openai_client: ClassVar[Optional[OpenAI]] = None
-    
-    @classmethod
-    def _get_exaone_client(cls) -> Optional[OpenAI]:
-        if cls._exaone_client is None:
+
+    def _get_exaone_client_for_domain(self) -> Optional[OpenAI]:
+        """
+        도메인별 EXAONE 클라이언트를 반환합니다.
+
+        우선순위:
+        1. 에이전트별 URL 설정 (RETRIEVAL_LLM_{DOMAIN}_URL)
+        2. 공통 URL (EXAONE_RUNPOD_URL)
+        """
+        global _domain_exaone_clients, _shared_exaone_client
+
+        config = get_config()
+        timeout = config.retrieval_llm.timeout
+
+        # 1. 에이전트별 URL 확인
+        domain_url = config.retrieval_llm.get_url_for_domain(self.domain_key)
+
+        if domain_url:
+            # 도메인별 독립 클라이언트 사용
+            if self.domain_key not in _domain_exaone_clients:
+                _domain_exaone_clients[self.domain_key] = OpenAI(
+                    base_url=domain_url,
+                    api_key=os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy'),
+                    timeout=timeout
+                )
+                logger.info(f"[{self.agent_name}] Created domain-specific EXAONE client: {domain_url}")
+            return _domain_exaone_clients[self.domain_key]
+
+        # 2. 공통 URL fallback
+        if _shared_exaone_client is None:
             runpod_url = os.getenv('EXAONE_RUNPOD_URL')
             if runpod_url:
-                cls._exaone_client = OpenAI(
+                _shared_exaone_client = OpenAI(
                     base_url=runpod_url,
                     api_key=os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy'),
-                    timeout=QUERY_REWRITE_TIMEOUT
+                    timeout=timeout
                 )
-        return cls._exaone_client
-    
-    @classmethod
-    def _get_openai_client(cls) -> Optional[OpenAI]:
-        if cls._openai_client is None:
+        return _shared_exaone_client
+
+    def _get_openai_client(self) -> Optional[OpenAI]:
+        """OpenAI fallback 클라이언트 반환 (공유)"""
+        global _shared_openai_client
+
+        if _shared_openai_client is None:
             api_key = os.getenv('OPENAI_API_KEY')
+            config = get_config()
             if api_key:
-                cls._openai_client = OpenAI(
+                _shared_openai_client = OpenAI(
                     api_key=api_key,
-                    timeout=QUERY_REWRITE_TIMEOUT
+                    timeout=config.retrieval_llm.timeout
                 )
-        return cls._openai_client
+        return _shared_openai_client
     
     async def _rewrite_query_for_domain(self, query: str) -> str:
+        """
+        도메인별 쿼리 재작성을 수행합니다.
+
+        각 에이전트는 자신의 도메인에 맞는 독립된 EXAONE 인스턴스를 사용합니다.
+        실패 시 공통 OpenAI fallback으로 전환됩니다.
+        """
         if not self.domain_rewrite_prompt:
             return query
-        
+
         config = get_config()
+        timeout = config.retrieval_llm.timeout
         prompt = self.domain_rewrite_prompt.format(query=query)
         system_prompt = "You are a query rewriting assistant. Output only the rewritten query, nothing else."
-        
-        # Try EXAONE first
-        exaone_client = self._get_exaone_client()
+
+        # Try EXAONE first (도메인별 또는 공통 클라이언트)
+        exaone_client = self._get_exaone_client_for_domain()
         if exaone_client:
             try:
                 result = await asyncio.wait_for(
@@ -92,16 +140,16 @@ class BaseRetrievalAgent(BaseAgent):
                         system_prompt,
                         prompt
                     ),
-                    timeout=QUERY_REWRITE_TIMEOUT
+                    timeout=timeout
                 )
                 if result:
-                    logger.info(f"[{self.agent_name}] EXAONE query rewrite: '{query}' -> '{result}'")
+                    logger.info(f"[{self.agent_name}] EXAONE query rewrite (domain={self.domain_key}): '{query}' -> '{result}'")
                     return result
             except asyncio.TimeoutError:
-                logger.warning(f"[{self.agent_name}] EXAONE query rewrite timeout")
+                logger.warning(f"[{self.agent_name}] EXAONE query rewrite timeout (domain={self.domain_key})")
             except Exception as e:
-                logger.warning(f"[{self.agent_name}] EXAONE query rewrite failed: {e}")
-        
+                logger.warning(f"[{self.agent_name}] EXAONE query rewrite failed (domain={self.domain_key}): {e}")
+
         # Fallback to gpt-4.1-nano
         openai_client = self._get_openai_client()
         if openai_client:
@@ -114,7 +162,7 @@ class BaseRetrievalAgent(BaseAgent):
                         system_prompt,
                         prompt
                     ),
-                    timeout=QUERY_REWRITE_TIMEOUT
+                    timeout=timeout
                 )
                 if result:
                     logger.info(f"[{self.agent_name}] Fallback query rewrite: '{query}' -> '{result}'")
@@ -123,7 +171,7 @@ class BaseRetrievalAgent(BaseAgent):
                 logger.warning(f"[{self.agent_name}] Fallback query rewrite timeout")
             except Exception as e:
                 logger.warning(f"[{self.agent_name}] Fallback query rewrite failed: {e}")
-        
+
         logger.info(f"[{self.agent_name}] Using original query (no rewrite)")
         return query
     

@@ -10,9 +10,10 @@ from .tools.retriever import SearchResult
 
 class LawRetrievalAgent(BaseRetrievalAgent):
     """법령(소비자보호법, 전자상거래법 등) 검색 에이전트"""
-    
+
     agent_name: ClassVar[str] = "retrieval_law"
     agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
+    domain_key: ClassVar[str] = "law"
     domain_rewrite_prompt: ClassVar[str] = "Convert this user query into a formal legal search query focusing on relevant laws and regulations: {query}"
     
     async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:

@@ -117,6 +117,58 @@ class IndividualRetrievalResult(TypedDict, total=False):
     error: Optional[str]
 
 
+class HallucinationCheckResult(TypedDict, total=False):
+    """
+    Hallucination 검사 결과
+
+    Attributes:
+        passed: 검사 통과 여부
+        cited_refs: 답변에서 발견된 인용 리스트
+        verified_refs: 검색 결과에서 확인된 인용 리스트
+        unverified_refs: 확인되지 않은 인용 (Hallucination 의심)
+        accuracy: 인용 정확도 (0.0 ~ 1.0)
+    """
+    passed: bool
+    cited_refs: List[str]
+    verified_refs: List[str]
+    unverified_refs: List[str]
+    accuracy: float
+
+
+class RelevanceCheckResult(TypedDict, total=False):
+    """
+    관련성 검사 결과
+
+    Attributes:
+        passed: 검사 통과 여부
+        query_answer_score: Query-Answer 관련성 점수
+        query_retrieval_score: Query-Retrieval 관련성 점수
+        answer_source_score: Answer-Source 관련성 점수
+        message: 실패 시 상세 메시지
+    """
+    passed: bool
+    query_answer_score: float
+    query_retrieval_score: float
+    answer_source_score: float
+    message: Optional[str]
+
+
+class LegalJudgmentCheckResult(TypedDict, total=False):
+    """
+    법적 판단 검사 결과
+
+    Attributes:
+        passed: 검사 통과 여부 (법적 판단 없음 = True)
+        detected_judgments: 탐지된 법적 판단 표현 리스트
+        severity: 심각도 ('low', 'medium', 'high')
+        llm_verified: LLM 2차 검증 수행 여부
+    """
+    passed: bool
+    detected_judgments: List[str]
+    severity: Literal['low', 'medium', 'high']
+    llm_verified: bool
+
+
 class ReviewResult(TypedDict, total=False):
     """
     검토 에이전트 결과
@@ -137,16 +189,33 @@ class ReviewResult(TypedDict, total=False):
             - passed=False인 경우에만 설정
             - 금지 표현 제거/완화된 버전
 
+        hallucination_check: Hallucination 검사 결과
+            - 인용 정확성 검증 결과
+
+        relevance_check: 관련성 검사 결과
+            - Query-Answer, Query-Retrieval, Answer-Source 관련성
+
+        legal_judgment_check: 법적 판단 검사 결과
+            - 변호사법 위반 가능성 검증
+
+        confidence_score: 종합 신뢰도 점수 (0.0 ~ 1.0)
+            - 출처 커버리지, 관련성, 인용 정확도 종합
+
     Example:
         >>> result: ReviewResult = {
         ...     'passed': False,
         ...     'violations': ['단정적 표현: "반드시 승소합니다"'],
-        ...     'filtered_answer': '환불 가능성이 있습니다...'
+        ...     'filtered_answer': '환불 가능성이 있습니다...',
+        ...     'confidence_score': 0.75
         ... }
     """
     passed: bool
     violations: List[str]
     filtered_answer: Optional[str]
+    hallucination_check: Optional[HallucinationCheckResult]
+    relevance_check: Optional[RelevanceCheckResult]
+    legal_judgment_check: Optional[LegalJudgmentCheckResult]
+    confidence_score: Optional[float]
 
 
 class AgentResultsState(TypedDict, total=False):
@@ -173,6 +242,9 @@ __all__ = [
     'QueryAnalysisResult',
     'RetrievalResult',
     'IndividualRetrievalResult',
+    'HallucinationCheckResult',
+    'RelevanceCheckResult',
+    'LegalJudgmentCheckResult',
     'ReviewResult',
     'AgentResultsState',
 ]

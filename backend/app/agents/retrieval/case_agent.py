@@ -10,9 +10,10 @@ from .tools.retriever import SearchResult
 
 class CaseRetrievalAgent(BaseRetrievalAgent):
     """분쟁조정사례(mediation_case) 검색 에이전트 - 법적 효력이 있는 분쟁조정 결과"""
-    
+
     agent_name: ClassVar[str] = "retrieval_case"
     agent_description: ClassVar[str] = "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
+    domain_key: ClassVar[str] = "case"
     domain_rewrite_prompt: ClassVar[str] = "Convert this problem description into a similar case search query: {query}"
     
     async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
