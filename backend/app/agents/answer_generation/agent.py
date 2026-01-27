@@ -21,7 +21,7 @@ from typing import Dict, List
 
 from langchain_core.messages import AIMessage
 
-from ...orchestrator.state import ChatState
+from ...supervisor.state import ChatState
 from ...domain import classify_domain, AGENCY_INFO
 from .cache import get_answer_cache
 from .fallback import AnswerGenerationFallback

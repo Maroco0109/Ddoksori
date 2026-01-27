@@ -22,7 +22,7 @@ class TestSupervisorRuleBasedFallback:
 
     def test_rule_based_calls_query_analyst_first(self):
         """첫 단계: query_analyst 호출"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -41,7 +41,7 @@ class TestSupervisorRuleBasedFallback:
 
     def test_rule_based_calls_retrieval_after_analysis(self):
         """query_analysis 완료 후 retrieval_team 호출"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -60,7 +60,7 @@ class TestSupervisorRuleBasedFallback:
 
     def test_rule_based_calls_drafter_after_retrieval(self):
         """retrieval 완료 후 answer_drafter 호출"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -79,7 +79,7 @@ class TestSupervisorRuleBasedFallback:
 
     def test_rule_based_calls_reviewer_after_draft(self):
         """draft 완료 후 legal_reviewer 호출"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -98,7 +98,7 @@ class TestSupervisorRuleBasedFallback:
 
     def test_rule_based_responds_after_all_complete(self):
         """모든 작업 완료 후 respond"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -120,7 +120,7 @@ class TestSupervisorMaxIterations:
 
     def test_max_iterations_forces_respond(self):
         """최대 반복 횟수 도달 시 강제 응답"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode, MAX_SUPERVISOR_ITERATIONS
+        from app.supervisor.nodes.supervisor import SupervisorNode, MAX_SUPERVISOR_ITERATIONS
 
         supervisor = SupervisorNode(llm=None)
 
@@ -144,7 +144,7 @@ class TestMasGraphRouting:
 
     def test_supervisor_to_query_analysis_routing(self):
         """Supervisor → query_analysis 라우팅"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
 
         state = {
             'supervisor': {'next_agent': 'query_analyst'}
@@ -155,7 +155,7 @@ class TestMasGraphRouting:
 
     def test_supervisor_to_retrieval_fan_out(self):
         """Supervisor → 4개 Retrieval Agent Fan-out"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
         from langgraph.types import Send
 
         state = {
@@ -181,7 +181,7 @@ class TestSupervisorNodeFunction:
 
     def test_as_node_returns_callable(self):
         """as_node()가 호출 가능한 함수 반환"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
         node_fn = supervisor.as_node()
@@ -190,7 +190,7 @@ class TestSupervisorNodeFunction:
 
     def test_node_increments_iteration_count(self):
         """노드 실행 시 iteration_count 증가"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
         node_fn = supervisor.as_node()
@@ -215,7 +215,7 @@ class TestSupervisorAgentMessage:
 
     def test_create_supervisor_message(self):
         """Supervisor 메시지 생성"""
-        from app.orchestrator.nodes.supervisor import SupervisorNode
+        from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
 
@@ -236,7 +236,7 @@ class TestGraphEndToEnd:
 
     def test_graph_structure_is_valid(self):
         """그래프 구조 유효성 검증"""
-        from app.orchestrator.graph import create_mas_supervisor_graph
+        from app.supervisor.graph import create_mas_supervisor_graph
 
         graph = create_mas_supervisor_graph()
 
@@ -255,7 +255,7 @@ class TestGraphEndToEnd:
 
     def test_compiled_graph_has_invoke_method(self):
         """컴파일된 그래프에 invoke 메서드 존재"""
-        from app.orchestrator.graph import get_mas_supervisor_compiled_graph
+        from app.supervisor.graph import get_mas_supervisor_compiled_graph
 
         compiled = get_mas_supervisor_compiled_graph()
 

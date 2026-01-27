@@ -24,7 +24,7 @@ import pytest
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)
 pytestmark = pytest.mark.unit
 
-from app.orchestrator.nodes.supervisor import (
+from app.supervisor.nodes.supervisor import (
     SupervisorNode,
     supervisor_router,
     create_initial_supervisor_state,
@@ -32,7 +32,7 @@ from app.orchestrator.nodes.supervisor import (
     LLM_TIMEOUT_SECONDS,
     _determine_phase,
 )
-from app.orchestrator.state import ChatState, create_initial_state
+from app.supervisor.state import ChatState, create_initial_state
 
 
 class MockLLM:

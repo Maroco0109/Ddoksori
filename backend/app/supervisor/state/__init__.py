@@ -9,18 +9,18 @@
 - agent_results.py: 에이전트 결과 (QueryAnalysisResult, RetrievalResult, ReviewResult)
 - output.py: 최종 출력 (ClaimEvidenceMapping, OutputState)
 - control.py: 제어 플래그 (RoutingMode, ControlState)
-- react.py: ReAct 패턴 (ReActStep, ReActState)
+- supervisor.py: MAS Supervisor 상태 (SupervisorState, AgentMessage)
 - memory.py: 메모리 관리 (MemoryState)
 
 사용법:
     # 통합 ChatState 사용 (권장)
-    from app.orchestrator.state import ChatState, create_initial_state
+    from app.supervisor.state import ChatState, create_initial_state
 
     # 개별 상태 타입 사용
-    from app.orchestrator.state import QueryAnalysisResult, RetrievalResult
+    from app.supervisor.state import QueryAnalysisResult, RetrievalResult
 
-    # 기존 방식도 계속 동작 (하위 호환)
-    from app.orchestrator.state import ChatState
+    # SupervisorState 사용
+    from app.supervisor.state import SupervisorState, AgentMessage
 """
 
 from typing import List, Dict, Optional, Annotated, Literal, Any
@@ -50,11 +50,27 @@ from .control import (
     RoutingMode,
     ControlState,
 )
-# [DEPRECATED] ReAct 패턴 - MAS Supervisor로 대체됨. 하위 호환성 유지용.
-from .react import (
-    ReActStep,
-    ReActState,
-)
+# =============================================================================
+# [DEPRECATED] ReAct 패턴 - MAS Supervisor로 대체됨 (Phase 7)
+# 하위 호환성을 위해 stub 정의만 유지. 실제 구현은 _archive/로 이동됨.
+# =============================================================================
+class ReActStep(TypedDict):
+    """[DEPRECATED] ReAct pattern removed in Phase 7. Use MAS Supervisor instead."""
+    thought: str
+    action: str
+    action_input: Dict[str, Any]
+    observation: str
+
+
+class ReActState(TypedDict, total=False):
+    """[DEPRECATED] ReAct pattern removed in Phase 7. Use SupervisorState instead."""
+    react_steps: List[ReActStep]
+    current_iteration: int
+    max_iterations: int
+    should_continue: bool
+    last_thought: Optional[str]
+    last_action: Optional[str]
+    last_observation: Optional[str]
 from .memory import (
     ConversationTurn,
     CompactSummary,

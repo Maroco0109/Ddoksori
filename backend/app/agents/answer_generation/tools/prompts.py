@@ -5,7 +5,7 @@
 
 from typing import Dict, List
 from langchain_core.messages import AIMessage
-from ....orchestrator.state import ChatState
+from ....supervisor.state import ChatState
 
 
 SIMILARITY_THRESHOLD_LOW = 0.40

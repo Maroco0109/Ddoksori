@@ -25,7 +25,7 @@ backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
 os.chdir(backend_path)
 
-from app.orchestrator.state import create_initial_state
+from app.supervisor.state import create_initial_state
 
 
 def _import_functions():

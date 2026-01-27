@@ -36,8 +36,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, ClassVar
 
-from ..orchestrator.state import ChatState
-from ..orchestrator.state.supervisor import AgentMessage, SupervisorState
+from ..supervisor.state import ChatState
+from ..supervisor.state.supervisor import AgentMessage, SupervisorState
 
 
 class BaseAgent(ABC):

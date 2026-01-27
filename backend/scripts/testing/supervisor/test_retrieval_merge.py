@@ -111,7 +111,7 @@ class TestMergeToRetrievalResult:
 
     def test_merge_all_four_sources(self, sample_individual_results):
         """4개 소스 모두 정상 병합"""
-        from app.orchestrator.nodes.retrieval_merge import _merge_to_retrieval_result
+        from app.supervisor.nodes.retrieval_merge import _merge_to_retrieval_result
 
         merged = _merge_to_retrieval_result(sample_individual_results)
 
@@ -123,7 +123,7 @@ class TestMergeToRetrievalResult:
 
     def test_merge_preserves_document_content(self, sample_individual_results):
         """병합 시 문서 내용 보존"""
-        from app.orchestrator.nodes.retrieval_merge import _merge_to_retrieval_result
+        from app.supervisor.nodes.retrieval_merge import _merge_to_retrieval_result
 
         merged = _merge_to_retrieval_result(sample_individual_results)
 
@@ -134,7 +134,7 @@ class TestMergeToRetrievalResult:
 
     def test_merge_empty_results(self, empty_results):
         """빈 결과 처리"""
-        from app.orchestrator.nodes.retrieval_merge import _merge_to_retrieval_result
+        from app.supervisor.nodes.retrieval_merge import _merge_to_retrieval_result
 
         merged = _merge_to_retrieval_result(empty_results)
 
@@ -145,7 +145,7 @@ class TestMergeToRetrievalResult:
 
     def test_merge_partial_results(self, partial_results):
         """일부 Agent만 결과 있을 때"""
-        from app.orchestrator.nodes.retrieval_merge import _merge_to_retrieval_result
+        from app.supervisor.nodes.retrieval_merge import _merge_to_retrieval_result
 
         merged = _merge_to_retrieval_result(partial_results)
 
@@ -158,7 +158,7 @@ class TestCalculateMergedStatistics:
 
     def test_statistics_calculation(self, sample_individual_results):
         """통계 계산 검증"""
-        from app.orchestrator.nodes.retrieval_merge import _calculate_merged_statistics
+        from app.supervisor.nodes.retrieval_merge import _calculate_merged_statistics
 
         stats = _calculate_merged_statistics(sample_individual_results)
 
@@ -169,7 +169,7 @@ class TestCalculateMergedStatistics:
 
     def test_statistics_empty_results(self, empty_results):
         """빈 결과의 통계"""
-        from app.orchestrator.nodes.retrieval_merge import _calculate_merged_statistics
+        from app.supervisor.nodes.retrieval_merge import _calculate_merged_statistics
 
         stats = _calculate_merged_statistics(empty_results)
 
@@ -182,7 +182,7 @@ class TestUpdateSupervisorState:
 
     def test_update_existing_supervisor(self):
         """기존 Supervisor 상태 업데이트"""
-        from app.orchestrator.nodes.retrieval_merge import _update_supervisor_state
+        from app.supervisor.nodes.retrieval_merge import _update_supervisor_state
 
         current = {
             'current_phase': 'retrieving',
@@ -202,7 +202,7 @@ class TestUpdateSupervisorState:
 
     def test_update_none_supervisor(self):
         """None Supervisor → 초기 상태 생성"""
-        from app.orchestrator.nodes.retrieval_merge import _update_supervisor_state
+        from app.supervisor.nodes.retrieval_merge import _update_supervisor_state
 
         updated = _update_supervisor_state(None)
 
@@ -211,7 +211,7 @@ class TestUpdateSupervisorState:
 
     def test_no_duplicate_retrieval(self):
         """retrieval 중복 추가 방지"""
-        from app.orchestrator.nodes.retrieval_merge import _update_supervisor_state
+        from app.supervisor.nodes.retrieval_merge import _update_supervisor_state
 
         current = {
             'completed_tasks': ['query_analysis', 'retrieval'],  # 이미 있음
@@ -229,7 +229,7 @@ class TestRetrievalMergeNode:
 
     def test_full_merge_workflow(self, mock_state_with_results):
         """전체 병합 워크플로우"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         result = retrieval_merge_node_sync(mock_state_with_results)
 
@@ -251,7 +251,7 @@ class TestRetrievalMergeNode:
 
     def test_sources_generation(self, mock_state_with_results):
         """출처 목록 생성 검증"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         result = retrieval_merge_node_sync(mock_state_with_results)
 
@@ -269,7 +269,7 @@ class TestRetrievalMergeNode:
 
     def test_supervisor_state_updated(self, mock_state_with_results):
         """Supervisor 상태 업데이트 확인"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         result = retrieval_merge_node_sync(mock_state_with_results)
 
@@ -284,7 +284,7 @@ class TestEdgeCases:
 
     def test_missing_individual_results(self):
         """individual_retrieval_results 필드 없음"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         state = {'user_query': 'test', 'supervisor': None}
         result = retrieval_merge_node_sync(state)
@@ -295,7 +295,7 @@ class TestEdgeCases:
 
     def test_agent_with_error(self):
         """에러가 있는 Agent 결과 처리"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         state = {
             'individual_retrieval_results': [
@@ -317,7 +317,7 @@ class TestRetrievalMergeNodeSync:
 
     def test_sync_version(self, mock_state_with_results):
         """retrieval_merge_node_sync 동작 확인"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         result = retrieval_merge_node_sync(mock_state_with_results)
 

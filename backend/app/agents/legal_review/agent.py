@@ -20,7 +20,7 @@ LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을
 import re
 from typing import Dict, List, Tuple
 
-from ...orchestrator.state import ChatState, ReviewResult
+from ...supervisor.state import ChatState, ReviewResult
 from ...common.config import AgentConfig
 
 

@@ -21,7 +21,7 @@ from typing import cast, Any
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)
 pytestmark = pytest.mark.unit
 
-from app.orchestrator.state import (
+from app.supervisor.state import (
     AgentMessage,
     SupervisorState,
     ChatState,

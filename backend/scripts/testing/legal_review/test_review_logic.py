@@ -14,7 +14,7 @@ from app.agents.legal_review.llm_reviewer import (
     hybrid_review_node_wrapper,
     get_reviewer,
 )
-from app.orchestrator.state import ChatState
+from app.supervisor.state import ChatState
 from app.common.config import reload_config
 
 

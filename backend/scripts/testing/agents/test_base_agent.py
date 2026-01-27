@@ -24,8 +24,8 @@ from typing import Dict, Any, cast
 import pytest
 
 from app.agents.base import BaseAgent
-from app.orchestrator.state.supervisor import AgentMessage
-from app.orchestrator.state import ChatState
+from app.supervisor.state.supervisor import AgentMessage
+from app.supervisor.state import ChatState
 
 
 class ConcreteTestAgent(BaseAgent):

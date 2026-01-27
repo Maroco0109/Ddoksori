@@ -277,7 +277,7 @@ class TestHybridToolExecutorFallback:
     def test_fallback_to_rule_based_on_timeout(self):
         """타임아웃 시 규칙 기반으로 폴백 테스트"""
         from app.agents.react.react_act import HybridToolExecutor
-        from app.orchestrator.state import ChatState
+        from app.supervisor.state import ChatState
         
         with patch.dict(os.environ, {'USE_LLM_TOOLS': 'true'}):
             with patch('requests.get') as mock_get:

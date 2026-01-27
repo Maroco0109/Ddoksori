@@ -18,7 +18,7 @@ class TestMasSupervisorGraphCreation:
 
     def test_graph_has_all_required_nodes(self):
         """그래프에 모든 필수 노드가 있는지 확인"""
-        from app.orchestrator.graph import create_mas_supervisor_graph
+        from app.supervisor.graph import create_mas_supervisor_graph
 
         graph = create_mas_supervisor_graph()
         nodes = list(graph.nodes.keys())
@@ -43,7 +43,7 @@ class TestMasSupervisorGraphCreation:
 
     def test_graph_compiles_successfully(self):
         """그래프가 성공적으로 컴파일되는지 확인"""
-        from app.orchestrator.graph import get_mas_supervisor_compiled_graph
+        from app.supervisor.graph import get_mas_supervisor_compiled_graph
 
         compiled = get_mas_supervisor_compiled_graph()
 
@@ -56,7 +56,7 @@ class TestMasRouting:
 
     def test_route_to_query_analysis(self):
         """query_analyst → query_analysis 라우팅"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
 
         state = {
             'supervisor': {
@@ -69,7 +69,7 @@ class TestMasRouting:
 
     def test_route_to_generation(self):
         """answer_drafter → generation 라우팅"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
 
         state = {
             'supervisor': {
@@ -82,7 +82,7 @@ class TestMasRouting:
 
     def test_route_to_review(self):
         """legal_reviewer → review 라우팅"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
 
         state = {
             'supervisor': {
@@ -95,7 +95,7 @@ class TestMasRouting:
 
     def test_route_to_output_on_respond(self):
         """respond → output_guardrail 라우팅"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
 
         state = {
             'supervisor': {
@@ -108,7 +108,7 @@ class TestMasRouting:
 
     def test_route_fan_out_returns_send_list(self):
         """retrieval_team → List[Send] 반환 (Fan-out)"""
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
         from langgraph.types import Send
 
         state = {
@@ -141,14 +141,14 @@ class TestRetrievalAgentNodes:
 
     def test_create_retrieval_agent_node_law(self):
         """Law Retrieval Agent 노드 생성 테스트"""
-        from app.orchestrator.graph import _create_retrieval_agent_node
+        from app.supervisor.graph import _create_retrieval_agent_node
 
         node_fn = _create_retrieval_agent_node('law')
         assert callable(node_fn)
 
     def test_create_retrieval_agent_node_criteria(self):
         """Criteria Retrieval Agent 노드 생성 테스트"""
-        from app.orchestrator.graph import _create_retrieval_agent_node
+        from app.supervisor.graph import _create_retrieval_agent_node
 
         node_fn = _create_retrieval_agent_node('criteria')
         assert callable(node_fn)
@@ -159,7 +159,7 @@ class TestGraphSingleton:
 
     def test_get_mas_supervisor_graph_returns_same_instance(self):
         """싱글톤 패턴 확인"""
-        from app.orchestrator.graph import get_mas_supervisor_graph, reset_mas_graph
+        from app.supervisor.graph import get_mas_supervisor_graph, reset_mas_graph
 
         # 리셋 후 새로 가져오기
         reset_mas_graph()
@@ -170,7 +170,7 @@ class TestGraphSingleton:
 
     def test_reset_mas_graph_clears_singleton(self):
         """리셋 후 새 인스턴스 생성"""
-        from app.orchestrator.graph import get_mas_supervisor_graph, reset_mas_graph
+        from app.supervisor.graph import get_mas_supervisor_graph, reset_mas_graph
 
         graph1 = get_mas_supervisor_graph()
         reset_mas_graph()
@@ -185,7 +185,7 @@ class TestSupervisorNodeIntegration:
 
     def test_supervisor_node_in_graph(self):
         """그래프에 SupervisorNode가 올바르게 등록되었는지 확인"""
-        from app.orchestrator.graph import create_mas_supervisor_graph
+        from app.supervisor.graph import create_mas_supervisor_graph
 
         graph = create_mas_supervisor_graph()
 

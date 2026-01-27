@@ -13,7 +13,7 @@ from typing import Dict, List
 
 from langchain_core.messages import AIMessage
 
-from ...orchestrator.state import ChatState
+from ...supervisor.state import ChatState
 
 
 FIELD_QUESTIONS = {

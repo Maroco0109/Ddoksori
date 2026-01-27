@@ -16,8 +16,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.common.logger import get_rag_logger
-from app.orchestrator import get_graph_for_chat_type, create_initial_state
-from app.orchestrator.memory import ConversationMemory, should_use_memory
+from app.supervisor import get_graph_for_chat_type, create_initial_state
+from app.supervisor.memory import ConversationMemory, should_use_memory
 
 from .models import (
     ChatRequest,

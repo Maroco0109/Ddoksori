@@ -11,7 +11,7 @@ from app.agents.answer_generation.fallback import (
     SAFE_FALLBACK_MESSAGE,
 )
 from app.agents.answer_generation.agent import generation_node
-from app.orchestrator.state import create_initial_state
+from app.supervisor.state import create_initial_state
 
 
 class TestAnswerGenerationFallback:

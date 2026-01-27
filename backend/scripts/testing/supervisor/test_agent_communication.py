@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)
 pytestmark = pytest.mark.unit
 
-from app.orchestrator.state.supervisor import AgentMessage, SupervisorState
+from app.supervisor.state.supervisor import AgentMessage, SupervisorState
 
 
 class MockAgent:

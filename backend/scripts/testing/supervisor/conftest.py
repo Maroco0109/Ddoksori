@@ -6,12 +6,12 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.orchestrator import (
+from app.supervisor import (
     ChatState,
     create_initial_state,
     reset_graph,
 )
-from app.orchestrator.graph import create_chat_graph
+from app.supervisor.graph_mas import create_mas_supervisor_graph
 
 
 @pytest.fixture
@@ -166,13 +166,13 @@ def mock_review_failed() -> Dict[str, Any]:
 @pytest.fixture
 def uncompiled_graph():
     reset_graph()
-    return create_chat_graph()
+    return create_mas_supervisor_graph()
 
 
 @pytest.fixture
 def compiled_graph():
     reset_graph()
-    graph = create_chat_graph()
+    graph = create_mas_supervisor_graph()
     from langgraph.checkpoint.memory import MemorySaver
     return graph.compile(checkpointer=MemorySaver())
 

@@ -40,14 +40,14 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def mock_supervisor_node():
     """SupervisorNode Mock - LLM 없이 규칙 기반 fallback 사용"""
-    from app.orchestrator.nodes.supervisor import SupervisorNode
+    from app.supervisor.nodes.supervisor import SupervisorNode
     return SupervisorNode(llm=None)
 
 
 @pytest.fixture
 def mock_dispute_state() -> Dict[str, Any]:
     """분쟁 질의용 초기 상태"""
-    from app.orchestrator.state import create_initial_state
+    from app.supervisor.state import create_initial_state
     return create_initial_state(
         user_query="노트북을 샀는데 일주일 만에 고장났어요. 환불 가능한가요?",
         chat_type='dispute',
@@ -58,7 +58,7 @@ def mock_dispute_state() -> Dict[str, Any]:
 @pytest.fixture
 def mock_general_state() -> Dict[str, Any]:
     """일반 질의용 초기 상태"""
-    from app.orchestrator.state import create_initial_state
+    from app.supervisor.state import create_initial_state
     return create_initial_state(
         user_query="안녕하세요, 반갑습니다.",
         chat_type='general'
@@ -192,32 +192,15 @@ class TestE2EDisputeQueryFullFlow:
 class TestE2EGeneralQueryFastPath:
     """일반 질의 Fast Path 테스트 - legal_review 생략"""
 
+    @pytest.mark.skip(reason="Legacy routing removed in Phase 7 - MAS Supervisor handles routing")
     def test_general_query_skips_legal_review(self, mock_general_state):
-        """일반 질의는 legal_review를 건너뛰는지 검증"""
-        # general 타입은 review 단계에서 자동 통과
-        mock_general_state['chat_type'] = 'general'
-        mock_general_state['query_analysis'] = {'query_type': 'general'}
-        mock_general_state['final_answer'] = '안녕하세요! 무엇을 도와드릴까요?'
+        """[DEPRECATED] Legacy 라우팅 테스트 - MAS Supervisor로 대체됨"""
+        pass
 
-        # _route_unified_after_review 로직 검증
-        from app.orchestrator.graph import _route_unified_after_review
-
-        result = _route_unified_after_review(mock_general_state)
-
-        # general 채팅은 retry 없이 바로 output_guardrail로 이동
-        assert result == 'output_guardrail'
-
+    @pytest.mark.skip(reason="Legacy routing removed in Phase 7 - MAS Supervisor handles routing")
     def test_general_query_no_retrieval_mode(self, mock_general_state):
-        """일반 질의는 NO_RETRIEVAL 모드로 처리되는지 검증"""
-        mock_general_state['mode'] = 'NO_RETRIEVAL'
-        mock_general_state['query_analysis'] = {'query_type': 'general'}
-
-        from app.orchestrator.graph import _route_unified_after_query_analysis
-
-        result = _route_unified_after_query_analysis(mock_general_state)
-
-        # NO_RETRIEVAL 모드는 바로 generation으로 이동
-        assert result == 'generation'
+        """[DEPRECATED] Legacy 라우팅 테스트 - MAS Supervisor로 대체됨"""
+        pass
 
 
 # ============================================================================
@@ -239,7 +222,7 @@ class TestE2ERetrievalParallelExecution:
             'iteration_count': 1,
         }
 
-        from app.orchestrator.graph import _route_mas_supervisor
+        from app.supervisor.graph import _route_mas_supervisor
         from langgraph.types import Send
 
         result = _route_mas_supervisor(mock_dispute_state)
@@ -257,7 +240,7 @@ class TestE2ERetrievalParallelExecution:
 
     def test_retrieval_merge_combines_results(self, mock_retrieval_results):
         """retrieval_merge가 4개 결과를 올바르게 병합하는지 검증"""
-        from app.orchestrator.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
 
         state = {
             'user_query': '환불 받고 싶어요',
@@ -342,7 +325,7 @@ class TestE2EMaxIterationProtection:
 
     def test_max_iteration_forces_respond(self, mock_supervisor_node, mock_dispute_state):
         """10회 반복 시 강제 종료되는지 검증"""
-        from app.orchestrator.nodes.supervisor import MAX_SUPERVISOR_ITERATIONS
+        from app.supervisor.nodes.supervisor import MAX_SUPERVISOR_ITERATIONS
 
         mock_dispute_state['supervisor'] = {
             'current_phase': 'analyzing',
@@ -391,7 +374,7 @@ class TestFeatureFlagGraphSwitch:
         os.environ.pop('MAS_SUPERVISOR_ENABLED', None)
         os.environ.pop('MAS_SUPERVISOR_CANARY_PERCENT', None)
 
-        from app.orchestrator.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
+        from app.supervisor.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
 
         # 싱글톤 리셋
         reset_graph()
@@ -404,7 +387,7 @@ class TestFeatureFlagGraphSwitch:
 
     def test_mas_enabled_returns_mas_graph(self):
         """MAS_SUPERVISOR_ENABLED=true일 때 MAS 그래프 반환"""
-        from app.orchestrator.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
+        from app.supervisor.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
 
         # 싱글톤 리셋
         reset_graph()
@@ -428,7 +411,7 @@ class TestFeatureFlagGraphSwitch:
 
     def test_canary_routing_consistency(self):
         """Canary 배포 시 세션 ID 기반 일관된 라우팅 검증"""
-        from app.orchestrator.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
+        from app.supervisor.graph import get_graph_for_chat_type, reset_graph, reset_mas_graph
 
         # 싱글톤 리셋
         reset_graph()
@@ -460,7 +443,7 @@ class TestMASGraphStructure:
 
     def test_mas_graph_has_all_required_nodes(self):
         """MAS 그래프에 필수 노드가 모두 있는지 검증"""
-        from app.orchestrator.graph import create_mas_supervisor_graph
+        from app.supervisor.graph import create_mas_supervisor_graph
 
         graph = create_mas_supervisor_graph()
         nodes = list(graph.nodes.keys())
@@ -484,7 +467,7 @@ class TestMASGraphStructure:
 
     def test_mas_graph_entry_point_is_input_guardrail(self):
         """MAS 그래프 진입점이 input_guardrail인지 검증"""
-        from app.orchestrator.graph import create_mas_supervisor_graph
+        from app.supervisor.graph import create_mas_supervisor_graph
         from langgraph.graph import START
 
         graph = create_mas_supervisor_graph()

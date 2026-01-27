@@ -18,7 +18,7 @@ from typing import List, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.orchestrator.nodes.query_analysis import (
+from app.supervisor.nodes.query_analysis import (
     _classify_query_type,
     _extract_keywords,
     _determine_agency_hint,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-LangGraph Orchestrator Visualization CLI
+LangGraph MAS Supervisor Visualization CLI
 
 Usage:
     python visualize_graph.py --format mermaid
@@ -16,14 +16,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.orchestrator import reset_graph
-from app.orchestrator.graph import create_chat_graph
-from app.orchestrator.state import ChatState
+from app.supervisor import reset_graph
+from app.supervisor.graph_mas import create_mas_supervisor_graph
+from app.supervisor.state import ChatState
 
 
 def get_graph():
     reset_graph()
-    return create_chat_graph()
+    return create_mas_supervisor_graph()
 
 
 def print_mermaid():
@@ -44,24 +44,25 @@ def print_mermaid():
 def print_manual_mermaid():
     print("""```mermaid
 graph TD
-    __start__([Start]) --> query_analysis
-    query_analysis --> |needs_clarification & no_info| ask_clarification
-    query_analysis --> |has_info or general| retrieval
-    retrieval --> |high_similarity| generation
-    retrieval --> |low_similarity or no_results| low_similarity_prompt
-    generation --> review
-    review --> |passed| __end__([End])
+    __start__([Start]) --> input_guardrail
+    input_guardrail --> |passed| supervisor
+    input_guardrail --> |blocked| __end__([End])
+    supervisor --> |analyze| query_analysis
+    supervisor --> |generate| generation
+    supervisor --> |review| review
+    supervisor --> |finalize| output_guardrail
+    query_analysis --> supervisor
+    generation --> supervisor
+    review --> |passed| supervisor
     review --> |failed & retry < 2| generation
-    review --> |failed & retry >= 2| __end__
-    ask_clarification --> __end__
-    low_similarity_prompt --> __end__
-    
+    output_guardrail --> |complete| __end__
+
+    style input_guardrail fill:#ffcdd2
+    style supervisor fill:#c8e6c9
     style query_analysis fill:#e1f5fe
-    style retrieval fill:#e1f5fe
     style generation fill:#e1f5fe
     style review fill:#e1f5fe
-    style ask_clarification fill:#fff3e0
-    style low_similarity_prompt fill:#fff3e0
+    style output_guardrail fill:#ffcdd2
 ```""")
 
 
@@ -84,18 +85,21 @@ def save_png(output_path: str):
 
 def list_nodes():
     graph = get_graph()
-    
+
     print("=" * 60)
-    print("LangGraph Orchestrator Nodes")
+    print("LangGraph MAS Supervisor Nodes")
     print("=" * 60)
-    
+
     nodes = list(graph.nodes.keys())
-    
+
     node_descriptions = {
+        'input_guardrail': '입력 가드레일 (유해 콘텐츠 필터링)',
+        'supervisor': 'MAS Supervisor (에이전트 조율)',
         'query_analysis': '질의 유형 분류, 키워드 추출, 쿼리 재생성',
         'retrieval': '4섹션 검색 (disputes, counsels, laws, criteria)',
-        'generation': 'LLM 답변 생성',
-        'review': '가드레일 검토 (금지 표현, 출처 확인)',
+        'generation': 'LLM 답변 생성 + Fallback 체인',
+        'review': '법적 검토 (사실 검증, 금지 표현, 인용 검증)',
+        'output_guardrail': '출력 가드레일 (최종 검증)',
         'ask_clarification': '추가 정보 요청 (되묻기)',
         'low_similarity_prompt': '낮은 유사도 경고',
     }
@@ -113,37 +117,39 @@ def list_nodes():
 def list_edges():
     graph = get_graph()
     compiled = graph.compile()
-    
+
     print("=" * 60)
-    print("LangGraph Orchestrator Edges")
+    print("LangGraph MAS Supervisor Edges")
     print("=" * 60)
-    
+
     try:
         drawable = compiled.get_graph()
-        
+
         print("\n[Normal Edges]")
         for edge in drawable.edges:
             if hasattr(edge, 'source') and hasattr(edge, 'target'):
                 print(f"  {edge.source} → {edge.target}")
-        
-        print("\n[Conditional Edges]")
+
+        print("\n[Conditional Edges - MAS Supervisor]")
         conditional_info = [
-            ("query_analysis", "_route_after_query_analysis", 
-             ["ask_clarification", "retrieval"]),
-            ("retrieval", "_route_after_retrieval", 
-             ["generation", "low_similarity_prompt"]),
-            ("review", "_route_after_review", 
-             ["generation (retry)", "__end__"]),
+            ("input_guardrail", "route_after_input_guardrail",
+             ["supervisor", "__end__ (blocked)"]),
+            ("supervisor", "supervisor_router",
+             ["query_analysis", "generation", "review", "output_guardrail"]),
+            ("review", "route_after_review",
+             ["generation (retry)", "output_guardrail"]),
+            ("output_guardrail", "route_after_output_guardrail",
+             ["supervisor", "__end__"]),
         ]
-        
+
         for source, func, targets in conditional_info:
             print(f"  {source} --[{func}]--> {', '.join(targets)}")
-        
+
         print("\n[Terminal Edges]")
-        terminals = ["ask_clarification", "low_similarity_prompt"]
+        terminals = ["output_guardrail"]
         for node in terminals:
-            print(f"  {node} → __end__")
-        
+            print(f"  {node} → __end__ (when complete)")
+
     except Exception as e:
         print(f"Error: {e}")
 
@@ -174,25 +180,34 @@ def print_state_schema():
 
 
 def print_routing_thresholds():
-    from app.orchestrator.graph import SIMILARITY_THRESHOLD_HIGH
-    
+    from app.common.config import get_config
+
+    config = get_config()
+
     print("=" * 60)
-    print("Routing Thresholds")
+    print("MAS Supervisor Routing Thresholds")
     print("=" * 60)
-    
+
     print(f"\n[Similarity Threshold]")
-    print(f"  SIMILARITY_THRESHOLD_HIGH: {SIMILARITY_THRESHOLD_HIGH}")
-    print(f"  - >= {SIMILARITY_THRESHOLD_HIGH}: → generation")
-    print(f"  - < {SIMILARITY_THRESHOLD_HIGH}: → low_similarity_prompt")
-    
+    threshold = config.agent.similarity_threshold
+    print(f"  SIMILARITY_THRESHOLD: {threshold}")
+    print(f"  - >= {threshold}: → generation (has evidence)")
+    print(f"  - < {threshold}: → low_similarity_mode")
+
     print(f"\n[Review Retry]")
     print(f"  MAX_RETRIES: 2")
     print(f"  - retry_count < 2: → generation (retry)")
-    print(f"  - retry_count >= 2: → __end__")
+    print(f"  - retry_count >= 2: → output_guardrail")
+
+    print(f"\n[Supervisor Routing]")
+    print(f"  - query_analysis → analyze intent, extract keywords")
+    print(f"  - generation → draft answer with Fallback chain")
+    print(f"  - review → legal review (skip for general/system_meta)")
+    print(f"  - output_guardrail → final validation, END")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='LangGraph Orchestrator Visualization')
+    parser = argparse.ArgumentParser(description='LangGraph MAS Supervisor Visualization')
     
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--format', choices=['mermaid', 'png'], help='Output format')
@@ -209,7 +224,7 @@ def main():
     if args.format == 'mermaid':
         print_mermaid()
     elif args.format == 'png':
-        output = args.output or 'orchestrator_graph.png'
+        output = args.output or 'mas_supervisor_graph.png'
         save_png(output)
     elif args.list_nodes:
         list_nodes()

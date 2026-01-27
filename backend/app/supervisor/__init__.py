@@ -1,7 +1,9 @@
 """
-똑소리 프로젝트 - Orchestrator 패키지
+똑소리 프로젝트 - Supervisor 패키지
 
 Phase 7: MAS Supervisor 기본 운영 그래프로 전환 완료.
+- ReAct/Legacy 그래프 제거 (archived to _archive/)
+- orchestrator → supervisor 모듈 이름 변경
 """
 from .state import (
     ChatState,

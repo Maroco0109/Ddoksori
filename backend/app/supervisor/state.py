@@ -3,28 +3,28 @@
 
 [주의]
 이 파일은 하위 호환성을 위해 유지됩니다.
-새 코드에서는 app.orchestrator.state 패키지를 직접 사용하세요.
+새 코드에서는 app.supervisor.state 패키지를 직접 사용하세요.
 
 권장 사용법:
-    from app.orchestrator.state import ChatState, create_initial_state
-    from app.orchestrator.state import QueryAnalysisResult, RetrievalResult
+    from app.supervisor.state import ChatState, create_initial_state
+    from app.supervisor.state import QueryAnalysisResult, RetrievalResult
 
 기존 코드 호환:
-    from app.orchestrator.state import ChatState  # 계속 동작함
+    from app.supervisor.state import ChatState  # 계속 동작함
 
 모듈 구조:
-    app/orchestrator/state/
+    app/supervisor/state/
     ├── __init__.py      # 통합 API
     ├── session.py       # 세션 메타데이터
     ├── agent_results.py # 에이전트 결과
     ├── output.py        # 최종 출력
     ├── control.py       # 제어 플래그
-    ├── react.py         # ReAct 패턴
+    ├── supervisor.py    # MAS Supervisor 상태
     └── memory.py        # 메모리 관리
 """
 
 # 새 state 패키지에서 모든 것을 re-export
-from app.orchestrator.state import (
+from app.supervisor.state import (
     # 세션
     OnboardingInfo,
     ChatType,
@@ -44,7 +44,7 @@ from app.orchestrator.state import (
     RoutingMode,
     ControlState,
 
-    # ReAct
+    # ReAct (deprecated stubs)
     ReActStep,
     ReActState,
 
@@ -52,6 +52,10 @@ from app.orchestrator.state import (
     ConversationTurn,
     CompactSummary,
     MemoryState,
+
+    # Supervisor
+    SupervisorState,
+    AgentMessage,
 
     # 기타
     SlotStatus,
@@ -82,7 +86,7 @@ __all__ = [
     'RoutingMode',
     'ControlState',
 
-    # ReAct
+    # ReAct (deprecated)
     'ReActStep',
     'ReActState',
 
@@ -90,6 +94,10 @@ __all__ = [
     'ConversationTurn',
     'CompactSummary',
     'MemoryState',
+
+    # Supervisor
+    'SupervisorState',
+    'AgentMessage',
 
     # 기타
     'SlotStatus',

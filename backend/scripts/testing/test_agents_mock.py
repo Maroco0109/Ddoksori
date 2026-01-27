@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from typing import Dict, Any
 
-from app.orchestrator.state import ChatState, OnboardingInfo, create_initial_state
+from app.supervisor.state import ChatState, OnboardingInfo, create_initial_state
 
 from app.agents.query_analysis.agent import (
     _classify_query_type,

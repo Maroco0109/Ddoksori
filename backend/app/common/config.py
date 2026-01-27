@@ -491,7 +491,7 @@ class AppConfig(BaseSettings):
     환경변수:
         DEBUG: 디버그 모드 (기본값: false)
         CORS_ORIGINS: CORS 허용 오리진 (기본값: http://localhost:5173)
-        ORCHESTRATOR_MODE: 오케스트레이터 모드 (기본값: react)
+        ORCHESTRATOR_MODE: [DEPRECATED] 그래프 모드 - MAS Supervisor만 지원 (Phase 7)
         RETRIEVAL_MODE: 검색 모드 (기본값: dense)
     """
     model_config = SettingsConfigDict(
@@ -508,9 +508,9 @@ class AppConfig(BaseSettings):
         description="CORS 허용 오리진 (쉼표 구분)"
     )
     orchestrator_mode: str = Field(
-        default="react",
+        default="mas",
         alias="ORCHESTRATOR_MODE",
-        description="오케스트레이터 모드 (react | legacy)"
+        description="[DEPRECATED] 그래프 모드 - MAS Supervisor만 지원 (Phase 7)"
     )
     retrieval_mode: str = Field(
         default="dense",

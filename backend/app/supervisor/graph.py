@@ -2,18 +2,18 @@
 똑소리 프로젝트 - LangGraph 그래프 엔트리포인트
 
 작성일: 2026-01-14
-최종 수정: 2026-01-26 (Phase 7: graph.py 분리)
+최종 수정: 2026-01-27 (Phase 7: supervisor 모듈로 이름 변경, Legacy 제거)
 
 [역할]
-그래프 선택 및 공통 유틸리티를 제공합니다.
+MAS Supervisor 그래프 엔트리포인트 및 공통 유틸리티를 제공합니다.
 
 [그래프 파일 구조]
 - graph.py (이 파일): 엔트리포인트 및 공통 유틸리티
 - graph_mas.py: MAS Supervisor 그래프 (현재 운영)
-- graph_legacy.py: Legacy/Unified 그래프 (deprecated, 롤백용)
+- (archived) graph_legacy.py: Legacy/Unified 그래프 → _archive/orchestrator/로 이동됨
 
 [주요 함수]
-- get_graph_for_chat_type(): Feature Flag 기반 그래프 선택
+- get_graph_for_chat_type(): MAS Supervisor 그래프 반환
 - _create_timed_node(): 노드 타이밍 래퍼
 """
 
@@ -149,43 +149,27 @@ def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
 
 def get_graph_for_chat_type(chat_type: str, session_id: str = None):
     """
-    Phase 7: Feature Flag 기반 그래프 선택
+    Phase 7: MAS Supervisor 그래프 반환
 
     chat_type별 동작 차이는 state 초기화 시 설정:
     - general: max_iterations=1, review 자동 통과
     - dispute: max_iterations=2, 전체 review 수행
 
-    Feature Flag:
-    - MAS_SUPERVISOR_ENABLED=true: MAS Supervisor 그래프 사용 (기본값)
-    - MAS_SUPERVISOR_CANARY_PERCENT=N: N% 트래픽에 MAS 그래프 적용 (Canary 배포)
+    Note:
+        Phase 7에서 Legacy/ReAct 그래프 지원이 제거되었습니다.
+        MAS_SUPERVISOR_ENABLED 환경변수는 더 이상 사용되지 않습니다.
 
     Args:
         chat_type: 'dispute' 또는 'general'
-        session_id: Canary 배포 시 일관된 라우팅을 위한 세션 ID (선택)
+        session_id: (사용되지 않음, 하위 호환성 유지용)
 
     Returns:
-        컴파일된 LangGraph 그래프
+        컴파일된 MAS Supervisor LangGraph 그래프
     """
     from .graph_mas import get_mas_supervisor_graph
-    from .graph_legacy import get_unified_graph
 
-    # 1. 전체 전환 플래그 확인 (Phase 7: 기본값 true)
-    if os.getenv('MAS_SUPERVISOR_ENABLED', 'true').lower() == 'true':
-        logger.info(f"[GraphSelect] MAS_SUPERVISOR_ENABLED=true, using MAS graph")
-        return get_mas_supervisor_graph()
-
-    # 2. Canary 배포 확인
-    canary_percent = int(os.getenv('MAS_SUPERVISOR_CANARY_PERCENT', '0'))
-    if canary_percent > 0 and session_id:
-        # 세션 ID 해시 기반 일관된 라우팅 (같은 세션은 항상 같은 그래프)
-        session_hash = hash(session_id) % 100
-        if session_hash < canary_percent:
-            logger.info(f"[GraphSelect] Canary {canary_percent}%, session in canary group, using MAS graph")
-            return get_mas_supervisor_graph()
-
-    # 3. Fallback: 기존 Unified 그래프 (deprecated)
-    logger.warning("[GraphSelect] Using deprecated Unified graph - consider enabling MAS_SUPERVISOR_ENABLED=true")
-    return get_unified_graph()
+    logger.info(f"[GraphSelect] Using MAS Supervisor graph (chat_type={chat_type})")
+    return get_mas_supervisor_graph()
 
 
 # ============================================================================
@@ -193,11 +177,9 @@ def get_graph_for_chat_type(chat_type: str, session_id: str = None):
 # ============================================================================
 
 def reset_graph():
-    """모든 그래프 싱글톤 리셋"""
+    """MAS 그래프 싱글톤 리셋"""
     from .graph_mas import reset_mas_graph
-    from .graph_legacy import reset_legacy_graphs
     reset_mas_graph()
-    reset_legacy_graphs()
 
 
 # ============================================================================
@@ -215,11 +197,13 @@ def get_mas_supervisor_graph():
 
 def get_unified_graph():
     """
-    [Deprecated] graph_legacy.py로 이동됨.
-    직접 from .graph_legacy import get_unified_graph 사용 권장.
+    [REMOVED] Legacy Unified 그래프는 Phase 7에서 제거되었습니다.
+    MAS Supervisor 그래프(get_mas_supervisor_graph)를 사용하세요.
     """
-    from .graph_legacy import get_unified_graph as _get_unified
-    return _get_unified()
+    raise NotImplementedError(
+        "Legacy Unified graph has been removed in Phase 7. "
+        "Use get_mas_supervisor_graph() instead."
+    )
 
 
 def create_mas_supervisor_graph():
@@ -233,11 +217,13 @@ def create_mas_supervisor_graph():
 
 def create_unified_chat_graph():
     """
-    [Deprecated] graph_legacy.py로 이동됨.
-    직접 from .graph_legacy import create_unified_chat_graph 사용 권장.
+    [REMOVED] Legacy Unified 그래프는 Phase 7에서 제거되었습니다.
+    MAS Supervisor 그래프(create_mas_supervisor_graph)를 사용하세요.
     """
-    from .graph_legacy import create_unified_chat_graph as _create_unified
-    return _create_unified()
+    raise NotImplementedError(
+        "Legacy Unified graph has been removed in Phase 7. "
+        "Use create_mas_supervisor_graph() instead."
+    )
 
 
 def _route_mas_supervisor(state):
@@ -278,50 +264,54 @@ def _create_retrieval_agent_node(agent_type: str):
 
 def _route_unified_after_query_analysis(state):
     """
-    [Deprecated] graph_legacy.py로 이동됨.
-    직접 from .graph_legacy import _route_unified_after_query_analysis 사용 권장.
+    [REMOVED] Legacy routing은 Phase 7에서 제거되었습니다.
+    MAS Supervisor 그래프를 사용하세요.
     """
-    from .graph_legacy import _route_unified_after_query_analysis as _route
-    return _route(state)
+    raise NotImplementedError(
+        "Legacy routing has been removed in Phase 7. "
+        "Use MAS Supervisor graph instead."
+    )
 
 
 def _route_unified_after_review(state):
     """
-    [Deprecated] graph_legacy.py로 이동됨.
-    직접 from .graph_legacy import _route_unified_after_review 사용 권장.
+    [REMOVED] Legacy routing은 Phase 7에서 제거되었습니다.
+    MAS Supervisor 그래프를 사용하세요.
     """
-    from .graph_legacy import _route_unified_after_review as _route
-    return _route(state)
+    raise NotImplementedError(
+        "Legacy routing has been removed in Phase 7. "
+        "Use MAS Supervisor graph instead."
+    )
 
 
 def create_chat_graph():
     """
-    [Deprecated] ORCHESTRATOR_MODE 기반 그래프 선택.
-    get_graph_for_chat_type() 사용 권장.
+    [REMOVED] Legacy 그래프는 Phase 7에서 제거되었습니다.
+    get_graph_for_chat_type() 또는 create_mas_supervisor_graph()를 사용하세요.
     """
-    from .graph_legacy import create_chat_graph as _create_chat
-    return _create_chat()
+    raise NotImplementedError(
+        "Legacy create_chat_graph has been removed in Phase 7. "
+        "Use get_graph_for_chat_type() or create_mas_supervisor_graph() instead."
+    )
 
 
 def get_compiled_graph():
     """
-    [Deprecated] graph_legacy.py로 이동됨.
+    [REMOVED] Legacy 그래프는 Phase 7에서 제거되었습니다.
+    get_graph_for_chat_type() 또는 get_mas_supervisor_graph()를 사용하세요.
     """
-    from .graph_legacy import create_chat_graph
-    from .checkpointer import get_checkpointer
-    graph = create_chat_graph()
-    checkpointer = get_checkpointer()
-    return graph.compile(checkpointer=checkpointer)
+    raise NotImplementedError(
+        "Legacy get_compiled_graph has been removed in Phase 7. "
+        "Use get_graph_for_chat_type() or get_mas_supervisor_graph() instead."
+    )
 
 
 def get_graph():
     """
-    [Deprecated] get_graph_for_chat_type() 사용 권장.
+    [REMOVED] Legacy 그래프는 Phase 7에서 제거되었습니다.
+    get_graph_for_chat_type() 또는 get_mas_supervisor_graph()를 사용하세요.
     """
-    global _compiled_graph
-    if _compiled_graph is None:
-        _compiled_graph = get_compiled_graph()
-    return _compiled_graph
-
-
-_compiled_graph = None
+    raise NotImplementedError(
+        "Legacy get_graph has been removed in Phase 7. "
+        "Use get_graph_for_chat_type() or get_mas_supervisor_graph() instead."
+    )

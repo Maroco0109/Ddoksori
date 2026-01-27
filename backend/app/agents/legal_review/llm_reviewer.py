@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from ...common.config import get_config
 
 if TYPE_CHECKING:
-    from ...orchestrator.state import ChatState, ReviewResult
+    from ...supervisor.state import ChatState, ReviewResult
 
 logger = logging.getLogger(__name__)
 
