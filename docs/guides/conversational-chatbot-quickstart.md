@@ -48,15 +48,31 @@ GOOGLE_CLIENT_SECRET=your-secret-here
 
 ### 2. 데이터베이스 마이그레이션
 
+#### ⚠️ 중요: RDS vs 로컬 DB 환경 구분
+
+**현재 환경 확인**:
 ```bash
-# PostgreSQL 실행 확인
+# .env 파일에서 DB 설정 확인
+grep -E "DB_HOST|DB_USER|USE_RDS_FOR_TESTS" backend/.env
+```
+
+#### 옵션 A: 로컬 테스트 환경 (권장)
+
+로컬 Docker PostgreSQL 사용:
+
+```bash
+# 1. 로컬 DB 시작
 docker compose up -d postgres
 
-# 마이그레이션 실행
-psql -U postgres -d ddoksori -f backend/database/migrations/004_conversation_memory.sql
+# 2. .env 설정 변경
+# DB_HOST=localhost
+# USE_RDS_FOR_TESTS=false
 
-# 테이블 생성 확인
-psql -U postgres -d ddoksori -c "\dt" | grep -E "conversations|users|oauth"
+# 3. 마이그레이션 실행
+psql -h localhost -U postgres -d ddoksori -f backend/database/migrations/004_conversation_memory.sql
+
+# 4. 테이블 생성 확인
+psql -h localhost -U postgres -d ddoksori -c "\dt" | grep -E "conversations|users|oauth"
 ```
 
 **예상 출력**:
@@ -67,6 +83,43 @@ psql -U postgres -d ddoksori -c "\dt" | grep -E "conversations|users|oauth"
  public | oauth_sessions         | table | postgres
  public | users                  | table | postgres
 ```
+
+#### 옵션 B: RDS 사용 (프로덕션/스테이징)
+
+**⚠️ 주의사항**:
+1. **READ-ONLY 계정 확인**: `.env`의 `DB_USER`가 `ddoksori_ro`이면 마이그레이션 불가
+2. **쓰기 권한 계정 필요**: DBA 또는 관리자 계정으로 실행
+3. **백업 필수**: 마이그레이션 전 DB 스냅샷 생성
+4. **기존 테이블 미접촉**: 새로운 5개 테이블만 생성
+
+**RDS 마이그레이션 절차**:
+
+```bash
+# 1. 현재 계정 권한 확인
+psql -h $DB_HOST -U $DB_USER -d ddoksori -c "\du $DB_USER"
+
+# 출력 예시:
+# ddoksori_ro | Cannot login, Cannot create DB, Cannot create roles
+# ↑ READ-ONLY 계정이면 다음 단계 진행 불가
+
+# 2. 쓰기 권한이 있는 계정으로 마이그레이션 실행
+psql -h dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com \
+     -U ddoksori_admin \
+     -d ddoksori \
+     -f backend/database/migrations/004_conversation_memory.sql
+
+# 3. 테이블 생성 확인
+psql -h $DB_HOST -U $DB_USER -d ddoksori -c "\dt" | grep -E "conversations|users|oauth"
+```
+
+**READ-ONLY 계정인 경우**:
+- DBA에게 마이그레이션 실행 요청
+- 또는 AWS Console에서 RDS 스냅샷 생성 후 관리자 계정으로 실행
+- 또는 로컬 테스트 환경 사용 (옵션 A)
+
+**마이그레이션 미실행 시**:
+- 기능은 작동하지만 메모리가 DB에 저장되지 않음
+- Feature flag를 `CONVERSATION_MEMORY_BACKEND=memory`로 설정하여 인메모리 모드 사용 가능
 
 ### 3. 백엔드 실행
 
@@ -255,6 +308,42 @@ ENABLE_FOLLOWUP_QUESTIONS=false
 ```
 
 **재시작 후 적용**: `uvicorn app.main:app --reload`
+
+---
+
+## 🔍 RDS 계정 권한 확인
+
+현재 사용 중인 DB 계정이 READ-ONLY인지 확인:
+
+```bash
+# 계정 권한 확인
+psql -h $DB_HOST -U $DB_USER -d ddoksori -c "\du $DB_USER"
+
+# 출력 예시:
+# ddoksori_ro | Cannot login, Cannot create DB, Cannot create roles
+```
+
+**권한별 가능한 작업**:
+
+| 권한 | SELECT | INSERT/UPDATE/DELETE | CREATE TABLE | DROP TABLE |
+|------|--------|---------------------|--------------|------------|
+| ddoksori_ro (READ-ONLY) | ✅ | ❌ | ❌ | ❌ |
+| ddoksori_admin (WRITE) | ✅ | ✅ | ✅ | ✅ |
+
+**READ-ONLY 계정으로 할 수 있는 것**:
+- ✅ 기능 검증 (조회만 사용)
+- ✅ 모니터링 쿼리 실행
+- ✅ E2E 테스트 (E2E-07 제외)
+
+**READ-ONLY 계정으로 할 수 없는 것**:
+- ❌ DB 마이그레이션 실행
+- ❌ 게스트 세션 수동 삭제
+- ❌ 테스트 데이터 삽입
+
+**대안**:
+1. 로컬 Docker PostgreSQL 사용 (전체 권한)
+2. DBA에게 마이그레이션 실행 요청
+3. 관리자 계정으로 임시 접속
 
 ---
 

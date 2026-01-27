@@ -1462,7 +1462,12 @@ if ENABLE_ANSWER_CACHE:
 - [ ] OAuth credentials obtained for all 3 providers
 - [ ] Production redirect URIs added to OAuth apps
 - [ ] `JWT_SECRET_KEY` generated (min 32 chars, cryptographically secure)
-- [ ] Database migration `004_conversation_memory.sql` executed on production DB
+- [ ] **Database migration `004_conversation_memory.sql` executed on production DB**:
+  - ⚠️ **RDS READ-ONLY account check**: `ddoksori_ro` cannot run migrations
+  - ⚠️ **Write-access account required**: Execute with DBA or admin account
+  - ⚠️ **Backup required**: Create RDS snapshot before execution
+  - ⚠️ **Do not touch existing tables**: Only create 5 new tables
+  - Command: `psql -h $DB_HOST -U $DB_ADMIN_USER -d ddoksori -f backend/database/migrations/004_conversation_memory.sql`
 - [ ] DB indexes verified (`EXPLAIN` queries)
 - [ ] Staging environment tested end-to-end
 

@@ -9,23 +9,53 @@
 
 ### Environment Setup
 
-1. **Backend Running**:
-   ```bash
-   cd backend
-   conda activate dsr
-   uvicorn app.main:app --reload
-   ```
+#### 1. Database Connection
 
-2. **Frontend Running**:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
+**⚠️ 중요: 로컬 vs RDS 환경 확인**
 
-3. **Database Running**:
-   ```bash
-   docker compose up -d postgres
-   ```
+```bash
+# 현재 DB 설정 확인
+grep -E "DB_HOST|DB_USER" backend/.env
+```
+
+**옵션 A - 로컬 테스트 환경 (권장)**:
+```bash
+# 로컬 Docker PostgreSQL 사용
+docker compose up -d postgres
+
+# .env 설정
+# DB_HOST=localhost
+# DB_USER=postgres
+# USE_RDS_FOR_TESTS=false
+```
+
+**옵션 B - RDS 환경**:
+```bash
+# .env 설정
+# DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+# DB_USER=ddoksori_ro  (READ-ONLY)
+# USE_RDS_FOR_TESTS=true
+```
+
+**READ-ONLY 계정 제약사항**:
+- ✅ E2E-01 ~ E2E-06: 정상 실행 (조회만 사용)
+- ❌ E2E-07 (Guest Session Cleanup): 수동 삭제 불가
+  - 대안: Cleanup 서비스 로그 확인으로 대체
+
+#### 2. Backend Running
+
+```bash
+cd backend
+conda activate dsr
+uvicorn app.main:app --reload
+```
+
+#### 3. Frontend Running
+
+```bash
+cd frontend
+npm run dev
+```
 
 4. **Redis Running** (for answer caching):
    ```bash
@@ -355,9 +385,13 @@ WHERE user_id IS NULL;
 
 **Objective**: Verify automatic deletion of expired guest sessions
 
-**Prerequisites**: DB access
+**Prerequisites**: DB access (쓰기 권한 필요)
 
-**Steps**:
+**⚠️ RDS READ-ONLY 계정 제약사항**:
+- `ddoksori_ro` 계정으로는 수동 UPDATE/DELETE 불가
+- **대안**: Cleanup 서비스 로그 확인으로 검증
+
+**Steps (쓰기 권한 있는 경우)**:
 
 1. Open **incognito window** → Send 1 message (creates guest session)
 2. **Get conversation ID from DB**:
@@ -370,6 +404,7 @@ WHERE user_id IS NULL;
    ```
 3. **Manually expire the session** (simulate 24 hours passed):
    ```sql
+   -- ⚠️ 쓰기 권한 필요
    UPDATE conversations
    SET expires_at = NOW() - INTERVAL '1 hour'
    WHERE conversation_id = 'your-conversation-id';

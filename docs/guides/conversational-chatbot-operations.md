@@ -254,6 +254,28 @@ WHERE last_login_at < NOW() - INTERVAL '30 days'
 
 ## 🧹 데이터 관리
 
+### ⚠️ RDS 환경 주의사항
+
+**현재 환경 확인**:
+```bash
+grep -E "DB_HOST|DB_USER" backend/.env
+```
+
+**READ-ONLY 계정 (`ddoksori_ro`) 사용 시**:
+- ✅ 가능: 조회 쿼리 (SELECT)
+- ❌ 불가능: INSERT, UPDATE, DELETE, TRUNCATE
+- ❌ 불가능: 수동 cleanup 실행
+
+**쓰기 권한 필요한 작업**:
+- 게스트 세션 수동 삭제
+- 대화 이력 아카이브
+- 인덱스 재구축
+
+**대안**:
+1. DBA에게 작업 요청
+2. 관리자 계정으로 임시 접속
+3. AWS RDS 콘솔에서 스냅샷 생성 후 복구
+
 ### 게스트 세션 Cleanup
 
 #### Cleanup 서비스 상태 확인
