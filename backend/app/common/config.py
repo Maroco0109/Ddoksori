@@ -177,6 +177,65 @@ class ExaoneConfig(BaseSettings):
 
 
 # ============================================================
+# 모델 아키텍처 설정
+# ============================================================
+
+class ModelConfig(BaseSettings):
+    """
+    모델 아키텍처 설정.
+
+    MAS(Multi-Agent System) 각 에이전트에서 사용할 LLM 모델을 중앙 관리합니다.
+    환경변수로 오버라이드 가능하며, 기본값은 최적화된 모델 조합입니다.
+
+    환경변수:
+        MODEL_SUPERVISOR: Supervisor 에이전트 모델 (기본값: gpt-5.1)
+        MODEL_DRAFT_AGENT: Draft 에이전트 모델 (기본값: gpt-4o)
+        MODEL_REVIEW_AGENT: Review 에이전트 모델 (기본값: gpt-4o)
+        MODEL_RETRIEVAL_LLM: Retrieval LLM 모델 (기본값: LGAI-EXAONE/EXAONE-4.0-1.2B)
+        MODEL_RETRIEVAL_FALLBACK: Retrieval 폴백 모델 (기본값: gpt-4.1-nano)
+    """
+    model_config = SettingsConfigDict(env_prefix="MODEL_")
+
+    supervisor: str = Field(
+        default="gpt-5.1",
+        description="Supervisor 에이전트 모델"
+    )
+    draft_agent: str = Field(
+        default="gpt-4o",
+        description="Draft 에이전트 모델"
+    )
+    review_agent: str = Field(
+        default="gpt-4o",
+        description="Review 에이전트 모델"
+    )
+    retrieval_llm: str = Field(
+        default="LGAI-EXAONE/EXAONE-4.0-1.2B",
+        description="Retrieval LLM 모델"
+    )
+    retrieval_fallback: str = Field(
+        default="gpt-4.1-nano",
+        description="Retrieval 폴백 모델"
+    )
+
+
+class PortConfig(BaseSettings):
+    """
+    서비스 포트 설정.
+
+    vLLM, 임베딩 서버 등 외부 서비스 포트를 중앙 관리합니다.
+
+    환경변수:
+        PORT_EXAONE_VLLM: EXAONE vLLM 서버 포트 (기본값: 19010)
+    """
+    model_config = SettingsConfigDict(env_prefix="PORT_")
+
+    exaone_vllm: int = Field(
+        default=19010,
+        description="EXAONE vLLM 서버 포트"
+    )
+
+
+# ============================================================
 # 에이전트 설정
 # ============================================================
 
@@ -480,6 +539,8 @@ class AppConfig(BaseSettings):
     redis: RedisConfig = Field(default_factory=RedisConfig)
     query_rewriter: QueryRewriterConfig = Field(default_factory=QueryRewriterConfig)
     moderation: ModerationConfig = Field(default_factory=ModerationConfig)
+    models: ModelConfig = Field(default_factory=ModelConfig)
+    ports: PortConfig = Field(default_factory=PortConfig)
 
     def get_cors_origins_list(self) -> List[str]:
         """
@@ -630,6 +691,8 @@ __all__ = [
     "RedisConfig",
     "QueryRewriterConfig",
     "ModerationConfig",
+    "ModelConfig",
+    "PortConfig",
 
     # 설정 접근 함수
     "get_config",
