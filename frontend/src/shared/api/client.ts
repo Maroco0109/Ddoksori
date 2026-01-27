@@ -1,7 +1,23 @@
 // API Client configuration
 // Connected to FastAPI backend at port 8000
 
+import { useAuthStore } from '@/features/auth/auth.store';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+// Helper to get auth headers
+const getAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const token = useAuthStore.getState().token;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+};
 
 export const apiClient = {
   get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
@@ -16,12 +32,13 @@ export const apiClient = {
 
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+      }
       throw new Error(`API Error: ${response.statusText}`);
     }
 
@@ -32,15 +49,16 @@ export const apiClient = {
     console.log('[API Client] POST', endpoint, data);
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: data ? JSON.stringify(data) : undefined,
     });
 
     console.log('[API Client] Response status:', response.status);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+      }
       throw new Error(`API Error: ${response.statusText}`);
     }
 
@@ -52,13 +70,14 @@ export const apiClient = {
   put: async <T>(endpoint: string, data?: any): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: data ? JSON.stringify(data) : undefined,
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+      }
       throw new Error(`API Error: ${response.statusText}`);
     }
 
@@ -68,12 +87,13 @@ export const apiClient = {
   delete: async <T>(endpoint: string): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+      }
       throw new Error(`API Error: ${response.statusText}`);
     }
 

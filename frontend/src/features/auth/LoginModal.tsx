@@ -31,12 +31,11 @@ export default function LoginModal() {
   const login = useAuthStore((state) => state.login);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
 
-  // OAuth 로그인 성공 시 호출할 함수 예시
-  // const handleLoginSuccess = (user: User, token: string) => {
-  //   login(user, token); // 세션 이전이 자동으로 처리됩니다
-  //   loadChatSessions(true); // 로그인 사용자 세션 로드
-  //   setIsAuthModalOpen(false);
-  // };
+  // OAuth 로그인 핸들러
+  const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    window.location.href = `${backendUrl}/auth/${provider}/login`;
+  };
 
   return (
     <div
@@ -68,6 +67,7 @@ export default function LoginModal() {
           {/* Google 로그인 */}
           <button
             type="button"
+            onClick={() => handleSocialLogin('google')}
             className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <GoogleIcon />
@@ -77,6 +77,7 @@ export default function LoginModal() {
           {/* 네이버 로그인 */}
           <button
             type="button"
+            onClick={() => handleSocialLogin('naver')}
             className="w-full rounded-lg bg-[#03C75A] text-white px-4 py-3 text-sm font-semibold hover:bg-[#02B350] transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <NaverIcon />
@@ -86,6 +87,7 @@ export default function LoginModal() {
           {/* 카카오 로그인 */}
           <button
             type="button"
+            onClick={() => handleSocialLogin('kakao')}
             className="w-full rounded-lg bg-[#FEE500] text-[#000000] px-4 py-3 text-sm font-semibold hover:bg-[#FDD835] transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <KakaoIcon />

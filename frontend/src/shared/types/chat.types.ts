@@ -65,6 +65,7 @@ export interface ChatAPIResponse {
   sources: SourceMetadata[];
   has_sufficient_evidence: boolean;
   clarifying_questions: string[];
+  followup_questions?: string[];
   is_restricted?: boolean;
   agency_code?: string;
   agency_info?: AgencyInfo;
@@ -101,6 +102,7 @@ export interface MessageWithCitations extends Message {
   citations?: Citation[];
   hasSafetyWarning?: boolean;
   clarifyingQuestions?: string[];
+  followupQuestions?: string[];
   isRestricted?: boolean;
   agencyCode?: string;
   agencyInfo?: AgencyInfo;
@@ -171,6 +173,7 @@ export interface SSECompleteData {
   sources: SSESourceInfo[];
   awaiting_user_choice: boolean;
   clarifying_questions: string[];
+  followup_questions?: string[];
 }
 
 /**

@@ -326,10 +326,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setDisputeMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMessageId
-            ? { 
-                ...msg, 
-                content: response.answer, 
+            ? {
+                ...msg,
+                content: response.answer,
                 citations,
+                followupQuestions: response.followup_questions,
                 isRestricted: response.is_restricted,
                 agencyCode: response.agency_code,
                 agencyInfo: response.agency_info,
@@ -408,6 +409,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   ...msg,
                   content: response.answer,
                   citations,
+                  followupQuestions: response.followup_questions,
                 }
               : msg
           )
@@ -484,6 +486,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   ...msg,
                   content: response.answer,
                   citations,
+                  followupQuestions: response.followup_questions,
                 }
               : msg
           )
@@ -521,6 +524,123 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const formatNumber = (value: string) => {
     const number = value.replace(/[^0-9]/g, '');
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  // Follow-up question handlers
+  const handleDisputeFollowupClick = (question: string) => {
+    setDisputeInputValue(question);
+    // Auto-send the question
+    setTimeout(() => {
+      const newMessage: MessageWithCitations = {
+        id: disputeMessages.length + 1,
+        type: 'user' as const,
+        content: question,
+        timestamp: new Date()
+      };
+      setDisputeMessages([...disputeMessages, newMessage]);
+      setDisputeInputValue('');
+
+      const aiMessageId = disputeMessages.length + 2;
+      const placeholderAI: MessageWithCitations = {
+        id: aiMessageId,
+        type: 'ai' as const,
+        content: '',
+        timestamp: new Date(),
+      };
+      setDisputeMessages((prev) => [...prev, placeholderAI]);
+
+      startDisputeStream({
+        message: question,
+        chat_type: 'dispute',
+        top_k: 5,
+      }).then((response) => {
+        if (response) {
+          const citations = extractCitations(response.answer, response.sources);
+          setDisputeMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    content: response.answer,
+                    citations,
+                    followupQuestions: response.followup_questions,
+                  }
+                : msg
+            )
+          );
+        }
+      }).catch((error) => {
+        console.error('Chat API error:', error);
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? {
+                  ...msg,
+                  content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                }
+              : msg
+          )
+        );
+      });
+    }, 100);
+  };
+
+  const handleGeneralFollowupClick = (question: string) => {
+    setGeneralInputValue(question);
+    // Auto-send the question
+    setTimeout(() => {
+      const newMessage: MessageWithCitations = {
+        id: generalMessages.length + 1,
+        type: 'user' as const,
+        content: question,
+        timestamp: new Date()
+      };
+      setGeneralMessages([...generalMessages, newMessage]);
+      setGeneralInputValue('');
+
+      const aiMessageId = generalMessages.length + 2;
+      const placeholderAI: MessageWithCitations = {
+        id: aiMessageId,
+        type: 'ai' as const,
+        content: '',
+        timestamp: new Date(),
+      };
+      setGeneralMessages((prev) => [...prev, placeholderAI]);
+
+      startGeneralStream({
+        message: question,
+        chat_type: 'general',
+        top_k: 5,
+      }).then((response) => {
+        if (response) {
+          const citations = extractCitations(response.answer, response.sources);
+          setGeneralMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? {
+                    ...msg,
+                    content: response.answer,
+                    citations,
+                    followupQuestions: response.followup_questions,
+                  }
+                : msg
+            )
+          );
+        }
+      }).catch((error) => {
+        console.error('Chat API error:', error);
+        setGeneralMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? {
+                  ...msg,
+                  content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                }
+              : msg
+          )
+        );
+      });
+    }, 100);
   };
 
   // 폼 입력 핸들러
@@ -708,7 +828,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                       questions={msg.clarifyingQuestions || []}
                     />
                   ) : (
-                    <MessageBubble key={msg.id} message={msg} chatType="dispute" />
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      chatType="dispute"
+                      onFollowupClick={handleDisputeFollowupClick}
+                    />
                   )
                 )}
                 {/* PR-7: StatusIndicator for real-time agent progress */}
@@ -766,7 +891,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   questions={msg.clarifyingQuestions || []}
                 />
               ) : (
-                <MessageBubble key={msg.id} message={msg} chatType="general" />
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  chatType="general"
+                  onFollowupClick={handleGeneralFollowupClick}
+                />
               )
             )}
             {/* PR-7: StatusIndicator for real-time agent progress */}

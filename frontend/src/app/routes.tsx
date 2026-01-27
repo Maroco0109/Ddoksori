@@ -5,8 +5,13 @@ import HomePage from '@/features/home/HomePage';
 import ProcedurePage from '@/features/procedure/ProcedurePage';
 import ChatPage from '@/features/chat/ChatPage';
 import BoardPage from '@/features/board/BoardPage';
+import { AuthCallback } from '@/features/auth/AuthCallback';
 
 export const router = createBrowserRouter([
+  {
+    path: '/auth/callback',
+    element: <AuthCallback />
+  },
   {
     element: <RootLayout />,
     children: [
