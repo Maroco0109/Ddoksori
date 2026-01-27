@@ -117,7 +117,7 @@ export function MessageBubble({
         {/* Follow-up questions */}
         {isAI && message.followupQuestions && message.followupQuestions.length > 0 && (
           <div className="mt-4 max-w-[85%] sm:max-w-[75%] md:max-w-[70%]">
-            <p className="text-sm text-gray-600 mb-2 font-medium px-2">이런 질문도 해보세요:</p>
+            <p className="text-sm text-gray-600 mb-2 font-medium px-2">💡 이런 질문도 해보세요:</p>
             <div className="flex flex-col gap-2">
               {message.followupQuestions.map((question, idx) => (
                 <button
