@@ -30,6 +30,61 @@ from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
 logger = logging.getLogger(__name__)
 
 
+# === PR-6: 캐시 관련 함수 ===
+from .cache import SupervisorResponseCache, QueryAnalysisCache
+
+
+def _cache_check_node(state: ChatState) -> Dict[str, Any]:
+    """L1 캐시 체크 노드"""
+    messages = state.get('messages', [])
+    if not messages:
+        return {'_cache_hit': False}
+
+    # Extract user_query from messages
+    last_msg = messages[-1]
+    if hasattr(last_msg, 'content'):
+        user_query = last_msg.content
+    elif isinstance(last_msg, dict):
+        user_query = last_msg.get('content', '')
+    else:
+        user_query = str(last_msg)
+
+    session_id = state.get('session_id')
+
+    cached = SupervisorResponseCache.get(user_query, session_id)
+    if cached:
+        logger.info(f"[L1 Cache] HIT for query: {user_query[:30]}...")
+        return {
+            '_cache_hit': True,
+            '_cached_response': cached,
+            'user_query': user_query,  # Save extracted user_query to state
+        }
+
+    return {
+        '_cache_hit': False,
+        'user_query': user_query,  # Save extracted user_query to state
+    }
+
+
+def _cache_response_node(state: ChatState) -> Dict[str, Any]:
+    """캐시된 응답 반환 노드"""
+    cached = state.get('_cached_response', {})
+    logger.info("[L1 Cache] Returning cached response")
+    return {
+        'final_answer': cached.get('final_answer'),
+        'mode': cached.get('mode'),
+        'citations': cached.get('citations', []),
+    }
+
+
+def _route_cache_check(state: ChatState) -> str:
+    """캐시 히트 여부에 따른 라우팅"""
+    if state.get('_cache_hit'):
+        return "cache_response"
+    return "input_guardrail"
+# === PR-6 끝 ===
+
+
 # ============================================================================
 # Retrieval Agent 노드 팩토리
 # ============================================================================
@@ -138,15 +193,42 @@ def _route_mas_supervisor(state: ChatState):
 
     logger.info(f"[MAS Router] next_agent={next_agent}")
 
-    # retrieval_team → Fan-out (4개 Agent 병렬)
+    # === PR-1: NO_RETRIEVAL Fast Path 시작 ===
+    mode = state.get("mode", "NEED_RAG")
+
+    # NO_RETRIEVAL 모드에서 retrieval_team이 요청되면 generation으로 우회
+    if mode == "NO_RETRIEVAL" and next_agent == "retrieval_team":
+        logger.info("[MAS Router] Fast path: NO_RETRIEVAL - skipping retrieval, routing to generation")
+        return "generation"
+    # === PR-1: NO_RETRIEVAL Fast Path 끝 ===
+
+    # === PR-2: Selective Retrieval 시작 ===
     if next_agent == 'retrieval_team':
-        logger.info("[MAS Router] Fan-out to 4 retrieval agents")
-        return [
-            Send('retrieval_law', state),
-            Send('retrieval_criteria', state),
-            Send('retrieval_case', state),
-            Send('retrieval_counsel', state),
-        ]
+        query_analysis = state.get('query_analysis', {})
+        retriever_types = query_analysis.get('retriever_types', ['law', 'criteria', 'case'])
+
+        fan_out_list = []
+
+        if 'law' in retriever_types:
+            fan_out_list.append(Send('retrieval_law', state))
+
+        if 'criteria' in retriever_types:
+            fan_out_list.append(Send('retrieval_criteria', state))
+
+        if 'case' in retriever_types:
+            fan_out_list.append(Send('retrieval_case', state))
+
+        # counsel agent는 현재 사용하지 않음 (case로 통합)
+
+        logger.info(f"[MAS Router] Selective fan-out to {len(fan_out_list)} retrieval agents: {retriever_types}")
+
+        # 빈 리스트면 generation으로 (검색 불필요)
+        if not fan_out_list:
+            logger.info("[MAS Router] No retrievers needed, routing to generation")
+            return "generation"
+
+        return fan_out_list
+    # === PR-2: Selective Retrieval 끝 ===
 
     # 라우팅 맵
     routing_map = {
@@ -196,6 +278,11 @@ def create_mas_supervisor_graph() -> StateGraph:
 
     # === 노드 등록 ===
 
+    # === PR-6: L1 캐시 노드 추가 ===
+    graph.add_node('cache_check', _cache_check_node)
+    graph.add_node('cache_response', _cache_response_node)
+    # === PR-6 끝 ===
+
     # 1. 가드레일
     graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
     graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
@@ -220,8 +307,24 @@ def create_mas_supervisor_graph() -> StateGraph:
 
     # === 엣지 설정 ===
 
-    # Entry: input_guardrail
-    graph.set_entry_point('input_guardrail')
+    # === PR-6: 엔트리포인트 변경 ===
+    logger.info("[PR-6 DEBUG] Setting entry point to 'cache_check'")
+    graph.set_entry_point('cache_check')
+    logger.info("[PR-6 DEBUG] Entry point set successfully")
+
+    # cache_check → cache_response 또는 input_guardrail
+    graph.add_conditional_edges(
+        'cache_check',
+        _route_cache_check,
+        {
+            'cache_response': 'cache_response',
+            'input_guardrail': 'input_guardrail',
+        }
+    )
+
+    # cache_response → END
+    graph.add_edge('cache_response', END)
+    # === PR-6 끝 ===
 
     # input_guardrail → supervisor 또는 END
     graph.add_conditional_edges(

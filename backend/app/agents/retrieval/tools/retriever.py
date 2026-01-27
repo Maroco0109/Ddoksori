@@ -7,7 +7,7 @@
 import os
 import psycopg2
 import time
-from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any, cast
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any, cast, Union
 import requests
 from dataclasses import dataclass
 import re
@@ -334,7 +334,9 @@ class RAGRetriever:
         query: str,
         top_k: int = 10,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        dataset_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[Union[str, List[str]]] = None,
+        category_filter: Optional[Union[str, List[str]]] = None
     ) -> List[SearchResult]:
         """벡터 유사도 검색"""
         # 쿼리 임베딩 생성
@@ -344,9 +346,36 @@ class RAGRetriever:
         assert self.conn is not None
         with self.conn.cursor() as cur:
             if getattr(self, '_has_vector_chunks', False):
-                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
-                cur.execute(
-                    """
+                # === PR-3: dataset_type_filter 우선 사용 ===
+                if dataset_type_filter is not None:
+                    final_dataset_type = dataset_type_filter
+                    mapped_category_filter = None
+                else:
+                    final_dataset_type, mapped_category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+
+                # === PR-3: chunk_type 리스트 지원 ===
+                if isinstance(chunk_type_filter, list):
+                    chunk_type_condition = "AND vc.chunk_type = ANY(%s)"
+                elif chunk_type_filter:
+                    chunk_type_condition = "AND vc.chunk_type = %s"
+                else:
+                    chunk_type_condition = ""
+
+                # === PR-4: category 리스트 지원 ===
+                # category_filter 파라미터가 명시적으로 제공된 경우 우선 사용
+                if category_filter is not None:
+                    final_category_filter = category_filter
+                else:
+                    final_category_filter = mapped_category_filter
+
+                if isinstance(final_category_filter, list):
+                    category_condition = "AND vc.category = ANY(%s)"
+                elif final_category_filter:
+                    category_condition = "AND vc.category = %s"
+                else:
+                    category_condition = ""
+
+                query_sql = f"""
                     SELECT
                         vc.chunk_id,
                         vc.dataset_type,
@@ -363,23 +392,33 @@ class RAGRetriever:
                     WHERE
                         vc.embedding IS NOT NULL
                         AND (%s IS NULL OR vc.dataset_type = %s)
-                        AND (%s IS NULL OR vc.category = %s)
-                        AND (%s IS NULL OR vc.chunk_type = %s)
+                        {category_condition}
+                        {chunk_type_condition}
                     ORDER BY vc.embedding <=> %s::vector
                     LIMIT %s
-                    """,
-                    (
-                        query_embedding,
-                        dataset_type_filter, dataset_type_filter,
-                        category_filter, category_filter,
-                        chunk_type_filter, chunk_type_filter,
-                        query_embedding,
-                        top_k,
-                    )
-                )
+                """
+
+                params: List[Any] = [
+                    query_embedding,
+                    final_dataset_type, final_dataset_type,
+                ]
+                if final_category_filter:
+                    params.append(final_category_filter)
+                if chunk_type_filter:
+                    params.append(chunk_type_filter)
+                params.extend([query_embedding, top_k])
+
+                cur.execute(query_sql, tuple(params))
             else:
-                cur.execute(
-                    """
+                # === PR-3: chunk_type 리스트 지원 (chunks 테이블) ===
+                if isinstance(chunk_type_filter, list):
+                    chunk_type_condition = "AND c.chunk_type = ANY(%s)"
+                elif chunk_type_filter:
+                    chunk_type_condition = "AND c.chunk_type = %s"
+                else:
+                    chunk_type_condition = ""
+
+                query_sql = f"""
                     SELECT
                         c.chunk_id,
                         c.doc_id,
@@ -398,18 +437,20 @@ class RAGRetriever:
                     WHERE
                         c.embedding IS NOT NULL
                         AND (%s IS NULL OR d.doc_type = %s)
-                        AND (%s IS NULL OR c.chunk_type = %s)
+                        {chunk_type_condition}
                     ORDER BY c.embedding <=> %s::vector
                     LIMIT %s
-                    """,
-                    (
-                        query_embedding,
-                        doc_type_filter, doc_type_filter,
-                        chunk_type_filter, chunk_type_filter,
-                        query_embedding,
-                        top_k
-                    )
-                )
+                """
+
+                params: List[Any] = [
+                    query_embedding,
+                    doc_type_filter, doc_type_filter,
+                ]
+                if chunk_type_filter:
+                    params.append(chunk_type_filter)
+                params.extend([query_embedding, top_k])
+
+                cur.execute(query_sql, tuple(params))
 
             results = []
             for row in cur.fetchall():

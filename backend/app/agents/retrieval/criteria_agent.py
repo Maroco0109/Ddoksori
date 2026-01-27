@@ -17,19 +17,65 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
     domain_rewrite_prompt: ClassVar[str] = "Convert this everyday language query into a dispute resolution criteria search query: {query}"
     
     async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
+        """
+        계층적 기준 검색: 품목 식별 → 구체적 기준 → 보충정보
+
+        검색 전략:
+        1단계: 별표1_품목매핑으로 품목 식별 (상위 3개)
+        2단계: 손자_청크 > 자식_청크 > 부모_청크 (구체적→추상적)
+        3단계: 별표3_품질보증, 별표4_내용연수 보충정보
+        """
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
 
         retriever = HybridRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
-            return await asyncio.to_thread(
+            # === PR-3: 계층적 기준 검색 시작 ===
+
+            # 1단계: 품목 식별 (별표1)
+            product_results = await asyncio.to_thread(
+                retriever.search,
+                query=query,
+                top_k=3,  # 품목 후보 3개
+                dataset_type_filter='law_guide',
+                chunk_type_filter=['별표1_품목매핑'],
+            )
+
+            # 2단계: 구체적 기준 검색 (손자 > 자식 > 부모 순서)
+            criteria_results = await asyncio.to_thread(
                 retriever.search,
                 query=query,
                 top_k=top_k,
-                doc_type_filter='criteria',
+                dataset_type_filter='law_guide',
+                chunk_type_filter=['손자_청크', '자식_청크', '부모_청크'],
             )
+
+            # 3단계: 보충정보 (품질보증, 내용연수)
+            supplement_results = await asyncio.to_thread(
+                retriever.search,
+                query=query,
+                top_k=2,  # 보충정보 2개
+                dataset_type_filter='law_guide',
+                chunk_type_filter=['별표3_품질보증', '별표4_내용연수'],
+            )
+
+            # 결과 병합 (품목 + 기준 + 보충정보)
+            # 중복 제거
+            seen_ids = set()
+            combined = []
+
+            for result_list in [product_results, criteria_results, supplement_results]:
+                for r in result_list:
+                    if r.chunk_id not in seen_ids:
+                        seen_ids.add(r.chunk_id)
+                        combined.append(r)
+
+            # === PR-3: 계층적 기준 검색 끝 ===
+
+            return combined[:top_k]
+
         finally:
             retriever.close()
     

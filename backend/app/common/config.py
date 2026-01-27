@@ -539,6 +539,171 @@ class ModerationConfig(BaseSettings):
 
 
 # ============================================================
+# 인증 설정 (JWT & OAuth)
+# ============================================================
+
+class AuthConfig(BaseSettings):
+    """
+    인증 시스템 설정.
+
+    JWT 토큰 인증 및 OAuth 2.0 소셜 로그인 설정을 관리합니다.
+
+    환경변수:
+        JWT_SECRET_KEY: JWT 서명에 사용할 비밀 키
+        JWT_ALGORITHM: JWT 알고리즘 (기본값: HS256)
+        JWT_TOKEN_EXPIRE_DAYS: JWT 토큰 만료 기간 (기본값: 30일)
+        GOOGLE_CLIENT_ID: Google OAuth Client ID
+        GOOGLE_CLIENT_SECRET: Google OAuth Client Secret
+        KAKAO_CLIENT_ID: Kakao REST API Key
+        KAKAO_CLIENT_SECRET: Kakao Client Secret
+        NAVER_CLIENT_ID: Naver Client ID
+        NAVER_CLIENT_SECRET: Naver Client Secret
+        BACKEND_URL: Backend API URL (기본값: http://localhost:8000)
+        FRONTEND_URL: Frontend URL (기본값: http://localhost:5173)
+    """
+    model_config = SettingsConfigDict(env_prefix="")
+
+    # JWT 설정
+    jwt_secret_key: str = Field(
+        default="dev_secret_key_change_in_production",
+        alias="JWT_SECRET_KEY",
+        description="JWT 서명 비밀 키"
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        alias="JWT_ALGORITHM",
+        description="JWT 알고리즘"
+    )
+    jwt_token_expire_days: int = Field(
+        default=30,
+        alias="JWT_TOKEN_EXPIRE_DAYS",
+        description="JWT 토큰 만료 기간 (일)"
+    )
+
+    # Google OAuth
+    google_client_id: Optional[str] = Field(
+        default=None,
+        alias="GOOGLE_CLIENT_ID",
+        description="Google OAuth Client ID"
+    )
+    google_client_secret: Optional[str] = Field(
+        default=None,
+        alias="GOOGLE_CLIENT_SECRET",
+        description="Google OAuth Client Secret"
+    )
+
+    # Kakao OAuth
+    kakao_client_id: Optional[str] = Field(
+        default=None,
+        alias="KAKAO_CLIENT_ID",
+        description="Kakao REST API Key"
+    )
+    kakao_client_secret: Optional[str] = Field(
+        default=None,
+        alias="KAKAO_CLIENT_SECRET",
+        description="Kakao Client Secret"
+    )
+
+    # Naver OAuth
+    naver_client_id: Optional[str] = Field(
+        default=None,
+        alias="NAVER_CLIENT_ID",
+        description="Naver Client ID"
+    )
+    naver_client_secret: Optional[str] = Field(
+        default=None,
+        alias="NAVER_CLIENT_SECRET",
+        description="Naver Client Secret"
+    )
+
+    # URL 설정
+    backend_url: str = Field(
+        default="http://localhost:8000",
+        alias="BACKEND_URL",
+        description="Backend API URL"
+    )
+    frontend_url: str = Field(
+        default="http://localhost:5173",
+        alias="FRONTEND_URL",
+        description="Frontend URL"
+    )
+
+
+# ============================================================
+# 대화 메모리 설정
+# ============================================================
+
+class MemoryConfig(BaseSettings):
+    """
+    대화 메모리 시스템 설정.
+
+    PostgreSQL 기반 장기 메모리 및 게스트 세션 관리 설정을 관리합니다.
+
+    환경변수:
+        CONVERSATION_MEMORY_BACKEND: 메모리 백엔드 (memory | db, 기본값: memory)
+        MAX_CONVERSATION_TURNS: 최대 대화 턴 수 (기본값: 30)
+        SLIDING_WINDOW_SIZE: 슬라이딩 윈도우 크기 (기본값: 10)
+        GUEST_SESSION_TTL_HOURS: 게스트 세션 만료 시간 (기본값: 24시간)
+        CLEANUP_INTERVAL_HOURS: Cleanup 서비스 실행 주기 (기본값: 1시간)
+    """
+    model_config = SettingsConfigDict(env_prefix="")
+
+    backend: str = Field(
+        default="memory",
+        alias="CONVERSATION_MEMORY_BACKEND",
+        description="메모리 백엔드 (memory | db)"
+    )
+    max_turns: int = Field(
+        default=30,
+        alias="MAX_CONVERSATION_TURNS",
+        description="최대 대화 턴 수"
+    )
+    sliding_window_size: int = Field(
+        default=10,
+        alias="SLIDING_WINDOW_SIZE",
+        description="슬라이딩 윈도우 크기"
+    )
+    guest_session_ttl_hours: int = Field(
+        default=24,
+        alias="GUEST_SESSION_TTL_HOURS",
+        description="게스트 세션 만료 시간 (시간)"
+    )
+    cleanup_interval_hours: int = Field(
+        default=1,
+        alias="CLEANUP_INTERVAL_HOURS",
+        description="Cleanup 서비스 실행 주기 (시간)"
+    )
+
+
+# ============================================================
+# 대화형 챗봇 기능 플래그
+# ============================================================
+
+class ChatbotFeaturesConfig(BaseSettings):
+    """
+    대화형 챗봇 기능 플래그 설정.
+
+    유연한 답변 형식, 후속 질문 등 대화형 챗봇 기능의 활성화 여부를 관리합니다.
+
+    환경변수:
+        ANSWER_FORMAT_MODE: 답변 형식 모드 (fixed | flexible, 기본값: fixed)
+        ENABLE_FOLLOWUP_QUESTIONS: 후속 질문 생성 활성화 (기본값: false)
+    """
+    model_config = SettingsConfigDict(env_prefix="")
+
+    answer_format_mode: str = Field(
+        default="fixed",
+        alias="ANSWER_FORMAT_MODE",
+        description="답변 형식 모드 (fixed | flexible)"
+    )
+    enable_followup_questions: bool = Field(
+        default=False,
+        alias="ENABLE_FOLLOWUP_QUESTIONS",
+        description="후속 질문 생성 활성화"
+    )
+
+
+# ============================================================
 # 애플리케이션 전역 설정
 # ============================================================
 
@@ -602,6 +767,9 @@ class AppConfig(BaseSettings):
     models: ModelConfig = Field(default_factory=ModelConfig)
     ports: PortConfig = Field(default_factory=PortConfig)
     retrieval_llm: RetrievalLLMConfig = Field(default_factory=RetrievalLLMConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    chatbot_features: ChatbotFeaturesConfig = Field(default_factory=ChatbotFeaturesConfig)
 
     def get_cors_origins_list(self) -> List[str]:
         """
@@ -755,6 +923,9 @@ __all__ = [
     "ModelConfig",
     "PortConfig",
     "RetrievalLLMConfig",
+    "AuthConfig",  # JWT & OAuth 설정
+    "MemoryConfig",  # 대화 메모리 설정
+    "ChatbotFeaturesConfig",  # 대화형 챗봇 기능 플래그
 
     # 설정 접근 함수
     "get_config",

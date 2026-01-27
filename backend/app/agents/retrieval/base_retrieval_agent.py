@@ -28,13 +28,28 @@ logger = logging.getLogger(__name__)
 
 
 def _get_db_config() -> Dict[str, str]:
-    return {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'dbname': os.getenv('DB_NAME', 'ddoksori'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'postgres'),
-    }
+    """
+    데이터베이스 설정을 반환합니다.
+    USE_RDS_FOR_TESTS=true인 경우 RDS READ_ONLY 설정을 사용합니다.
+    """
+    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
+
+    if use_rds:
+        return {
+            'host': os.getenv('DB_TEST_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'dbname': os.getenv('DB_TEST_NAME', 'ddoksori'),
+            'user': os.getenv('DB_TEST_USER', 'readonly_user'),
+            'password': os.getenv('DB_TEST_PASSWORD', ''),
+        }
+    else:
+        return {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'dbname': os.getenv('DB_NAME', 'ddoksori'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'postgres'),
+        }
 
 
 def _get_embed_api_url() -> str:

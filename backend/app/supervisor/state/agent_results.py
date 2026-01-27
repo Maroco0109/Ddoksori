@@ -53,6 +53,10 @@ class QueryAnalysisResult(TypedDict, total=False):
     search_queries: List[str]
     expansion_applied: str
 
+    # === PR-2: Selective Retrieval 시작 ===
+    retriever_types: List[str]  # ["law", "criteria", "case"] 중 선택
+    # === PR-2: Selective Retrieval 끝 ===
+
 
 class RetrievalResult(TypedDict, total=False):
     """

@@ -12,7 +12,7 @@ import os
 import json
 import time
 import requests
-from typing import List, Dict, Optional, Any, cast
+from typing import List, Dict, Optional, Any, cast, Union
 import psycopg2
 from .retriever import (
     RAGRetriever,
@@ -99,7 +99,9 @@ class HybridRetriever:
         query: str,
         top_k: int = 10,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        dataset_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[Union[str, List[str]]] = None,
+        category_filter: Optional[Union[str, List[str]]] = None
     ) -> List[SearchResult]:
         """
         Main hybrid search with RRF fusion
@@ -125,7 +127,9 @@ class HybridRetriever:
             query,
             candidate_count,
             doc_type_filter,
-            chunk_type_filter
+            dataset_type_filter,
+            chunk_type_filter,
+            category_filter
         )
 
         # 2. Lexical retrieval (FTS)
@@ -133,7 +137,9 @@ class HybridRetriever:
             query,
             candidate_count,
             doc_type_filter,
-            chunk_type_filter
+            dataset_type_filter,
+            chunk_type_filter,
+            category_filter
         )
 
         # 3. Sparse retrieval (BGE-M3) - optional
@@ -143,7 +149,9 @@ class HybridRetriever:
                 query,
                 candidate_count,
                 doc_type_filter,
-                chunk_type_filter
+                dataset_type_filter,
+                chunk_type_filter,
+                category_filter
             )
 
         # 4. RRF fusion (2-way or 3-way)
@@ -236,7 +244,9 @@ class HybridRetriever:
         query: str,
         top_k: int,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        dataset_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[Union[str, List[str]]] = None,
+        category_filter: Optional[Union[str, List[str]]] = None
     ) -> List[SearchResult]:
         """
         Dense retrieval using pgvector
@@ -249,7 +259,9 @@ class HybridRetriever:
                 query=query,
                 top_k=top_k,
                 doc_type_filter=doc_type_filter,
-                chunk_type_filter=chunk_type_filter
+                dataset_type_filter=dataset_type_filter,
+                chunk_type_filter=chunk_type_filter,
+                category_filter=category_filter
             )
         except Exception as e:
             # Handle embedding API errors gracefully
@@ -261,7 +273,9 @@ class HybridRetriever:
         query: str,
         top_k: int,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        dataset_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[Union[str, List[str]]] = None,
+        category_filter: Optional[Union[str, List[str]]] = None
     ) -> List[SearchResult]:
         """
         Lexical retrieval using PostgreSQL FTS
@@ -269,9 +283,37 @@ class HybridRetriever:
         """
         with self.conn.cursor() as cur:
             if getattr(self, '_has_vector_chunks', False):
-                dataset_type_filter, category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
-                cur.execute(
-                    """
+                # === PR-3: dataset_type_filter 우선 사용 ===
+                if dataset_type_filter is not None:
+                    final_dataset_type = dataset_type_filter
+                    mapped_category_filter = None
+                else:
+                    final_dataset_type, mapped_category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+
+                # === PR-4: category 필터 우선순위 ===
+                # category_filter 파라미터가 명시적으로 제공된 경우 우선 사용
+                if category_filter is not None:
+                    final_category_filter = category_filter
+                else:
+                    final_category_filter = mapped_category_filter
+
+                # === PR-3: chunk_type 리스트 지원 ===
+                if isinstance(chunk_type_filter, list):
+                    chunk_type_condition = "AND vc.chunk_type = ANY(%s)"
+                elif chunk_type_filter:
+                    chunk_type_condition = "AND vc.chunk_type = %s"
+                else:
+                    chunk_type_condition = ""
+
+                # === PR-4: category 리스트 지원 ===
+                if isinstance(final_category_filter, list):
+                    category_condition = "AND vc.category = ANY(%s)"
+                elif final_category_filter:
+                    category_condition = "AND vc.category = %s"
+                else:
+                    category_condition = ""
+
+                query_sql = f"""
                     SELECT
                         vc.chunk_id,
                         vc.dataset_type,
@@ -288,28 +330,32 @@ class HybridRetriever:
                     WHERE
                         vc.text_tsv @@ plainto_tsquery('simple', %s)
                         AND (%s IS NULL OR vc.dataset_type = %s)
-                        AND (%s IS NULL OR vc.category = %s)
-                        AND (%s IS NULL OR vc.chunk_type = %s)
+                        {category_condition}
+                        {chunk_type_condition}
                     ORDER BY rank_score DESC
                     LIMIT %s
-                    """,
-                    (
-                        query,
-                        query,
-                        dataset_type_filter, dataset_type_filter,
-                        category_filter, category_filter,
-                        chunk_type_filter, chunk_type_filter,
-                        top_k,
-                    )
-                )
+                """
+
+                params = [
+                    query,
+                    query,
+                    final_dataset_type, final_dataset_type,
+                ]
+                if final_category_filter:
+                    params.append(final_category_filter)
+                if chunk_type_filter:
+                    params.append(chunk_type_filter)
+                params.append(top_k)
+
+                cur.execute(query_sql, tuple(params))
 
                 rows = cur.fetchall()
                 if not rows:
                     # FTS can return 0 for Korean depending on how text_tsv was built.
                     # Fall back to ILIKE to keep retrieval functional.
                     search_pattern = f"%{query}%"
-                    cur.execute(
-                        """
+
+                    fallback_sql = f"""
                         SELECT
                             vc.chunk_id,
                             vc.dataset_type,
@@ -326,18 +372,22 @@ class HybridRetriever:
                         WHERE
                             vc.text ILIKE %s
                             AND (%s IS NULL OR vc.dataset_type = %s)
-                            AND (%s IS NULL OR vc.category = %s)
-                            AND (%s IS NULL OR vc.chunk_type = %s)
+                            {category_condition}
+                            {chunk_type_condition}
                         LIMIT %s
-                        """,
-                        (
-                            search_pattern,
-                            dataset_type_filter, dataset_type_filter,
-                            category_filter, category_filter,
-                            chunk_type_filter, chunk_type_filter,
-                            top_k,
-                        )
-                    )
+                    """
+
+                    fallback_params = [
+                        search_pattern,
+                        final_dataset_type, final_dataset_type,
+                    ]
+                    if final_category_filter:
+                        fallback_params.append(final_category_filter)
+                    if chunk_type_filter:
+                        fallback_params.append(chunk_type_filter)
+                    fallback_params.append(top_k)
+
+                    cur.execute(fallback_sql, tuple(fallback_params))
                     rows = cur.fetchall()
 
                 results = []
@@ -393,8 +443,15 @@ class HybridRetriever:
             tokens = query.split()
             tsquery = ' & '.join(tokens)
 
-            cur.execute(
-                """
+            # === PR-3: chunk_type 리스트 지원 (mv_searchable_chunks) ===
+            if isinstance(chunk_type_filter, list):
+                chunk_type_condition = "AND chunk_type = ANY(%s)"
+            elif chunk_type_filter:
+                chunk_type_condition = "AND chunk_type = %s"
+            else:
+                chunk_type_condition = ""
+
+            query_sql = f"""
                 SELECT
                     chunk_id,
                     doc_id,
@@ -412,17 +469,20 @@ class HybridRetriever:
                 WHERE
                     content_vector @@ to_tsquery('simple', %s)
                     AND (%s IS NULL OR doc_type = %s)
-                    AND (%s IS NULL OR chunk_type = %s)
+                    {chunk_type_condition}
                 ORDER BY rank_score DESC
                 LIMIT %s
-                """,
-                (
-                    tsquery, tsquery,
-                    doc_type_filter, doc_type_filter,
-                    chunk_type_filter, chunk_type_filter,
-                    top_k
-                )
-            )
+            """
+
+            params = [
+                tsquery, tsquery,
+                doc_type_filter, doc_type_filter,
+            ]
+            if chunk_type_filter:
+                params.append(chunk_type_filter)
+            params.append(top_k)
+
+            cur.execute(query_sql, tuple(params))
 
             results = []
             for row in cur.fetchall():
@@ -510,7 +570,9 @@ class HybridRetriever:
         query: str,
         top_k: int,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        dataset_type_filter: Optional[str] = None,
+        chunk_type_filter: Optional[Union[str, List[str]]] = None,
+        category_filter: Optional[Union[str, List[str]]] = None
     ) -> List[SearchResult]:
         """
         Sparse retrieval using BGE-M3 sparse vectors
@@ -523,6 +585,7 @@ class HybridRetriever:
             top_k: Number of results to return
             doc_type_filter: Filter by document type
             chunk_type_filter: Filter by chunk type
+            category_filter: Filter by category (single string or list)
 
         Returns:
             List of SearchResult objects sorted by sparse similarity
@@ -549,8 +612,25 @@ class HybridRetriever:
 
             # 2. Search using sparse dot product
             with self.conn.cursor() as cur:
-                cur.execute(
-                    """
+                # === PR-3: chunk_type 리스트 지원 ===
+                if isinstance(chunk_type_filter, list):
+                    chunk_type_condition = "AND c.chunk_type = ANY(%s)"
+                elif chunk_type_filter:
+                    chunk_type_condition = "AND c.chunk_type = %s"
+                else:
+                    chunk_type_condition = ""
+
+                # === PR-4: category 리스트 지원 (documents.category_path는 배열) ===
+                if isinstance(category_filter, list):
+                    # 여러 카테고리 중 하나라도 포함되면 매칭 (overlap 연산자)
+                    category_condition = "AND d.category_path && %s::text[]"
+                elif category_filter:
+                    # 단일 카테고리 포함 확인 (contains 연산자)
+                    category_condition = "AND d.category_path @> ARRAY[%s]::text[]"
+                else:
+                    category_condition = ""
+
+                query_sql = f"""
                     SELECT
                         c.chunk_id,
                         c.doc_id,
@@ -571,18 +651,23 @@ class HybridRetriever:
                         AND c.bge_m3_encoded = TRUE
                         AND c.drop = FALSE
                         AND (%s IS NULL OR d.doc_type = %s)
-                        AND (%s IS NULL OR c.chunk_type = %s)
+                        {chunk_type_condition}
+                        {category_condition}
                     ORDER BY bge_sparse_dot_product(c.bge_sparse_vector, %s::jsonb) DESC
                     LIMIT %s
-                    """,
-                    (
-                        json.dumps(query_sparse),
-                        doc_type_filter, doc_type_filter,
-                        chunk_type_filter, chunk_type_filter,
-                        json.dumps(query_sparse),
-                        top_k
-                    )
-                )
+                """
+
+                params = [
+                    json.dumps(query_sparse),
+                    doc_type_filter, doc_type_filter,
+                ]
+                if chunk_type_filter:
+                    params.append(chunk_type_filter)
+                if category_filter:
+                    params.append(category_filter)
+                params.extend([json.dumps(query_sparse), top_k])
+
+                cur.execute(query_sql, tuple(params))
 
                 results = []
                 for row in cur.fetchall():

@@ -45,6 +45,27 @@ from ...supervisor.state import (
 
 logger = logging.getLogger(__name__)
 
+# OpenAI import for fallback
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+
+# ============================================================
+# === PR-2: Selective Retrieval 시작 ===
+# 검색 우선순위: 법령 → 기준 → 사례
+# ============================================================
+QUERY_TYPE_TO_RETRIEVERS = {
+    "law": ["law"],                          # 법령만
+    "criteria": ["law", "criteria"],         # 법령 + 기준 (기준은 법령의 구체화)
+    "dispute": ["law", "criteria", "case"],  # 전체 (분쟁은 법령+기준+사례 필요)
+    "general": [],                           # 검색 불필요
+    "system_meta": [],                       # 검색 불필요
+    "ambiguous": ["law", "criteria"],        # 법령 + 기준 (사례는 나중에)
+}
+# === PR-2: Selective Retrieval 끝 ===
+
 
 # ============================================================
 # [Keyword & Pattern Definitions]
@@ -441,38 +462,71 @@ def _check_ambiguity_with_llm(query: str) -> bool:
     규칙 기반으로 판단하기 어려운 짧은 쿼리에 대해 LLM의 상식을 활용합니다.
     비용 절감을 위해 모든 쿼리에 사용하지 않고, Layer 1, 2를 통과한 경우에만 호출합니다.
 
+    Fallback 체인:
+    1. EXAONE (Primary) - 도메인 특화 모델
+    2. gpt-4o-mini (Fallback) - 빠르고 저렴한 OpenAI 모델
+
     Args:
         query: 사용자 쿼리
 
     Returns:
         True if query is ambiguous and needs clarification
     """
-    try:
-        from app.llm.exaone_client import ExaoneLLMClient, LLMUnavailableError
-
-        client = ExaoneLLMClient()
-        if not client.is_available():
-            logger.warning("[QueryAnalysis] LLM not available for ambiguity check")
-            return False  # LLM 불가 시 보수적으로 RAG 진행 (False 반환)
-
-        system_prompt = "당신은 소비자 분쟁 상담 시스템의 쿼리 분류기입니다. 사용자 질문이 구체적인지 모호한지 판단하세요."
-        user_prompt = f"""사용자 질문: "{query}"
+    system_prompt = "당신은 소비자 분쟁 상담 시스템의 쿼리 분류기입니다. 사용자 질문이 구체적인지 모호한지 판단하세요."
+    user_prompt = f"""사용자 질문: "{query}"
 판단 기준:
 - 구체적: 제품/서비스 종류, 문제 상황(환불/교환/배송 등)이 명확함
 - 모호함: 무엇을 원하는지 불명확, 맥락 없는 단순 요청
 
 응답: "구체적" 또는 "모호함" 중 하나만 출력하세요."""
 
-        response = client.generate(system_prompt, user_prompt)
-        is_ambiguous = "모호" in response.lower()
+    # 1. EXAONE 시도 (Primary)
+    try:
+        from app.llm.exaone_client import ExaoneLLMClient, LLMUnavailableError
+
+        client = ExaoneLLMClient()
+        if client.is_available():
+            response = client.generate(system_prompt, user_prompt)
+            is_ambiguous = "모호" in response.lower()
+            logger.info(
+                f"[QueryAnalysis] EXAONE ambiguity check: '{query[:20]}...' -> {response.strip()} (ambiguous={is_ambiguous})"
+            )
+            return is_ambiguous
+        else:
+            logger.info("[QueryAnalysis] EXAONE not available, trying fallback...")
+    except Exception as e:
+        logger.warning(f"[QueryAnalysis] EXAONE ambiguity check failed: {e}, trying fallback...")
+
+    # 2. gpt-4o-mini Fallback
+    try:
+        from openai import OpenAI
+
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            logger.warning("[QueryAnalysis] OpenAI API key not found, skipping LLM check")
+            return False
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.0,
+            max_tokens=20
+        )
+
+        result = response.choices[0].message.content.strip()
+        is_ambiguous = "모호" in result.lower()
         logger.info(
-            f"[QueryAnalysis] LLM ambiguity check: '{query[:20]}...' -> {response.strip()} (ambiguous={is_ambiguous})"
+            f"[QueryAnalysis] gpt-4o-mini ambiguity check: '{query[:20]}...' -> {result} (ambiguous={is_ambiguous})"
         )
         return is_ambiguous
 
     except Exception as e:
-        logger.warning(f"[QueryAnalysis] LLM ambiguity check failed: {e}")
-        return False  # 실패 시 보수적으로 RAG 진행
+        logger.warning(f"[QueryAnalysis] gpt-4o-mini fallback failed: {e}")
+        return False  # 모든 LLM 실패 시 보수적으로 RAG 진행
 
 
 def _is_ambiguous_query(query: str) -> bool:
@@ -506,6 +560,18 @@ def _is_ambiguous_query(query: str) -> bool:
     # Layer 0.5: 제품명 있으면 → NOT ambiguous (제품 + 문제없음도 일단 RAG 시도)
     has_product = any(p.lower() in query_lower for p in COMMON_PRODUCTS)
     if has_product:
+        return False
+
+    # Layer 0.6: 법령명 패턴 있으면 → NOT ambiguous (예: "소비자기본법", "전자상거래법")
+    law_pattern_match = re.search(r'\S+법', query_lower)
+    logger.info(f"[DEBUG Line 566] query_lower='{query_lower}', law_pattern_match={law_pattern_match}")
+    if law_pattern_match:
+        return False
+
+    # Layer 0.7: 법령/기준 관련 키워드 있으면 → NOT ambiguous
+    has_law_keywords = any(kw in query_lower for kw in LAW_KEYWORDS)
+    has_criteria_keywords = any(kw in query_lower for kw in CRITERIA_KEYWORDS)
+    if has_law_keywords or has_criteria_keywords:
         return False
 
     # Layer 1: 명시적 패턴 매칭 (의도/제품 없는 경우에만)
@@ -747,6 +813,13 @@ def _classify_query_type(
             return "general"
 
     # 법령 문의 (법령 키워드가 명시적으로 포함)
+    # Pattern 1: 법률명 패턴 (예: "소비자기본법", "전자상거래법")
+    law_pattern_match_815 = re.search(r'\S+법', query_lower)
+    logger.info(f"[DEBUG Line 815] query_lower='{query_lower}', law_pattern_match={law_pattern_match_815}")
+    if law_pattern_match_815:
+        return "law"
+
+    # Pattern 2: 키워드 카운트 (2개 이상) 또는 특정 패턴
     law_count = sum(1 for kw in LAW_KEYWORDS if kw in query_lower)
     if law_count >= 2 or any(
         kw in query_lower for kw in ["몇조", "법 조항", "법령 조회"]
@@ -1077,6 +1150,19 @@ def query_analysis_node(state: ChatState) -> Dict:
     chat_type = state.get("chat_type", "general")
     onboarding = state.get("onboarding")
 
+    # === PR-6: L2 캐시 체크 ===
+    from ...supervisor.cache import QueryAnalysisCache
+
+    cached = QueryAnalysisCache.get(user_query)
+    if cached:
+        logger.info(f"[QueryAnalysis] Cache HIT for: {user_query[:30]}...")
+        return {
+            'query_analysis': cached,
+            'mode': cached.get('mode', 'NEED_RAG'),
+            '_qa_cache_hit': True,
+        }
+    # === PR-6 끝 ===
+
     # Step 1: 쿼리 정규화
     normalized_query = _normalize_query(user_query)
 
@@ -1085,17 +1171,21 @@ def query_analysis_node(state: ChatState) -> Dict:
 
     # PR-7: 일반 채팅에서도 분쟁 의도 키워드가 있으면 dispute로 처리 (Safety Net)
     if chat_type == "general":
-        has_dispute_intent = any(
-            kw in normalized_query for kw in DISPUTE_INTENT_KEYWORDS
-        )
-        if has_dispute_intent:
-            query_type = "dispute"
-            logger.info(
-                f"[QueryAnalysis] General chat with dispute intent: '{normalized_query[:30]}'"
+        # 법령/기준 쿼리는 유지 (더 구체적인 분류이므로 우선순위 높음)
+        if query_type in ("law", "criteria"):
+            pass  # Keep the specific classification
+        else:
+            has_dispute_intent = any(
+                kw in normalized_query for kw in DISPUTE_INTENT_KEYWORDS
             )
-        elif query_type not in ("law", "criteria"):
-            # 법령/기준 쿼리는 유지, 나머지는 general
-            query_type = "general"
+            if has_dispute_intent:
+                query_type = "dispute"
+                logger.info(
+                    f"[QueryAnalysis] General chat with dispute intent: '{normalized_query[:30]}'"
+                )
+            else:
+                # 나머지는 general
+                query_type = "general"
 
     # Step 3: 키워드 추출
     keywords = _extract_keywords(normalized_query)
@@ -1160,7 +1250,19 @@ def query_analysis_node(state: ChatState) -> Dict:
         "rewritten_query": rewritten_query,
         "search_queries": search_queries,
         "expansion_applied": expansion_applied,
+
+        # === PR-2: Selective Retrieval 시작 ===
+        "retriever_types": QUERY_TYPE_TO_RETRIEVERS.get(query_type, ["law", "criteria"]),
+        # === PR-2: Selective Retrieval 끝 ===
     }
+
+    # === PR-6: L2 캐시 저장 ===
+    from ...supervisor.cache import QueryAnalysisCache
+
+    cache_data = dict(analysis_result)
+    cache_data['mode'] = mode
+    QueryAnalysisCache.set(user_query, cache_data)
+    # === PR-6 끝 ===
 
     return {
         "query_analysis": analysis_result,
