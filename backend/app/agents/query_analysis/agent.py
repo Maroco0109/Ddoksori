@@ -43,20 +43,7 @@ from ...orchestrator.state import (
     RoutingMode,
 )
 
-# S2-10: LLM 기반 쿼리 재작성 (Phase 3)
-# 복잡한 법률 용어를 일상어로 풀거나, 검색에 용이한 형태로 변환하기 위해 LLM을 사용합니다.
-try:
-    from app.llm import get_query_rewriter
-
-    LLM_REWRITE_AVAILABLE = True
-except ImportError:
-    LLM_REWRITE_AVAILABLE = False
-    get_query_rewriter = None
-
 logger = logging.getLogger(__name__)
-
-# 환경 변수로 LLM 재작성 활성화 여부 제어 (운영 환경에서 비용/지연 시간 이슈 시 끄기 위함)
-USE_LLM_REWRITE = os.getenv("QUERY_REWRITE_ENABLED", "true").lower() == "true"
 
 
 # ============================================================
@@ -940,27 +927,6 @@ def _expand_query_by_type(
     # 모호한 쿼리는 확장 불필요 (clarification 먼저)
     if query_type == "ambiguous":
         return query, "ambiguous_no_expansion"
-
-    # S2-10: LLM 기반 쿼리 재작성 시도
-    if use_llm and USE_LLM_REWRITE and LLM_REWRITE_AVAILABLE:
-        try:
-            rewriter = get_query_rewriter()
-            if rewriter and rewriter.is_complex_query(query, query_type):
-                llm_rewritten = rewriter.rewrite(
-                    query,
-                    {
-                        "query_type": query_type,
-                        "keywords": keywords,
-                        "extracted_info": extracted_info,
-                    },
-                )
-                if llm_rewritten and llm_rewritten != query:
-                    logger.info(
-                        f"[QueryAnalysis] LLM rewrite: {query[:30]}... -> {llm_rewritten[:30]}..."
-                    )
-                    return llm_rewritten, f"llm_rewrite: {query[:20]}..."
-        except Exception as e:
-            logger.warning(f"[QueryAnalysis] LLM rewrite failed: {e}, using rule-based")
 
     # 기존 규칙 기반 확장 (Phase 1)
     item = extracted_info.get("purchase_item", "")
