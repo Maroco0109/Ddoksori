@@ -1,67 +1,58 @@
-# Docker Compose Override for RDS (External Database)
-# 
-# Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.rds.yml up --build
+# Docker Compose Override for RDS + OpenAI Embedding (E2E Test Environment)
+#
+# Usage (IMPORTANT: use --no-deps to skip local db):
+#   docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file backend/.env up --no-deps -d backend frontend prometheus grafana
+#
+# To stop:
+#   docker compose -f docker-compose.yml -f docker-compose.rds.yml down
 #
 # Prerequisites:
 #   1. Set RDS connection info in backend/.env:
-#      DB_HOST=your-instance.xxxx.ap-northeast-2.rds.amazonaws.com
-#      DB_PORT=5432
-#      DB_NAME=ddoksori
-#      DB_USER=admin
-#      DB_PASSWORD=your-secure-password
+#      DB_TEST_HOST=your-instance.xxxx.region.rds.amazonaws.com
+#      DB_TEST_USER=<username>
+#      DB_TEST_PASSWORD=<password>
+#      DB_TEST_NAME=ddoksori
 #
-#   2. Ensure RDS security group allows your IP on port 5432
+#   2. Set OpenAI API key in backend/.env:
+#      OPENAI_API_KEY=sk-...
+#      USE_OPENAI_EMBEDDING=true
+#
+#   3. Ensure RDS security group allows your IP on port 5432
 #
 # What this file does:
-#   - Removes local 'db' service (using external RDS instead)
-#   - Removes 'cloudbeaver' service (use RDS console or local pgAdmin)
-#   - Updates backend to connect to RDS via environment variables
-#   - Removes postgres_data volume
-
-version: '3.8'
+#   - Updates backend to connect to RDS (using DB_TEST_* variables)
+#   - Enables OpenAI Embedding (text-embedding-3-large)
+#   - Removes backend dependency on local db
+#   - Use selective service startup to avoid db/cloudbeaver/redis
+#
+# Services to start (explicitly specify):
+#   - backend (FastAPI) - Port 8000
+#   - frontend (React) - Port 5173
+#   - prometheus - Port 9090
+#   - grafana - Port 3000
 
 services:
-  # Embedding server container (CPU).
-  # This avoids backend blocking while trying to auto-start an embedding server.
-  embedding:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.embedding
-    container_name: ddoksori_embedding
-    ports:
-      - "8001:8001"
-    environment:
-      - CUDA_VISIBLE_DEVICES=
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-    restart: unless-stopped
-
+  # Backend: RDS connection + OpenAI Embedding
   backend:
-    # In docker-compose.yml, backend sets DB_HOST=db for local containers.
-    # In RDS mode, override to use the external endpoint (typically from --env-file backend/.env).
+    depends_on: {}  # Remove db dependency (empty dict to override)
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-5432}
-      # If your RDS embeddings are 1536-dim (e.g., OpenAI), enable this to avoid dimension mismatch.
-      USE_OPENAI_EMBEDDING: ${USE_OPENAI_EMBEDDING:-false}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # Use embedding service inside the compose network.
-      REMOTE_EMBED_URL: http://embedding:8001
+      # RDS connection (uses DB_TEST_* variables from .env)
+      DB_HOST: ${DB_TEST_HOST}
+      DB_PORT: ${DB_TEST_PORT:-5432}
+      DB_NAME: ${DB_TEST_NAME:-ddoksori}
+      DB_USER: ${DB_TEST_USER}
+      DB_PASSWORD: ${DB_TEST_PASSWORD}
+      # OpenAI Embedding (no local embedding server needed)
+      USE_OPENAI_EMBEDDING: "true"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_MODEL: "text-embedding-3-large"
+      EMBEDDING_DIMENSION: "1536"
+      # Disable local embedding auto-start
       DISABLE_LOCAL_EMBED_AUTO_START: "true"
-    # Keep depends_on untouched here; when bringing up the RDS stack,
-    # run `docker compose ... up --no-deps ...` to avoid starting local db/cloudbeaver.
+      # Disable Redis caching
+      ENABLE_ANSWER_CACHE: "false"
 
-
-# Override volumes - remove postgres_data since using RDS
+# Override volumes - only keep what's needed
 volumes:
-  bge_m3_model_cache:
-  redis_data:
   prometheus_data:
   grafana_data:
-  # postgres_data: removed (using RDS)
-  # cloudbeaver_data: removed
