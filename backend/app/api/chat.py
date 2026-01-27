@@ -12,12 +12,15 @@ import json
 import logging
 from typing import Dict, Any, cast
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
 from app.common.logger import get_rag_logger
+from app.common.config import get_config
 from app.supervisor import get_graph_for_chat_type, create_initial_state
 from app.supervisor.memory import ConversationMemory, should_use_memory
+from app.auth.dependencies import get_current_user_optional
+from app.auth.models import User
 
 from .models import (
     ChatRequest,
@@ -37,10 +40,6 @@ router = APIRouter(tags=["Chat"])
 # RAG 로거 인스턴스
 rag_logger = get_rag_logger()
 
-# 세션별 대화 메모리 저장소 (in-memory)
-# 프로덕션에서는 Redis 등 사용 권장
-_session_memories: Dict[str, ConversationMemory] = {}
-
 # SSE 실시간 상태 표시용 노드 라벨 및 진행률
 NODE_LABELS: Dict[str, tuple[str, int]] = {
     'input_guardrail': ('입력 검증중...', 5),
@@ -55,7 +54,10 @@ NODE_LABELS: Dict[str, tuple[str, int]] = {
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     """
     LangGraph 기반 멀티턴 챗봇 응답 생성
 
@@ -63,15 +65,20 @@ async def chat(request: ChatRequest):
 
     Args:
         request: 채팅 요청 (message, session_id, chat_type 등)
+        current_user: 현재 인증된 사용자 (선택, JWT 토큰에서 추출)
 
     Returns:
         ChatResponse: 생성된 답변과 관련 정보
 
     Note:
         session_id가 없으면 새 세션 생성, 있으면 기존 세션 이어서 대화
+        로그인 사용자의 경우 user_id를 DB에 저장하여 대화 이력 관리
     """
     start_time = time.time()
     log_entry = rag_logger.create_entry(query=request.message)
+
+    # Get user_id from JWT token
+    user_id = current_user.user_id if current_user else None
 
     rag_logger.log_input(
         entry=log_entry,
@@ -92,15 +99,22 @@ async def chat(request: ChatRequest):
         # Recursion limit 증가 (기본 25 → 50)
         GRAPH_RECURSION_LIMIT = 50
 
-        # 세션 메모리 가져오기/생성
+        # Create memory with DB persistence
+        config = get_config()
+        use_db = config.memory.backend == 'db'
+
+        session_memory = None
         memory_context = {}
         if should_use_memory(request.chat_type):
-            if session_id not in _session_memories:
-                _session_memories[session_id] = ConversationMemory(chat_type=request.chat_type)
-            session_memory = _session_memories[session_id]
+            session_memory = ConversationMemory(
+                chat_type=request.chat_type,
+                session_id=session_id,
+                user_id=user_id,
+                use_db=use_db
+            )
 
-            # 사용자 메시지를 메모리에 추가
-            session_memory.add_turn(role='user', content=request.message)
+            # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
+            await session_memory.add_turn(role='user', content=request.message)
 
             # 메모리 컨텍스트 가져오기
             memory_context = session_memory.get_context_for_llm()
@@ -113,10 +127,10 @@ async def chat(request: ChatRequest):
         )
 
         # 메모리 컨텍스트를 초기 상태에 병합
-        if memory_context:
+        if memory_context and session_memory:
             initial_state['conversation_history'] = memory_context.get('conversation_history', [])
             initial_state['compact_summary'] = memory_context.get('compact_summary')
-            initial_state['total_turn_count'] = _session_memories[session_id].get_total_turn_count()
+            initial_state['total_turn_count'] = session_memory.get_total_turn_count()
 
         config = cast(Any, {
             "configurable": {"thread_id": session_id},
@@ -180,8 +194,8 @@ async def chat(request: ChatRequest):
         followup_questions = final_state.get('followup_questions', [])
 
         # 어시스턴트 응답을 메모리에 추가
-        if should_use_memory(request.chat_type) and session_id in _session_memories:
-            _session_memories[session_id].add_turn(role='assistant', content=answer)
+        if session_memory:
+            await session_memory.add_turn(role='assistant', content=answer)
 
         node_timings = final_state.get('_node_timings', {})
         if node_timings:
@@ -263,7 +277,10 @@ async def chat(request: ChatRequest):
 
 
 @router.post("/chat/stream")
-async def chat_stream_sse(request: ChatRequest):
+async def chat_stream_sse(
+    request: ChatRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     """
     LangGraph astream 기반 SSE 스트리밍 챗봇 응답 생성
 
@@ -280,17 +297,27 @@ async def chat_stream_sse(request: ChatRequest):
         session_id = request.session_id or str(uuid.uuid4())
         final_state = None
 
+        # Get user_id from JWT token
+        user_id = current_user.user_id if current_user else None
+
         try:
             graph = get_graph_for_chat_type(request.chat_type)
             GRAPH_RECURSION_LIMIT = 50
 
-            # 세션 메모리 가져오기/생성
+            # Create memory with DB persistence
+            config = get_config()
+            use_db = config.memory.backend == 'db'
+
+            session_memory = None
             memory_context = {}
             if should_use_memory(request.chat_type):
-                if session_id not in _session_memories:
-                    _session_memories[session_id] = ConversationMemory(chat_type=request.chat_type)
-                session_memory = _session_memories[session_id]
-                session_memory.add_turn(role='user', content=request.message)
+                session_memory = ConversationMemory(
+                    chat_type=request.chat_type,
+                    session_id=session_id,
+                    user_id=user_id,
+                    use_db=use_db
+                )
+                await session_memory.add_turn(role='user', content=request.message)
                 memory_context = session_memory.get_context_for_llm()
 
             # 초기 상태 생성
@@ -301,10 +328,10 @@ async def chat_stream_sse(request: ChatRequest):
             )
 
             # 메모리 컨텍스트 병합
-            if memory_context:
+            if memory_context and session_memory:
                 initial_state['conversation_history'] = memory_context.get('conversation_history', [])
                 initial_state['compact_summary'] = memory_context.get('compact_summary')
-                initial_state['total_turn_count'] = _session_memories[session_id].get_total_turn_count()
+                initial_state['total_turn_count'] = session_memory.get_total_turn_count()
 
             config = cast(Any, {
                 "configurable": {"thread_id": session_id},
@@ -335,8 +362,8 @@ async def chat_stream_sse(request: ChatRequest):
                 retrieval = final_state.get('retrieval') or {}
 
                 # 어시스턴트 응답을 메모리에 추가
-                if should_use_memory(request.chat_type) and session_id in _session_memories:
-                    _session_memories[session_id].add_turn(role='assistant', content=answer)
+                if session_memory:
+                    await session_memory.add_turn(role='assistant', content=answer)
 
                 # 소스 정보 수집
                 sources = []
