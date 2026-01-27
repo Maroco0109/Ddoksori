@@ -1,16 +1,156 @@
 """
-똑소리 RAG - 검토 에이전트 평가 메트릭
+똑소리 RAG - 검토 에이전트 평가 메트릭 + Prometheus 모니터링
 
 평가 지표:
 - Violation Detection Precision: 위반 탐지 정밀도 (목표: ≥0.85)
 - Violation Detection Recall: 위반 탐지 재현율 (목표: ≥0.90)
 - False Positive Rate: 오탐률 (목표: ≤0.10)
 - Filter Effectiveness: 필터링 효과 (목표: ≥0.80)
+
+Prometheus 메트릭:
+- legal_review_violations_total: 위반 탐지 총 건수
+- legal_review_hallucination_detected_total: Hallucination 탐지 건수
+- legal_review_confidence_score: 신뢰도 점수 분포
+- legal_review_llm_calls_total: LLM 리뷰 호출 건수
+- legal_review_processing_seconds: 리뷰 처리 시간
 """
 
 import re
+import logging
 from dataclasses import dataclass
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+# Prometheus 메트릭 (지연 초기화)
+_prometheus_metrics = None
+
+
+def _get_prometheus_metrics():
+    """Prometheus 메트릭 객체 지연 초기화"""
+    global _prometheus_metrics
+    if _prometheus_metrics is None:
+        try:
+            from prometheus_client import Counter, Histogram, Gauge
+
+            _prometheus_metrics = {
+                'violations_total': Counter(
+                    'legal_review_violations_total',
+                    'Total number of violations detected',
+                    ['violation_type']
+                ),
+                'hallucination_detected': Counter(
+                    'legal_review_hallucination_detected_total',
+                    'Total number of hallucinations detected'
+                ),
+                'legal_judgment_detected': Counter(
+                    'legal_review_legal_judgment_detected_total',
+                    'Total number of legal judgments detected'
+                ),
+                'confidence_score': Histogram(
+                    'legal_review_confidence_score',
+                    'Confidence score distribution',
+                    buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                ),
+                'llm_calls': Counter(
+                    'legal_review_llm_calls_total',
+                    'Total number of LLM review calls',
+                    ['status']  # success, failure, skipped
+                ),
+                'processing_seconds': Histogram(
+                    'legal_review_processing_seconds',
+                    'Review processing time in seconds',
+                    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+                ),
+                'reviews_total': Counter(
+                    'legal_review_reviews_total',
+                    'Total number of reviews processed',
+                    ['result']  # passed, failed, filtered
+                ),
+                'relevance_score': Histogram(
+                    'legal_review_relevance_score',
+                    'Query-Answer relevance score distribution',
+                    buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                ),
+            }
+            logger.info("[LegalReviewMetrics] Prometheus metrics initialized")
+        except ImportError:
+            logger.warning("[LegalReviewMetrics] prometheus_client not installed, metrics disabled")
+            _prometheus_metrics = {}
+
+    return _prometheus_metrics
+
+
+class PrometheusReviewMetrics:
+    """
+    Prometheus 기반 리뷰 메트릭 수집기
+
+    Usage:
+        metrics = PrometheusReviewMetrics()
+        metrics.record_violation('legal_judgment')
+        metrics.record_confidence_score(0.75)
+        metrics.record_review_result('passed')
+    """
+
+    def record_violation(self, violation_type: str) -> None:
+        """위반 탐지 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'violations_total' in metrics:
+            metrics['violations_total'].labels(violation_type=violation_type).inc()
+
+    def record_hallucination(self) -> None:
+        """Hallucination 탐지 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'hallucination_detected' in metrics:
+            metrics['hallucination_detected'].inc()
+
+    def record_legal_judgment(self) -> None:
+        """법적 판단 탐지 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'legal_judgment_detected' in metrics:
+            metrics['legal_judgment_detected'].inc()
+
+    def record_confidence_score(self, score: float) -> None:
+        """신뢰도 점수 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'confidence_score' in metrics:
+            metrics['confidence_score'].observe(score)
+
+    def record_relevance_score(self, score: float) -> None:
+        """관련성 점수 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'relevance_score' in metrics:
+            metrics['relevance_score'].observe(score)
+
+    def record_llm_call(self, status: str) -> None:
+        """LLM 호출 기록 (status: success, failure, skipped)"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'llm_calls' in metrics:
+            metrics['llm_calls'].labels(status=status).inc()
+
+    def record_processing_time(self, seconds: float) -> None:
+        """리뷰 처리 시간 기록"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'processing_seconds' in metrics:
+            metrics['processing_seconds'].observe(seconds)
+
+    def record_review_result(self, result: str) -> None:
+        """리뷰 결과 기록 (result: passed, failed, filtered)"""
+        metrics = _get_prometheus_metrics()
+        if metrics and 'reviews_total' in metrics:
+            metrics['reviews_total'].labels(result=result).inc()
+
+
+# 싱글톤 인스턴스
+_prometheus_review_metrics: Optional[PrometheusReviewMetrics] = None
+
+
+def get_prometheus_review_metrics() -> PrometheusReviewMetrics:
+    """PrometheusReviewMetrics 싱글톤 인스턴스 반환"""
+    global _prometheus_review_metrics
+    if _prometheus_review_metrics is None:
+        _prometheus_review_metrics = PrometheusReviewMetrics()
+    return _prometheus_review_metrics
 
 
 PROHIBITED_PATTERNS = [

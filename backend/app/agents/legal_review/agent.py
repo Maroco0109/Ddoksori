@@ -18,7 +18,8 @@ LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을
 """
 
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
+from dataclasses import dataclass
 
 from ...supervisor.state import ChatState, ReviewResult
 from ...common.config import AgentConfig
@@ -86,6 +87,158 @@ SOFTENING_PHRASES = {
     '무조건': '일반적으로',
     '당연히': '통상적으로',
 }
+
+# 법령/조문 추출 패턴 (Citation Accuracy Verification용)
+LAW_REFERENCE_PATTERNS = [
+    r'제\s*(\d+)\s*조',                          # 제17조
+    r'제\s*(\d+)\s*조\s*제\s*(\d+)\s*항',         # 제17조 제1항
+    r'별표\s*(\d+)',                              # 별표 1
+    r'(소비자보호법|소비자기본법)',
+    r'(전자상거래법|전자상거래\s*등에서의\s*소비자보호에\s*관한\s*법률)',
+    r'(약관규제법|약관의\s*규제에\s*관한\s*법률)',
+    r'(할부거래법|할부거래에\s*관한\s*법률)',
+    r'(방문판매법|방문판매\s*등에\s*관한\s*법률)',
+    r'(표시광고법|표시·광고의\s*공정화에\s*관한\s*법률)',
+    r'(제조물책임법|제조물\s*책임법)',
+    r'(민법)',
+    r'(상법)',
+]
+
+
+@dataclass
+class CitationVerifyResult:
+    """
+    인용 정확성 검증 결과
+
+    Attributes:
+        passed: 모든 인용이 유효한지 여부
+        cited_refs: 답변에서 발견된 법령/조문 리스트
+        verified_refs: 검색 결과에서 확인된 법령/조문 리스트
+        unverified_refs: 검색 결과에서 확인되지 않은 법령/조문 (Hallucination 의심)
+        accuracy: 인용 정확도 (0.0 ~ 1.0)
+    """
+    passed: bool
+    cited_refs: List[str]
+    verified_refs: List[str]
+    unverified_refs: List[str]
+    accuracy: float
+
+
+def _extract_law_references(text: str) -> List[str]:
+    """
+    텍스트에서 법령/조문 참조를 추출합니다.
+
+    Args:
+        text: 검색할 텍스트
+
+    Returns:
+        발견된 법령/조문 참조 리스트 (중복 제거)
+    """
+    references = set()
+
+    for pattern in LAW_REFERENCE_PATTERNS:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            if isinstance(match, tuple):
+                # 그룹이 여러 개인 경우 (예: 제X조 제Y항)
+                ref = ''.join(str(m) for m in match if m)
+            else:
+                ref = match
+            if ref:
+                references.add(ref.strip())
+
+    return list(references)
+
+
+def verify_citation_accuracy(
+    answer: str,
+    retrieved_chunks: List[Dict],
+    strict_mode: bool = False
+) -> CitationVerifyResult:
+    """
+    인용 정확성 검증 (Hallucination 방지)
+
+    답변에서 인용된 법령/조문이 실제 검색된 문서에 존재하는지 확인합니다.
+    검색 결과에 없는 법령을 인용하면 Hallucination으로 마킹합니다.
+
+    Args:
+        answer: 생성된 답변 텍스트
+        retrieved_chunks: 검색된 문서 청크 리스트 (각 청크는 'content' 키 포함)
+        strict_mode: True면 모든 인용이 검증되어야 통과
+
+    Returns:
+        CitationVerifyResult: 인용 검증 결과
+    """
+    if not answer:
+        return CitationVerifyResult(
+            passed=True,
+            cited_refs=[],
+            verified_refs=[],
+            unverified_refs=[],
+            accuracy=1.0
+        )
+
+    # 1. 답변에서 법령/조문 참조 추출
+    cited_refs = _extract_law_references(answer)
+
+    if not cited_refs:
+        # 법령 인용이 없으면 검증 불필요
+        return CitationVerifyResult(
+            passed=True,
+            cited_refs=[],
+            verified_refs=[],
+            unverified_refs=[],
+            accuracy=1.0
+        )
+
+    # 2. 검색된 청크에서 법령/조문 참조 추출
+    source_refs = set()
+    for chunk in retrieved_chunks:
+        content = chunk.get('content', '') or chunk.get('text', '') or str(chunk)
+        chunk_refs = _extract_law_references(content)
+        source_refs.update(chunk_refs)
+
+    # 3. 인용 검증: 답변의 인용이 검색 결과에 존재하는지 확인
+    verified_refs = []
+    unverified_refs = []
+
+    for ref in cited_refs:
+        # 정규화된 매칭 (숫자 부분만 비교)
+        ref_normalized = re.sub(r'\s+', '', ref)
+        found = False
+
+        for source_ref in source_refs:
+            source_normalized = re.sub(r'\s+', '', source_ref)
+            # 부분 매칭 허용 (예: "17" in "제17조")
+            if ref_normalized in source_normalized or source_normalized in ref_normalized:
+                found = True
+                break
+
+        if found:
+            verified_refs.append(ref)
+        else:
+            unverified_refs.append(ref)
+
+    # 4. 정확도 계산
+    if cited_refs:
+        accuracy = len(verified_refs) / len(cited_refs)
+    else:
+        accuracy = 1.0
+
+    # 5. 통과 여부 결정
+    if strict_mode:
+        passed = len(unverified_refs) == 0
+    else:
+        # 관대 모드: 50% 이상 검증되면 통과
+        passed = accuracy >= 0.5
+
+    return CitationVerifyResult(
+        passed=passed,
+        cited_refs=cited_refs,
+        verified_refs=verified_refs,
+        unverified_refs=unverified_refs,
+        accuracy=accuracy
+    )
 
 
 def _check_prohibited_expressions(answer: str) -> List[Tuple[str, str]]:
@@ -225,13 +378,22 @@ def review_node(state: ChatState) -> Dict:
     
     # 1. 금지 표현 검사
     prohibited_violations = _check_prohibited_expressions(draft_answer)
-    
+
     # 2. 출처 표시 검사
     has_sources = len(sources) > 0
     has_citation = _check_citation_presence(draft_answer, has_sources)
-    
+
     # 3. 근거 충분성 검사
     has_evidence = _check_evidence_sufficiency(state)
+
+    # 4. 인용 정확성 검사 (Hallucination 방지)
+    citation_verify = verify_citation_accuracy(draft_answer, sources)
+    if not citation_verify.passed and citation_verify.unverified_refs:
+        # 검증되지 않은 인용을 위반 목록에 추가
+        prohibited_violations.append((
+            'Hallucination 의심 (미검증 인용)',
+            ', '.join(citation_verify.unverified_refs[:3])
+        ))
     
     # 위반 메시지 생성
     violation_messages = _build_violation_messages(
