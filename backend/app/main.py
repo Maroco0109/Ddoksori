@@ -48,6 +48,7 @@ from app.api import (
     search_router,
     case_router,
     metrics_router,
+    auth_router,
 )
 
 
@@ -80,16 +81,41 @@ app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(case_router)
 app.include_router(metrics_router)
+app.include_router(auth_router)
 
 
 # 시작 로그
 @app.on_event("startup")
 async def startup_event():
-    """애플리케이션 시작 시 로그"""
+    """애플리케이션 시작 시 로그 및 서비스 시작"""
     retrieval_mode = os.getenv('RETRIEVAL_MODE', 'dense')
     logger.info(f"[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
     logger.info(f"[Startup] Embedding API: {embed_api_url}")
+
+    # ConversationCleanupService 시작
+    try:
+        from app.supervisor.persistence.cleanup import get_cleanup_service
+        cleanup_service = get_cleanup_service()
+        await cleanup_service.start()
+        logger.info("[Startup] ConversationCleanupService 시작 완료")
+    except Exception as e:
+        logger.warning(f"[Startup] ConversationCleanupService 시작 실패: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """애플리케이션 종료 시 정리"""
+    logger.info("[Shutdown] 똑소리 API 서버 종료 중...")
+
+    # ConversationCleanupService 종료
+    try:
+        from app.supervisor.persistence.cleanup import get_cleanup_service
+        cleanup_service = get_cleanup_service()
+        await cleanup_service.stop()
+        logger.info("[Shutdown] ConversationCleanupService 종료 완료")
+    except Exception as e:
+        logger.warning(f"[Shutdown] ConversationCleanupService 종료 실패: {e}")
 
 
 # 하위 호환성을 위한 export
