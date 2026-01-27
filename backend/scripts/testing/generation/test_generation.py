@@ -105,12 +105,12 @@ class TestAnswerGenerationFallback:
         assert '오류' in message
 
     def test_fallback_chain_order(self):
-        """fallback chain has correct order"""
+        """fallback chain has correct order: gpt-4o -> gpt-4o-mini -> rule_based"""
         chain = AnswerGenerationFallback.FALLBACK_CHAIN
 
         assert len(chain) == 3
-        assert chain[0] == ('gpt-4o-mini', 'OpenAI')
-        assert chain[1] == ('claude-3-haiku-20240307', 'Anthropic')
+        assert chain[0] == ('gpt-4o', 'OpenAI')
+        assert chain[1] == ('gpt-4o-mini', 'OpenAI')
         assert chain[2] == ('rule_based', 'Local')
 
     @patch.object(AnswerGenerationFallback, '_try_llm_generation')

@@ -77,10 +77,11 @@ class TestSupervisorNodeInit:
         assert "legal_reviewer" in supervisor.available_agents
 
     def test_init_without_llm(self):
-        """LLM이 없는 경우 초기화 테스트 (규칙 기반 모드)"""
+        """LLM이 없는 경우 초기화 테스트 (config에서 자동 초기화)"""
         supervisor = SupervisorNode(llm=None)
 
-        assert supervisor.llm is None
+        # Phase 4: llm=None이면 config.models.supervisor에서 자동 초기화
+        # API 키가 있으면 LLM이 생성됨, 없으면 None
         assert len(supervisor.available_agents) == 4
 
 
