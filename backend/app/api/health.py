@@ -5,6 +5,7 @@
 """
 
 import os
+import httpx
 from fastapi import APIRouter
 
 from app.agents.retrieval.tools.retriever import RAGRetriever
@@ -68,6 +69,70 @@ async def health_check():
         except UnicodeDecodeError:
             error_msg = repr(e)
         return {"status": "unhealthy", "error": error_msg}
+
+
+@router.get("/health/llm/supervisor")
+async def check_supervisor_llm():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                return {"status": "healthy", "model": "gpt-5.1 (OpenAI API)"}
+            else:
+                return {"status": "unhealthy", "error": f"OpenAI API returned {response.status_code}"}
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@router.get("/health/llm/exaone")
+async def check_exaone_llm():
+    base_url = os.getenv("MODEL_EXAONE_BASE_URL") or os.getenv("EXAONE_RUNPOD_URL")
+    if not base_url:
+        return {"status": "unhealthy", "error": "EXAONE URL not configured"}
+    
+    if not base_url.endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{base_url}/models", timeout=5.0)
+            if response.status_code == 200:
+                return {"status": "healthy", "url": base_url}
+            else:
+                return {"status": "unhealthy", "error": f"vLLM returned {response.status_code}"}
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@router.get("/health/embedding")
+async def check_embedding():
+    use_openai = os.getenv("USE_OPENAI_EMBEDDING", "false").lower() == "true"
+    
+    if use_openai:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
+        return {"status": "healthy", "type": "OpenAI Embedding"}
+    else:
+        embed_url = get_embed_api_url()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(embed_url, timeout=5.0)
+                if response.status_code in [200, 404, 405]:
+                    return {"status": "healthy", "url": embed_url}
+                else:
+                    return {"status": "unhealthy", "error": f"Embedding server returned {response.status_code}"}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
+
 
 
 __all__ = ['router']
