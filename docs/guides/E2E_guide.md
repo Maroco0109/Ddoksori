@@ -1,6 +1,8 @@
 # DDOKSORI E2E 수동 테스트 가이드
 
-> AI_MEMO.md 기반 - Model Architecture Refactor 완료 후 전체 시스템 검증 절차
+> AI_MEMO.md 기반 - Model Architecture Refactor + Retrieval Agent 병렬 처리 인프라 완료 후 전체 시스템 검증 절차
+>
+> **최종 업데이트**: 2026-01-27 (Retrieval Agent별 LLM 엔드포인트 설정 추가)
 
 ## 📋 목차
 
@@ -33,7 +35,13 @@
 
 ### 1.3 선택 사항: RunPod vLLM (EXAONE)
 
-**RunPod 사용 시 SSH 터널링 설정:**
+EXAONE은 Retrieval Agent의 Query Rewrite에 사용됩니다. 4개의 Retrieval Agent (Law, Criteria, Case, Counsel)가 병렬로 실행되므로, 성능 최적화를 위해 **에이전트별 독립 vLLM 인스턴스**를 구성할 수 있습니다.
+
+#### 옵션 A: 공유 인스턴스 (기본)
+
+모든 Retrieval Agent가 1개의 EXAONE 인스턴스를 공유합니다.
+
+**SSH 터널링 설정:**
 ```bash
 ssh -L 19010:localhost:9010 root@<pod-ip>
 ```
@@ -42,6 +50,27 @@ ssh -L 19010:localhost:9010 root@<pod-ip>
 ```
 https://<pod-id>-9010.proxy.runpod.net/v1
 ```
+
+#### 옵션 B: 에이전트별 독립 인스턴스 (병렬 처리 최적화)
+
+4개의 Retrieval Agent 각각에 독립 vLLM 인스턴스를 할당하여 완전한 병렬 처리를 구현합니다.
+
+**SSH 터널링 설정 (4개 포트):**
+```bash
+# Law Agent용 (포트 19010)
+ssh -L 19010:localhost:9010 root@<pod-ip-1> -N &
+
+# Criteria Agent용 (포트 19011)
+ssh -L 19011:localhost:9010 root@<pod-ip-2> -N &
+
+# Case Agent용 (포트 19012)
+ssh -L 19012:localhost:9010 root@<pod-ip-3> -N &
+
+# Counsel Agent용 (포트 19013)
+ssh -L 19013:localhost:9010 root@<pod-ip-4> -N &
+```
+
+> **Fallback**: EXAONE 연결 실패 시 `gpt-4.1-nano`로 자동 폴백됩니다.
 
 ---
 
@@ -57,7 +86,7 @@ cp .env.example .env
 
 ### 2.2 핵심 환경 변수 (Model Architecture Refactor 반영)
 
-#### 모델 아키텍처 설정 (새로 추가됨)
+#### 모델 아키텍처 설정
 
 ```bash
 MODEL_SUPERVISOR=gpt-5.1
@@ -66,10 +95,26 @@ MODEL_REVIEW_AGENT=gpt-4o
 MODEL_RETRIEVAL_LLM=LGAI-EXAONE/EXAONE-4.0-1.2B
 MODEL_RETRIEVAL_FALLBACK=gpt-4.1-nano
 
-# EXAONE vLLM 설정 (RunPod SSH 터널링 시)
+# EXAONE vLLM 공유 설정 (RunPod SSH 터널링 시)
 MODEL_EXAONE_BASE_URL=http://localhost:19010/v1
 MODEL_EXAONE_API_KEY=empty
 PORT_EXAONE_VLLM=19010
+```
+
+#### Retrieval Agent별 LLM 설정 (병렬 처리 최적화, 선택 사항)
+
+4개 Retrieval Agent에 독립 vLLM 인스턴스를 할당할 때 사용합니다.
+설정하지 않으면 공유 `MODEL_EXAONE_BASE_URL`을 사용합니다.
+
+```bash
+# 에이전트별 EXAONE vLLM URL
+RETRIEVAL_LLM_LAW_URL=http://localhost:19010/v1
+RETRIEVAL_LLM_CRITERIA_URL=http://localhost:19011/v1
+RETRIEVAL_LLM_CASE_URL=http://localhost:19012/v1
+RETRIEVAL_LLM_COUNSEL_URL=http://localhost:19013/v1
+
+# Query Rewrite 타임아웃 (초)
+RETRIEVAL_LLM_TIMEOUT=3.0
 ```
 
 #### 임베딩 설정 (text-embedding-3-large로 변경됨)
@@ -80,22 +125,14 @@ EMBEDDING_MODEL=text-embedding-3-large
 EMBEDDING_DIMENSION=1536
 ```
 
-#### 데이터베이스 설정
+#### 데이터베이스 설정 (RDS)
 
-**로컬 Docker DB 사용 시:**
 ```bash
-DB_HOST=db
+DB_HOST=your-instance.xxxx.region.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=ddoksori
-DB_USER=postgres
-DB_PASSWORD=postgres
-```
-
-**RDS 사용 시 (READ_ONLY 테스트):**
-```bash
-# DB_HOST=your-instance.xxxx.region.rds.amazonaws.com
-# DB_USER=readonly_user
-# DB_PASSWORD=<your_password>
+DB_USER=readonly_user
+DB_PASSWORD=<your_password>
 ```
 
 #### MAS Supervisor 그래프
@@ -109,55 +146,56 @@ MAS_SUPERVISOR_CANARY_PERCENT=0
 
 ## 3. Docker 서비스 시작
 
-### 3.1 방법 A: 로컬 Docker DB 사용 (기본)
+### 3.0. 루트에 심볼릭 링크
+```bash
+# .env의 위치를 명시
+ln -s backend/.env .env
+```
+
+### 3.1 서비스 시작 (RDS 연결)
 
 ```bash
 cd /home/maroco/LLM
-
-# 전체 서비스 시작 (DB, Backend, Frontend, Redis, Monitoring)
-docker compose up --build -d
+    
+# RDS 오버라이드로 시작 (--no-deps로 의존 서비스 제외)
+docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file backend/.env up --no-deps -d backend frontend prometheus grafana
 
 # 서비스 상태 확인
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.rds.yml ps
 ```
 
 **예상 결과:**
 ```
 NAME                    STATUS         PORTS
-ddoksori_db             running        0.0.0.0:5432->5432/tcp
 ddoksori_backend        running        0.0.0.0:8000->8000/tcp
 ddoksori_frontend       running        0.0.0.0:5173->5173/tcp
-ddoksori_redis          running        0.0.0.0:6379->6379/tcp
 ddoksori_prometheus     running        0.0.0.0:9090->9090/tcp
 ddoksori_grafana        running        0.0.0.0:3000->3000/tcp
 ```
 
-### 3.2 방법 B: AWS RDS 사용
+> **주의**: `--no-deps` 플래그가 필요합니다. `docker-compose.yml`에서 backend가 db에 의존하지만, RDS 모드에서는 로컬 db 컨테이너가 불필요합니다.
+
+### 3.2 서비스 중지
 
 ```bash
-cd /home/maroco/LLM
-
-# RDS 오버라이드로 시작 (로컬 DB 제외)
-docker compose -f docker-compose.yml -f docker-compose.rds.yml up --build -d redis embedding backend frontend
-
-# 서비스 상태 확인
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.rds.yml down
 ```
 
-### 3.3 방법 C: 로컬 개발 (Docker 없이)
+### 3.3 로그 확인
 
-**터미널 1: Backend 시작**
 ```bash
-cd /home/maroco/LLM/backend
-conda activate dsr
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+# 특정 컨테이너 로그
+docker logs ddoksori_backend
 
-**터미널 2: Frontend 시작**
-```bash
-cd /home/maroco/LLM/frontend
-npm install
-npm run dev
+# 실시간 로그 (follow)
+docker logs -f ddoksori_backend
+
+# 최근 N줄만
+docker logs --tail 100 ddoksori_backend
+
+# docker compose로 보기
+docker compose logs backend
+docker compose logs -f backend --tail 100
 ```
 
 ---
@@ -397,22 +435,53 @@ curl -s http://localhost:8000/chat \
 
 > **확인 기준:** 답변이 생성되면 Fallback 정상 동작
 
-### 7.4 Backend 로그 확인
+### 7.4 시나리오 4: Retrieval Agent 병렬 처리 테스트
+
+4개 Retrieval Agent (Law, Criteria, Case, Counsel)가 병렬로 Query Rewrite를 수행하는지 확인합니다.
+
+**debug 모드로 node_timings 확인:**
+```bash
+curl -s http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "전자상거래법 청약철회 기간과 분쟁해결기준",
+    "chat_type": "dispute",
+    "debug": true,
+    "top_k": 5
+  }' | jq '{
+    retrieval_timings: .node_timings | to_entries | map(select(.key | startswith("retrieval_")))
+  }'
+```
+
+**성공 기준:**
+- 4개 Retrieval Agent의 타이밍이 기록됨
+- 에이전트별 독립 URL 설정 시: 타이밍이 유사 (병렬 처리)
+- 공유 URL 사용 시: 타이밍에 약간의 순차 대기 발생 가능
+
+**로그에서 Query Rewrite 확인:**
+```bash
+docker compose logs backend --tail 50 | grep -E "domain=(law|criteria|case|counsel).*rewrite"
+```
+
+### 7.5 Backend 로그 확인
 
 **Docker 사용 시:**
 ```bash
-docker compose logs backend --tail 100 | grep -E "(QueryRewriter|Supervisor|Draft|Review)"
+docker compose logs backend --tail 100 | grep -E "(QueryRewriter|Supervisor|Draft|Review|Retrieval)"
 ```
 
 **로컬 실행 시:**
 ```bash
-tail -100 backend/app.log | grep -E "(QueryRewriter|Supervisor|Draft|Review)"
+tail -100 backend/app.log | grep -E "(QueryRewriter|Supervisor|Draft|Review|Retrieval)"
 ```
 
 **확인할 로그 패턴:**
 - `[Supervisor] LLM 결정: model=gpt-5.1` - Supervisor 동작
+- `[Retrieval] domain=law rewrite` - Law Agent Query Rewrite
+- `[Retrieval] domain=criteria rewrite` - Criteria Agent Query Rewrite
 - `[Draft] 답변 생성 완료` - Draft Agent 동작
 - `[LegalReview] 검토 완료` - Review Agent 동작
+- `Using fallback model: gpt-4.1-nano` - EXAONE 폴백 발생
 
 ---
 
@@ -505,6 +574,8 @@ echo "Chat (General) Sources: $(jq '.sources | length' $BASE/chat-general.json)"
 | 채팅 API | `curl localhost:8000/chat -d ...` | 답변 생성 |
 | Frontend | `http://localhost:5173` | 페이지 로드 |
 | E2E 분쟁상담 | 복잡한 법률 질의 | 출처 포함 답변 |
+| Retrieval 병렬 | `debug: true` + node_timings | 4개 Agent 타이밍 기록 |
+| Fallback 동작 | EXAONE 없이 테스트 | gpt-4.1-nano로 답변 생성 |
 
 ---
 
