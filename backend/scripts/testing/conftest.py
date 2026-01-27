@@ -36,33 +36,82 @@ def api_client():
         yield client
 
 
+def _get_db_conninfo() -> str:
+    """Build database connection string based on USE_RDS_FOR_TESTS flag."""
+    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
+    
+    if use_rds:
+        return (
+            f"host={os.getenv('DB_TEST_HOST', 'localhost')} "
+            f"port={os.getenv('DB_PORT', '5432')} "
+            f"dbname={os.getenv('DB_TEST_NAME', 'ddoksori')} "
+            f"user={os.getenv('DB_TEST_USER', 'readonly_user')} "
+            f"password={os.getenv('DB_TEST_PASSWORD', '')}"
+        )
+    else:
+        return (
+            f"host={os.getenv('DB_HOST', 'localhost')} "
+            f"port={os.getenv('DB_PORT', '5432')} "
+            f"dbname={os.getenv('DB_NAME', 'ddoksori')} "
+            f"user={os.getenv('DB_USER', 'postgres')} "
+            f"password={os.getenv('DB_PASSWORD', 'postgres')}"
+        )
+
+
 @pytest.fixture(scope="session")
 def db_connection():
     """
-    Database connection for validation queries
-
-    Yields:
-        psycopg.Connection: PostgreSQL connection (or None if unavailable)
-
-    Note:
-        PR-T6: Unit 테스트 지원을 위해 연결 실패 시 skip 대신 None 반환.
-        통합 테스트는 db_connection이 None이면 개별적으로 skip 처리.
+    Database connection for validation queries.
+    
+    Supports both local DB and RDS READ_ONLY connections based on USE_RDS_FOR_TESTS.
     """
-    conninfo = (
-        f"host={os.getenv('DB_HOST', 'localhost')} "
-        f"port={os.getenv('DB_PORT', '5432')} "
-        f"dbname={os.getenv('DB_NAME', 'ddoksori')} "
-        f"user={os.getenv('DB_USER', 'postgres')} "
-        f"password={os.getenv('DB_PASSWORD', 'postgres')}"
-    )
+    conninfo = _get_db_conninfo()
+    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
 
     try:
         conn = psycopg.connect(conninfo, autocommit=True)
+        if use_rds:
+            print(f"\n✅  RDS READ_ONLY 연결 성공: {os.getenv('DB_TEST_HOST')}")
         yield conn
         conn.close()
     except psycopg.OperationalError as e:
-        # PR-T6: Unit 테스트를 위해 skip 대신 None 반환
-        print(f"\n⚠️  PostgreSQL 연결 실패 (Unit 테스트는 계속 실행됨): {e}")
+        db_type = "RDS" if use_rds else "PostgreSQL"
+        print(f"\n⚠️  {db_type} 연결 실패 (Unit 테스트는 계속 실행됨): {e}")
+        yield None
+
+
+@pytest.fixture(scope="session")
+def rds_readonly_connection():
+    """
+    RDS READ_ONLY connection fixture for integration tests.
+    
+    This fixture explicitly connects to RDS regardless of USE_RDS_FOR_TESTS.
+    Use this when you need to test against real RDS data.
+    
+    Yields:
+        psycopg.Connection: RDS READ_ONLY connection (or None if unavailable)
+    """
+    host = os.getenv('DB_TEST_HOST')
+    if not host:
+        print("\n⚠️  DB_TEST_HOST not configured, skipping RDS connection")
+        yield None
+        return
+    
+    conninfo = (
+        f"host={host} "
+        f"port={os.getenv('DB_PORT', '5432')} "
+        f"dbname={os.getenv('DB_TEST_NAME', 'ddoksori')} "
+        f"user={os.getenv('DB_TEST_USER', 'readonly_user')} "
+        f"password={os.getenv('DB_TEST_PASSWORD', '')}"
+    )
+    
+    try:
+        conn = psycopg.connect(conninfo, autocommit=True)
+        print(f"\n✅  RDS READ_ONLY 연결 성공: {host}")
+        yield conn
+        conn.close()
+    except psycopg.OperationalError as e:
+        print(f"\n⚠️  RDS 연결 실패: {e}")
         yield None
 
 
@@ -80,6 +129,7 @@ def ensure_test_data(db_connection, request):
 
     Note:
         PR-Phase5: Unit 테스트(-m unit)는 DB 체크 스킵
+        RDS READ_ONLY: 스키마 체크 스킵 (다른 스키마 사용)
     """
     # PR-Phase5: Unit 테스트만 실행 시 DB 체크 스킵
     # -m unit 옵션이 있으면 DB 불필요
@@ -88,6 +138,12 @@ def ensure_test_data(db_connection, request):
         return
 
     if db_connection is None:
+        return
+    
+    # RDS READ_ONLY 모드에서는 스키마 체크 스킵 (다른 스키마 사용)
+    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
+    if use_rds:
+        print("\n✅  RDS READ_ONLY 모드: 스키마 체크 스킵 (vector_chunks 테이블 사용)")
         return
 
     with db_connection.cursor() as cur:

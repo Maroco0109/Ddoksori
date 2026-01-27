@@ -12,6 +12,8 @@ import time
 from typing import List, Dict, Tuple, Optional, Any
 from openai import OpenAI
 
+from ....common.config import get_config
+
 # S1-1 MVP Answer Template
 DISCLAIMER = "본 답변은 정보 제공 목적이며 법률 자문이 아닙니다. 최종 판단·결정은 관련 기관 또는 전문가와 상담하여 진행해 주세요."
 
@@ -80,12 +82,15 @@ class RAGGenerator:
     - Next action checklist
     """
 
-    def __init__(self, model: str = "gpt-4o-mini", use_llm: bool = True):
+    def __init__(self, model: str = None, use_llm: bool = True):
         """
         Args:
-            model: LLM 모델 (기본값: gpt-4o-mini)
+            model: LLM 모델 (기본값: config.models.draft_agent = gpt-4o)
             use_llm: LLM 사용 여부 (False면 stub 모드)
         """
+        if model is None:
+            config = get_config()
+            model = config.models.draft_agent
         self.model = model
         self.use_llm = use_llm and bool(os.getenv('OPENAI_API_KEY'))
 

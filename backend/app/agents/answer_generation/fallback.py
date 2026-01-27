@@ -4,8 +4,8 @@
 S1-PR5: LLM API 오류 시 다중 폴백 전략
 
 폴백 순서:
-1. GPT-4o-mini (OpenAI) - 기본
-2. Claude-3-haiku (Anthropic) - 폴백 1
+1. GPT-4o (OpenAI) - 기본 (config.models.draft_agent)
+2. GPT-4o-mini (OpenAI) - 폴백 1
 3. 규칙 기반 (Local) - 폴백 2
 4. 안전 메시지 (최종 폴백)
 """
@@ -29,8 +29,8 @@ class AnswerGenerationFallback:
     """답변 생성 폴백 체인"""
     
     FALLBACK_CHAIN = [
+        ('gpt-4o', 'OpenAI'),
         ('gpt-4o-mini', 'OpenAI'),
-        ('claude-3-haiku-20240307', 'Anthropic'),
         ('rule_based', 'Local'),
     ]
     

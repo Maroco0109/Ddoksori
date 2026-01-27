@@ -2,14 +2,24 @@
 BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 
 4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
-LLM: 2.4B (EXAONE), 역할: 쿼리 재작성
+LLM: EXAONE-4.0-1.2B (쿼리 재작성), Fallback: gpt-4.1-nano
 """
 
+import asyncio
+import logging
 import os
 from abc import abstractmethod
 from typing import Dict, Any, List, ClassVar, Optional
 
+from openai import OpenAI, APIError, APITimeoutError
+
 from ..base import BaseAgent
+from ...common.config import get_config
+
+logger = logging.getLogger(__name__)
+
+# Query rewriting timeout (seconds)
+QUERY_REWRITE_TIMEOUT = 3.0
 
 
 def _get_db_config() -> Dict[str, str]:
@@ -34,6 +44,107 @@ class BaseRetrievalAgent(BaseAgent):
     
     default_top_k: ClassVar[int] = 3
     
+    domain_rewrite_prompt: ClassVar[str] = ""
+    
+    _exaone_client: ClassVar[Optional[OpenAI]] = None
+    _openai_client: ClassVar[Optional[OpenAI]] = None
+    
+    @classmethod
+    def _get_exaone_client(cls) -> Optional[OpenAI]:
+        if cls._exaone_client is None:
+            runpod_url = os.getenv('EXAONE_RUNPOD_URL')
+            if runpod_url:
+                cls._exaone_client = OpenAI(
+                    base_url=runpod_url,
+                    api_key=os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy'),
+                    timeout=QUERY_REWRITE_TIMEOUT
+                )
+        return cls._exaone_client
+    
+    @classmethod
+    def _get_openai_client(cls) -> Optional[OpenAI]:
+        if cls._openai_client is None:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if api_key:
+                cls._openai_client = OpenAI(
+                    api_key=api_key,
+                    timeout=QUERY_REWRITE_TIMEOUT
+                )
+        return cls._openai_client
+    
+    async def _rewrite_query_for_domain(self, query: str) -> str:
+        if not self.domain_rewrite_prompt:
+            return query
+        
+        config = get_config()
+        prompt = self.domain_rewrite_prompt.format(query=query)
+        system_prompt = "You are a query rewriting assistant. Output only the rewritten query, nothing else."
+        
+        # Try EXAONE first
+        exaone_client = self._get_exaone_client()
+        if exaone_client:
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._call_llm,
+                        exaone_client,
+                        config.models.retrieval_llm,
+                        system_prompt,
+                        prompt
+                    ),
+                    timeout=QUERY_REWRITE_TIMEOUT
+                )
+                if result:
+                    logger.info(f"[{self.agent_name}] EXAONE query rewrite: '{query}' -> '{result}'")
+                    return result
+            except asyncio.TimeoutError:
+                logger.warning(f"[{self.agent_name}] EXAONE query rewrite timeout")
+            except Exception as e:
+                logger.warning(f"[{self.agent_name}] EXAONE query rewrite failed: {e}")
+        
+        # Fallback to gpt-4.1-nano
+        openai_client = self._get_openai_client()
+        if openai_client:
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._call_llm,
+                        openai_client,
+                        config.models.retrieval_fallback,
+                        system_prompt,
+                        prompt
+                    ),
+                    timeout=QUERY_REWRITE_TIMEOUT
+                )
+                if result:
+                    logger.info(f"[{self.agent_name}] Fallback query rewrite: '{query}' -> '{result}'")
+                    return result
+            except asyncio.TimeoutError:
+                logger.warning(f"[{self.agent_name}] Fallback query rewrite timeout")
+            except Exception as e:
+                logger.warning(f"[{self.agent_name}] Fallback query rewrite failed: {e}")
+        
+        logger.info(f"[{self.agent_name}] Using original query (no rewrite)")
+        return query
+    
+    def _call_llm(self, client: OpenAI, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=256
+            )
+            content = response.choices[0].message.content
+            if content:
+                return content.strip()
+        except (APIError, APITimeoutError) as e:
+            logger.warning(f"[{self.agent_name}] LLM API error: {e}")
+        return None
+    
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
         if error:
@@ -43,7 +154,8 @@ class BaseRetrievalAgent(BaseAgent):
         user_query = context.get("user_query", "")
         query_analysis = context.get("query_analysis", {})
         
-        search_query = self._build_search_query(user_query, query_analysis)
+        base_query = self._build_search_query(user_query, query_analysis)
+        search_query = await self._rewrite_query_for_domain(base_query)
         top_k = request.get("params", {}).get("top_k", self.default_top_k)
         
         try:

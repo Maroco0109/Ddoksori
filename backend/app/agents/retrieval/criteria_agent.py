@@ -13,6 +13,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
     
     agent_name: ClassVar[str] = "retrieval_criteria"
     agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
+    domain_rewrite_prompt: ClassVar[str] = "Convert this everyday language query into a dispute resolution criteria search query: {query}"
     
     async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
         db_config = _get_db_config()

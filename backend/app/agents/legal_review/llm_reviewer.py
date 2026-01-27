@@ -19,6 +19,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
+from ...common.config import get_config
+
 if TYPE_CHECKING:
     from ...orchestrator.state import ChatState, ReviewResult
 
@@ -269,8 +271,11 @@ class HybridLegalReviewer:
             from openai import OpenAI
             client = OpenAI()
             
+            config = get_config()
+            review_model = config.models.review_agent
+            
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=review_model,
                 messages=[
                     {"role": "system", "content": LLM_REVIEW_SYSTEM_PROMPT},
                     {"role": "user", "content": f"검토할 답변:\n\n{draft_answer}"}

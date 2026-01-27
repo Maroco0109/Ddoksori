@@ -13,6 +13,7 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
     
     agent_name: ClassVar[str] = "retrieval_case"
     agent_description: ClassVar[str] = "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
+    domain_rewrite_prompt: ClassVar[str] = "Convert this problem description into a similar case search query: {query}"
     
     async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
         db_config = _get_db_config()
