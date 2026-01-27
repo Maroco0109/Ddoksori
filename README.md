@@ -7,10 +7,11 @@
 본 프로젝트는 복잡하고 전문적인 한국의 소비자 분쟁 관련 문의에 대해 정확하고 신뢰도 높은 답변을 제공하는 MAS(Multi-Agent System) 챗봇입니다. React, FastAPI, LangGraph, PostgreSQL 등 현대적인 기술 스택을 활용하여 분쟁조정사례, 상담사례, 법령 데이터를 기반으로 최적의 해결 방안을 제시합니다.
 
 ### 핵심 기능
-- **멀티 에이전트 워크플로우**: 질의 분석, 정보 검색, 답변 생성, 법률 검토 단계별 전문 에이전트 배치
-- **하이브리드 검색**: pgvector 기반 벡터 검색과 전문(Full-text) 검색을 결합한 고정밀 RAG
+- **MAS Supervisor 아키텍처**: GPT-5.1 기반 Supervisor가 7개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **Pre-retrieval LLM**: EXAONE-4.0-1.2B 기반 도메인 특화 쿼리 재작성으로 검색 정확도 향상
+- **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합
 - **실시간 스트리밍**: SSE(Server-Sent Events)를 통한 실시간 답변 생성 및 출처 제공
-- **신뢰성 보장**: 법률 검토 에이전트를 통한 환각 방지 및 면책 문구 자동 포함
+- **신뢰성 보장**: 법률 검토 에이전트(gpt-4o)를 통한 환각 방지 및 면책 문구 자동 포함
 
 ---
 
@@ -85,14 +86,37 @@ docker compose --profile bge-m3 up -d
 
 `.env` 파일 설정을 통해 시스템 동작을 제어합니다. `backend/.env.example`을 복사하여 사용하세요.
 
+### 기본 설정
 | 변수명 | 설명 | 기본값/예시 |
 |--------|------|------------|
 | `OPENAI_API_KEY` | OpenAI API 키 | `sk-...` |
 | `ANTHROPIC_API_KEY` | Anthropic API 키 | `sk-ant-...` |
-| `EMBEDDING_MODEL` | 사용할 임베딩 모델 | `nlpai-lab/KURE-v1` |
 | `RETRIEVAL_MODE` | 검색 모드 | `hybrid` |
 | `ENABLE_ANSWER_CACHE` | Redis 캐싱 활성화 | `false` |
-| `EXAONE_RUNPOD_URL` | EXAONE LLM API URL | `http://localhost:19080/v1` |
+
+### 모델 설정 (Phase 8)
+| 변수명 | 설명 | 기본값 |
+|--------|------|--------|
+| `MODEL_SUPERVISOR` | Supervisor 모델 (라우팅/조율) | `gpt-5.1` |
+| `MODEL_DRAFT_AGENT` | Draft Agent 모델 (답변 생성) | `gpt-4o` |
+| `MODEL_REVIEW_AGENT` | Review Agent 모델 (법률 검토) | `gpt-4o` |
+| `MODEL_RETRIEVAL_LLM` | Pre-retrieval LLM (쿼리 재작성) | `LGAI-EXAONE/EXAONE-4.0-1.2B` |
+| `MODEL_RETRIEVAL_FALLBACK` | Retrieval LLM 폴백 | `gpt-4.1-nano` |
+| `PORT_EXAONE_VLLM` | EXAONE vLLM 서버 포트 | `19010` |
+
+### 임베딩 설정
+| 변수명 | 설명 | 기본값 |
+|--------|------|--------|
+| `EMBEDDING_MODEL` | 임베딩 모델 | `text-embedding-3-large` |
+| `EMBEDDING_DIMENSION` | 임베딩 차원 | `1536` |
+| `USE_OPENAI_EMBEDDING` | OpenAI 임베딩 사용 | `true` |
+
+### RDS 테스트 설정
+| 변수명 | 설명 | 기본값 |
+|--------|------|--------|
+| `DB_TEST_HOST` | RDS 테스트 호스트 | (RDS endpoint) |
+| `DB_TEST_USER` | READ_ONLY 계정 | `readonly_user` |
+| `USE_RDS_FOR_TESTS` | RDS 테스트 모드 활성화 | `false` |
 
 ---
 
@@ -105,53 +129,70 @@ graph TB
         A[사용자] -->|질문 입력| B[Chat Interface]
         B -->|HTTP/SSE| C[API Client]
     end
-    
+
     subgraph "Backend Layer (FastAPI)"
         C -->|/chat, /chat/stream| D[API Gateway]
         D --> E[Session Manager]
         D --> F[SSE Handler]
         E --> G[LangGraph Orchestrator]
-        
-        subgraph "Multi-Agent System"
-            G --> H[Query Analysis]
-            H --> I[Information Retrieval]
-            I --> J[Answer Generation]
-            J --> K[Legal Review]
+
+        subgraph "MAS Supervisor (Hub-Spoke)"
+            G --> SUP[Supervisor<br/>GPT-5.1]
+            SUP --> H[Query Analysis]
+            SUP --> I[Retrieval Team<br/>4개 Agent 병렬]
+            I --> PRE[Pre-retrieval LLM<br/>EXAONE-4.0-1.2B]
+            SUP --> J[Answer Generation<br/>gpt-4o]
+            SUP --> K[Legal Review<br/>gpt-4o]
         end
     end
-    
+
     subgraph "Data & Infrastructure"
-        I --> L[(PostgreSQL/pgvector)]
-        I --> M[(Redis Cache)]
-        I --> N[Embedding API:8003]
+        I --> L[(PostgreSQL/pgvector<br/>text-embedding-3-large)]
+        J --> M[(Redis Cache)]
+        PRE --> N[vLLM Server:19010]
         G --> O[Prometheus/Grafana]
     end
-    
+
     subgraph "External LLM"
-        J -.-> P[OpenAI/Anthropic]
+        J -.-> P[OpenAI GPT-5.1/4o]
         K -.-> P
+        SUP -.-> P
     end
 ```
+
+### 에이전트별 모델 할당
+| 에이전트 | 모델 | Fallback |
+|---------|------|----------|
+| **Supervisor** | GPT-5.1 | Claude 3.5 Sonnet → Rule-based |
+| **Draft Agent** | gpt-4o | gpt-4o-mini → rule_based → safe_fallback |
+| **Review Agent** | gpt-4o | 규칙 기반 검토 |
+| **Retrieval LLM** | EXAONE-4.0-1.2B | gpt-4.1-nano → original query |
 
 ### 에이전트 데이터 흐름
 ```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as API Gateway
-    participant Orch as Orchestrator
+    participant SUP as Supervisor (GPT-5.1)
     participant QA as Query Analysis
-    participant IR as Retrieval
-    participant AG as Generation
-    participant LR as Legal Review
-    
+    participant PRE as Pre-retrieval LLM
+    participant IR as Retrieval (4 Agents)
+    participant AG as Draft Agent (gpt-4o)
+    participant LR as Review Agent (gpt-4o)
+
     FE->>API: POST /chat/stream
-    API->>Orch: 워크플로우 시작
-    Orch->>QA: 질의 분석 (의도/키워드)
-    Orch->>IR: 하이브리드 검색 (DB/Embedding)
-    Orch->>AG: 답변 초안 생성 (LLM)
-    Orch->>LR: 법률 검토 및 가드레일
-    LR-->>Orch: 최종 승인
-    Orch->>API: 최종 답변 + 출처
+    API->>SUP: 워크플로우 시작
+    SUP->>QA: 질의 분석 (의도/키워드)
+    QA-->>SUP: 분석 결과
+    SUP->>PRE: 쿼리 재작성 (EXAONE)
+    PRE-->>IR: 최적화된 쿼리
+    SUP->>IR: 4개 Agent 병렬 검색
+    IR-->>SUP: 검색 결과 병합
+    SUP->>AG: 답변 초안 생성
+    AG-->>SUP: 초안 + 인용
+    SUP->>LR: 법률 검토 및 가드레일
+    LR-->>SUP: 최종 승인
+    SUP->>API: 최종 답변 + 출처
     API->>FE: SSE 스트리밍 응답
 ```
 
@@ -164,6 +205,7 @@ sequenceDiagram
 | **시작하기** | [EASY_START_GUIDE_KR.md](docs/guides/EASY_START_GUIDE_KR.md) | 상세 설치 및 실행 가이드 |
 | **API** | [backend/app/api/README.md](backend/app/api/README.md) | 엔드포인트 및 데이터 모델 명세 |
 | **아키텍처** | [backend/app/orchestrator/README.md](backend/app/orchestrator/README.md) | 에이전트 상세 설계 및 구현 가이드 |
+| **인프라** | [docs/infrastructure/runpod-vllm-setup.md](docs/infrastructure/runpod-vllm-setup.md) | RunPod vLLM 서버 설정 가이드 |
 | **로드맵** | [docs/plans/sprint-roadmap.md](docs/plans/sprint-roadmap.md) | 스프린트별 개발 계획 및 PR 목록 |
 | **평가** | [docs/guides/evaluation-strategy.md](docs/guides/evaluation-strategy.md) | 에이전트별 평가 지표 및 전략 |
 | **테스트** | [backend/scripts/testing/README.md](backend/scripts/testing/README.md) | 테스트 전략 및 데이터 파이프라인 |

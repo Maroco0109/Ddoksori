@@ -1,6 +1,6 @@
 # Retrieval Agent (정보 검색 에이전트)
 
-**최종 수정**: 2026-01-26 (Phase 7: MAS Supervisor 전환)
+**최종 수정**: 2026-01-27 (Phase 8: Pre-retrieval LLM 도입)
 
 ## 1. 개요 (Overview)
 
@@ -171,7 +171,48 @@ class LawRetrievalAgent(BaseRetrievalAgent):
 | **specialized_retrievers.py** | 도메인별 특화 Retriever | Law, Criteria |
 | **hybrid_retriever.py** | Dense + Sparse + RRF Fusion | Case, Counsel |
 | **rdb_retriever.py** | SQL 기반 정형 필터 | 공통 (필터 조건 시) |
-| **embedding_client.py** | OpenAI text-embedding-3-large | 공통 |
+| **embedding_client.py** | OpenAI text-embedding-3-large (1536d) | 공통 |
+
+### 4.3 Pre-retrieval LLM (Phase 8)
+
+검색 전 쿼리 재작성을 통해 도메인 특화 검색 정확도를 높입니다.
+
+| 설정 | 값 | 환경변수 |
+|------|-----|---------|
+| 기본 모델 | EXAONE-4.0-1.2B (vLLM) | `MODEL_RETRIEVAL_LLM` |
+| Fallback 모델 | gpt-4.1-nano | `MODEL_RETRIEVAL_FALLBACK` |
+| vLLM 포트 | 19010 | `PORT_EXAONE_VLLM` |
+| 타임아웃 | 3초 | - |
+
+#### BaseRetrievalAgent 메서드
+
+```python
+class BaseRetrievalAgent:
+    async def _rewrite_query_for_domain(self, query: str) -> str:
+        """도메인별 프롬프트로 쿼리 재작성"""
+        # 1. EXAONE 호출 시도 (3초 타임아웃)
+        # 2. 실패 시 gpt-4.1-nano 폴백
+        # 3. 최종 실패 시 original query 반환
+```
+
+#### Agent별 도메인 프롬프트
+
+| Agent | `domain_rewrite_prompt` 예시 |
+|-------|------------------------------|
+| **LawRetrievalAgent** | "법령 검색에 적합하도록 법률 용어와 조항 번호를 명시하세요" |
+| **CriteriaRetrievalAgent** | "분쟁해결기준 검색을 위해 분쟁 유형과 금액 범위를 명확히 하세요" |
+| **CaseRetrievalAgent** | "유사 분쟁사례 검색을 위해 분쟁 상황과 결과를 요약하세요" |
+| **CounselRetrievalAgent** | "상담사례 검색을 위해 소비자 문의 핵심을 추출하세요" |
+
+#### Fallback 체인
+
+```
+EXAONE-4.0-1.2B (3초 타임아웃)
+    ↓ 실패
+gpt-4.1-nano (빠른 폴백)
+    ↓ 실패
+original query (쿼리 재작성 없이 검색)
+```
 
 ---
 
@@ -311,6 +352,7 @@ from app.agents.retrieval import (
 | 2026-01-26 | **Phase 4** | 4개 전문 Retrieval Agent 분리 (Law, Criteria, Case, Counsel). |
 | 2026-01-26 | **Phase 5** | MAS Graph Fan-out/Fan-in 통합. `retrieval_merge_node` 추가. |
 | 2026-01-26 | **Phase 7** | `agent.py` deprecated 표시. MAS 기본 운영 전환 완료. |
+| 2026-01-27 | **Phase 8** | Pre-retrieval LLM (EXAONE-4.0-1.2B) 도입. 도메인별 쿼리 재작성 구현. text-embedding-3-large (1536d) 전환. |
 
 ---
 

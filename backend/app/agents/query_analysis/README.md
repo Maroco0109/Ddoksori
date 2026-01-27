@@ -1,5 +1,7 @@
 # Query Analysis Agent (질의 분석 에이전트)
 
+**최종 수정**: 2026-01-27 (Phase 8: Query Rewriter 아카이브 반영)
+
 ## 1. 개요 (Overview)
 
 **Query Analysis Agent**는 사용자의 자연어 입력을 시스템이 이해할 수 있는 구조화된 데이터로 변환하는 첫 번째 관문입니다. 사용자의 의도를 파악하여 RAG 검색이 필요한지 결정하고(Routing), 검색에 필요한 키워드를 추출하며, 불완전한 쿼리를 보완(Expansion/Rewrite)합니다.
@@ -28,11 +30,11 @@ flowchart TD
     Extract --> Entities[Entity Extraction]
     
     Keywords --> Expansion{Expansion Strategy}
-    Expansion -- LLM Available --> LLMRewrite[LLM Query Rewrite]
-    Expansion -- Fallback --> RuleExpansion[Rule-based Expansion]
-    
-    LLMRewrite --> SearchQueries[Generate Search Queries]
-    RuleExpansion --> SearchQueries
+    Expansion --> RuleExpansion[Rule-based Expansion<br/>동의어/관련어 추가]
+
+    RuleExpansion --> SearchQueries[Generate Search Queries]
+
+    Note[Phase 8: 도메인 특화 재작성은<br/>Retrieval Agent Pre-retrieval LLM에서 수행]
     
     SearchQueries --> FinalState[Update ChatState]
     FinalState --> NextNode[Routing: NEED_RAG]
@@ -56,10 +58,22 @@ flowchart TD
 - **System Meta**: "너 누구야?" 같은 질문은 검색 없이 처리.
 - **General**: "안녕" 같은 인사는 검색 없이 처리 (단, "소송", "환불" 등 특정 키워드 포함 시 RAG로 승격).
 
-#### Query Rewriting (S2-10)
-복잡한 법률 용어나 구어체 질문을 검색에 용이한 형태로 변환합니다.
-- **LLM Rewrite**: EXAONE 모델을 사용하여 문맥을 파악하고 재작성합니다.
-- **Fallback**: LLM 호출 실패 시 규칙 기반으로 동의어를 추가합니다.
+#### Query Rewriting (Phase 8 변경)
+
+> **Note**: Phase 8에서 도메인 특화 쿼리 재작성 기능이 **Retrieval Agent의 Pre-retrieval LLM**으로 이동되었습니다.
+> 기존 `QueryRewriter` 모듈은 `_archive/llm/query_rewriter.py`로 아카이브되었습니다.
+
+**현재 Query Analysis Agent의 역할**:
+- 키워드 추출 및 동의어 확장 (규칙 기반)
+- 의도 분류 및 라우팅 결정
+- 엔티티 추출 (구매 품목, 날짜, 금액)
+
+**Pre-retrieval LLM으로 위임된 기능**:
+- 복잡한 법률 용어 재작성 → `LawRetrievalAgent`
+- 분쟁 유형 명확화 → `CriteriaRetrievalAgent`
+- 상황 요약 → `CaseRetrievalAgent`, `CounselRetrievalAgent`
+
+자세한 내용은 [Retrieval Agent README](../retrieval/README.md#43-pre-retrieval-llm-phase-8)를 참고하세요.
 
 ---
 
@@ -95,6 +109,7 @@ test_pr2_hybrid.py::test_definitional_query_is_general PASSED # 정의형 질문
 | 2026-01-14 | **PR 1** | 초기 아키텍처 구현. 기본적인 Rule-based 분류 로직 적용. |
 | 2026-01-22 | **PR 2** | **Hybrid Query Analysis** 도입. 동의어 사전 확장, 정의형 질문 패턴 추가, Multi-Query Expansion 구현. |
 | 2026-01-22 | **PR 3** | Data Collection Pipeline 연동을 위한 로그 스냅샷 구조(`query_analysis_v2`) 개선. |
+| 2026-01-27 | **Phase 8** | Query Rewriter 모듈 아카이브. 도메인 특화 쿼리 재작성은 Retrieval Agent Pre-retrieval LLM으로 이전. |
 
 ---
 

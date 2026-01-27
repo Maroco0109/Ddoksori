@@ -1,5 +1,7 @@
 # Answer Generation Agent (답변 생성 에이전트)
 
+**최종 수정**: 2026-01-27 (Phase 8: gpt-4o 모델 업그레이드)
+
 ## 1. 개요 (Overview)
 
 **Answer Generation Agent**는 사용자 질문과 검색된 정보(Evidence)를 종합하여 최종 답변을 생성하는 역할을 합니다. 단순히 정보를 요약하는 것을 넘어, 사용자의 상황에 맞는 공감적이고 전문적인 답변을 작성하며, 답변의 근거를 명시(Citation)하여 할루시네이션(Hallucination)을 방지합니다.
@@ -40,6 +42,13 @@ flowchart TD
 
 ### 3.1. RAG 기반 생성 (Standard)
 검색된 4가지 섹션(사례, 상담, 법령, 기준)의 정보를 종합하여 답변을 생성합니다.
+
+| 설정 | 값 | 환경변수 |
+|------|-----|---------|
+| 기본 모델 | gpt-4o | `MODEL_DRAFT_AGENT` |
+| 1차 폴백 | gpt-4o-mini | - |
+| 2차 폴백 | rule_based | - |
+
 - **Prompting**: "당신은 한국소비자원 상담사입니다..." 페르소나 부여.
 - **Structure**: [결론] -> [상세 근거] -> [관련 규정] -> [해결 방안] 순서로 구조화.
 
@@ -50,6 +59,27 @@ flowchart TD
 
 ### 3.3. 일반 대화 (General Chat)
 "안녕", "고마워" 등의 인사말은 LLM 토큰 소모를 줄이기 위해 규칙 기반으로 즉시 응답합니다.
+
+### 3.4. Fallback 체인 (Phase 8)
+
+LLM 호출 실패 시 자동으로 다음 모델로 전환됩니다:
+
+| 순서 | 모델 | 설명 |
+|------|------|------|
+| 1 | **gpt-4o** | 기본 Draft Agent (고품질 답변) |
+| 2 | gpt-4o-mini | 1차 폴백 (빠른 응답) |
+| 3 | rule_based | 2차 폴백 (규칙 기반 템플릿) |
+| 4 | safe_fallback | 최종 안전 메시지 (1372 안내) |
+
+```
+gpt-4o (기본)
+    ↓ API 오류/타임아웃
+gpt-4o-mini (1차 폴백)
+    ↓ 실패
+rule_based (2차 폴백)
+    ↓ 실패
+safe_fallback (최종 안전 메시지)
+```
 
 ---
 
@@ -120,6 +150,7 @@ pytest scripts/testing/generation/test_generation.py -v
 |------|----|------|
 | 2026-01-14 | **Sprint 1** | 초기 RAG 생성 로직 구현. |
 | 2026-01-22 | **PR 2** | `classify_domain` 도입으로 제한 영역(금융/의료) 필터링 추가. |
+| 2026-01-27 | **Phase 8** | Draft Agent 모델 gpt-4o 업그레이드. Fallback 체인 정비. |
 
 ---
 
