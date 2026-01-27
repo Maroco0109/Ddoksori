@@ -71,7 +71,7 @@ docs/plans/manus
 backend/data/counsel/
 backend/data/criteria/
 backend/data/dispute/
-backend/data/law/raw
+backend/data/law
 backend/data/evaluation
 backend/data/golden_set
 
@@ -83,7 +83,6 @@ backup_v3.sql
 
 
 # Agents
-Agents
 .agent
 .claude
 .sisyphus
