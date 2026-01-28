@@ -72,6 +72,11 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onTokenRef = useRef(onToken);
+  const onFallbackRef = useRef(onFallback);
+
+  onTokenRef.current = onToken;
+  onFallbackRef.current = onFallback;
 
   /**
    * Cancel ongoing stream
@@ -160,20 +165,22 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
                 const eventData = JSON.parse(line.slice(6)) as SSEEvent;
 
                 if (eventData.type === 'status') {
-                  const { node, status, progress } = eventData.data;
-                  setStreamingState((prev) => ({
-                    ...prev,
-                    currentNode: node,
-                    status,
-                    progress,
-                  }));
-                  onStatusUpdate?.(status, progress, node);
-                } else if (eventData.type === 'token') {
-                  const { content, model } = eventData.data;
-                  onToken?.(content, model);
-                } else if (eventData.type === 'fallback') {
-                  const { model, message } = eventData.data;
-                  onFallback?.(model, message);
+                   const { node, status, progress } = eventData.data;
+                   setStreamingState((prev) => ({
+                     ...prev,
+                     currentNode: node,
+                     status,
+                     progress,
+                   }));
+                   onStatusUpdate?.(status, progress, node);
+                 } else if (eventData.type === 'token') {
+                   const { content, model } = eventData.data;
+                   if (content !== '') {
+                     onTokenRef.current?.(content, model);
+                   }
+                 } else if (eventData.type === 'fallback') {
+                   const { model, message } = eventData.data;
+                   onFallbackRef.current?.(model, message);
                 } else if (eventData.type === 'complete') {
                   completeData = eventData.data;
                   setBackendSessionId(completeData.session_id);
