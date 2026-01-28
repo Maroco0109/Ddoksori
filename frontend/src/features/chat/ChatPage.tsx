@@ -31,25 +31,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   // React Query mutation for API calls (fallback)
   const chatMutation = useChatMutation();
 
-  // PR-7: SSE Streaming hook for real-time agent status
-  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat({
-    onToken: (token, model) => {
-      if (!streamingMessageId) {
-        // 새 메시지 생성
-        const aiMessageId = disputeMessages.length + 1;
-        setStreamingMessageId(aiMessageId);
+  // Ref to track streaming message ID (avoid stale closure)
+  const streamingMessageIdRef = useRef<number | null>(null);
 
-        setDisputeMessages((prev) => [...prev, {
-          id: aiMessageId,
-          type: 'ai',
-          content: token,
-          timestamp: new Date(),
-        }]);
-      } else {
-        // 기존 메시지에 토큰 추가
+  // PR-7: SSE Streaming hook for real-time agent status
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream, cancelStream: cancelDisputeStream } = useStreamingChat({
+    onToken: (token, model) => {
+      // Only append to existing message (placeholder created before stream)
+      if (streamingMessageIdRef.current !== null) {
         setDisputeMessages((prev) =>
           prev.map((msg) =>
-            msg.id === streamingMessageId
+            msg.id === streamingMessageIdRef.current
               ? { ...msg, content: msg.content + token }
               : msg
           )
@@ -62,11 +54,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     },
     onComplete: (data) => {
       // 최종 메시지 업데이트 (citations, sources 추가)
-      if (streamingMessageId) {
+      if (streamingMessageIdRef.current !== null) {
         const citations = extractCitations(data.answer, data.sources);
         setDisputeMessages((prev) =>
           prev.map((msg) =>
-            msg.id === streamingMessageId
+            msg.id === streamingMessageIdRef.current
               ? {
                   ...msg,
                   content: data.answer,
@@ -82,10 +74,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           )
         );
       }
-      setStreamingMessageId(null);
+      streamingMessageIdRef.current = null;
     },
   });
-  const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
+  const { streamingState: generalStreamingState, startStream: startGeneralStream, cancelStream: cancelGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
   const [disputeMessages, setDisputeMessages] = useState<MessageWithCitations[]>([
@@ -145,9 +137,18 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setTimeout(scrollToTop, 100);
   }, []); // 빈 의존성 배열 - 마운트 시 한 번만 실행
 
-  // 세션 불러오기
+  // 세션 불러오기 및 스트림 취소
   useEffect(() => {
     if (resolvedSessionId) {
+      // Cancel any active streams when session changes
+      if (disputeStreamingState.isStreaming) {
+        cancelDisputeStream();
+        streamingMessageIdRef.current = null;
+      }
+      if (generalStreamingState.isStreaming) {
+        cancelGeneralStream();
+      }
+
       setSessionId(resolvedSessionId);
 
       if (storeSessionId !== resolvedSessionId) {
@@ -190,6 +191,15 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         console.error('Failed to load session:', e);
       }
     } else {
+      // Cancel any active streams when session is cleared
+      if (disputeStreamingState.isStreaming) {
+        cancelDisputeStream();
+        streamingMessageIdRef.current = null;
+      }
+      if (generalStreamingState.isStreaming) {
+        cancelGeneralStream();
+      }
+
       setSessionId(null);
       setActiveChatType(null);
       setIsFormSubmitted(false);
@@ -222,7 +232,20 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         disputeDetail: ''
       });
     }
-  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, storeSessionId]);
+  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, storeSessionId, disputeStreamingState.isStreaming, generalStreamingState.isStreaming, cancelDisputeStream, cancelGeneralStream]);
+
+  // Cancel streams on unmount
+  useEffect(() => {
+    return () => {
+      if (disputeStreamingState.isStreaming) {
+        cancelDisputeStream();
+      }
+      if (generalStreamingState.isStreaming) {
+        cancelGeneralStream();
+      }
+      streamingMessageIdRef.current = null;
+    };
+  }, [disputeStreamingState.isStreaming, generalStreamingState.isStreaming, cancelDisputeStream, cancelGeneralStream]);
 
   // 채팅 세션 저장 함수
   const saveChatSession = (type: ChatType, messages: Message[]) => {
@@ -343,15 +366,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setActiveChatType('dispute');
     setIsDisputeLoading(true);
 
-    // Create placeholder AI message for streaming
-    const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
+    // Create placeholder AI message BEFORE stream starts
+    setDisputeMessages((prev) => {
+      const nextId = Math.max(...prev.map(m => m.id), 0) + 1;
+      streamingMessageIdRef.current = nextId;
+      return [...prev, {
+        id: nextId,
+        type: 'ai' as const,
+        content: '',
+        timestamp: new Date(),
+      }];
+    });
 
     try {
       // SSE streaming 사용 (real-time token streaming)
@@ -376,17 +401,20 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       }
     } catch (error) {
       console.error('Chat API error:', error);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
+      if (streamingMessageIdRef.current !== null) {
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageIdRef.current
+              ? {
+                  ...msg,
+                  content:
+                    '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                }
+              : msg
+          )
+        );
+      }
+      streamingMessageIdRef.current = null;
     } finally {
       setIsDisputeLoading(false);
     }
@@ -406,15 +434,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages([...disputeMessages, newMessage]);
     setDisputeInputValue('');
 
-    // Create placeholder AI message
-    const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
+    // Create placeholder AI message BEFORE stream starts
+    setDisputeMessages((prev) => {
+      const nextId = Math.max(...prev.map(m => m.id), 0) + 1;
+      streamingMessageIdRef.current = nextId;
+      return [...prev, {
+        id: nextId,
+        type: 'ai' as const,
+        content: '',
+        timestamp: new Date(),
+      }];
+    });
 
     try {
       // Real-time token streaming via SSE
@@ -427,17 +457,20 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       // onToken/onComplete callbacks handle all message updates
     } catch (error) {
       console.error('Chat API error:', error);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
+      if (streamingMessageIdRef.current !== null) {
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageIdRef.current
+              ? {
+                  ...msg,
+                  content:
+                    '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                }
+              : msg
+          )
+        );
+      }
+      streamingMessageIdRef.current = null;
     }
   };
 
@@ -551,14 +584,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setDisputeMessages([...disputeMessages, newMessage]);
       setDisputeInputValue('');
 
-      const aiMessageId = disputeMessages.length + 2;
-      const placeholderAI: MessageWithCitations = {
-        id: aiMessageId,
-        type: 'ai' as const,
-        content: '',
-        timestamp: new Date(),
-      };
-      setDisputeMessages((prev) => [...prev, placeholderAI]);
+      // Create placeholder AI message BEFORE stream starts
+      setDisputeMessages((prev) => {
+        const nextId = Math.max(...prev.map(m => m.id), 0) + 1;
+        streamingMessageIdRef.current = nextId;
+        return [...prev, {
+          id: nextId,
+          type: 'ai' as const,
+          content: '',
+          timestamp: new Date(),
+        }];
+      });
 
       startDisputeStream({
         message: question,
@@ -569,7 +605,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           const citations = extractCitations(response.answer, response.sources);
           setDisputeMessages((prev) =>
             prev.map((msg) =>
-              msg.id === aiMessageId
+              msg.id === streamingMessageIdRef.current
                 ? {
                     ...msg,
                     content: response.answer,
@@ -582,16 +618,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         }
       }).catch((error) => {
         console.error('Chat API error:', error);
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId
-              ? {
-                  ...msg,
-                  content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-                }
-              : msg
-          )
-        );
+        if (streamingMessageIdRef.current !== null) {
+          setDisputeMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === streamingMessageIdRef.current
+                ? {
+                    ...msg,
+                    content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                  }
+                : msg
+            )
+          );
+        }
+        streamingMessageIdRef.current = null;
       });
     }, 100);
   };
