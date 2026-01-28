@@ -63,7 +63,10 @@ class QualityFilter:
     
     @classmethod
     def is_valid_query_type(cls, query_type: str) -> bool:
-        valid_types = {'dispute', 'general', 'law', 'system'}
+        valid_types = {
+            'dispute', 'general', 'law', 'system',
+            'system_meta', 'procedure', 'restricted', 'ambiguous',
+        }
         return query_type in valid_types
 
 

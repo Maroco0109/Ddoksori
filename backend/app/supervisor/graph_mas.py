@@ -188,19 +188,19 @@ def _route_mas_supervisor(state: ChatState):
     Returns:
         다음 노드 이름 (str) 또는 List[Send] (Fan-out)
     """
-    supervisor_state = state.get('supervisor', {})
+    supervisor_state = state.get('supervisor') or {}
     next_agent = supervisor_state.get('next_agent')
 
     logger.info(f"[MAS Router] next_agent={next_agent}")
 
-    # === PR-1: NO_RETRIEVAL Fast Path 시작 ===
     mode = state.get("mode", "NEED_RAG")
+    if mode in ('NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION'):
+        logger.info(f"[MAS Router] Routing to ask_clarification for mode={mode}")
+        return 'ask_clarification'
 
-    # NO_RETRIEVAL 모드에서 retrieval_team이 요청되면 generation으로 우회
     if mode == "NO_RETRIEVAL" and next_agent == "retrieval_team":
         logger.info("[MAS Router] Fast path: NO_RETRIEVAL - skipping retrieval, routing to generation")
         return "generation"
-    # === PR-1: NO_RETRIEVAL Fast Path 끝 ===
 
     # === PR-2: Selective Retrieval 시작 ===
     if next_agent == 'retrieval_team':
@@ -347,6 +347,7 @@ def create_mas_supervisor_graph() -> StateGraph:
             'generation': 'generation',
             'review': 'review',
             'output_guardrail': 'output_guardrail',
+            'ask_clarification': 'ask_clarification',
         }
     )
 

@@ -48,6 +48,7 @@ from .output import (
 )
 from .control import (
     RoutingMode,
+    ConversationPhase,
     ControlState,
 )
 # =============================================================================
@@ -198,6 +199,12 @@ class ChatState(MessagesState):
     guardrail_blocked: bool
     guardrail_type: Optional[str]
 
+    # === 대화 단계 (Conversation Phase) ===
+    conversation_phase: ConversationPhase
+    dispute_slots: Dict[str, Optional[str]]
+    dispute_slot_status: Dict[str, SlotStatus]
+    last_phase_transition_reason: Optional[str]
+
     # === ReAct 패턴 ===
     react_steps: Annotated[List[ReActStep], operator.add]
     current_iteration: int
@@ -281,6 +288,18 @@ def create_initial_state(
         guardrail_blocked=False,
         guardrail_type=None,
 
+        # 대화 단계
+        conversation_phase='initial',
+        dispute_slots={
+            'purchase_item': None,
+            'dispute_type': None,
+            'problem_details': None,
+            'purchase_date': None,
+            'purchase_place': None,
+        },
+        dispute_slot_status={},
+        last_phase_transition_reason=None,
+
         # ReAct 패턴
         react_steps=[],
         current_iteration=0,
@@ -330,6 +349,7 @@ __all__ = [
 
     # 제어
     'RoutingMode',
+    'ConversationPhase',
     'ControlState',
 
     # ReAct

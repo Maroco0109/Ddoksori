@@ -44,6 +44,13 @@ from ...supervisor.state import (
     QueryAnalysisResult,
     OnboardingInfo,
     RoutingMode,
+    ConversationPhase,
+)
+from ...supervisor.conversation_manager import (
+    update_slots_and_phase,
+    extract_dispute_type,
+    should_trigger_clarification,
+    get_retriever_types_for_phase,
 )
 
 logger = logging.getLogger(__name__)
@@ -771,6 +778,11 @@ def _extract_info_from_message(query: str) -> Dict[str, str]:
                 amount = int(float(base_match.group(1)) * 10000)
                 info["purchase_amount"] = str(amount)
 
+    if "dispute_type" not in info:
+        dispute_type = extract_dispute_type(query)
+        if dispute_type:
+            info["dispute_type"] = dispute_type
+
     return info
 
 
@@ -1441,7 +1453,27 @@ def query_analysis_node(state: ChatState) -> Dict:
     QueryAnalysisCache.set(user_query, cache_data)
     # === PR-6 끝 ===
 
+    temp_state_for_phase = {
+        'user_query': user_query,
+        'conversation_phase': state.get('conversation_phase', 'initial'),
+        'dispute_slots': state.get('dispute_slots', {}),
+        'onboarding': onboarding,
+        'query_analysis': analysis_result,
+    }
+    phase_updates = update_slots_and_phase(temp_state_for_phase)
+
+    new_phase = phase_updates.get('conversation_phase', 'initial')
+    if should_trigger_clarification({'conversation_phase': new_phase}):
+        mode = 'NEED_USER_CLARIFICATION'
+
+    if new_phase in ('providing_law', 'providing_case', 'providing_procedure'):
+        analysis_result['retriever_types'] = get_retriever_types_for_phase(new_phase)
+
     return {
         "query_analysis": analysis_result,
         "mode": mode,
+        "conversation_phase": phase_updates.get('conversation_phase'),
+        "dispute_slots": phase_updates.get('dispute_slots'),
+        "dispute_slot_status": phase_updates.get('dispute_slot_status'),
+        "last_phase_transition_reason": phase_updates.get('last_phase_transition_reason'),
     }

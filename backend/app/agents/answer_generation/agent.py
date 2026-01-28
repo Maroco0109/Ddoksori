@@ -23,7 +23,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.callbacks.manager import adispatch_custom_event
 from langchain_core.runnables import RunnableConfig
 
-from ...supervisor.state import ChatState
+from ...supervisor.state import ChatState, ConversationPhase
 from ...domain import classify_domain, AGENCY_INFO
 from .cache import get_answer_cache
 from .fallback import AnswerGenerationFallback
@@ -95,6 +95,50 @@ DOMAIN_KOREAN_NAMES = {
     "realestate": "부동산 임대차",
     "construction": "건설/건축",
 }
+
+PHASE_CASE_OFFER_TEMPLATE = """
+관련 법령과 분쟁해결기준을 안내해 드렸습니다.
+
+{main_content}
+
+---
+**관련 분쟁조정 사례도 보여드릴까요?** 유사한 상황의 실제 조정 결과를 참고하시면 도움이 될 수 있습니다.
+""".strip()
+
+PHASE_PROCEDURE_OFFER_TEMPLATE = """
+{main_content}
+
+---
+**분쟁 해결 절차(한국소비자원, 전자거래분쟁조정위원회 등)도 안내해 드릴까요?** 직접 분쟁조정을 신청하시는 방법을 알려드릴 수 있습니다.
+""".strip()
+
+PHASE_PROCEDURE_TEMPLATE = """
+## 분쟁 해결 절차 안내
+
+### 1. 한국소비자원 (KCA)
+- **대표전화**: 1372
+- **홈페이지**: https://www.kca.go.kr
+- **신청 방법**: 
+  1. 소비자상담센터(1372) 전화상담
+  2. 홈페이지 온라인 상담/분쟁조정 신청
+  3. 방문상담 (전국 소비자원 지부)
+
+### 2. 전자거래분쟁조정위원회 (ECMC)
+- **관할**: 온라인 쇼핑, 전자상거래 분쟁
+- **홈페이지**: https://www.ecmc.or.kr
+- **신청 방법**: 온라인 분쟁조정 신청서 제출
+
+### 3. 준비 서류
+- 계약서, 영수증, 결제 내역
+- 판매자와의 대화 기록 (문자, 이메일, 채팅)
+- 제품 사진, 하자 증빙 자료
+
+### 4. 분쟁조정 진행 과정
+1. **상담 신청** → 2. **사실 조사** → 3. **조정안 제시** → 4. **수락/거부** → 5. **조정 성립/불성립**
+
+---
+> 분쟁조정위원회의 조정안에 양측이 동의하면 재판상 화해와 같은 효력이 발생합니다.
+""".strip()
 
 
 def _get_llm_model() -> str:
@@ -449,6 +493,14 @@ async def generation_node(state: ChatState, config: RunnableConfig = None) -> Di
         'followup_questions': followup_questions,
         'clarifying_questions': clarifying_questions,
     })
+
+    conversation_phase = state.get('conversation_phase', 'initial')
+    if conversation_phase == 'providing_law':
+        draft_answer = PHASE_CASE_OFFER_TEMPLATE.format(main_content=draft_answer)
+    elif conversation_phase == 'providing_case':
+        draft_answer = PHASE_PROCEDURE_OFFER_TEMPLATE.format(main_content=draft_answer)
+    elif conversation_phase == 'providing_procedure':
+        draft_answer = PHASE_PROCEDURE_TEMPLATE
 
     return {
         'draft_answer': draft_answer,

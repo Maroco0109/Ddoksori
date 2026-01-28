@@ -23,6 +23,19 @@ RoutingMode = Literal[
 ]
 
 
+ConversationPhase = Literal[
+    'initial',
+    'info_gathering',
+    'ready_for_analysis',
+    'providing_law',
+    'awaiting_case_confirm',
+    'providing_case',
+    'awaiting_procedure_confirm',
+    'providing_procedure',
+    'completed',
+]
+
+
 class ControlState(TypedDict, total=False):
     """
     제어 플래그 상태
@@ -80,5 +93,6 @@ class ControlState(TypedDict, total=False):
 
 __all__ = [
     'RoutingMode',
+    'ConversationPhase',
     'ControlState',
 ]

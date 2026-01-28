@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Any
 from langchain_core.messages import AIMessage
 
 from ..state import ChatState
+from ..conversation_manager import get_next_questions, should_trigger_clarification
 
 logger = logging.getLogger(__name__)
 
@@ -232,11 +233,22 @@ def ask_clarification_node(state: ChatState) -> Dict[str, Any]:
     """
     logger.info("[Clarify] Generating clarification questions")
 
-    # query_analysis에서 query_type 확인
+    conversation_phase = state.get('conversation_phase', 'initial')
+    if should_trigger_clarification(state):
+        phase_questions = get_next_questions(state)
+        if phase_questions:
+            response = _build_clarification_response(phase_questions)
+            logger.info(f"[Clarify] Phase-based questions for {conversation_phase}: {phase_questions}")
+            return {
+                'final_answer': response,
+                'clarifying_questions': phase_questions,
+                'awaiting_user_choice': True,
+                'messages': [AIMessage(content=response)],
+            }
+
     query_analysis = state.get('query_analysis') or {}
     query_type = query_analysis.get('query_type')
 
-    # NEW: Pre-clarification 처리 (검색 전 모호한 쿼리)
     if query_type == 'ambiguous':
         user_query = state.get('user_query', '')
         if len(user_query.strip()) <= 5:
@@ -252,26 +264,21 @@ def ask_clarification_node(state: ChatState) -> Dict[str, Any]:
             'messages': [AIMessage(content=response)],
         }
 
-    # 기존 post-retrieval clarification 로직
-    # 정보 수집
     missing_fields = _get_missing_fields(state)
     max_similarity = _get_max_similarity(state)
     low_similarity = max_similarity > 0 and max_similarity < SIMILARITY_THRESHOLD
 
-    # 브랜드만 있는 품목 확인
     onboarding = state.get('onboarding') or {}
     extracted_info = query_analysis.get('extracted_info') or {}
     item = onboarding.get('purchase_item') or extracted_info.get('purchase_item')
     brand_only_item = item if _check_brand_only_item(item) else None
 
-    # 역질문 생성
     questions = _generate_clarification_questions(
         missing_fields=missing_fields,
         low_similarity=low_similarity,
         brand_only_item=brand_only_item,
     )
 
-    # 응답 메시지 구성
     response = _build_clarification_response(questions)
 
     logger.info(f"[Clarify] Generated {len(questions)} questions: {questions}")

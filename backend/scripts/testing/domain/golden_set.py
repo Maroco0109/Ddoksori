@@ -81,4 +81,24 @@ GOLDEN_SET: List[GoldenSetItem] = [
     {"query": "여행사 일정 변경 보상 요청", "expected_agency": "KCA", "is_restricted": False},
     {"query": "이사업체 물품 파손 보상", "expected_agency": "KCA", "is_restricted": False},
     {"query": "통신사 요금제 변경 문제", "expected_agency": "KCA", "is_restricted": False},
+
+    # KLAB (임대차) - 8개
+    {"query": "전세보증금 반환이 안돼요", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "집주인이 보증금을 안 돌려줘요", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "월세 인상이 과도해요", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "임대인이 계약 갱신을 거부해요", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "전세 계약 해지 문제", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "원룸 보증금 반환 분쟁", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "임대차 계약 위반으로 손해 입음", "expected_agency": "KLAB", "is_restricted": True},
+    {"query": "월세 연체로 계약 해지 통보받음", "expected_agency": "KLAB", "is_restricted": True},
+
+    # MOLIT (건설/건축) - 8개
+    {"query": "아파트 하자 보수가 안돼요", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "신축 아파트 누수 문제", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "시공 불량으로 벽에 금이 갔어요", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "건설사가 하자 보수를 거부해요", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "공사 지연으로 입주 못했어요", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "아파트 분양 계약 해제 분쟁", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "리모델링 공사 불량 피해", "expected_agency": "MOLIT", "is_restricted": True},
+    {"query": "인테리어 시공 후 하자 발견", "expected_agency": "MOLIT", "is_restricted": True},
 ]

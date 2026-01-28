@@ -88,12 +88,17 @@ class TestQualityFilter:
         assert QualityFilter.is_valid_query(query) is False
     
     def test_valid_query_type(self):
-        for qt in ['dispute', 'general', 'law', 'system']:
+        valid_types = [
+            'dispute', 'general', 'law', 'system',
+            'system_meta', 'procedure', 'restricted', 'ambiguous',
+        ]
+        for qt in valid_types:
             assert QualityFilter.is_valid_query_type(qt) is True
-    
+
     def test_invalid_query_type(self):
         assert QualityFilter.is_valid_query_type('unknown') is False
         assert QualityFilter.is_valid_query_type('') is False
+        assert QualityFilter.is_valid_query_type('invalid_type') is False
 
 
 class TestDataCollectorExtraction:
