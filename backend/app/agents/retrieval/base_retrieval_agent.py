@@ -11,6 +11,8 @@ LLM: EXAONE-4.0-1.2B (쿼리 재작성), Fallback: gpt-4.1-nano
     - RETRIEVAL_LLM_CASE_URL: Case Agent용 EXAONE URL
     - RETRIEVAL_LLM_COUNSEL_URL: Counsel Agent용 EXAONE URL
 설정되지 않은 경우 공통 EXAONE_RUNPOD_URL 사용 (싱글톤 fallback)
+
+Refactor: LLMProviderFactory를 통한 클라이언트 관리
 """
 
 import asyncio
@@ -23,6 +25,7 @@ from openai import OpenAI, APIError, APITimeoutError
 
 from ..base import BaseAgent
 from ...common.config import get_config
+from ...llm.providers import get_openai_client, get_exaone_client
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +59,9 @@ def _get_embed_api_url() -> str:
     return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
 
 
-# 도메인별 EXAONE 클라이언트 캐시 (독립 인스턴스)
+# 도메인별 EXAONE 클라이언트 캐시 (deprecated - LLMProviderFactory로 이전 중)
+# LLMProviderFactory가 이미 싱글톤 캐싱을 처리함
 _domain_exaone_clients: Dict[str, OpenAI] = {}
-# 공통 fallback 클라이언트 (에이전트별 URL 미설정 시)
 _shared_exaone_client: Optional[OpenAI] = None
 _shared_openai_client: Optional[OpenAI] = None
 
@@ -80,53 +83,32 @@ class BaseRetrievalAgent(BaseAgent):
         """
         도메인별 EXAONE 클라이언트를 반환합니다.
 
+        Refactor: LLMProviderFactory를 통해 도메인별 클라이언트 관리.
+        팩토리가 싱글톤 캐싱을 처리하므로 중복 생성 방지됨.
+
         우선순위:
         1. 에이전트별 URL 설정 (RETRIEVAL_LLM_{DOMAIN}_URL)
         2. 공통 URL (EXAONE_RUNPOD_URL)
         """
-        global _domain_exaone_clients, _shared_exaone_client
-
         config = get_config()
         timeout = config.retrieval_llm.timeout
 
-        # 1. 에이전트별 URL 확인
-        domain_url = config.retrieval_llm.get_url_for_domain(self.domain_key)
+        # LLMProviderFactory를 통해 도메인별 클라이언트 획득
+        client = get_exaone_client(domain=self.domain_key, timeout=timeout)
 
-        if domain_url:
-            # 도메인별 독립 클라이언트 사용
-            if self.domain_key not in _domain_exaone_clients:
-                _domain_exaone_clients[self.domain_key] = OpenAI(
-                    base_url=domain_url,
-                    api_key=os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy'),
-                    timeout=timeout
-                )
-                logger.info(f"[{self.agent_name}] Created domain-specific EXAONE client: {domain_url}")
-            return _domain_exaone_clients[self.domain_key]
-
-        # 2. 공통 URL fallback
-        if _shared_exaone_client is None:
-            runpod_url = os.getenv('EXAONE_RUNPOD_URL')
-            if runpod_url:
-                _shared_exaone_client = OpenAI(
-                    base_url=runpod_url,
-                    api_key=os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy'),
-                    timeout=timeout
-                )
-        return _shared_exaone_client
+        if client:
+            logger.debug(f"[{self.agent_name}] Got EXAONE client for domain '{self.domain_key}'")
+        return client
 
     def _get_openai_client(self) -> Optional[OpenAI]:
-        """OpenAI fallback 클라이언트 반환 (공유)"""
-        global _shared_openai_client
+        """
+        OpenAI fallback 클라이언트 반환 (공유).
 
-        if _shared_openai_client is None:
-            api_key = os.getenv('OPENAI_API_KEY')
-            config = get_config()
-            if api_key:
-                _shared_openai_client = OpenAI(
-                    api_key=api_key,
-                    timeout=config.retrieval_llm.timeout
-                )
-        return _shared_openai_client
+        Refactor: LLMProviderFactory를 통해 싱글톤 관리.
+        """
+        config = get_config()
+        timeout = config.retrieval_llm.timeout
+        return get_openai_client(timeout=timeout)
     
     async def _rewrite_query_for_domain(self, query: str) -> str:
         """

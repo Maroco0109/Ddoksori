@@ -39,6 +39,7 @@ from typing import Dict, Any, Optional, Protocol, List
 
 from ...common.logging import get_logger
 from ...common.config import get_config
+from ...agents.registry import get_agent_registry
 from ..state import ChatState
 from ..state.supervisor import AgentMessage, SupervisorState
 
@@ -182,14 +183,10 @@ class SupervisorNode:
         self._primary_llm: Optional[LLMProtocol] = None
         self._fallback_llm: Optional[LLMProtocol] = None
         self._current_model_name: str = "rule-based"
-        
-        self.available_agents: Dict[str, str] = {
-            "query_analyst": "질문 분석 및 의도 파악",
-            "retrieval_team": "법령, 분쟁조정기준, 분쟁사례, 상담사례 검색 (병렬)",
-            "answer_drafter": "답변 초안 작성",
-            "legal_reviewer": "법적 정확성 검토",
-        }
-        
+
+        # Agent Registry에서 동적으로 에이전트 목록 로드
+        self._agent_registry = get_agent_registry()
+
         self._init_llm_chain()
 
     def _init_llm_chain(self) -> None:
@@ -218,13 +215,18 @@ class SupervisorNode:
         
         logger.info(
             f"[SupervisorNode] 초기화 완료. "
-            f"사용 가능 에이전트: {list(self.available_agents.keys())}"
+            f"사용 가능 에이전트: {self._agent_registry.list_names()}"
         )
 
     @property
     def llm(self) -> Optional[LLMProtocol]:
         """현재 활성 LLM 반환 (하위 호환성)"""
         return self._primary_llm or self._fallback_llm
+
+    @property
+    def available_agents(self) -> Dict[str, str]:
+        """사용 가능한 에이전트 목록 (Registry에서 동적 로드)"""
+        return self._agent_registry.get_for_prompt()
 
     async def decide_next_action(self, state: ChatState) -> Dict[str, Any]:
         """
