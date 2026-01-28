@@ -15,9 +15,9 @@ class AgencyInfoDict(TypedDict, total=False):
     restriction_reason: str
 
 
-AgencyCode = Literal['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO']
+AgencyCode = Literal['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO', 'KLAB', 'MOLIT']
 
-AGENCY_CODES: List[AgencyCode] = ['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO']
+AGENCY_CODES: List[AgencyCode] = ['KCA', 'ECMC', 'KCDRC', 'FSS', 'K_MEDI', 'KOPICO', 'KLAB', 'MOLIT']
 
 AGENCY_INFO: Dict[AgencyCode, AgencyInfoDict] = {
     'KCA': {
@@ -64,6 +64,24 @@ AGENCY_INFO: Dict[AgencyCode, AgencyInfoDict] = {
         'url': 'https://www.kopico.go.kr',
         'is_restricted': True,
         'restriction_reason': '개인정보 분쟁은 복잡하고 전문적인 영역으로, 전문가 상담 후 진행을 권장합니다.',
+    },
+    'KLAB': {
+        'name': '임대차분쟁조정위원회',
+        'full_name': '한국부동산원 임대차분쟁조정위원회',
+        'description': '주택 임대차 관련 분쟁 조정 (보증금 반환, 임대료 분쟁, 계약 해지 등)',
+        'url': 'https://www.reb.or.kr',
+        'phone': '1644-2828',
+        'is_restricted': True,
+        'restriction_reason': '부동산 임대차 분쟁은 복잡하고 전문적인 영역으로, 전문가 상담 후 진행을 권장합니다.',
+    },
+    'MOLIT': {
+        'name': '건설분쟁조정위원회',
+        'full_name': '국토교통부 건설분쟁조정위원회',
+        'description': '건설/건축 관련 분쟁 조정 (공사 하자, 시공 불량, 계약 분쟁 등)',
+        'url': 'https://www.molit.go.kr',
+        'phone': '1599-0001',
+        'is_restricted': True,
+        'restriction_reason': '건설/건축 분쟁은 복잡하고 전문적인 영역으로, 전문가 상담 후 진행을 권장합니다.',
     },
 }
 

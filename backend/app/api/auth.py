@@ -27,6 +27,7 @@ OAuth 2.0 소셜 로그인 API 엔드포인트를 제공합니다.
 """
 
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Dict
 from urllib.parse import urlencode
@@ -34,12 +35,11 @@ from fastapi import APIRouter, HTTPException, Query, Depends, status
 from fastapi.responses import RedirectResponse
 
 from app.common.config import get_config
-from app.common.logging.rag_logger import get_rag_logger
 from app.auth.models import User, AuthResponse
 from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # 인메모리 OAuth state 저장소 (TTL 관리)

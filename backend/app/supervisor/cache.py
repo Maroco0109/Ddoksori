@@ -198,6 +198,77 @@ class QueryAnalysisCache:
 
 
 # ============================================================
+# L3: Intent Classification 캐시
+# ============================================================
+
+class IntentClassificationCache:
+    """
+    L3 캐시: Intent Classification 결과
+
+    gpt-4o-mini 호출 결과를 캐싱하여 LLM 비용/지연 절감.
+    세션 무관하게 캐싱 (쿼리 자체의 특성이므로).
+    """
+
+    PREFIX = "intent_classification"
+    TTL_SECONDS = 86400 * 7  # 7일 (분류 결과는 오래 유효)
+
+    @classmethod
+    def get(cls, query: str) -> Optional[Dict]:
+        """캐시된 Intent Classification 조회"""
+        redis = _get_redis()
+        if not redis:
+            return None
+
+        try:
+            normalized = _normalize_query(query)
+            key = f"{cls.PREFIX}:{_hash_query(normalized)}"
+
+            cached = redis.get(key)
+            if cached:
+                logger.debug(f"[L3 Cache] HIT: {key}")
+                result = json.loads(cached)
+                result['from_cache'] = True
+                return result
+
+            logger.debug(f"[L3 Cache] MISS: {key}")
+            return None
+
+        except Exception as e:
+            logger.warning(f"[L3 Cache] Get error: {e}")
+            return None
+
+    @classmethod
+    def set(cls, query: str, classification: Dict) -> bool:
+        """Intent Classification 캐싱"""
+        redis = _get_redis()
+        if not redis:
+            return False
+
+        try:
+            normalized = _normalize_query(query)
+            key = f"{cls.PREFIX}:{_hash_query(normalized)}"
+
+            # 캐싱할 필드
+            cacheable = {
+                'query_type': classification.get('query_type'),
+                'domain': classification.get('domain'),
+                'agency': classification.get('agency'),
+                'confidence': classification.get('confidence'),
+                'reasoning': classification.get('reasoning'),
+                'model_used': classification.get('model_used'),
+                '_cached_at': __import__('time').time(),
+            }
+
+            redis.setex(key, cls.TTL_SECONDS, json.dumps(cacheable, ensure_ascii=False))
+            logger.debug(f"[L3 Cache] SET: {key}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"[L3 Cache] Set error: {e}")
+            return False
+
+
+# ============================================================
 # 캐시 관리 유틸리티
 # ============================================================
 
@@ -224,6 +295,13 @@ def clear_all_supervisor_caches() -> Dict[str, int]:
         else:
             results['l2_deleted'] = 0
 
+        # L3 삭제
+        l3_keys = list(redis.scan_iter(match=f"{IntentClassificationCache.PREFIX}:*"))
+        if l3_keys:
+            results['l3_deleted'] = redis.delete(*l3_keys)
+        else:
+            results['l3_deleted'] = 0
+
         logger.info(f"[SupervisorCache] Cleared: {results}")
         return results
 
@@ -241,14 +319,16 @@ def get_cache_stats() -> Dict[str, Any]:
     try:
         l1_count = sum(1 for _ in redis.scan_iter(match=f"{SupervisorResponseCache.PREFIX}:*"))
         l2_count = sum(1 for _ in redis.scan_iter(match=f"{QueryAnalysisCache.PREFIX}:*"))
-        l3_count = sum(1 for _ in redis.scan_iter(match="answer_cache:*"))
+        l3_count = sum(1 for _ in redis.scan_iter(match=f"{IntentClassificationCache.PREFIX}:*"))
+        answer_count = sum(1 for _ in redis.scan_iter(match="answer_cache:*"))
 
         return {
             'enabled': True,
             'l1_supervisor_count': l1_count,
             'l2_query_analysis_count': l2_count,
-            'l3_answer_count': l3_count,
-            'total': l1_count + l2_count + l3_count,
+            'l3_intent_classification_count': l3_count,
+            'answer_count': answer_count,
+            'total': l1_count + l2_count + l3_count + answer_count,
         }
     except Exception as e:
         return {'enabled': True, 'error': str(e)}

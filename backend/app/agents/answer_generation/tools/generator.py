@@ -10,7 +10,7 @@ import re
 import json
 import time
 from typing import List, Dict, Tuple, Optional, Any
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 from ....common.config import get_config
 
@@ -95,7 +95,10 @@ class RAGGenerator:
         self.use_llm = use_llm and bool(os.getenv('OPENAI_API_KEY'))
 
         if self.use_llm:
+            # 동기 클라이언트 (기존 메서드용)
             self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            # 비동기 클라이언트 (스트리밍 메서드용)
+            self.async_client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
     def generate_answer(self, query: str, chunks: List[Dict]) -> Dict:
         """
@@ -935,3 +938,70 @@ class RAGGenerator:
             'completion_tokens': 0,
             'response_time_ms': 0.0
         }
+
+    # ========================================
+    # 토큰 스트리밍 지원 (2026-01-28)
+    # ========================================
+
+    async def generate_structured_answer_streaming(
+        self,
+        query: str,
+        agency_info: Dict,
+        disputes: List[Dict],
+        counsels: List[Dict],
+        laws: List[Dict],
+        criteria: List[Dict],
+        include_disclaimer: bool = True,
+    ):
+        """
+        구조화된 답변을 스트리밍 방식으로 생성 (토큰 단위)
+
+        OpenAI streaming API를 사용하여 토큰이 생성되는 즉시 yield합니다.
+
+        Args:
+            query: 사용자 질문
+            agency_info: 기관 정보
+            disputes: 분쟁조정사례 리스트
+            counsels: 상담사례 리스트
+            laws: 관련 법령 리스트
+            criteria: 분쟁해결기준 리스트
+            include_disclaimer: 면책 문구 포함 여부
+
+        Yields:
+            str: 개별 토큰 (부분 문자열)
+
+        Example:
+            >>> generator = rag_gen.generate_structured_answer_streaming(...)
+            >>> async for token in generator:
+            ...     print(token, end='', flush=True)
+        """
+        # Stub 모드
+        if not self.use_llm:
+            result = self._generate_structured_stub(
+                query, agency_info, disputes, counsels, laws, criteria,
+                include_disclaimer=include_disclaimer
+            )
+            yield result['answer']
+            return
+
+        # 프롬프트 생성
+        system_prompt = self._get_structured_system_prompt(include_disclaimer)
+        user_prompt = self._build_structured_prompt(
+            query, agency_info, disputes, counsels, laws, criteria
+        )
+
+        # OpenAI Streaming API 호출
+        stream = await self.async_client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            stream=True  # 스트리밍 활성화
+        )
+
+        # 토큰 스트리밍
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

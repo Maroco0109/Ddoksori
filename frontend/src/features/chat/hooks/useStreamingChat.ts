@@ -34,6 +34,8 @@ function convertDisputeFormToOnboarding(): OnboardingAPIData | undefined {
 
 interface UseStreamingChatOptions {
   onStatusUpdate?: (status: string, progress: number, node: string) => void;
+  onToken?: (token: string, model: string) => void;  // 새로 추가
+  onFallback?: (model: string, message: string) => void;  // 새로 추가
   onComplete?: (data: SSECompleteData) => void;
   onError?: (error: string) => void;
 }
@@ -58,7 +60,7 @@ interface UseStreamingChatReturn {
  * await startStream({ message: 'Hello' });
  */
 export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStreamingChatReturn {
-  const { onStatusUpdate, onComplete, onError } = options;
+  const { onStatusUpdate, onToken, onFallback, onComplete, onError } = options;
   const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
 
   const [streamingState, setStreamingState] = useState<StreamingState>({
@@ -166,6 +168,12 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
                     progress,
                   }));
                   onStatusUpdate?.(status, progress, node);
+                } else if (eventData.type === 'token') {
+                  const { content, model } = eventData.data;
+                  onToken?.(content, model);
+                } else if (eventData.type === 'fallback') {
+                  const { model, message } = eventData.data;
+                  onFallback?.(model, message);
                 } else if (eventData.type === 'complete') {
                   completeData = eventData.data;
                   setBackendSessionId(completeData.session_id);

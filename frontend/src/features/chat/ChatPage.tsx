@@ -32,7 +32,59 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const chatMutation = useChatMutation();
 
   // PR-7: SSE Streaming hook for real-time agent status
-  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat();
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat({
+    onToken: (token, model) => {
+      if (!streamingMessageId) {
+        // 새 메시지 생성
+        const aiMessageId = disputeMessages.length + 1;
+        setStreamingMessageId(aiMessageId);
+
+        setDisputeMessages((prev) => [...prev, {
+          id: aiMessageId,
+          type: 'ai',
+          content: token,
+          timestamp: new Date(),
+        }]);
+      } else {
+        // 기존 메시지에 토큰 추가
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageId
+              ? { ...msg, content: msg.content + token }
+              : msg
+          )
+        );
+      }
+    },
+    onFallback: (model, message) => {
+      setFallbackNotice(message);
+      setTimeout(() => setFallbackNotice(null), 3000);
+    },
+    onComplete: (data) => {
+      // 최종 메시지 업데이트 (citations, sources 추가)
+      if (streamingMessageId) {
+        const citations = extractCitations(data.answer, data.sources);
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageId
+              ? {
+                  ...msg,
+                  content: data.answer,
+                  citations,
+                  followupQuestions: data.followup_questions,
+                  hasSafetyWarning: !data.has_sufficient_evidence,
+                  clarifyingQuestions: data.clarifying_questions,
+                  isRestricted: data.domain?.is_restricted,
+                  agencyCode: data.domain?.agency_code,
+                  agencyInfo: data.domain,
+                }
+              : msg
+          )
+        );
+      }
+      setStreamingMessageId(null);
+    },
+  });
   const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
@@ -72,6 +124,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 활성 상담 타입 (null, 'dispute', 'general')
   const [activeChatType, setActiveChatType] = useState<ChatType | null>(null);
+
+  // 토큰 스트리밍 상태 (2026-01-28)
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
 
   // 로그인 여부 확인
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
@@ -298,7 +354,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      const response = await chatMutation.mutateAsync({
+      // SSE streaming 사용 (real-time token streaming)
+      const response = await startDisputeStream({
         message: formMessage.content,
         chat_type: 'dispute',
         top_k: 5,
@@ -312,43 +369,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         },
       });
 
-      let streamedText = '';
-      await simulateStreaming(response.answer, (chunk) => {
-        streamedText += chunk;
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
-          )
-        );
-      });
-
-      const citations = extractCitations(response.answer, response.sources);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content: response.answer,
-                citations,
-                followupQuestions: response.followup_questions,
-                isRestricted: response.is_restricted,
-                agencyCode: response.agency_code,
-                agencyInfo: response.agency_info,
-              }
-            : msg
-        )
-      );
-
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
-        const warningMessage: MessageWithCitations = {
-          id: aiMessageId + 1,
-          type: 'ai' as const,
-          content: '',
-          timestamp: new Date(),
-          hasSafetyWarning: true,
-          clarifyingQuestions: response.clarifying_questions,
-        };
-        setDisputeMessages((prev) => [...prev, warningMessage]);
+      // onToken/onComplete callbacks handle message updates
+      // Backend session ID 저장
+      if (response?.session_id) {
+        setBackendSessionId(response.session_id);
       }
     } catch (error) {
       console.error('Chat API error:', error);
@@ -393,40 +417,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      // PR-7: Use SSE streaming API for real-time progress
-      const response = await startDisputeStream({
+      // Real-time token streaming via SSE
+      await startDisputeStream({
         message: newMessage.content,
         chat_type: 'dispute',
         top_k: 5,
       });
 
-      if (response) {
-        const citations = extractCitations(response.answer, response.sources);
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId
-              ? {
-                  ...msg,
-                  content: response.answer,
-                  citations,
-                  followupQuestions: response.followup_questions,
-                }
-              : msg
-          )
-        );
-
-        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
-          const warningMessage: MessageWithCitations = {
-            id: aiMessageId + 1,
-            type: 'ai' as const,
-            content: '',
-            timestamp: new Date(),
-            hasSafetyWarning: true,
-            clarifyingQuestions: response.clarifying_questions,
-          };
-          setDisputeMessages((prev) => [...prev, warningMessage]);
-        }
-      }
+      // onToken/onComplete callbacks handle all message updates
     } catch (error) {
       console.error('Chat API error:', error);
       setDisputeMessages((prev) =>
@@ -479,6 +477,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
+
+        // Word-by-word streaming 애니메이션
+        let streamedText = '';
+        await simulateStreaming(response.answer, (chunk) => {
+          streamedText += chunk;
+          setGeneralMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
+            )
+          );
+        });
+
+        // 최종 메시지 업데이트 (citations 및 metadata 포함)
         setGeneralMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessageId
@@ -665,6 +676,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     <div className="chat-page flex flex-col h-full">
       {/* 페이지 최상단 참조 */}
       <div ref={pageTopRef} />
+
+      {/* Fallback notification (토큰 스트리밍) */}
+      {fallbackNotice && (
+        <div className="fixed top-4 right-4 bg-amber-100 px-4 py-2 rounded-lg shadow-lg z-50">
+          <p className="text-sm text-amber-800">{fallbackNotice}</p>
+        </div>
+      )}
+
       {/* Custom scrollbar styles */}
       <style>{`
         .chat-scrollbar::-webkit-scrollbar {

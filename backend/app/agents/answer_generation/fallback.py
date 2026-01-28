@@ -12,7 +12,7 @@ S1-PR5: LLM API 오류 시 다중 폴백 전략
 
 import os
 import logging
-from typing import Dict, Tuple, List, Any, Mapping
+from typing import Dict, Tuple, List, Any, Mapping, AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -175,3 +175,137 @@ class AnswerGenerationFallback:
     def _safe_fallback_message(cls) -> str:
         """안전 폴백 메시지"""
         return SAFE_FALLBACK_MESSAGE
+
+    # ========================================
+    # 토큰 스트리밍 지원 (2026-01-28)
+    # ========================================
+
+    @classmethod
+    async def generate_with_fallback_streaming(
+        cls,
+        query: str,
+        retrieval: Mapping[str, Any],
+        agency_info: Mapping[str, Any],
+        include_disclaimer: bool = True,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        폴백 체인을 통한 스트리밍 답변 생성
+
+        각 LLM을 순차적으로 시도하며, 실패 시 다음 모델로 전환합니다.
+        토큰은 생성 즉시 yield하고, fallback 전환 시 알림 이벤트를 전송합니다.
+
+        Yields:
+            Dict with keys:
+            - type: 'token' | 'fallback' | 'complete' | 'error'
+            - content: str (for token/error)
+            - model: str (현재 사용중인 모델)
+            - claim_evidence_map: List[Dict] (complete일 때만)
+        """
+        last_error = None
+        full_answer = ""
+
+        for model, provider in cls.FALLBACK_CHAIN:
+            try:
+                # rule_based 처리
+                if model == 'rule_based':
+                    answer = cls._rule_based_generation(retrieval, agency_info)
+                    logger.info(f"[fallback_streaming] Using rule_based generation")
+                    yield {
+                        'type': 'complete',
+                        'content': answer,
+                        'model': model,
+                        'claim_evidence_map': []
+                    }
+                    return
+
+                # Fallback 전환 알림 (첫 번째 시도 제외)
+                if last_error:
+                    yield {
+                        'type': 'fallback',
+                        'model': model,
+                        'previous_error': str(last_error)
+                    }
+
+                # LLM 스트리밍 시도
+                logger.info(f"[fallback_streaming] Trying {provider}/{model}")
+                generator = cls._try_llm_streaming(
+                    model=model,
+                    provider=provider,
+                    query=query,
+                    retrieval=retrieval,
+                    agency_info=agency_info,
+                    include_disclaimer=include_disclaimer,
+                )
+
+                # 토큰 스트리밍
+                async for token in generator:
+                    full_answer += token
+                    yield {
+                        'type': 'token',
+                        'content': token,
+                        'model': model
+                    }
+
+                # 완료
+                logger.info(f"[fallback_streaming] Successfully generated with {provider}/{model}")
+
+                # claim_evidence_map 생성
+                disputes = retrieval.get('disputes', [])
+                counsels = retrieval.get('counsels', [])
+                laws = retrieval.get('laws', [])
+                criteria = retrieval.get('criteria', [])
+
+                # RAGGenerator._extract_claim_evidence_map 재사용
+                from .tools.generator import RAGGenerator
+                temp_gen = RAGGenerator(model=model)
+                claim_evidence_map = temp_gen._extract_claim_evidence_map(
+                    full_answer, disputes, counsels, laws, criteria
+                )
+
+                yield {
+                    'type': 'complete',
+                    'content': full_answer,
+                    'model': model,
+                    'claim_evidence_map': claim_evidence_map
+                }
+                return
+
+            except Exception as e:
+                logger.warning(f"[fallback_streaming] {provider}/{model} failed: {e}")
+                last_error = e
+                full_answer = ""  # 초기화 (다음 LLM 시도)
+                continue
+
+        # 모든 LLM 실패 시 safe fallback
+        logger.error(f"[fallback_streaming] All LLMs failed. Last error: {last_error}")
+        yield {
+            'type': 'error',
+            'content': cls._safe_fallback_message(),
+            'model': 'safe_fallback'
+        }
+
+    @classmethod
+    async def _try_llm_streaming(
+        cls,
+        model: str,
+        provider: str,
+        query: str,
+        retrieval: Mapping[str, Any],
+        agency_info: Mapping[str, Any],
+        include_disclaimer: bool,
+    ) -> AsyncGenerator[str, None]:
+        """단일 LLM으로 스트리밍 시도"""
+        from .tools.generator import RAGGenerator
+
+        generator = RAGGenerator(model=model, use_llm=True)
+
+        async for token in generator.generate_structured_answer_streaming(
+            query=query,
+            agency_info=dict(agency_info),
+            disputes=list(retrieval.get('disputes', [])),
+            counsels=list(retrieval.get('counsels', [])),
+            laws=list(retrieval.get('laws', [])),
+            criteria=list(retrieval.get('criteria', [])),
+            include_disclaimer=include_disclaimer,
+        ):
+            yield token

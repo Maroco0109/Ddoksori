@@ -212,31 +212,82 @@ class BaseRetrievalAgent(BaseAgent):
         error = self.validate_request(request)
         if error:
             return self.report_to_supervisor(status="failure", result=None, message=error)
-        
+
         context = request.get("context", {})
         user_query = context.get("user_query", "")
         query_analysis = context.get("query_analysis", {})
-        
+
         base_query = self._build_search_query(user_query, query_analysis)
-        search_query = await self._rewrite_query_for_domain(base_query)
+        rewritten_query = await self._rewrite_query_for_domain(base_query)
         top_k = request.get("params", {}).get("top_k", self.default_top_k)
-        
+
         try:
-            results = await self._execute_search(search_query, top_k)
-            
+            # === P0.1: Dual-Track Query Processing ===
+            # Search with BOTH original and rewritten queries
+            all_results = []
+
+            # Track 1: Original query (always search if not empty)
+            if base_query and base_query.strip():
+                try:
+                    original_results = await self._execute_search(base_query, top_k)
+                    # Tag results with query source for debugging
+                    for r in original_results:
+                        if not hasattr(r, 'query_source'):
+                            r.query_source = "original"
+                    all_results.extend(original_results)
+                    logger.info(f"[{self.agent_name}] Original query: {len(original_results)} results")
+                except Exception as e:
+                    logger.warning(f"[{self.agent_name}] Original query search failed: {e}")
+
+            # Track 2: Rewritten query (only if different and valid)
+            if rewritten_query and rewritten_query != base_query and rewritten_query.strip():
+                try:
+                    rewritten_results = await self._execute_search(rewritten_query, top_k)
+                    # Tag results with query source
+                    for r in rewritten_results:
+                        if not hasattr(r, 'query_source'):
+                            r.query_source = "rewritten"
+                    all_results.extend(rewritten_results)
+                    logger.info(f"[{self.agent_name}] Rewritten query: {len(rewritten_results)} results")
+                except Exception as e:
+                    logger.warning(f"[{self.agent_name}] Rewritten query search failed: {e}")
+
+            # Deduplicate by chunk_id, keeping highest similarity
+            results = self._deduplicate_by_similarity(all_results)[:top_k]
+            # === End P0.1 ===
+
+            # === P0.3: Similarity Threshold Filtering ===
+            # Get threshold from environment (default: 0.50 for dispute queries)
+            threshold = float(os.getenv('SIMILARITY_THRESHOLD_DISPUTE', '0.50'))
+            # Filter results by similarity threshold
+            filtered_results = [r for r in results if r.similarity >= threshold]
+
+            logger.info(f"[{self.agent_name}] Threshold filtering: {len(results)} -> {len(filtered_results)} results (threshold={threshold:.2f})")
+
+            if not filtered_results:
+                return self.report_to_supervisor(
+                    status="failure",
+                    result={"results": [], "sources": []},
+                    message=f"{self.agent_name}: 검색 결과 없음 (similarity < {threshold:.2f}). 다른 키워드로 재시도 권장."
+                )
+
+            # Use filtered results
+            results = filtered_results
+            # === End P0.3 ===
+
             if not results:
                 return self.report_to_supervisor(
                     status="failure",
                     result={"results": [], "sources": []},
                     message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
                 )
-            
+
             formatted_results = self._format_results(results)
             sources = self._build_sources(results)
-            
+
             max_sim = max((r.get("similarity", 0) for r in formatted_results), default=0)
             avg_sim = sum(r.get("similarity", 0) for r in formatted_results) / len(formatted_results) if formatted_results else 0
-            
+
             return self.report_to_supervisor(
                 status="success",
                 result={
@@ -247,7 +298,7 @@ class BaseRetrievalAgent(BaseAgent):
                 },
                 message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
             )
-            
+
         except Exception as e:
             return self.report_to_supervisor(
                 status="failure",
@@ -260,17 +311,39 @@ class BaseRetrievalAgent(BaseAgent):
         if rewritten and rewritten != user_query:
             return rewritten
         return user_query
-    
+
+    def _deduplicate_by_similarity(self, results: List[Any]) -> List[Any]:
+        """
+        P0.1: Deduplicate results by chunk_id, keeping highest similarity
+
+        Args:
+            results: List of SearchResult objects with chunk_id and similarity
+
+        Returns:
+            Deduplicated list sorted by similarity (descending)
+        """
+        seen = {}
+        for result in results:
+            chunk_id = result.chunk_id
+            similarity = result.similarity
+
+            if chunk_id not in seen or similarity > seen[chunk_id].similarity:
+                seen[chunk_id] = result
+
+        # Sort by similarity descending
+        deduplicated = sorted(seen.values(), key=lambda r: r.similarity, reverse=True)
+        return deduplicated
+
     @abstractmethod
     async def _execute_search(self, query: str, top_k: int) -> List[Any]:
         """서브클래스에서 구현: 실제 검색 수행"""
         pass
-    
+
     @abstractmethod
     def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:
         """서브클래스에서 구현: 결과 포맷팅"""
         pass
-    
+
     @abstractmethod
     def _build_sources(self, results: List[Any]) -> List[Dict[str, Any]]:
         """서브클래스에서 구현: 출처 정보 생성"""

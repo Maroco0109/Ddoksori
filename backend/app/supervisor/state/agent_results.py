@@ -21,11 +21,13 @@ class QueryAnalysisResult(TypedDict, total=False):
             - 'general': 일반 질문 (인사, 정의 질문 등)
             - 'law': 법령 관련 질문
             - 'criteria': 분쟁해결기준 관련
+            - 'procedure': 분쟁조정 신청 절차 안내
+            - 'restricted': 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
             - 'system_meta': 시스템 관련 (기능 문의 등)
             - 'ambiguous': 의도 불명확
 
         keywords: 추출된 핵심 키워드 리스트
-        agency_hint: 추천 기관 힌트 (예: '소비자원', '공정위')
+        agency_hint: 추천 기관 힌트 ('KCA', 'ECMC', None)
         needs_clarification: 추가 정보 필요 여부
         missing_fields: 누락된 필수 정보 목록
         extracted_info: 추출된 구조화 정보 (품목, 금액 등)
@@ -33,6 +35,9 @@ class QueryAnalysisResult(TypedDict, total=False):
         rewritten_query: 정규화 + 확장된 최종 검색 쿼리
         search_queries: Multi-Query 검색용 쿼리 리스트 (최대 4개)
         expansion_applied: 적용된 확장 규칙 설명
+        retriever_types: 활성화할 Retrieval Agent 리스트
+        restricted_domain: 전문기관 도메인 (finance, medical, privacy, realestate, construction)
+        restricted_agency_info: 전문기관 정보 (name, organization, url, phone)
 
     Example:
         >>> result: QueryAnalysisResult = {
@@ -42,7 +47,7 @@ class QueryAnalysisResult(TypedDict, total=False):
         ...     'search_queries': ['헬스장 환불', '피트니스 중도해지']
         ... }
     """
-    query_type: Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']
+    query_type: Literal['dispute', 'general', 'law', 'criteria', 'procedure', 'restricted', 'system_meta', 'ambiguous']
     keywords: List[str]
     agency_hint: Optional[str]
     needs_clarification: bool
@@ -54,8 +59,12 @@ class QueryAnalysisResult(TypedDict, total=False):
     expansion_applied: str
 
     # === PR-2: Selective Retrieval 시작 ===
-    retriever_types: List[str]  # ["law", "criteria", "case"] 중 선택
+    retriever_types: List[str]  # ["law", "criteria", "case", "counsel"] 중 선택
     # === PR-2: Selective Retrieval 끝 ===
+
+    # === Phase 9: Restricted Domain 정보 ===
+    restricted_domain: Optional[str]  # finance, medical, privacy, realestate, construction
+    restricted_agency_info: Optional[Dict[str, str]]  # {name, organization, url, phone}
 
 
 class RetrievalResult(TypedDict, total=False):

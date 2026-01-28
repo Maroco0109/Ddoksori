@@ -174,6 +174,11 @@ export interface SSECompleteData {
   awaiting_user_choice: boolean;
   clarifying_questions: string[];
   followup_questions?: string[];
+  has_sufficient_evidence?: boolean;
+  domain?: AgencyRecommendation;
+  similar_cases?: SimilarCases;
+  related_laws?: LawReference[];
+  related_criteria?: CriteriaReference[];
 }
 
 /**
@@ -184,10 +189,28 @@ export interface SSEErrorData {
 }
 
 /**
+ * SSE Token Event - Individual token from LLM streaming
+ */
+export interface SSETokenData {
+  content: string;  // 개별 토큰
+  model: string;    // 현재 사용중인 모델
+}
+
+/**
+ * SSE Fallback Event - Model switching notification
+ */
+export interface SSEFallbackData {
+  model: string;    // 전환할 모델
+  message: string;  // 알림 메시지
+}
+
+/**
  * SSE Event Union Type
  */
 export type SSEEvent =
   | { type: 'status'; data: SSEStatusData }
+  | { type: 'token'; data: SSETokenData }
+  | { type: 'fallback'; data: SSEFallbackData }
   | { type: 'complete'; data: SSECompleteData }
   | { type: 'error'; data: SSEErrorData };
 

@@ -20,7 +20,10 @@ MAS Supervisor 그래프 엔트리포인트 및 공통 유틸리티를 제공합
 import os
 import time
 import logging
+import inspect
 from typing import Dict, Any, Callable
+
+from langchain_core.runnables import RunnableConfig
 
 from .state import ChatState
 
@@ -105,42 +108,85 @@ def _detect_state_changes(input_state: Dict[str, Any], output: Dict[str, Any]) -
 
 
 def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
-    """노드 함수를 감싸서 실행 시간과 I/O 스냅샷을 기록하는 래퍼 생성"""
-    def timed_wrapper(state: ChatState) -> Dict[str, Any]:
-        start_time = time.time()
-        logger.info(f"[NODE START] {node_name}")
+    """노드 함수를 감싸서 실행 시간과 I/O 스냅샷을 기록하는 래퍼 생성
 
-        # 입력 스냅샷 수집
-        snapshot_config = NODE_SNAPSHOT_FIELDS.get(node_name, {'input': [], 'output': []})
-        input_snapshot = _snapshot_state(dict(state), snapshot_config['input'])
+    async 노드와 sync 노드 모두 지원합니다.
+    async 노드는 RunnableConfig 파라미터를 받아 스트리밍 모드를 감지할 수 있습니다.
+    """
+    if inspect.iscoroutinefunction(node_fn):
+        # Async node wrapper
+        async def async_timed_wrapper(state: ChatState, config: RunnableConfig = None) -> Dict[str, Any]:
+            start_time = time.time()
+            logger.info(f"[NODE START] {node_name}")
 
-        result = node_fn(state)
+            # 입력 스냅샷 수집
+            snapshot_config = NODE_SNAPSHOT_FIELDS.get(node_name, {'input': [], 'output': []})
+            input_snapshot = _snapshot_state(dict(state), snapshot_config['input'])
 
-        end_time = time.time()
-        duration_ms = round((end_time - start_time) * 1000, 2)
-        logger.info(f"[NODE END] {node_name} - {duration_ms}ms")
+            result = await node_fn(state, config)
 
-        # 출력 스냅샷 수집
-        output_snapshot = _snapshot_state(result, snapshot_config['output'])
+            end_time = time.time()
+            duration_ms = round((end_time - start_time) * 1000, 2)
+            logger.info(f"[NODE END] {node_name} - {duration_ms}ms")
 
-        # 상태 변경 감지
-        state_changes = _detect_state_changes(dict(state), result)
+            # 출력 스냅샷 수집
+            output_snapshot = _snapshot_state(result, snapshot_config['output'])
 
-        existing_timings = state.get(NODE_TIMINGS_KEY)
-        timings = dict(existing_timings) if existing_timings else {}
-        timings[node_name] = {
-            'start': start_time,
-            'end': end_time,
-            'duration_ms': duration_ms,
-            'input_snapshot': input_snapshot,
-            'output_snapshot': output_snapshot,
-            'state_changes': state_changes,
-        }
-        result[NODE_TIMINGS_KEY] = timings
+            # 상태 변경 감지
+            state_changes = _detect_state_changes(dict(state), result)
 
-        return result
+            existing_timings = state.get(NODE_TIMINGS_KEY)
+            timings = dict(existing_timings) if existing_timings else {}
+            timings[node_name] = {
+                'start': start_time,
+                'end': end_time,
+                'duration_ms': duration_ms,
+                'input_snapshot': input_snapshot,
+                'output_snapshot': output_snapshot,
+                'state_changes': state_changes,
+            }
+            result[NODE_TIMINGS_KEY] = timings
 
-    return timed_wrapper
+            return result
+
+        return async_timed_wrapper
+    else:
+        # Sync node wrapper (unchanged)
+        def timed_wrapper(state: ChatState) -> Dict[str, Any]:
+            start_time = time.time()
+            logger.info(f"[NODE START] {node_name}")
+
+            # 입력 스냅샷 수집
+            snapshot_config = NODE_SNAPSHOT_FIELDS.get(node_name, {'input': [], 'output': []})
+            input_snapshot = _snapshot_state(dict(state), snapshot_config['input'])
+
+            result = node_fn(state)
+
+            end_time = time.time()
+            duration_ms = round((end_time - start_time) * 1000, 2)
+            logger.info(f"[NODE END] {node_name} - {duration_ms}ms")
+
+            # 출력 스냅샷 수집
+            output_snapshot = _snapshot_state(result, snapshot_config['output'])
+
+            # 상태 변경 감지
+            state_changes = _detect_state_changes(dict(state), result)
+
+            existing_timings = state.get(NODE_TIMINGS_KEY)
+            timings = dict(existing_timings) if existing_timings else {}
+            timings[node_name] = {
+                'start': start_time,
+                'end': end_time,
+                'duration_ms': duration_ms,
+                'input_snapshot': input_snapshot,
+                'output_snapshot': output_snapshot,
+                'state_changes': state_changes,
+            }
+            result[NODE_TIMINGS_KEY] = timings
+
+            return result
+
+        return timed_wrapper
 
 
 # ============================================================================

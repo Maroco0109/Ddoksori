@@ -10,7 +10,7 @@ import asyncio
 import uuid
 import json
 import logging
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -333,52 +333,129 @@ async def chat_stream_sse(
                 initial_state['compact_summary'] = memory_context.get('compact_summary')
                 initial_state['total_turn_count'] = session_memory.get_total_turn_count()
 
-            config = cast(Any, {
+            runnable_config = cast(Any, {
                 "configurable": {"thread_id": session_id},
                 "recursion_limit": GRAPH_RECURSION_LIMIT
             })
 
-            # LangGraph astream으로 노드별 진행 상황 스트리밍
-            async for event in graph.astream(initial_state, config):
-                if event:
-                    node_name = list(event.keys())[0]
-                    final_state = event[node_name]
+            # LangGraph astream_events로 실시간 토큰 스트리밍 + 노드 진행 상황
+            # on_custom_event: 토큰, fallback 이벤트 (generation_node가 발생)
+            # on_chain_start/end: 노드 시작/종료
+            full_answer = ""
+            final_state = {}
 
-                    label, progress = NODE_LABELS.get(node_name, ('처리중...', 0))
+            async for event in graph.astream_events(initial_state, runnable_config, version="v2"):
+                event_type = event.get("event")
 
-                    status_event = {
-                        'type': 'status',
-                        'data': {
-                            'node': node_name,
-                            'status': label,
-                            'progress': progress
+                # 1. Custom Events (token, fallback, error)
+                if event_type == "on_custom_event":
+                    custom_event_name = event.get("name")
+                    custom_data = event.get("data", {})
+
+                    if custom_event_name == "generation_token":
+                        # Token from LLM streaming
+                        full_answer += custom_data.get('content', '')
+                        sse_event = {
+                            'type': 'token',
+                            'data': {
+                                'content': custom_data.get('content'),
+                                'model': custom_data.get('model', 'unknown')
+                            }
                         }
-                    }
-                    yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps(sse_event, ensure_ascii=False)}\n\n"
+
+                    elif custom_event_name == "generation_fallback":
+                        # Fallback model switch
+                        fallback_event = {
+                            'type': 'fallback',
+                            'data': {
+                                'model': custom_data.get('model', 'unknown'),
+                                'message': custom_data.get('message', 'Fallback triggered')
+                            }
+                        }
+                        yield f"data: {json.dumps(fallback_event, ensure_ascii=False)}\n\n"
+
+                    elif custom_event_name == "generation_error":
+                        # Error during generation
+                        error_event = {
+                            'type': 'error',
+                            'data': {'message': custom_data.get('message', 'Unknown error')}
+                        }
+                        yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+
+                # 2. Node Start Events (status updates)
+                elif event_type == "on_chain_start":
+                    node_name = event.get("name", "")
+                    if node_name in NODE_LABELS:
+                        label, progress = NODE_LABELS[node_name]
+                        status_event = {
+                            'type': 'status',
+                            'data': {
+                                'node': node_name,
+                                'status': label,
+                                'progress': progress
+                            }
+                        }
+                        yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+
+                # 3. Node End Events (capture final state)
+                elif event_type == "on_chain_end":
+                    # Capture node outputs to build final_state
+                    node_output = event.get("data", {}).get("output", {})
+                    if isinstance(node_output, dict):
+                        final_state.update(node_output)
 
             # 최종 결과 전송
             if final_state:
                 answer = final_state.get('final_answer', '')
                 retrieval = final_state.get('retrieval') or {}
 
+                # retrieval 정보 추출 (기존 /chat endpoint와 동일)
+                agency_info = retrieval.get('agency', {})
+                disputes = retrieval.get('disputes', [])
+                counsels = retrieval.get('counsels', [])
+                laws = retrieval.get('laws', [])
+                criteria = retrieval.get('criteria', [])
+
                 # 어시스턴트 응답을 메모리에 추가
                 if session_memory:
                     await session_memory.add_turn(role='assistant', content=answer)
 
-                # 소스 정보 수집
+                # 소스 정보를 /chat endpoint와 동일하게 확장
                 sources = []
-                for dispute in retrieval.get('disputes', [])[:3]:
+                for dispute in disputes[:3]:
                     sources.append({
                         'type': 'dispute',
                         'title': dispute.get('doc_title', ''),
                         'source_org': dispute.get('source_org', ''),
-                        'similarity': dispute.get('similarity', 0)
+                        'similarity': dispute.get('similarity', 0),
+                        'content': dispute.get('content', ''),
+                        'case_uid': dispute.get('case_uid'),
+                        'product_name': dispute.get('product_name'),
                     })
-                for law in retrieval.get('laws', [])[:3]:
+                for counsel in counsels[:3]:
+                    sources.append({
+                        'type': 'counsel',
+                        'title': counsel.get('doc_title', ''),
+                        'source_org': counsel.get('source_org', ''),
+                        'similarity': counsel.get('similarity', 0),
+                        'content': counsel.get('content', ''),
+                    })
+                for law in laws[:3]:
                     sources.append({
                         'type': 'law',
                         'title': f"{law.get('law_name', '')} {law.get('full_path', '')}",
-                        'similarity': law.get('similarity', 0)
+                        'similarity': law.get('similarity', 0),
+                        'content': law.get('content', ''),
+                        'law_name': law.get('law_name'),
+                        'article': law.get('article'),
+                    })
+                for criterion in criteria[:3]:
+                    sources.append({
+                        'type': 'criteria',
+                        'title': criterion.get('title', ''),
+                        'similarity': criterion.get('similarity', 0),
+                        'content': criterion.get('content', ''),
                     })
 
                 complete_event = {
@@ -388,7 +465,16 @@ async def chat_stream_sse(
                         'answer': answer,
                         'sources': sources,
                         'awaiting_user_choice': final_state.get('awaiting_user_choice', False),
-                        'clarifying_questions': final_state.get('clarifying_questions', [])
+                        'clarifying_questions': final_state.get('clarifying_questions', []),
+                        'followup_questions': final_state.get('followup_questions', []),
+                        'has_sufficient_evidence': final_state.get('has_sufficient_evidence', True),
+                        'domain': agency_info if agency_info else None,
+                        'similar_cases': {
+                            'disputes': [{'doc_title': d.get('doc_title'), 'source_org': d.get('source_org'), 'similarity': d.get('similarity')} for d in disputes],
+                            'counsels': [{'doc_title': c.get('doc_title'), 'source_org': c.get('source_org'), 'similarity': c.get('similarity')} for c in counsels],
+                        } if (disputes or counsels) else None,
+                        'related_laws': [{'law_name': l.get('law_name'), 'article': l.get('article'), 'similarity': l.get('similarity')} for l in laws] if laws else None,
+                        'related_criteria': [{'title': c.get('title'), 'similarity': c.get('similarity')} for c in criteria] if criteria else None,
                     }
                 }
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"

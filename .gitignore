@@ -82,12 +82,12 @@ backup_v2.sql
 backup_v3.sql
 
 
+# # Agents
 # Agents
-Agents
-.agent
-.claude
-.sisyphus
-.cursorrules
-AGENTS.md
-CLAUDE.md
-AI_MEMO.md
+# .agent
+# .claude
+# .sisyphus
+# .cursorrules
+# AGENTS.md
+# CLAUDE.md
+# AI_MEMO.md

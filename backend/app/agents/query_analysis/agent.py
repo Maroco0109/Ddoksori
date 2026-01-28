@@ -2,7 +2,7 @@
 똑소리 프로젝트 - 질의분석 노드 (Query Analysis Node)
 
 작성일: 2026-01-14
-최종 수정: 2026-01-22 (PR#2 완료 후 문서화)
+최종 수정: 2026-01-28 (PR#2 Intent Classifier 고도화)
 
 [역할 및 책임]
 사용자의 자연어 질문을 분석하여 시스템이 처리 가능한 구조화된 데이터로 변환합니다.
@@ -17,16 +17,19 @@ Input State:
 Output State:
     - query_analysis (QueryAnalysisResult): 분석 결과 (v1 호환)
     - mode (RoutingMode): 라우팅 모드
-    - mode (RoutingMode): 다음 단계 라우팅 결정 (NEED_RAG, NO_RETRIEVAL, NEED_USER_CLARIFICATION)
+    - mode (RoutingMode): 다음 단계 라우팅 결정 (NEED_RAG, NO_RETRIEVAL, NEED_USER_CLARIFICATION, RESTRICTED_DOMAIN)
 
 [주요 로직]
 1. 정규화: 불필요한 어미, 특수문자 제거
-2. 유형 분류: Rule-based 패턴 매칭 + LLM Fallback (Hybrid)
+2. 유형 분류: Hybrid (Rule-based Fast Path + LLM Function Calling)
    - dispute: 분쟁 상담 (환불, 교환 등)
    - law: 법령 문의
    - criteria: 분쟁조정기준 문의
+   - procedure: 분쟁조정 신청 절차 안내
+   - restricted: 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
    - general: 일반 대화
    - system_meta: 봇 정체성 질문
+   - ambiguous: 의도 불명확 (되묻기 필요)
 3. 키워드 추출: 검색 효율을 위한 불용어 제거 및 동의어 정규화
 4. 쿼리 확장: HyDE, LLM Rewrite 등을 통한 검색 쿼리 다변화
 """
@@ -57,12 +60,14 @@ except ImportError:
 # 검색 우선순위: 법령 → 기준 → 사례
 # ============================================================
 QUERY_TYPE_TO_RETRIEVERS = {
-    "law": ["law"],                          # 법령만
-    "criteria": ["law", "criteria"],         # 법령 + 기준 (기준은 법령의 구체화)
-    "dispute": ["law", "criteria", "case"],  # 전체 (분쟁은 법령+기준+사례 필요)
-    "general": [],                           # 검색 불필요
-    "system_meta": [],                       # 검색 불필요
-    "ambiguous": ["law", "criteria"],        # 법령 + 기준 (사례는 나중에)
+    "law": ["law"],                                  # 법령만
+    "criteria": ["law", "criteria"],                 # 법령 + 기준 (기준은 법령의 구체화)
+    "dispute": ["law", "criteria", "case", "counsel"],  # P2.2: counsel 추가 (13,544 cases)
+    "procedure": ["law", "criteria"],                # 절차 안내: 법령 + 기준 (템플릿 + RAG 보강)
+    "restricted": ["case"],                          # 전문기관 도메인: 유사 사례만 검색
+    "general": [],                                   # 검색 불필요
+    "system_meta": [],                               # 검색 불필요
+    "ambiguous": ["law", "criteria"],                # 법령 + 기준 (사례는 나중에)
 }
 # === PR-2: Selective Retrieval 끝 ===
 
@@ -73,37 +78,75 @@ QUERY_TYPE_TO_RETRIEVERS = {
 # 빠른 응답 속도와 예측 가능한 동작을 위해 1차적으로 사용됩니다.
 # ============================================================
 
-# 콘텐츠 관련 키워드 (KCDRC - 콘텐츠분쟁조정위원회 관할)
-CONTENT_KEYWORDS = [
-    "게임",
-    "영화",
-    "콘텐츠",
-    "앱",
-    "어플",
-    "애플리케이션",
-    "음악",
-    "웹툰",
-    "만화",
-    "동영상",
-    "영상",
-    "스트리밍",
-    "OTT",
-    "넷플릭스",
-    "왓챠",
-    "디즈니",
-    "유튜브",
-    "인앱",
-    "결제",
-    "아이템",
-    "캐시",
-    "다이아",
-    "루비",
-    "디지털",
-    "다운로드",
-    "구독",
-    "VOD",
-    "e북",
-    "전자책",
+# ============================================================
+# === Restricted Domain Keywords (전문기관 도메인) ===
+# KCA/ECMC 관할 외 전문분쟁조정기관 안내 필요
+# ============================================================
+RESTRICTED_DOMAIN_KEYWORDS = {
+    "finance": [  # 금융감독원 · 금융분쟁조정위원회
+        "대출", "보험", "카드", "신용카드", "주식", "펀드", "은행", "예금", "적금",
+        "증권", "투자", "금융", "채권", "보험사", "저축", "대출금리", "금융상품",
+        "보험금", "보험료", "해지환급금", "보험해지", "금융회사",
+    ],
+    "medical": [  # 한국의료분쟁조정중재원 · 의료분쟁조정위원회
+        "병원", "진료", "수술", "의사", "의료사고", "의료", "치료", "약", "처방",
+        "입원", "퇴원", "간호사", "의원", "클리닉", "성형", "성형외과", "피부과",
+        "치과", "한의원", "약국", "의료비", "진료비", "오진", "의료과실",
+    ],
+    "privacy": [  # 개인정보보호위원회 · 개인정보분쟁조정위원회
+        "개인정보", "유출", "정보보호", "개인정보유출", "정보유출", "해킹",
+        "개인정보보호", "정보침해", "동의없이", "개인정보처리",
+    ],
+    "realestate": [  # 한국부동산원 · 임대차분쟁조정위원회
+        "임대차", "전세", "월세", "집주인", "보증금", "임대인", "임차인",
+        "주택임대", "전월세", "보증금반환", "퇴거", "계약갱신",
+    ],
+    "construction": [  # 국토교통부 · 건설/건축분쟁조정위원회
+        "공사", "시공", "건축", "아파트하자", "건설", "건물", "시공사",
+        "하자보수", "건축물", "입주", "준공", "건축주", "시공불량",
+    ],
+}
+
+# Restricted 도메인별 전문기관 정보
+RESTRICTED_DOMAIN_AGENCIES = {
+    "finance": {
+        "name": "금융분쟁조정위원회",
+        "organization": "금융감독원",
+        "url": "https://www.fcsc.kr",
+        "phone": "1332",
+    },
+    "medical": {
+        "name": "의료분쟁조정위원회",
+        "organization": "한국의료분쟁조정중재원",
+        "url": "https://www.k-medi.or.kr",
+        "phone": "1670-2545",
+    },
+    "privacy": {
+        "name": "개인정보분쟁조정위원회",
+        "organization": "개인정보보호위원회",
+        "url": "https://www.kopico.go.kr",
+        "phone": "1833-6972",
+    },
+    "realestate": {
+        "name": "임대차분쟁조정위원회",
+        "organization": "한국부동산원",
+        "url": "https://www.reb.or.kr",
+        "phone": "1644-2828",
+    },
+    "construction": {
+        "name": "건설분쟁조정위원회",
+        "organization": "국토교통부",
+        "url": "https://www.molit.go.kr",
+        "phone": "1599-0001",
+    },
+}
+
+# 절차 안내 키워드 (Procedure)
+PROCEDURE_KEYWORDS = [
+    "신청 방법", "신청방법", "접수", "분쟁조정 신청", "분쟁조정신청",
+    "어떻게 신청", "절차", "서류", "기간", "분쟁해결 절차", "조정신청",
+    "피해구제 신청", "신고", "신고방법", "제출서류", "필요서류",
+    "온라인 신청", "방문 신청", "조정 절차", "구비서류",
 ]
 
 # 개인간 거래 키워드 (ECMC - 전자문서·전자거래분쟁조정위원회 관할)
@@ -464,7 +507,7 @@ def _check_ambiguity_with_llm(query: str) -> bool:
 
     Fallback 체인:
     1. EXAONE (Primary) - 도메인 특화 모델
-    2. gpt-4o-mini (Fallback) - 빠르고 저렴한 OpenAI 모델
+    2. gpt-4o-mini Function Calling (Fallback) - 구조화된 분류
 
     Args:
         query: 사용자 쿼리
@@ -497,7 +540,27 @@ def _check_ambiguity_with_llm(query: str) -> bool:
     except Exception as e:
         logger.warning(f"[QueryAnalysis] EXAONE ambiguity check failed: {e}, trying fallback...")
 
-    # 2. gpt-4o-mini Fallback
+    # 2. gpt-4o-mini Function Calling Fallback (PR-2 IntentClassifier 통합)
+    try:
+        from .classifier import IntentClassifier
+
+        classifier = IntentClassifier(model="gpt-4o-mini", timeout=3.0)
+        result = classifier.classify(query)
+
+        # ambiguous로 분류되었거나 confidence가 낮으면 모호한 것으로 판단
+        is_ambiguous = result.query_type == "ambiguous" or result.confidence < 0.8
+        logger.info(
+            f"[QueryAnalysis] gpt-4o-mini intent check: '{query[:20]}...' -> "
+            f"type={result.query_type}, conf={result.confidence:.2f} (ambiguous={is_ambiguous})"
+        )
+        return is_ambiguous
+
+    except ImportError:
+        logger.warning("[QueryAnalysis] IntentClassifier import failed, using legacy fallback")
+    except Exception as e:
+        logger.warning(f"[QueryAnalysis] IntentClassifier failed: {e}, using legacy fallback...")
+
+    # 3. Legacy fallback (텍스트 기반)
     try:
         from openai import OpenAI
 
@@ -592,7 +655,7 @@ def _is_ambiguous_query(query: str) -> bool:
 
 def _classify_mode(
     query_type: Literal[
-        "dispute", "general", "law", "criteria", "system_meta", "ambiguous"
+        "dispute", "general", "law", "criteria", "procedure", "restricted", "system_meta", "ambiguous"
     ],
     needs_clarification: bool,
     query: str,
@@ -603,6 +666,7 @@ def _classify_mode(
     - NO_RETRIEVAL: 검색 없이 바로 답변 (일반 대화, 시스템 질문)
     - NEED_USER_CLARIFICATION: 정보가 부족하거나 모호해서 사용자에게 되물어야 함
     - NEED_RAG: 정보 검색이 필요함
+    - RESTRICTED_DOMAIN: 전문기관 도메인 (유사 사례 검색 + 전문기관 안내)
     """
     # Phase 4: 시스템 관련 질문은 검색 불필요
     if query_type == "system_meta":
@@ -625,9 +689,15 @@ def _classify_mode(
             return "NEED_RAG"
         return "NO_RETRIEVAL"
 
+    # NEW: Restricted 도메인은 전문기관 안내 + 유사 사례 검색
+    if query_type == "restricted":
+        logger.info("[QueryAnalysis] Restricted domain detected, routing to specialist agency guidance")
+        return "RESTRICTED_DOMAIN"
+
     if needs_clarification:
         return "NEED_USER_CLARIFICATION"
 
+    # procedure, law, criteria, dispute 모두 RAG 필요
     return "NEED_RAG"
 
 
@@ -751,21 +821,89 @@ def _is_system_meta_query(query: str) -> bool:
     return False
 
 
+def _detect_restricted_domain(query: str) -> Optional[str]:
+    """
+    전문기관 도메인 감지
+
+    KCA/ECMC 관할 외 전문분쟁조정기관으로 안내해야 하는 도메인인지 확인합니다.
+
+    Returns:
+        도메인 키 (finance, medical, privacy, realestate, construction) 또는 None
+    """
+    query_lower = query.lower()
+
+    # 핵심 키워드 (1개만 있어도 해당 도메인으로 판단)
+    core_keywords = {
+        "finance": ["금융분쟁", "보험분쟁", "대출분쟁", "대출", "보험금", "보험료", "은행", "금융회사", "증권", "펀드"],
+        "medical": ["의료사고", "의료분쟁", "의료과실", "진료", "수술", "병원", "의사", "오진"],
+        "privacy": ["개인정보유출", "개인정보침해", "개인정보", "정보유출", "해킹"],
+        "realestate": ["임대차분쟁", "전세분쟁", "보증금분쟁", "전세", "월세", "임대차", "보증금반환", "집주인"],
+        "construction": ["건축분쟁", "시공분쟁", "하자분쟁", "시공불량", "시공", "건축", "아파트하자"],
+    }
+
+    # 우선순위: 핵심 키워드 먼저 체크
+    for domain, keywords in core_keywords.items():
+        if any(kw in query_lower for kw in keywords):
+            logger.info(f"[QueryAnalysis] Restricted domain detected by core keyword: {domain}")
+            return domain
+
+    # 일반 키워드 2개 이상 매칭 체크
+    for domain, keywords in RESTRICTED_DOMAIN_KEYWORDS.items():
+        match_count = sum(1 for kw in keywords if kw in query_lower)
+        if match_count >= 2:
+            logger.info(f"[QueryAnalysis] Restricted domain detected: {domain} (matches: {match_count})")
+            return domain
+
+    return None
+
+
+def _is_procedure_query(query: str) -> bool:
+    """
+    절차 안내 질문인지 확인
+
+    분쟁조정 신청 절차, 서류, 기간 등에 대한 질문인지 판단합니다.
+    """
+    query_lower = query.lower()
+
+    # 절차 키워드 매칭
+    procedure_match = sum(1 for kw in PROCEDURE_KEYWORDS if kw in query_lower)
+    if procedure_match >= 1:
+        logger.info(f"[QueryAnalysis] Procedure query detected (matches: {procedure_match})")
+        return True
+
+    # 절차 질문 패턴
+    procedure_patterns = [
+        r"어떻게\s*(신청|접수|신고)",
+        r"(신청|접수|신고)\s*방법",
+        r"(절차|과정).*알려",
+        r"뭐\s*필요해",
+        r"서류.*뭐",
+        r"기간.*얼마나",
+    ]
+    for pattern in procedure_patterns:
+        if re.search(pattern, query_lower):
+            return True
+
+    return False
+
+
 def _classify_query_type(
     query: str,
-) -> Literal["dispute", "general", "law", "criteria", "system_meta", "ambiguous"]:
+) -> Literal["dispute", "general", "law", "criteria", "procedure", "restricted", "system_meta", "ambiguous"]:
     """
-    사용자의 질문을 6가지 유형 중 하나로 분류합니다.
+    사용자의 질문을 8가지 유형 중 하나로 분류합니다.
     우선순위(Priority) 기반의 Rule-based 로직을 사용합니다.
 
     Priority:
     1. System Meta (시스템 질문) -> 검색 Skip
     2. General (인사/잡담) -> 검색 Skip
     3. Definitional (정의 질문) -> General로 분류
-    4. Law (법령 질문) -> 관련 법령 검색
-    5. Criteria (기준 질문) -> 고시/기준 검색
-    6. Ambiguous (모호함) -> 사용자 확인 요청
-    7. Dispute (분쟁 상담) -> Default (유사 사례 검색)
+    4. Restricted (전문기관 도메인) -> 전문기관 안내 + 유사 사례 검색
+    5. Procedure (절차 안내) -> 절차 템플릿 + RAG 보강
+    6. Law (법령 질문) -> 관련 법령 검색
+    7. Criteria (기준 질문) -> 고시/기준 검색
+    8. Ambiguous (모호함) -> 사용자 확인 요청
+    9. Dispute (분쟁 상담) -> Default (유사 사례 검색)
 
     Returns:
         분류된 질의 유형 문자열
@@ -812,11 +950,20 @@ def _classify_query_type(
         if re.search(pattern, query_lower):
             return "general"
 
+    # NEW: Restricted 도메인 체크 (전문기관 안내 필요)
+    # 금융, 의료, 개인정보, 부동산, 건설 분야는 전문기관 안내
+    restricted_domain = _detect_restricted_domain(query)
+    if restricted_domain:
+        return "restricted"
+
+    # NEW: Procedure 체크 (절차 안내 질문)
+    if _is_procedure_query(query):
+        return "procedure"
+
     # 법령 문의 (법령 키워드가 명시적으로 포함)
     # Pattern 1: 법률명 패턴 (예: "소비자기본법", "전자상거래법")
-    law_pattern_match_815 = re.search(r'\S+법', query_lower)
-    logger.info(f"[DEBUG Line 815] query_lower='{query_lower}', law_pattern_match={law_pattern_match_815}")
-    if law_pattern_match_815:
+    law_pattern_match = re.search(r'\S+법', query_lower)
+    if law_pattern_match:
         return "law"
 
     # Pattern 2: 키워드 카운트 (2개 이상) 또는 특정 패턴
@@ -931,20 +1078,26 @@ def _extract_keywords(query: str) -> List[str]:
 def _determine_agency_hint(query: str) -> Optional[str]:
     """
     질의 내용을 바탕으로 적절한 분쟁조정 기관을 추측합니다.
-    - KCDRC: 콘텐츠 키워드
-    - ECMC: 개인간 거래 키워드
-    - KCA: 그 외 일반 (Default)
+    - ECMC: 전자거래/개인간 거래 키워드
+    - KCA: 그 외 일반 소비자 분쟁 (Default)
+    - None: restricted 도메인 (전문기관 안내 필요)
+
+    Note: KCDRC(콘텐츠분쟁조정위원회) 분류는 Phase 9에서 제거됨.
+          콘텐츠 분쟁도 KCA로 통합 처리.
     """
     query_lower = query.lower()
 
-    content_matches = [kw for kw in CONTENT_KEYWORDS if kw in query_lower]
-    if content_matches:
-        return "KCDRC"
+    # Restricted 도메인인 경우 agency_hint는 None
+    restricted_domain = _detect_restricted_domain(query)
+    if restricted_domain:
+        return None
 
+    # 전자거래/개인간 거래 → ECMC
     individual_matches = [kw for kw in INDIVIDUAL_KEYWORDS if kw in query_lower]
     if individual_matches:
         return "ECMC"
 
+    # 기본값: KCA (한국소비자원)
     return "KCA"
 
 
@@ -968,7 +1121,7 @@ def _normalize_query(query: str) -> str:
 def _expand_query_by_type(
     query: str,
     query_type: Literal[
-        "dispute", "general", "law", "criteria", "system_meta", "ambiguous"
+        "dispute", "general", "law", "criteria", "procedure", "restricted", "system_meta", "ambiguous"
     ],
     onboarding: Optional[OnboardingInfo],
     extracted_info: Dict[str, str],
@@ -986,6 +1139,8 @@ def _expand_query_by_type(
        - dispute: {품목} {동사} 분쟁조정 피해구제 소비자
        - law: {쿼리} 관련 조항 조문
        - criteria: {품목} 분쟁해결기준 기간
+       - procedure: {쿼리} 분쟁조정 신청 절차 서류
+       - restricted: {쿼리} 분쟁 사례 (유사 사례 검색용)
 
     Returns:
         (확장된 쿼리, 적용된 확장 방식)
@@ -1039,6 +1194,21 @@ def _expand_query_by_type(
             expanded = f"{item} 분쟁해결기준 교환 환불 수리 보상 기간"
             return expanded, f"criteria_item: {item}"
         return f"{query} 분쟁해결기준 품목 기준", "criteria_default"
+
+    # NEW: procedure (절차 안내)
+    elif query_type == "procedure":
+        expanded = f"{query} 분쟁조정 신청 절차 서류 기간 방법"
+        return expanded, "procedure_expansion"
+
+    # NEW: restricted (전문기관 도메인 - 유사 사례 검색용)
+    elif query_type == "restricted":
+        # 도메인 키워드를 추출하여 유사 사례 검색에 활용
+        domain = _detect_restricted_domain(query)
+        if domain:
+            domain_keywords = RESTRICTED_DOMAIN_KEYWORDS.get(domain, [])[:3]
+            expanded = f"{query} {' '.join(domain_keywords)} 분쟁 사례"
+            return expanded, f"restricted_expansion: {domain}"
+        return f"{query} 분쟁 사례", "restricted_default"
 
     return query, "unknown_type"
 
@@ -1190,9 +1360,12 @@ def query_analysis_node(state: ChatState) -> Dict:
     # Step 3: 키워드 추출
     keywords = _extract_keywords(normalized_query)
 
-    # Step 4: 기관 추천 힌트
+    # Step 4: 기관 추천 힌트 및 Restricted 도메인 감지
+    restricted_domain = _detect_restricted_domain(normalized_query) if query_type == "restricted" else None
     agency_hint = (
-        _determine_agency_hint(normalized_query) if query_type == "dispute" else None
+        _determine_agency_hint(normalized_query)
+        if query_type in ("dispute", "procedure", "criteria")
+        else None
     )
 
     # Step 5: 메시지에서 정보 추출
@@ -1254,6 +1427,10 @@ def query_analysis_node(state: ChatState) -> Dict:
         # === PR-2: Selective Retrieval 시작 ===
         "retriever_types": QUERY_TYPE_TO_RETRIEVERS.get(query_type, ["law", "criteria"]),
         # === PR-2: Selective Retrieval 끝 ===
+
+        # === Phase 9: Restricted Domain 정보 ===
+        "restricted_domain": restricted_domain,
+        "restricted_agency_info": RESTRICTED_DOMAIN_AGENCIES.get(restricted_domain) if restricted_domain else None,
     }
 
     # === PR-6: L2 캐시 저장 ===

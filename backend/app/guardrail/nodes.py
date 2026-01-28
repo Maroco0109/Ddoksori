@@ -47,12 +47,23 @@ def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
 def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # === PR-6: draft_answer를 final_answer로 복사 ===
     draft_answer = state.get('draft_answer', '')
-    final_answer = state.get('final_answer', '') or draft_answer
+    final_answer = state.get('final_answer', '')
 
-    # final_answer를 state에 설정
-    updates = {}
-    if final_answer and not state.get('final_answer'):
-        updates['final_answer'] = final_answer
+    # 우선순위: final_answer > draft_answer
+    if not final_answer:
+        final_answer = draft_answer
+
+    # 안전 체크: 둘 다 비어있으면 에러 로그 + fallback 메시지
+    if not final_answer:
+        logger.error(
+            "[OutputGuardrail] CRITICAL BUG: Both draft_answer and final_answer are empty! "
+            f"State keys: {list(state.keys())}"
+        )
+        # Fallback 메시지로 사용자 경험 개선
+        final_answer = "죄송합니다. 일시적인 오류로 답변을 생성하지 못했습니다. 잠시 후 다시 시도해주세요."
+
+    # ALWAYS set final_answer (빈 문자열이어도 설정)
+    updates = {'final_answer': final_answer}
     # === PR-6 끝 ===
 
     if not MODERATION_ENABLED:
@@ -61,9 +72,7 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # === PR-6 끝 ===
         return updates
 
-    if not final_answer:
-        return updates
-
+    # Moderation 체크 (final_answer가 fallback 메시지라도 체크)
     result = check_output(final_answer)
 
     if result['blocked']:

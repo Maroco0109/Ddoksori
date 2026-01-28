@@ -22,13 +22,14 @@ class CounselRetrievalAgent(BaseRetrievalAgent):
 
         retriever = HybridRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
             return await asyncio.to_thread(
                 retriever.search,
                 query=query,
                 top_k=top_k,
-                doc_type_filter='counsel_case',
+                dataset_type_filter='case',
+                category_filter=['상담'],  # 상담 사례만 (counsel_case)
             )
         finally:
             retriever.close()

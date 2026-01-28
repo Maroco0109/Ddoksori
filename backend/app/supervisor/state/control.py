@@ -13,7 +13,14 @@ from typing_extensions import TypedDict
 # - NEED_RAG: RAG 파이프라인 필요
 # - NEED_USER_CLARIFICATION: 사용자 추가 정보 필요
 # - NEED_CLARIFICATION: NEED_USER_CLARIFICATION과 동일 (통합 그래프용)
-RoutingMode = Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
+# - RESTRICTED_DOMAIN: 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
+RoutingMode = Literal[
+    'NO_RETRIEVAL',
+    'NEED_RAG',
+    'NEED_USER_CLARIFICATION',
+    'NEED_CLARIFICATION',
+    'RESTRICTED_DOMAIN',
+]
 
 
 class ControlState(TypedDict, total=False):
