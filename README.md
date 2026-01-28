@@ -8,6 +8,7 @@
 
 ### 핵심 기능
 - **MAS Supervisor 아키텍처**: GPT-5.1 기반 Supervisor가 7개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **Conversation Phase System**: Rule-based 대화 단계 상태 머신으로 점진적 정보 수집 및 단계별 안내 (법령→사례→절차)
 - **Pre-retrieval LLM**: EXAONE-4.0-1.2B 기반 도메인 특화 쿼리 재작성으로 검색 정확도 향상
 - **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합
 - **실시간 스트리밍**: SSE(Server-Sent Events)를 통한 실시간 답변 생성 및 출처 제공

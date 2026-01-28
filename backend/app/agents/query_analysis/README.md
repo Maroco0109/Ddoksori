@@ -1,6 +1,6 @@
 # Query Analysis Agent (질의 분석 에이전트)
 
-**최종 수정**: 2026-01-27 (Phase 8: Query Rewriter 아카이브 반영)
+**최종 수정**: 2026-01-28 (Phase 9: Conversation Phase 통합 반영)
 
 ## 1. 개요 (Overview)
 
@@ -113,7 +113,62 @@ test_pr2_hybrid.py::test_definitional_query_is_general PASSED # 정의형 질문
 
 ---
 
-## 6. 고도화 계획 (To-Be)
+## 6. Conversation Phase 통합 (Phase 9)
+
+### 슬롯 추출 레이어
+
+분쟁 상담 시 필요한 정보를 수집하기 위해 2단계 슬롯 추출을 수행합니다.
+
+**Layer 1 (Rule-based)**: 비용 $0
+- 정규식 기반 엔티티 추출 (구매 품목, 날짜, 금액)
+- 분쟁 유형 키워드 매핑: `환불/반품/교환/수리/취소/해지/해약`
+- 일반 제품명 사전 매칭 (COMMON_PRODUCTS)
+
+**Layer 2 (LLM Fallback)**: gpt-4o-mini
+- 필수 슬롯 누락 시에만 트리거
+- 3초 타임아웃, JSON 스키마 강제
+- 3-tier 폴백: EXAONE → gpt-4o-mini → OpenAI legacy
+
+### ConversationManager 통합
+
+```python
+from ...supervisor.conversation_manager import (
+    update_slots_and_phase,
+    should_trigger_clarification,
+    get_retriever_types_for_phase,
+)
+
+# 슬롯 업데이트 및 단계 전환
+phase_updates = update_slots_and_phase(temp_state)
+
+# 역질문 필요 시 모드 설정
+if should_trigger_clarification({'conversation_phase': new_phase}):
+    mode = 'NEED_USER_CLARIFICATION'
+
+# 단계별 검색 대상 조정
+retriever_types = get_retriever_types_for_phase(new_phase)
+```
+
+### 필수 슬롯
+
+| 슬롯 | 필수 여부 | 설명 |
+|------|----------|------|
+| `purchase_item` | Required | 구매 품목/서비스 |
+| `problem_details` | Required | 문제 상황 설명 |
+| `dispute_type` | Optional | 환불/교환/수리/해지 |
+| `purchase_date` | Optional | 구매 시기 |
+| `purchase_place` | Optional | 구매처 |
+
+### 슬롯 → 모드 매핑
+
+```text
+필수 슬롯 채움 → NEED_RAG (검색 진행)
+필수 슬롯 누락 → NEED_USER_CLARIFICATION (역질문)
+```
+
+---
+
+## 7. 고도화 계획 (To-Be)
 
 1.  **Fine-tuned SLM 도입**: 현재의 Rule+LLM 방식을 Fine-tuned EXAONE 2.4B 모델로 완전히 대체하여 분류 정확도를 95% 이상으로 끌어올릴 예정입니다.
 2.  **개인화된 쿼리 확장**: 사용자의 이전 대화 이력을 반영하여 쿼리를 확장하는 기능이 필요합니다.
