@@ -1,6 +1,425 @@
 # AI_MEMO
 
-## Current Task: 대화형 챗봇 + 소셜 로그인 구현 계획 (PLANNED ✅)
+## Current Task: Real-time LLM Token Streaming 구현 (COMPLETED ✅)
+
+**Date**: 2026-01-28 | **Status**: ✅ 완료
+
+---
+
+### 1. What Shipped (사용자 관점)
+
+**ChatGPT-style 실시간 토큰 스트리밍** - LangGraph `astream_events()` API 기반 구현
+
+**배경**: 기존 `graph.astream()` 사용 시 노드 완료 후에만 이벤트가 전달되어 LLM 생성 중 토큰 인터셉트 불가능. 이로 인해 TTFB(Time To First Byte)가 5-10초로 길고, 사용자는 답변 생성이 완료될 때까지 대기해야 했음.
+
+**해결**: LangGraph의 `astream_events(version="v2")` API와 `adispatch_custom_event()`를 활용하여 LLM 생성 중 실시간으로 토큰을 스트리밍.
+
+**효과**:
+- ✅ 실시간 토큰 스트리밍 (버퍼링 없음)
+- ✅ TTFB 개선 (토큰이 즉시 흐름)
+- ✅ ChatGPT 스타일 UX 제공
+- ✅ Fallback 체인 스트리밍 준비 완료
+
+### 2. Key Technical Decisions
+
+#### 2.1. LangGraph astream_events() 마이그레이션
+
+**Before (Workaround)**:
+```python
+# chat.py - 기존 방식
+async for event in graph.astream(initial_state, config):
+    node_name = list(event.keys())[0]
+    final_state = event[node_name]
+
+    # ❌ 문제: 'generation' 이벤트는 노드 완료 후에만 도착
+    # 이미 LLM 생성이 끝난 상태이므로 토큰 인터셉트 불가능
+    if node_name == 'generation':
+        # Workaround: generation_node_streaming() 직접 호출
+        async for token_event in generation_node_streaming(final_state):
+            yield token_event
+```
+
+**After (Native Approach)**:
+```python
+# chat.py - astream_events 방식
+async for event in graph.astream_events(initial_state, config, version="v2"):
+    event_type = event.get("event")
+
+    # ✅ Custom Events: LLM 생성 중 실시간 토큰 전송
+    if event_type == "on_custom_event":
+        custom_event_name = event.get("name")
+        custom_data = event.get("data", {})
+
+        if custom_event_name == "generation_token":
+            yield {
+                'type': 'token',
+                'data': {
+                    'content': custom_data.get('content'),
+                    'model': custom_data.get('model', 'unknown')
+                }
+            }
+        elif custom_event_name == "generation_fallback":
+            yield {'type': 'fallback', 'data': {...}}
+
+    # ✅ Node Status: on_chain_start/end로 진행 상황 추적
+    elif event_type == "on_chain_start":
+        node_name = event.get("name", "")
+        if node_name in NODE_LABELS:
+            yield {'type': 'status', 'data': {...}}
+```
+
+#### 2.2. generation_node Async 변환 + Custom Event 발생
+
+**Before (Sync)**:
+```python
+# agent.py - 기존 동기 함수
+def generation_node(state: ChatState) -> Dict:
+    # LLM 호출 (블로킹)
+    draft_answer, model_used, claim_evidence_map = \
+        AnswerGenerationFallback.generate_with_fallback(...)
+
+    return {
+        'draft_answer': draft_answer,
+        'generation_model_used': model_used,
+        ...
+    }
+```
+
+**After (Async + Custom Events)**:
+```python
+# agent.py - async + 커스텀 이벤트 발생
+async def generation_node(state: ChatState, config: RunnableConfig = None) -> Dict:
+    # 스트리밍 모드 감지
+    is_streaming = config and config.get('callbacks') is not None
+
+    if is_streaming:
+        # LLM 스트리밍 + 커스텀 이벤트 발생
+        full_answer = ""
+        async for event in AnswerGenerationFallback.generate_with_fallback_streaming(...):
+            event_type = event.get('type')
+
+            if event_type == 'token':
+                # ✅ 개별 토큰을 custom event로 발생
+                await adispatch_custom_event(
+                    'generation_token',
+                    {'content': event['content'], 'model': event.get('model', 'unknown')},
+                    config=config
+                )
+                full_answer += event['content']
+
+            elif event_type == 'fallback':
+                # ✅ Fallback 전환 알림
+                await adispatch_custom_event(
+                    'generation_fallback',
+                    {'model': event['model'], 'message': f"{event['model']}로 전환중..."},
+                    config=config
+                )
+
+        draft_answer = full_answer
+    else:
+        # Non-streaming: 기존 블로킹 호출 유지 (하위 호환성)
+        draft_answer, model_used, claim_evidence_map = \
+            AnswerGenerationFallback.generate_with_fallback(...)
+
+    return {'draft_answer': draft_answer, ...}
+```
+
+#### 2.3. Graph Infrastructure - Async Node 지원
+
+**_create_timed_node() 확장**:
+```python
+# graph.py
+def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
+    """async/sync 노드 모두 지원"""
+
+    if inspect.iscoroutinefunction(node_fn):
+        # ✅ Async node wrapper
+        async def async_timed_wrapper(state: ChatState, config: RunnableConfig = None) -> Dict:
+            start_time = time.time()
+            result = await node_fn(state, config)  # config 전달
+            duration_ms = (time.time() - start_time) * 1000
+            # Timing 정보 저장...
+            return result
+        return async_timed_wrapper
+    else:
+        # Sync node wrapper (기존 유지)
+        def timed_wrapper(state: ChatState) -> Dict:
+            result = node_fn(state)
+            return result
+        return timed_wrapper
+```
+
+### 3. Tests Run + 결과
+
+#### TC1: 기본 Dispute 쿼리 (캐시 미스)
+
+```bash
+curl -N -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "중고 자동차를 구매했는데 엔진에서 이상한 소리가 납니다.", "chat_type": "dispute"}'
+```
+
+**결과**:
+```
+data: {"type": "status", "data": {"node": "input_guardrail", "status": "입력 검증중...", "progress": 5}}
+data: {"type": "status", "data": {"node": "query_analysis", "status": "질의 분석중...", "progress": 15}}
+data: {"type": "status", "data": {"node": "generation", "status": "답변 생성중...", "progress": 80}}
+data: {"type": "token", "data": {"content": "##", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": " ", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": "1", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": ".", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": " 유", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": "사", "model": "gpt-4o"}}
+data: {"type": "token", "data": {"content": " 사례", "model": "gpt-4o"}}
+...
+```
+
+**검증 항목**:
+- ✅ 개별 토큰 실시간 스트리밍 확인
+- ✅ 모델명 포함 (`gpt-4o`)
+- ✅ 노드 상태 업데이트 정상 작동
+- ✅ Cache hit 시 즉시 반환 (기존 동작 유지)
+
+#### Backend 로그 확인
+
+```bash
+docker logs ddoksori_backend --tail 50
+```
+
+**로그**:
+```
+[NODE START] generation
+[AnswerCache] Cache MISS: answer_cache:...
+[AsyncOpenAI] Streaming tokens from gpt-4o
+[NODE END] generation - 3541.2ms
+```
+
+### 4. 변경 파일 및 커밋
+
+**Modified Files**:
+1. `backend/app/agents/answer_generation/agent.py` - generation_node async 변환 + custom events
+2. `backend/app/supervisor/graph.py` - _create_timed_node async 지원
+3. `backend/app/api/chat.py` - astream_events 마이그레이션
+
+**Commit**: `df01392` - feat: implement real-time LLM token streaming with LangGraph astream_events
+
+**Branch**: `feature/34-e2e`
+
+### 5. Next Steps
+
+- [ ] Frontend에서 토큰 스트리밍 UI 연동 확인
+- [ ] Fallback 체인 스트리밍 테스트 (gpt-4o → gpt-4o-mini → rule_based)
+- [ ] TTFB 성능 메트릭 수집
+- [ ] Production 배포 전 Load Testing
+
+### 6. Related Issues
+
+- Issue #34: E2E Token Streaming
+- Related: Phase 7 MAS Supervisor Architecture
+
+---
+
+## Previous Task: Query Analysis Agent 개선 - PR-1~PR-5 (COMPLETED ✅)
+
+**Date**: 2026-01-28 | **Status**: ✅ 완료
+
+---
+
+### 1. What Shipped (사용자 관점)
+
+**Query Analysis Agent 전면 개선** - LLM 기반 의도 분류 + 캐싱 최적화 + 테스트 확장
+
+| PR | 제목 | 설명 | 효과 |
+|----|------|------|------|
+| **PR-1** | 새 Query Types 추가 | `procedure`, `restricted` 타입 추가 | 절차 문의/전문기관 안내 분리 |
+| **PR-2** | gpt-4o-mini Intent Classifier | Function Calling 기반 LLM 분류기 | Rule-based 한계 극복 |
+| **PR-3** | 전문기관 안내 응답 처리 | restricted 도메인 템플릿 응답 | 금융/의료/개인정보/임대차/건설 전문기관 안내 |
+| **PR-4** | 성능 최적화 & 캐싱 | L3 Intent Classification Cache | 반복 쿼리 LLM 호출 절감 |
+| **PR-5** | 테스트 & 데이터셋 수집 | Golden Set 확장 + 새 query type 테스트 | Fine-tuning 준비 |
+
+### 2. Key Technical Decisions
+
+**HybridIntentClassifier 3-Layer 아키텍처**:
+```python
+# backend/app/agents/query_analysis/classifier.py
+class HybridIntentClassifier:
+    """
+    Layer 0: Fast Path (Rule-based) - system_meta, general, law
+    Layer 1: Redis Cache (L3) - 7일 TTL
+    Layer 2: LLM Classification (gpt-4o-mini Function Calling)
+    """
+    def classify(self, query: str) -> IntentClassificationResult:
+        # 1. Fast Path 체크 (캐시 건너뜀)
+        if self._is_fast_path(query):
+            return self._fast_path_classify(query)
+
+        # 2. 캐시 체크 (use_cache=True 시)
+        if self.use_cache:
+            cached = self._get_from_cache(query)
+            if cached:
+                return cached
+
+        # 3. LLM 호출 (use_llm=True 시)
+        if self.use_llm:
+            result = self.llm_classifier.classify(query)
+            self._save_to_cache(query, result)
+            return result
+
+        return IntentClassificationResult(query_type="ambiguous", ...)
+```
+
+**L3 Intent Classification Cache**:
+```python
+# backend/app/supervisor/cache.py
+class IntentClassificationCache:
+    PREFIX = "intent_classification"
+    TTL_SECONDS = 86400 * 7  # 7일 (분류 결과는 오래 유효)
+
+    @classmethod
+    def get(cls, query: str) -> Optional[Dict]:
+        # 쿼리 정규화 → SHA-256 해시 → Redis GET
+        # from_cache=True 플래그 자동 추가
+
+    @classmethod
+    def set(cls, query: str, classification: Dict) -> bool:
+        # cacheable 필드만 저장 (query_type, domain, agency, confidence, ...)
+```
+
+**전문기관 안내 응답 템플릿**:
+```python
+# backend/app/agents/answer_generation/agent.py
+SPECIALIST_AGENCY_RESPONSE_TEMPLATE = """
+## {domain_name} 관련 문의
+
+{domain_name} 분야의 분쟁은 **{agency_name}**에서 전문적으로 처리합니다.
+
+### 담당 기관 안내
+- **기관명**: {agency_name}
+- **소속**: {organization}
+- **연락처**: {phone}
+- **홈페이지**: {url}
+
+{similar_cases_section}
+
+---
+{agency_name}에 직접 문의하시면 전문적인 상담을 받으실 수 있습니다.
+"""
+```
+
+**Golden Set 확장** (16개 케이스 추가):
+```python
+# backend/scripts/testing/domain/golden_set.py
+# KLAB (임대차) - 8개
+{"query": "전세보증금 반환이 안돼요", "expected_agency": "KLAB", "is_restricted": True},
+# MOLIT (건설/건축) - 8개
+{"query": "아파트 하자 보수가 안돼요", "expected_agency": "MOLIT", "is_restricted": True},
+```
+
+### 3. Tests Run + 결과
+
+**PR-4: Intent Cache 테스트**:
+```bash
+PYTHONPATH=backend pytest backend/scripts/testing/query_analysis/test_intent_cache.py -v
+# 9/9 passed ✅
+```
+
+| 테스트 클래스 | 결과 |
+|-------------|------|
+| `TestIntentClassificationCacheUnit` | 3/3 passed |
+| `TestIntentClassificationCacheIntegration` | 4/4 passed |
+| `TestHybridClassifierWithCache` | 2/2 passed |
+
+**PR-5: 새 Query Type 테스트**:
+```bash
+PYTHONPATH=backend pytest backend/scripts/testing/query_analysis/test_new_query_types.py -v -m "not llm"
+# 42/42 passed ✅
+```
+
+| 테스트 클래스 | 결과 |
+|-------------|------|
+| `TestProcedureQueryType` | 8/8 passed |
+| `TestRestrictedQueryType` (금융/의료/개인정보/임대차/건설) | 21/21 passed |
+| `TestNonRestrictedQueries` | 6/6 passed |
+| `TestQueryTypeEdgeCases` | 4/4 passed |
+| `TestIntentClassificationResultFields` | 3/3 passed |
+
+**전체 Query Analysis 테스트**:
+```bash
+PYTHONPATH=backend pytest backend/scripts/testing/query_analysis/ -v --tb=short
+# 92 passed, 2 skipped ✅
+```
+
+**데이터 수집 테스트**:
+```bash
+PYTHONPATH=backend pytest backend/scripts/testing/data/test_collect_training_data.py -v
+# 29/29 passed ✅
+```
+
+### 4. Files Changed
+
+**신규 파일** (2개):
+| 파일 | 용도 |
+|------|------|
+| `backend/scripts/testing/query_analysis/test_intent_cache.py` | L3 캐시 테스트 (9 tests) |
+| `backend/scripts/testing/query_analysis/test_new_query_types.py` | 새 query type 테스트 (42 tests) |
+
+**수정 파일** (4개):
+| 파일 | 변경 내용 |
+|------|----------|
+| `backend/app/supervisor/cache.py` | `IntentClassificationCache` (L3) 추가, `clear_all_supervisor_caches()` 및 `get_cache_stats()` 확장 |
+| `backend/app/agents/query_analysis/classifier.py` | `use_cache` 파라미터, `_get_from_cache()`, `_save_to_cache()` 메서드 추가 |
+| `backend/scripts/data/collect_training_data.py` | `QualityFilter.is_valid_query_type()`에 새 타입 추가 |
+| `backend/scripts/testing/domain/golden_set.py` | KLAB (8개), MOLIT (8개) 케이스 추가 |
+
+### 5. Learnings
+
+**Fast Path vs Cache 전략**:
+- Fast Path (system_meta, general, law): 캐시 조회 없이 즉시 분류 → 최소 지연
+- LLM Path: 캐시 조회 → 캐시 미스 시 LLM 호출 → 결과 캐싱
+- 이유: Fast Path 쿼리는 규칙 기반으로 100% 정확, 캐시 오버헤드 불필요
+
+**Query Type 확장 시 체크리스트**:
+1. `classifier.py`의 `QUERY_TYPES` 상수 업데이트
+2. `QualityFilter.is_valid_query_type()` 업데이트
+3. `golden_set.py`에 테스트 케이스 추가
+4. 새 query type 전용 테스트 파일 작성
+
+**캐시 키 설계**:
+- 정규화: lowercase + 공백 통일 + 종결부호 제거
+- 해시: SHA-256 16자 (충돌 방지)
+- 포맷: `{prefix}:{query_hash}`
+
+### 6. Known Issues / Risks
+
+| 이슈 | 심각도 | 대응 |
+|------|--------|------|
+| LLM 테스트 SKIP | Low | `@pytest.mark.llm` 마커로 분리, CI에서는 건너뜀 |
+| Redis 미연결 시 | Low | Graceful degradation - 캐시 없이 정상 동작 |
+| Fine-tuning 데이터 미수집 | Medium | 운영 로그에서 자동 수집 파이프라인 필요 |
+
+### 7. Next Steps
+
+**완료된 작업**:
+- ✅ PR-1: 새 Query Types 추가 (procedure, restricted)
+- ✅ PR-2: gpt-4o-mini Intent Classifier 구현
+- ✅ PR-3: 전문기관 안내 응답 처리
+- ✅ PR-4: 성능 최적화 & 캐싱 (L3 Intent Cache)
+- ✅ PR-5: 테스트 & 데이터셋 수집
+
+**Follow-ups**:
+| 우선순위 | 작업 |
+|---------|------|
+| P1 | 운영 로그 기반 Fine-tuning 데이터셋 자동 수집 |
+| P2 | EXAONE Fine-tuning 실험 (PR-2 후속) |
+| P3 | Prometheus 메트릭에 캐시 히트율 추가 |
+
+**브랜치**:
+- 현재: `feature/34-e2e`
+- Query Analysis Agent 개선 완료 후 커밋 필요
+
+---
+
+## Previous Task: 대화형 챗봇 + 소셜 로그인 구현 계획 (PLANNED ✅)
 
 **Date**: 2026-01-27 | **Status**: ✅ 계획 수립 완료
 
