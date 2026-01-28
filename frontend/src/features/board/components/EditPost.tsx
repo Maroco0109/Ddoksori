@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
+import { CATEGORY_LABELS, DISPLAY_TO_CATEGORY_MAP, POST_CATEGORIES } from '@/shared/config/categories';
 import type { BoardPost, BoardPostForm } from '../board.types';
-import type { PostCategory } from '@/shared/types';
 
 interface EditPostProps {
   post: BoardPost;
@@ -10,13 +10,20 @@ interface EditPostProps {
   onSubmit: (postId: number, data: BoardPostForm) => void;
 }
 
+type EditPostFormState = {
+  category: BoardPostForm['category'];
+  subCategory: string;
+  title: string;
+  content: string;
+};
+
 export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
-  const getCategoryIdFromDisplayName = (displayName: string) => {
+  const getCategoryIdFromDisplayName = (displayName) => {
     // 서브 카테고리가 포함된 경우 분리
     const parts = displayName.split(' - ');
     const mainCategory = parts[0];
 
-    const categoryMap: Record<string, string> = {
+    const categoryMap = {
       '분쟁해결사례/공유': 'case-sharing',
       '무엇이든/물어보세요': 'qna',
       '소비자/꿀팁/노하우': 'tips'
@@ -24,10 +31,10 @@ export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
     return categoryMap[mainCategory] || 'case-sharing';
   };
 
-  const getSubCategoryFromDisplayName = (displayName: string) => {
+  const getSubCategoryFromDisplayName = (displayName) => {
     const parts = displayName.split(' - ');
     if (parts.length > 1) {
-      const subCategoryMap: Record<string, string> = {
+      const subCategoryMap = {
         '조정 이전 단계에서 해결': 'before-mediation',
         '조정을 통한 해결': 'through-mediation'
       };
@@ -67,18 +74,13 @@ export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
       return;
     }
 
-    onSubmit(post.id, {
-      category: formData.category as PostCategory,
-      subCategory: formData.subCategory,
-      title: formData.title,
-      content: formData.content,
-    });
+    onSubmit(post.id, formData);
   };
 
   const handleCategoryChange = (categoryId: string) => {
     setFormData({
       ...formData,
-      category: categoryId as PostCategory,
+      category: categoryId,
       subCategory: '' // 카테고리 변경 시 서브 카테고리 초기화
     });
   };

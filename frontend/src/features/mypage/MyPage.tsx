@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useChatStore } from '@/features/chat/chat.store';
 import { ROUTES } from '@/shared/config/routes';
-import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare, Edit2, Check, X } from 'lucide-react';
+import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import { formatDateTime } from '@/shared/lib/date';
 import { DISPLAY_TO_CATEGORY_MAP, CATEGORY_LABELS } from '@/shared/config/categories';
 
@@ -15,11 +15,6 @@ export default function MyPage() {
   const chatSessions = useChatStore((state) => state.chatSessions);
   const setCurrentSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setActiveChatType = useChatStore((state) => state.setActiveChatType);
-
-  // 닉네임 관련 상태
-  const [nickname, setNickname] = useState(user?.name || '현재사용자');
-  const [isEditingNickname, setIsEditingNickname] = useState(false);
-  const [tempNickname, setTempNickname] = useState(nickname);
 
   // 페이지네이션 상태
   const [chatPage, setChatPage] = useState(1);
@@ -36,65 +31,6 @@ export default function MyPage() {
   const handleLogout = () => {
     logout();
     navigate(ROUTES.HOME);
-  };
-
-  // 닉네임 길이 검증 함수 (한글 1자 = 1.6 가중치, 영문 1자 = 1 가중치, 최대 16)
-  const calculateNicknameWeight = (nickname: string) => {
-    let weight = 0;
-    let koreanCount = 0;
-    let otherCount = 0;
-
-    for (const char of nickname) {
-      if (/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(char)) {
-        weight += 1.6;
-        koreanCount++;
-      } else {
-        weight += 1;
-        otherCount++;
-      }
-    }
-
-    return {
-      weight,
-      isValid: weight <= 16,
-      koreanCount,
-      otherCount,
-      remaining: Math.max(0, 16 - weight)
-    };
-  };
-
-  const handleNicknameChange = (value: string) => {
-    const validation = calculateNicknameWeight(value);
-
-    // 가중치가 16을 초과하면 입력을 막음
-    if (validation.weight > 16) {
-      return;
-    }
-
-    setTempNickname(value);
-  };
-
-  const handleSaveNickname = () => {
-    if (!tempNickname.trim()) {
-      alert('닉네임을 입력해주세요.');
-      return;
-    }
-
-    const validation = calculateNicknameWeight(tempNickname);
-    if (!validation.isValid) {
-      alert('닉네임이 너무 깁니다. 한글은 최대 10자, 영문/숫자/특수문자는 최대 16자까지 입력 가능합니다.');
-      return;
-    }
-
-    // TODO: 백엔드 API 연동 시 닉네임 업데이트 API 호출
-    setNickname(tempNickname);
-    setIsEditingNickname(false);
-    alert('닉네임이 변경되었습니다.');
-  };
-
-  const handleCancelNicknameEdit = () => {
-    setTempNickname(nickname);
-    setIsEditingNickname(false);
   };
 
   const handleDeleteAccount = () => {
@@ -146,6 +82,32 @@ export default function MyPage() {
     setCurrentSessionId(sessionId);
     setActiveChatType(chatType);
     navigate(ROUTES.CHAT);
+  };
+
+  const getProviderName = (provider: string) => {
+    switch (provider) {
+      case 'google':
+        return 'Google';
+      case 'naver':
+        return '네이버';
+      case 'kakao':
+        return '카카오';
+      default:
+        return provider;
+    }
+  };
+
+  const getProviderColor = (provider: string) => {
+    switch (provider) {
+      case 'google':
+        return 'bg-white text-gray-700 border-2 border-gray-300';
+      case 'naver':
+        return 'bg-[#03C75A]';
+      case 'kakao':
+        return 'bg-[#FEE500] text-black';
+      default:
+        return 'bg-gray-500';
+    }
   };
 
   // 게시글 카테고리를 DISPLAY_MAP 형식에서 LABELS 형식으로 변환
@@ -273,62 +235,19 @@ export default function MyPage() {
 
       {/* 프로필 섹션 */}
       <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 mb-6">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
           {/* 사용자 정보 */}
-          <div className="flex-1 w-full space-y-4">
-            {/* 닉네임 섹션 */}
-            <div className="flex items-center gap-3">
-              <label className="text-base font-semibold text-gray-700 w-16">닉네임</label>
-              {isEditingNickname ? (
-                <div className="flex flex-col gap-1 flex-1">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={tempNickname}
-                      onChange={(e) => handleNicknameChange(e.target.value)}
-                      className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-deep-teal transition-colors flex-1 max-w-xs"
-                      placeholder="닉네임 입력 (한글 10자, 영문 16자)"
-                    />
-                    <button
-                      onClick={handleSaveNickname}
-                      className="p-2 bg-deep-teal text-white rounded-lg hover:bg-mint-green transition-all"
-                      title="저장"
-                    >
-                      <Check size={18} />
-                    </button>
-                    <button
-                      onClick={handleCancelNicknameEdit}
-                      className="p-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all"
-                      title="취소"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {(() => {
-                      const validation = calculateNicknameWeight(tempNickname);
-                      return `${validation.koreanCount > 0 ? `한글 ${validation.koreanCount}자` : ''}${validation.koreanCount > 0 && validation.otherCount > 0 ? ' + ' : ''}${validation.otherCount > 0 ? `영문/숫자/특수문자 ${validation.otherCount}자` : ''} (용량: ${validation.weight.toFixed(1)}/16)`;
-                    })()}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-medium text-dark-navy">{nickname}</span>
-                  <button
-                    onClick={() => setIsEditingNickname(true)}
-                    className="p-1 text-gray-500 hover:text-deep-teal transition-colors"
-                    title="닉네임 수정"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 계정 섹션 */}
-            <div className="flex items-center gap-3">
-              <label className="text-base font-semibold text-gray-700 w-16">계정</label>
-              <span className="text-base text-gray-600">{user.email}</span>
+          <div className="flex-1 text-center sm:text-left">
+            <h2 className="text-2xl font-bold text-dark-navy mb-2">{user.name}</h2>
+            <p className="text-gray-purple mb-3">{user.email}</p>
+            <div className="inline-flex items-center gap-2 mb-4">
+              <span
+                className={`px-3 py-1 rounded-full text-sm font-semibold ${getProviderColor(
+                  user.provider
+                )}`}
+              >
+                {getProviderName(user.provider)} 계정
+              </span>
             </div>
           </div>
 

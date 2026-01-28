@@ -24,12 +24,14 @@ export default function LoginModal() {
   const login = useAuthStore((state) => state.login);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
   const handleGoogleLogin = () => {
-    window.location.href = '/auth/google';
+    window.location.href = `${BACKEND_URL}/auth/google`;
   };
 
   const handleNaverLogin = () => {
-    window.location.href = '/auth/naver';
+    window.location.href = `${BACKEND_URL}/auth/naver`;
   };
 
   // 개발 환경에서만 사용할 테스트 로그인 함수
@@ -39,7 +41,7 @@ export default function LoginModal() {
       email: 'test@example.com',
       name: '테스트 사용자',
       avatar: 'https://via.placeholder.com/100',
-      provider: 'google' as const,
+      provider: 'google',
     };
     const dummyToken = 'test-jwt-token-12345';
 

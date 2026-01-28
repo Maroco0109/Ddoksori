@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
+import { CATEGORY_LABELS, POST_CATEGORIES } from '@/shared/config/categories';
 import type { BoardPostForm } from '../board.types';
-import type { PostCategory } from '@/shared/types';
 
 interface WritePostProps {
   onBack: () => void;
@@ -49,7 +49,7 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
     }
 
     onSubmit({
-      category: formData.category as PostCategory,
+      category: formData.category as BoardPostForm['category'],
       subCategory: formData.subCategory || undefined,
       title: formData.title,
       content: formData.content,
@@ -59,7 +59,7 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
   const handleCategoryChange = (categoryId: string) => {
     setFormData({
       ...formData,
-      category: categoryId as PostCategory,
+      category: categoryId,
       subCategory: '' // 카테고리 변경 시 서브 카테고리 초기화
     });
   };
@@ -139,15 +139,6 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
                 </button>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Notice for case-sharing category */}
-        {formData.category === 'case-sharing' && (
-          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg">
-            <p className="text-sm text-gray-700">
-              <span className="font-semibold text-amber-700">안내:</span> &lt;분쟁해결사례 공유&gt;에 게시된 내용은 개인정보나 상호명 등 민감한 정보를 마스킹한 채 <span className="font-bold">필요한 정보(분쟁 상황과 해결)만을 추출</span>하여 AI 상담을 위한 데이터에 활용될 수 있습니다.
-            </p>
           </div>
         )}
 
