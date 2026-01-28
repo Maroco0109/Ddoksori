@@ -1,0 +1,28 @@
+﻿# Law Agent LLM 재작성 디버그 노트
+
+## 요약
+- "??" 출력은 **PowerShell here-string에서 한글 리터럴이 깨지는 문제** 때문에 발생했다.
+- PowerShell 명령에 한글 리터럴을 직접 넣으면, OpenAI 요청 전에 이미 `?`로 변환된다.
+- 같은 문장을 **유니코드 이스케이프**(예: `\uc804...`)나 UTF-8 파일로 전달하면 정상 한글이 반환된다.
+
+## 근본 원인 (확인됨)
+- **테스트 하니스 인코딩 문제**: PowerShell here-string이 활성 코드 페이지(cp949)로 인코딩되면서 한글이 손실됨.
+- 그 결과 요청 페이로드 자체가 `??`를 포함했고, 모델이 한글을 출력할 수 없었다.
+
+## 재현 / 검증
+- 유니코드 이스케이프를 사용한 직접 테스트는 정상 한글을 반환함.
+- 사용한 쿼리 문자열 예시:
+  - `"\uc804\uc790\uc0c1\uac70\ub798 \ud658\ubd88 \uaddc\uc815 \uc54c\ub824\uc918"`
+- 결과 저장 위치:
+  - `C:\SKN_19\final_project\LLM\law_agent_rewrite_result.txt`
+
+## 코드 변경
+- `backend\app\agents\retrieval\law_agent.py`
+- 근본 원인이 PowerShell 테스트 인코딩임을 확인한 뒤, LLM 재작성 가드를 **제거**함.
+
+## 권장 사항
+- CLI 테스트 시 **PowerShell heredoc에 한글을 직접 넣지 말 것**.
+- 다음 중 하나를 사용:
+  - 유니코드 이스케이프(\u....)
+  - UTF-8 텍스트 파일에서 읽기
+  - Jupyter 노트북에서 실행(UTF-8 안전)
