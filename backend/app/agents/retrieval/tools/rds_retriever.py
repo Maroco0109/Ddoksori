@@ -81,6 +81,112 @@ class RDSRetriever:
         )
         return response.data[0].embedding
 
+    def search_similar_chunks(
+        self,
+        query: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_law_name: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+    ) -> List[SimilarChunkResult]:
+        if not self.conn:
+            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+
+        query_embedding = self.embed_query(query)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM search_similar_chunks(
+                    %s::vector, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    query_embedding,
+                    filter_dataset,
+                    filter_category,
+                    filter_law_name,
+                    filter_year,
+                    result_limit,
+                ),
+            )
+
+            results: List[SimilarChunkResult] = []
+            for row in cur.fetchall():
+                results.append(
+                    SimilarChunkResult(
+                        chunk_id=row[0],
+                        dataset_type=row[1],
+                        text=row[2],
+                        similarity=float(row[3]),
+                        law_name=row[4],
+                        chunk_type=row[5],
+                        category=row[6],
+                        source_url=row[7],
+                        source_file=row[8],
+                        printed_page=row[9],
+                        source_year=row[10],
+                        metadata=row[11],
+                    )
+                )
+
+        return results
+
+    def search_hybrid_rrf(
+        self,
+        query_text: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_document_type: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+        rrf_k: int = 60,
+    ) -> List[Dict]:
+        if not self.conn:
+            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+
+        query_embedding = self.embed_query(query_text)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM search_hybrid_rrf(
+                    %s, %s::vector, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    query_text,
+                    query_embedding,
+                    filter_dataset,
+                    filter_category,
+                    filter_document_type,
+                    filter_year,
+                    result_limit,
+                    rrf_k,
+                ),
+            )
+
+            results: List[Dict] = []
+            for row in cur.fetchall():
+                results.append(
+                    {
+                        "chunk_id": row[0],
+                        "dataset_type": row[1],
+                        "text": row[2],
+                        "rrf_score": float(row[3]),
+                        "bm25_score": float(row[4]),
+                        "vector_similarity": float(row[5]),
+                        "source_url": row[6],
+                        "source_file": row[7],
+                        "printed_page": row[8],
+                        "source_year": row[9],
+                        "metadata": row[10],
+                    }
+                )
+
+        return results
+
     def dense_search(
         self,
         query: str,
