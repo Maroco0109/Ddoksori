@@ -7,9 +7,8 @@
 본 프로젝트는 복잡하고 전문적인 한국의 소비자 분쟁 관련 문의에 대해 정확하고 신뢰도 높은 답변을 제공하는 MAS(Multi-Agent System) 챗봇입니다. React, FastAPI, LangGraph, PostgreSQL 등 현대적인 기술 스택을 활용하여 분쟁조정사례, 상담사례, 법령 데이터를 기반으로 최적의 해결 방안을 제시합니다.
 
 ### 핵심 기능
-- **MAS Supervisor 아키텍처**: GPT-5.1 기반 Supervisor가 7개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **MAS Supervisor 아키텍처**: GPT-5.1 기반 Supervisor가 6개 전문 에이전트를 조율하는 Hub-Spoke 구조
 - **Conversation Phase System**: Rule-based 대화 단계 상태 머신으로 점진적 정보 수집 및 단계별 안내 (법령→사례→절차)
-- **Pre-retrieval LLM**: EXAONE-4.0-1.2B 기반 도메인 특화 쿼리 재작성으로 검색 정확도 향상
 - **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합
 - **실시간 스트리밍**: SSE(Server-Sent Events)를 통한 실시간 답변 생성 및 출처 제공
 - **신뢰성 보장**: 법률 검토 에이전트(gpt-4o)를 통한 환각 방지 및 면책 문구 자동 포함
@@ -51,8 +50,6 @@ Docker Compose를 사용하여 전체 스택(DB, Redis, Backend, Frontend, Monit
 # 전체 서비스 실행
 docker compose up --build -d
 
-# BGE-M3 임베딩 서버 포함 실행 (선택)
-docker compose --profile bge-m3 up -d
 ```
 
 ### 서비스 포트 정보
@@ -62,7 +59,6 @@ docker compose --profile bge-m3 up -d
 | Backend | 8000 | FastAPI API Server |
 | Database | 5432 | PostgreSQL + pgvector |
 | Redis | 6379 | Answer Caching |
-| Embedding API | 8003 | BGE-M3 Embedding Server |
 | CloudBeaver | 8978 | Web-based DB Manager |
 | Prometheus | 9090 | Monitoring Metrics |
 | Grafana | 3000 | Monitoring Dashboard |
@@ -95,15 +91,12 @@ docker compose --profile bge-m3 up -d
 | `RETRIEVAL_MODE` | 검색 모드 | `hybrid` |
 | `ENABLE_ANSWER_CACHE` | Redis 캐싱 활성화 | `false` |
 
-### 모델 설정 (Phase 8)
+### 모델 설정
 | 변수명 | 설명 | 기본값 |
 |--------|------|--------|
 | `MODEL_SUPERVISOR` | Supervisor 모델 (라우팅/조율) | `gpt-5.1` |
 | `MODEL_DRAFT_AGENT` | Draft Agent 모델 (답변 생성) | `gpt-4o` |
 | `MODEL_REVIEW_AGENT` | Review Agent 모델 (법률 검토) | `gpt-4o` |
-| `MODEL_RETRIEVAL_LLM` | Pre-retrieval LLM (쿼리 재작성) | `LGAI-EXAONE/EXAONE-4.0-1.2B` |
-| `MODEL_RETRIEVAL_FALLBACK` | Retrieval LLM 폴백 | `gpt-4.1-nano` |
-| `PORT_EXAONE_VLLM` | EXAONE vLLM 서버 포트 | `19010` |
 
 ### 임베딩 설정
 | 변수명 | 설명 | 기본값 |
@@ -140,8 +133,7 @@ graph TB
         subgraph "MAS Supervisor (Hub-Spoke)"
             G --> SUP[Supervisor<br/>GPT-5.1]
             SUP --> H[Query Analysis]
-            SUP --> I[Retrieval Team<br/>4개 Agent 병렬]
-            I --> PRE[Pre-retrieval LLM<br/>EXAONE-4.0-1.2B]
+            SUP --> I[Retrieval Team<br/>3개 Agent 병렬]
             SUP --> J[Answer Generation<br/>gpt-4o]
             SUP --> K[Legal Review<br/>gpt-4o]
         end
@@ -150,7 +142,6 @@ graph TB
     subgraph "Data & Infrastructure"
         I --> L[(PostgreSQL/pgvector<br/>text-embedding-3-large)]
         J --> M[(Redis Cache)]
-        PRE --> N[vLLM Server:19010]
         G --> O[Prometheus/Grafana]
     end
 
@@ -167,7 +158,6 @@ graph TB
 | **Supervisor** | GPT-5.1 | Claude 3.5 Sonnet → Rule-based |
 | **Draft Agent** | gpt-4o | gpt-4o-mini → rule_based → safe_fallback |
 | **Review Agent** | gpt-4o | 규칙 기반 검토 |
-| **Retrieval LLM** | EXAONE-4.0-1.2B | gpt-4.1-nano → original query |
 
 ### 에이전트 데이터 흐름
 ```mermaid
@@ -176,18 +166,15 @@ sequenceDiagram
     participant API as API Gateway
     participant SUP as Supervisor (GPT-5.1)
     participant QA as Query Analysis
-    participant PRE as Pre-retrieval LLM
-    participant IR as Retrieval (4 Agents)
+    participant IR as Retrieval (3 Agents)
     participant AG as Draft Agent (gpt-4o)
     participant LR as Review Agent (gpt-4o)
 
     FE->>API: POST /chat/stream
     API->>SUP: 워크플로우 시작
-    SUP->>QA: 질의 분석 (의도/키워드)
+    SUP->>QA: 질의 분석 (의도/키워드/쿼리 확장)
     QA-->>SUP: 분석 결과
-    SUP->>PRE: 쿼리 재작성 (EXAONE)
-    PRE-->>IR: 최적화된 쿼리
-    SUP->>IR: 4개 Agent 병렬 검색
+    SUP->>IR: 3개 Agent 병렬 검색
     IR-->>SUP: 검색 결과 병합
     SUP->>AG: 답변 초안 생성
     AG-->>SUP: 초안 + 인용
@@ -205,7 +192,7 @@ sequenceDiagram
 |------|-----------|------|
 | **시작하기** | [EASY_START_GUIDE_KR.md](docs/guides/EASY_START_GUIDE_KR.md) | 상세 설치 및 실행 가이드 |
 | **API** | [backend/app/api/README.md](backend/app/api/README.md) | 엔드포인트 및 데이터 모델 명세 |
-| **아키텍처** | [backend/app/orchestrator/README.md](backend/app/orchestrator/README.md) | 에이전트 상세 설계 및 구현 가이드 |
+| **아키텍처** | [backend/app/supervisor/README.md](backend/app/supervisor/README.md) | 에이전트 상세 설계 및 구현 가이드 |
 | **인프라** | [docs/infrastructure/runpod-vllm-setup.md](docs/infrastructure/runpod-vllm-setup.md) | RunPod vLLM 서버 설정 가이드 |
 | **로드맵** | [docs/plans/sprint-roadmap.md](docs/plans/sprint-roadmap.md) | 스프린트별 개발 계획 및 PR 목록 |
 | **평가** | [docs/guides/evaluation-strategy.md](docs/guides/evaluation-strategy.md) | 에이전트별 평가 지표 및 전략 |

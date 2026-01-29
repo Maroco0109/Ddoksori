@@ -4,7 +4,7 @@
 
 ## 1. 개요 (Overview)
 
-MAS(Multi-Agent System) Supervisor는 **GPT-5.1 기반 Hub-Spoke 아키텍처**로 7개 전문 에이전트를 조율합니다. LangGraph를 기반으로 각 에이전트(노드) 간의 실행 순서를 제어하고, 상태(State)를 관리하며, 데이터 흐름을 조정합니다.
+MAS(Multi-Agent System) Supervisor는 **GPT-5.1 기반 Hub-Spoke 아키텍처**로 6개 전문 에이전트를 조율합니다. LangGraph를 기반으로 각 에이전트(노드) 간의 실행 순서를 제어하고, 상태(State)를 관리하며, 데이터 흐름을 조정합니다.
 
 ### 주요 책임
 1. **워크플로우 관리 (Workflow)**: 질의 분석 → 검색 → 답변 생성 → 검토 등 전체 프로세스 실행 흐름 정의
@@ -64,7 +64,7 @@ flowchart TD
 
     Supervisor -- "NEED_USER_CLARIFICATION" --> Clarify[ask_clarification]
     Supervisor -- "NO_RETRIEVAL" --> Generation
-    Supervisor -- "NEED_RAG" --> Retrieval[Retrieval Team<br/>4개 Agent 병렬]
+    Supervisor -- "NEED_RAG" --> Retrieval[Retrieval Team<br/>3개 Agent 병렬]
 
     Retrieval --> Supervisor
     Supervisor --> Generation[Answer Generation]
@@ -84,7 +84,7 @@ flowchart TD
 | `input_guardrail` | 입력 검증 및 안전성 검사 |
 | `supervisor` | Hub 역할, 다음 에이전트 결정 |
 | `query_analysis` | 사용자 의도 분석, 라우팅 모드 결정, 슬롯 추출 |
-| `retrieval_team` | 4개 전문 에이전트 병렬 검색 (법령/기준/사례/상담) |
+| `retrieval_team` | 3개 전문 에이전트 병렬 검색 (법령/기준/사례) |
 | `generation` | 검색 결과 기반 답변 생성 (gpt-4o) |
 | `legal_review` | 생성 답변의 정확성/안전성 검토 |
 | `ask_clarification` | 정보 부족 시 역질문 생성 |
@@ -200,7 +200,7 @@ backend/app/supervisor/
 ├── nodes/
 │   ├── supervisor.py     # Supervisor 노드 로직
 │   ├── clarify.py        # ask_clarification 노드
-│   ├── retrieval_merge.py  # 4개 Agent 결과 병합
+│   ├── retrieval_merge.py  # 3개 Agent 결과 병합
 │   └── guardrail.py      # Input/Output Guardrail
 └── checkpointer.py       # 대화 상태 체크포인트 (Memory/Postgres)
 ```
@@ -241,6 +241,7 @@ pytest backend/scripts/testing/supervisor/test_mas_supervisor_graph.py -v
 | 2026-01-22 | PR 3 | Data Collection 로깅 스키마 개선 |
 | 2026-01-24 | Phase 7 | **MAS Supervisor 도입**. ReAct 패턴 아카이브 |
 | 2026-01-28 | Phase 9 | **Conversation Phase System** 도입. 슬롯 기반 정보 수집, 단계별 라우팅 |
+| 2026-01-29 | Phase 10 | **v2 태그 삭제**: v1 코드 제거, 함수명/타입명 V2 접미사 제거, 파일 리네임 |
 
 ---
 

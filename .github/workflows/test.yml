@@ -1,0 +1,81 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  PYTHONPATH: backend
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ddoksori_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests (PR - fast)
+        if: github.event_name == 'pull_request'
+        run: pytest -c backend/pytest.ini -m "not skip_ci and not llm" backend/scripts/testing -v
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ddoksori_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          ENABLE_ANSWER_CACHE: false
+
+      - name: Run tests (main - full)
+        if: github.ref == 'refs/heads/main'
+        run: pytest -c backend/pytest.ini -m "not skip_ci" backend/scripts/testing -v
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ddoksori_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          ENABLE_ANSWER_CACHE: true
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

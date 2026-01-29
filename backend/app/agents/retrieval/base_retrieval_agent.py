@@ -2,30 +2,17 @@
 BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 
 4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
-LLM: EXAONE-4.0-1.2B (쿼리 재작성), Fallback: gpt-4.1-nano
 
-각 에이전트는 독립된 EXAONE vLLM 인스턴스를 사용할 수 있습니다.
-환경변수 설정:
-    - RETRIEVAL_LLM_LAW_URL: Law Agent용 EXAONE URL
-    - RETRIEVAL_LLM_CRITERIA_URL: Criteria Agent용 EXAONE URL
-    - RETRIEVAL_LLM_CASE_URL: Case Agent용 EXAONE URL
-    - RETRIEVAL_LLM_COUNSEL_URL: Counsel Agent용 EXAONE URL
-설정되지 않은 경우 공통 EXAONE_RUNPOD_URL 사용 (싱글톤 fallback)
-
-Refactor: LLMProviderFactory를 통한 클라이언트 관리
+각 에이전트는 원본 쿼리를 사용하여 검색을 수행합니다.
 """
 
-import asyncio
 import logging
 import os
 from abc import abstractmethod
 from typing import Dict, Any, List, ClassVar, Optional
 
-from openai import OpenAI, APIError, APITimeoutError
-
 from ..base import BaseAgent
 from ...common.config import get_config
-from ...llm.providers import get_openai_client, get_exaone_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +21,7 @@ def _get_db_config() -> Dict[str, str]:
     """
     데이터베이스 설정을 반환합니다.
     USE_RDS_FOR_TESTS=true인 경우 RDS READ_ONLY 설정을 사용합니다.
+    기본값은 get_config().database에서 중앙 관리됩니다.
     """
     use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
 
@@ -45,25 +33,17 @@ def _get_db_config() -> Dict[str, str]:
             'user': os.getenv('DB_TEST_USER', 'readonly_user'),
             'password': os.getenv('DB_TEST_PASSWORD', ''),
         }
-    else:
-        return {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'dbname': os.getenv('DB_NAME', 'ddoksori'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'postgres'),
-        }
+
+    config = get_config().database
+    conn = config.get_connection_dict()
+    # psycopg2는 'dbname' 키를 사용하지만 get_connection_dict()는 'database'를 반환
+    if 'database' in conn and 'dbname' not in conn:
+        conn['dbname'] = conn.pop('database')
+    return conn
 
 
 def _get_embed_api_url() -> str:
     return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
-
-
-# 도메인별 EXAONE 클라이언트 캐시 (deprecated - LLMProviderFactory로 이전 중)
-# LLMProviderFactory가 이미 싱글톤 캐싱을 처리함
-_domain_exaone_clients: Dict[str, OpenAI] = {}
-_shared_exaone_client: Optional[OpenAI] = None
-_shared_openai_client: Optional[OpenAI] = None
 
 
 class BaseRetrievalAgent(BaseAgent):
@@ -77,119 +57,6 @@ class BaseRetrievalAgent(BaseAgent):
     # 서브클래스에서 오버라이드: 도메인 키 (law, criteria, case, counsel)
     domain_key: ClassVar[str] = ""
 
-    domain_rewrite_prompt: ClassVar[str] = ""
-
-    def _get_exaone_client_for_domain(self) -> Optional[OpenAI]:
-        """
-        도메인별 EXAONE 클라이언트를 반환합니다.
-
-        Refactor: LLMProviderFactory를 통해 도메인별 클라이언트 관리.
-        팩토리가 싱글톤 캐싱을 처리하므로 중복 생성 방지됨.
-
-        우선순위:
-        1. 에이전트별 URL 설정 (RETRIEVAL_LLM_{DOMAIN}_URL)
-        2. 공통 URL (EXAONE_RUNPOD_URL)
-        """
-        config = get_config()
-        timeout = config.retrieval_llm.timeout
-
-        # LLMProviderFactory를 통해 도메인별 클라이언트 획득
-        client = get_exaone_client(domain=self.domain_key, timeout=timeout)
-
-        if client:
-            logger.debug(f"[{self.agent_name}] Got EXAONE client for domain '{self.domain_key}'")
-        return client
-
-    def _get_openai_client(self) -> Optional[OpenAI]:
-        """
-        OpenAI fallback 클라이언트 반환 (공유).
-
-        Refactor: LLMProviderFactory를 통해 싱글톤 관리.
-        """
-        config = get_config()
-        timeout = config.retrieval_llm.timeout
-        return get_openai_client(timeout=timeout)
-    
-    async def _rewrite_query_for_domain(self, query: str) -> str:
-        """
-        도메인별 쿼리 재작성을 수행합니다.
-
-        각 에이전트는 자신의 도메인에 맞는 독립된 EXAONE 인스턴스를 사용합니다.
-        실패 시 공통 OpenAI fallback으로 전환됩니다.
-        """
-        if not self.domain_rewrite_prompt:
-            return query
-
-        config = get_config()
-        timeout = config.retrieval_llm.timeout
-        prompt = self.domain_rewrite_prompt.format(query=query)
-        system_prompt = "You are a query rewriting assistant. Output only the rewritten query, nothing else."
-
-        # Try EXAONE first (도메인별 또는 공통 클라이언트)
-        exaone_client = self._get_exaone_client_for_domain()
-        if exaone_client:
-            try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self._call_llm,
-                        exaone_client,
-                        config.models.retrieval_llm,
-                        system_prompt,
-                        prompt
-                    ),
-                    timeout=timeout
-                )
-                if result:
-                    logger.info(f"[{self.agent_name}] EXAONE query rewrite (domain={self.domain_key}): '{query}' -> '{result}'")
-                    return result
-            except asyncio.TimeoutError:
-                logger.warning(f"[{self.agent_name}] EXAONE query rewrite timeout (domain={self.domain_key})")
-            except Exception as e:
-                logger.warning(f"[{self.agent_name}] EXAONE query rewrite failed (domain={self.domain_key}): {e}")
-
-        # Fallback to gpt-4.1-nano
-        openai_client = self._get_openai_client()
-        if openai_client:
-            try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self._call_llm,
-                        openai_client,
-                        config.models.retrieval_fallback,
-                        system_prompt,
-                        prompt
-                    ),
-                    timeout=timeout
-                )
-                if result:
-                    logger.info(f"[{self.agent_name}] Fallback query rewrite: '{query}' -> '{result}'")
-                    return result
-            except asyncio.TimeoutError:
-                logger.warning(f"[{self.agent_name}] Fallback query rewrite timeout")
-            except Exception as e:
-                logger.warning(f"[{self.agent_name}] Fallback query rewrite failed: {e}")
-
-        logger.info(f"[{self.agent_name}] Using original query (no rewrite)")
-        return query
-    
-    def _call_llm(self, client: OpenAI, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=256
-            )
-            content = response.choices[0].message.content
-            if content:
-                return content.strip()
-        except (APIError, APITimeoutError) as e:
-            logger.warning(f"[{self.agent_name}] LLM API error: {e}")
-        return None
-    
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
         if error:
@@ -199,48 +66,27 @@ class BaseRetrievalAgent(BaseAgent):
         user_query = context.get("user_query", "")
         query_analysis = context.get("query_analysis", {})
 
-        base_query = self._build_search_query(user_query, query_analysis)
-        rewritten_query = await self._rewrite_query_for_domain(base_query)
-        top_k = request.get("params", {}).get("top_k", self.default_top_k)
+        # === v2: 확장 쿼리 및 에이전트 키워드 지원 ===
+        expanded_queries = context.get("expanded_queries", [])
+        agent_keywords = context.get("agent_keywords", [])
+
+        params = request.get("params", {})
+        top_k = params.get("top_k", self.default_top_k)
+
+        # === v2: 메타데이터 필터 및 임계치 무시 옵션 ===
+        metadata_filter = params.get("metadata_filter", {})
+        ignore_threshold = params.get("ignore_threshold", False)
+
+        search_query = self._build_search_query(user_query, query_analysis)
 
         try:
-            # === P0.1: Dual-Track Query Processing ===
-            # Search with BOTH original and rewritten queries
-            all_results = []
-
-            # Track 1: Original query (always search if not empty)
-            if base_query and base_query.strip():
-                try:
-                    original_results = await self._execute_search(base_query, top_k)
-                    # Tag results with query source for debugging
-                    for r in original_results:
-                        if not hasattr(r, 'query_source'):
-                            r.query_source = "original"
-                    all_results.extend(original_results)
-                    logger.info(f"[{self.agent_name}] Original query: {len(original_results)} results")
-                except Exception as e:
-                    logger.warning(f"[{self.agent_name}] Original query search failed: {e}")
-
-            # Track 2: Rewritten query (only if different and valid)
-            if rewritten_query and rewritten_query != base_query and rewritten_query.strip():
-                try:
-                    rewritten_results = await self._execute_search(rewritten_query, top_k)
-                    # Tag results with query source
-                    for r in rewritten_results:
-                        if not hasattr(r, 'query_source'):
-                            r.query_source = "rewritten"
-                    all_results.extend(rewritten_results)
-                    logger.info(f"[{self.agent_name}] Rewritten query: {len(rewritten_results)} results")
-                except Exception as e:
-                    logger.warning(f"[{self.agent_name}] Rewritten query search failed: {e}")
-
-            # Deduplicate by chunk_id, keeping highest similarity
-            results = self._deduplicate_by_similarity(all_results)[:top_k]
-            # === End P0.1 ===
+            results = await self._execute_search(
+                search_query, top_k, metadata_filter, ignore_threshold
+            )
 
             # === P0.3: Similarity Threshold Filtering ===
-            # Get threshold from environment (default: 0.50 for dispute queries)
-            threshold = float(os.getenv('SIMILARITY_THRESHOLD_DISPUTE', '0.50'))
+            # 도메인별 threshold 적용 (law=0.60, criteria=0.50, dispute=0.55, general=0.45)
+            threshold = get_config().agent.get_similarity_threshold(self.domain_key or None)
             # Filter results by similarity threshold
             filtered_results = [r for r in results if r.similarity >= threshold]
 
@@ -294,31 +140,29 @@ class BaseRetrievalAgent(BaseAgent):
             return rewritten
         return user_query
 
-    def _deduplicate_by_similarity(self, results: List[Any]) -> List[Any]:
+    @abstractmethod
+    async def _execute_search(
+        self,
+        query: str,
+        top_k: int,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        ignore_threshold: bool = False
+    ) -> List[Any]:
         """
-        P0.1: Deduplicate results by chunk_id, keeping highest similarity
+        서브클래스에서 구현: 실제 검색 수행
 
         Args:
-            results: List of SearchResult objects with chunk_id and similarity
+            query: 검색 쿼리
+            top_k: 반환할 결과 수
+            metadata_filter: v2 메타데이터 필터 (optional)
+                - dataset_type: 데이터셋 유형 ('law_guide', 'case')
+                - document_types: 문서 유형 리스트 (['법률', '시행령'] 등)
+                - categories: 카테고리 리스트 (['조정', '해결', '상담'] 등)
+            ignore_threshold: True면 유사도 임계치 무시
 
         Returns:
-            Deduplicated list sorted by similarity (descending)
+            검색 결과 리스트
         """
-        seen = {}
-        for result in results:
-            chunk_id = result.chunk_id
-            similarity = result.similarity
-
-            if chunk_id not in seen or similarity > seen[chunk_id].similarity:
-                seen[chunk_id] = result
-
-        # Sort by similarity descending
-        deduplicated = sorted(seen.values(), key=lambda r: r.similarity, reverse=True)
-        return deduplicated
-
-    @abstractmethod
-    async def _execute_search(self, query: str, top_k: int) -> List[Any]:
-        """서브클래스에서 구현: 실제 검색 수행"""
         pass
 
     @abstractmethod

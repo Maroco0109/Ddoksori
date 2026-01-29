@@ -34,8 +34,6 @@ flowchart TD
 
     RuleExpansion --> SearchQueries[Generate Search Queries]
 
-    Note[Phase 8: 도메인 특화 재작성은<br/>Retrieval Agent Pre-retrieval LLM에서 수행]
-    
     SearchQueries --> FinalState[Update ChatState]
     FinalState --> NextNode[Routing: NEED_RAG]
 ```
@@ -58,22 +56,15 @@ flowchart TD
 - **System Meta**: "너 누구야?" 같은 질문은 검색 없이 처리.
 - **General**: "안녕" 같은 인사는 검색 없이 처리 (단, "소송", "환불" 등 특정 키워드 포함 시 RAG로 승격).
 
-#### Query Rewriting (Phase 8 변경)
+#### 쿼리 확장 (현재)
 
-> **Note**: Phase 8에서 도메인 특화 쿼리 재작성 기능이 **Retrieval Agent의 Pre-retrieval LLM**으로 이동되었습니다.
-> 기존 `QueryRewriter` 모듈은 `_archive/llm/query_rewriter.py`로 아카이브되었습니다.
+QueryAnalysisAgent가 LLM 기반 쿼리 확장 및 키워드 추출을 전담합니다.
 
-**현재 Query Analysis Agent의 역할**:
-- 키워드 추출 및 동의어 확장 (규칙 기반)
+**현재 역할**:
+- 키워드 추출 및 동의어 확장 (규칙 기반 + LLM)
 - 의도 분류 및 라우팅 결정
 - 엔티티 추출 (구매 품목, 날짜, 금액)
-
-**Pre-retrieval LLM으로 위임된 기능**:
-- 복잡한 법률 용어 재작성 → `LawRetrievalAgent`
-- 분쟁 유형 명확화 → `CriteriaRetrievalAgent`
-- 상황 요약 → `CaseRetrievalAgent`, `CounselRetrievalAgent`
-
-자세한 내용은 [Retrieval Agent README](../retrieval/README.md#43-pre-retrieval-llm-phase-8)를 참고하세요.
+- 도메인 특화 쿼리 확장 (`expanders.py` — 법률 용어, 분쟁 유형, 상황 요약)
 
 ---
 
@@ -109,7 +100,7 @@ test_pr2_hybrid.py::test_definitional_query_is_general PASSED # 정의형 질문
 | 2026-01-14 | **PR 1** | 초기 아키텍처 구현. 기본적인 Rule-based 분류 로직 적용. |
 | 2026-01-22 | **PR 2** | **Hybrid Query Analysis** 도입. 동의어 사전 확장, 정의형 질문 패턴 추가, Multi-Query Expansion 구현. |
 | 2026-01-22 | **PR 3** | Data Collection Pipeline 연동을 위한 로그 스냅샷 구조(`query_analysis_v2`) 개선. |
-| 2026-01-27 | **Phase 8** | Query Rewriter 모듈 아카이브. 도메인 특화 쿼리 재작성은 Retrieval Agent Pre-retrieval LLM으로 이전. |
+| 2026-01-27 | **Phase 8** | Query Rewriter 모듈 아카이브. Phase 11에서 Pre-retrieval LLM 제거, QueryAnalysisAgent가 쿼리 확장 전담. |
 
 ---
 

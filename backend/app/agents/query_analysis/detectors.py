@@ -5,7 +5,6 @@ Query Detectors
 """
 
 import logging
-import os
 import re
 from typing import Optional
 
@@ -39,14 +38,14 @@ def should_promote_to_rag(query: str) -> bool:
 
 def check_ambiguity_with_llm(query: str) -> bool:
     """
-    LLM을 사용해 쿼리가 모호한지 판단 (Layer 3 fallback)
+    LLM을 사용해 쿼리가 모호한지 판단
 
     규칙 기반으로 판단하기 어려운 짧은 쿼리에 대해 LLM의 상식을 활용합니다.
     비용 절감을 위해 모든 쿼리에 사용하지 않고, Layer 1, 2를 통과한 경우에만 호출합니다.
 
     Fallback 체인:
     1. EXAONE (Primary) - 도메인 특화 모델
-    2. gpt-4o-mini Function Calling (Fallback) - 구조화된 분류
+    2. gpt-4o-mini IntentClassifier (Fallback) - 구조화된 분류
 
     Args:
         query: 사용자 쿼리
@@ -95,39 +94,10 @@ def check_ambiguity_with_llm(query: str) -> bool:
         return is_ambiguous
 
     except ImportError:
-        logger.warning("[QueryAnalysis] IntentClassifier import failed, using legacy fallback")
+        logger.warning("[QueryAnalysis] IntentClassifier import failed")
+        return False
     except Exception as e:
-        logger.warning(f"[QueryAnalysis] IntentClassifier failed: {e}, using legacy fallback...")
-
-    # 3. Legacy fallback (텍스트 기반)
-    try:
-        from openai import OpenAI
-
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            logger.warning("[QueryAnalysis] OpenAI API key not found, skipping LLM check")
-            return False
-
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.0,
-            max_tokens=20
-        )
-
-        result = response.choices[0].message.content.strip()
-        is_ambiguous = "모호" in result.lower()
-        logger.info(
-            f"[QueryAnalysis] gpt-4o-mini ambiguity check: '{query[:20]}...' -> {result} (ambiguous={is_ambiguous})"
-        )
-        return is_ambiguous
-
-    except Exception as e:
-        logger.warning(f"[QueryAnalysis] gpt-4o-mini fallback failed: {e}")
+        logger.warning(f"[QueryAnalysis] IntentClassifier failed: {e}")
         return False  # 모든 LLM 실패 시 보수적으로 RAG 진행
 
 

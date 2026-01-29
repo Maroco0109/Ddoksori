@@ -1,7 +1,7 @@
-"""CriteriaRetrievalAgent - 분쟁조정기준 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+"""CriteriaRetrievalAgent - 분쟁조정기준 검색 전용 에이전트"""
 
 import asyncio
-from typing import Dict, Any, List, ClassVar
+from typing import Dict, Any, List, ClassVar, Optional
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
 from .tools.hybrid_retriever import HybridRetriever
@@ -14,9 +14,14 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
     agent_name: ClassVar[str] = "retrieval_criteria"
     agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
     domain_key: ClassVar[str] = "criteria"
-    domain_rewrite_prompt: ClassVar[str] = "Convert this everyday language query into a dispute resolution criteria search query: {query}"
-    
-    async def _execute_search(self, query: str, top_k: int) -> List[SearchResult]:
+
+    async def _execute_search(
+        self,
+        query: str,
+        top_k: int,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        ignore_threshold: bool = False
+    ) -> List[SearchResult]:
         """
         계층적 기준 검색: 품목 식별 → 구체적 기준 → 보충정보
 
@@ -24,6 +29,10 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         1단계: 별표1_품목매핑으로 품목 식별 (상위 3개)
         2단계: 손자_청크 > 자식_청크 > 부모_청크 (구체적→추상적)
         3단계: 별표3_품질보증, 별표4_내용연수 보충정보
+
+        v2: metadata_filter 지원
+            - dataset_type: 기본값 'law_guide'
+            - document_types: ['행정규칙', '별표'] 등 (chunk_type_filter로 매핑)
         """
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
@@ -32,6 +41,14 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         retriever.connect()
 
         try:
+            # === v2: 메타데이터 필터 적용 ===
+            dataset_type = 'law_guide'  # 기본값
+
+            if metadata_filter:
+                # dataset_type 오버라이드
+                if metadata_filter.get('dataset_type'):
+                    dataset_type = metadata_filter['dataset_type']
+
             # === PR-3: 계층적 기준 검색 시작 ===
 
             # 1단계: 품목 식별 (별표1)
@@ -39,7 +56,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 retriever.search,
                 query=query,
                 top_k=3,  # 품목 후보 3개
-                dataset_type_filter='law_guide',
+                dataset_type_filter=dataset_type,
                 chunk_type_filter=['별표1_품목매핑'],
             )
 
@@ -48,7 +65,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 retriever.search,
                 query=query,
                 top_k=top_k,
-                dataset_type_filter='law_guide',
+                dataset_type_filter=dataset_type,
                 chunk_type_filter=['손자_청크', '자식_청크', '부모_청크'],
             )
 
@@ -57,7 +74,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 retriever.search,
                 query=query,
                 top_k=2,  # 보충정보 2개
-                dataset_type_filter='law_guide',
+                dataset_type_filter=dataset_type,
                 chunk_type_filter=['별표3_품질보증', '별표4_내용연수'],
             )
 

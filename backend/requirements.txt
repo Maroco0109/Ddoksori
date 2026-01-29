@@ -5,6 +5,7 @@ fastapi==0.115.6
 # Note: Using httptools instead of uvloop for Windows compatibility
 # uvloop is Linux/macOS only and will cause installation failures on Windows
 uvicorn==0.32.1
+gunicorn==23.0.0
 httptools==0.7.1
 watchfiles==1.1.1
 python-multipart==0.0.20

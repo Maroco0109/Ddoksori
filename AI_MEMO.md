@@ -1,6 +1,45 @@
 # AI_MEMO
 
-## Current Task: Conversation Phase System Implementation (COMPLETED ✅)
+## Current Task: 문서 업데이트 + Docker 파일 검토/수정 (COMPLETED ✅)
+
+**Date**: 2026-01-29 | **Status**: ✅ 완료
+
+---
+
+### 1. 문서 업데이트 (MAS v2 아키텍처 반영)
+
+MAS v2 아키텍처 개편(4→3 Retrieval Agent, LLM 기반 쿼리 확장, 재생성 루프 등)에 따라 기존 문서 3건을 업데이트.
+
+| 문서 | 작업 |
+|------|------|
+| `docs/plans/MAS_SUPERVISOR_PLAN.md` | `docs/_archive/plans/`로 이동 + `[ARCHIVED]` 헤더 추가 |
+| `docs/plans/2026-01-28-mas-architecture-v2-design.md` | 참고 자료에 v1 아카이브 링크 추가 |
+| `docs/plans/2026-01-28-cicd-pipeline-design.md` | "MAS v2 아키텍처 반영 사항 (2026-01-29)" 섹션 추가 |
+| `docs/runbooks/database-recovery.md` | 3-Agent 주석, 데이터 소스 검증 쿼리, v2 문서 링크 추가 |
+
+### 2. Docker 파일 검토 및 수정
+
+CI/CD 배포용 Docker 파일을 MAS v2 구조 및 RDS 전용 환경에 맞게 검토/수정.
+
+#### 변경 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `backend/Dockerfile.prod` | `COPY utils/ ./utils/` 추가 (import 누락 수정), gunicorn: timeout 120s, graceful-timeout 30s, worker 수 환경변수화(`WEB_CONCURRENCY`), access log stdout |
+| `docker-compose.prod.yml` | `MODEL_QUERY_ANALYST` (gpt-4o-mini), `MAX_RETRY_COUNT` (1) 환경변수 추가. DB 서비스 없음 (RDS 전용) 확인 |
+| `frontend/nginx.conf` | `location /api` (매칭 불가) → 실제 API 경로별 개별 블록 (`/chat`, `/search`, `/auth`, `/case`, `/metrics`), SSE 블록 우선순위 조정 |
+| `frontend/.dockerignore` | 신규 생성 (`node_modules/`, `dist/`, `.env*` 등 제외) |
+
+#### 발견된 주요 이슈 및 해결
+
+1. **backend/Dockerfile.prod `utils/` 누락**: `main.py`에서 `from utils.embedding_connection` import하는데 `COPY app/ ./app/`만 존재 → `COPY utils/ ./utils/` 추가
+2. **gunicorn timeout 부재**: LLM 호출은 30초 이상 소요 가능 → `--timeout 120` 설정
+3. **nginx.conf `/api` 경로 불일치**: 백엔드 API는 root path(`/chat`, `/search` 등)에 등록, `/api` prefix 없음 → 개별 location 블록으로 교체
+4. **frontend `.dockerignore` 부재**: `node_modules/`가 빌드 컨텍스트에 포함됨 → 신규 생성
+
+---
+
+## Previous Task: Conversation Phase System Implementation (COMPLETED ✅)
 
 **Date**: 2026-01-28 | **Status**: ✅ 구현 완료
 

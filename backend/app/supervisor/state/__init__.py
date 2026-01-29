@@ -41,6 +41,10 @@ from .agent_results import (
     IndividualRetrievalResult,
     ReviewResult,
     AgentResultsState,
+    # v2 타입
+    CitedCase,
+    ViolationV2,
+    RetryContext,
 )
 from .output import (
     ClaimEvidenceMapping,
@@ -222,6 +226,11 @@ class ChatState(MessagesState):
     # operator.add로 누적되어 retrieval_merge_node에서 병합됨
     individual_retrieval_results: Annotated[List[IndividualRetrievalResult], operator.add]
 
+    # === MAS v2 추가 필드 ===
+    retry_context: Optional[RetryContext]  # 재생성 컨텍스트
+    cited_cases: List[CitedCase]  # 인용된 사례 정보
+    expanded_queries: List[str]  # LLM 기반 확장 쿼리 리스트
+
     # === 노드 타이밍 ===
     _node_timings: Optional[Dict[str, Dict]]
 
@@ -315,6 +324,11 @@ def create_initial_state(
         # === 개별 Retrieval 결과 (Phase 5: MAS) ===
         individual_retrieval_results=[],
 
+        # === MAS v2 추가 필드 ===
+        retry_context=None,
+        cited_cases=[],
+        expanded_queries=[],
+
         # 노드 타이밍
         _node_timings={},
 
@@ -342,6 +356,10 @@ __all__ = [
     'IndividualRetrievalResult',
     'ReviewResult',
     'AgentResultsState',
+    # v2 타입
+    'CitedCase',
+    'ViolationV2',
+    'RetryContext',
 
     # 출력
     'ClaimEvidenceMapping',

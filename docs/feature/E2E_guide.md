@@ -1,8 +1,8 @@
 # DDOKSORI E2E 수동 테스트 가이드
 
-> AI_MEMO.md 기반 - Model Architecture Refactor + Retrieval Agent 병렬 처리 인프라 완료 후 전체 시스템 검증 절차
+> AI_MEMO.md 기반 - MAS v2 아키텍처 반영, RDS 전용 환경에서의 전체 시스템 검증 절차
 >
-> **최종 업데이트**: 2026-01-27 (Retrieval Agent별 LLM 엔드포인트 설정 추가)
+> **최종 업데이트**: 2026-01-29 (MAS v2 반영: 3개 Retrieval Agent, gpt-4o-mini Supervisor)
 
 ## 📋 목차
 
@@ -30,12 +30,12 @@
 ### 1.2 API 키 확인
 
 **필수 API 키 (backend/.env에 설정):**
-- `OPENAI_API_KEY` - GPT-5.1 Supervisor, gpt-4o Draft/Review, Embedding
-- `ANTHROPIC_API_KEY` - Claude 3.5 Sonnet (Fallback용)
+- `OPENAI_API_KEY` - gpt-4o-mini Supervisor/QueryAnalyst/Draft/Review, Embedding
+- `ANTHROPIC_API_KEY` - Claude 3 Haiku (Fallback용)
 
 ### 1.3 선택 사항: RunPod vLLM (EXAONE)
 
-EXAONE은 Retrieval Agent의 Query Rewrite에 사용됩니다. 4개의 Retrieval Agent (Law, Criteria, Case, Counsel)가 병렬로 실행되므로, 성능 최적화를 위해 **에이전트별 독립 vLLM 인스턴스**를 구성할 수 있습니다.
+EXAONE은 Retrieval Agent의 Query Rewrite에 사용됩니다. 3개의 Retrieval Agent (Law, Criteria, Case)가 병렬로 실행되므로, 성능 최적화를 위해 **에이전트별 독립 vLLM 인스턴스**를 구성할 수 있습니다.
 
 #### 옵션 A: 공유 인스턴스 (기본)
 
@@ -53,9 +53,9 @@ https://<pod-id>-9010.proxy.runpod.net/v1
 
 #### 옵션 B: 에이전트별 독립 인스턴스 (병렬 처리 최적화)
 
-4개의 Retrieval Agent 각각에 독립 vLLM 인스턴스를 할당하여 완전한 병렬 처리를 구현합니다.
+3개의 Retrieval Agent 각각에 독립 vLLM 인스턴스를 할당하여 완전한 병렬 처리를 구현합니다.
 
-**SSH 터널링 설정 (4개 포트):**
+**SSH 터널링 설정 (3개 포트):**
 ```bash
 # Law Agent용 (포트 19010)
 ssh -L 19010:localhost:9010 root@<pod-ip-1> -N &
@@ -65,9 +65,6 @@ ssh -L 19011:localhost:9010 root@<pod-ip-2> -N &
 
 # Case Agent용 (포트 19012)
 ssh -L 19012:localhost:9010 root@<pod-ip-3> -N &
-
-# Counsel Agent용 (포트 19013)
-ssh -L 19013:localhost:9010 root@<pod-ip-4> -N &
 ```
 
 > **Fallback**: EXAONE 연결 실패 시 `gpt-4.1-nano`로 자동 폴백됩니다.
@@ -89,11 +86,13 @@ cp .env.example .env
 #### 모델 아키텍처 설정
 
 ```bash
-MODEL_SUPERVISOR=gpt-5.1
-MODEL_DRAFT_AGENT=gpt-4o
-MODEL_REVIEW_AGENT=gpt-4o
+MODEL_SUPERVISOR=gpt-4o-mini
+MODEL_QUERY_ANALYST=gpt-4o-mini
+MODEL_DRAFT_AGENT=gpt-4o-mini
+MODEL_REVIEW_AGENT=gpt-4o-mini
 MODEL_RETRIEVAL_LLM=LGAI-EXAONE/EXAONE-4.0-1.2B
 MODEL_RETRIEVAL_FALLBACK=gpt-4.1-nano
+MAX_RETRY_COUNT=1
 
 # EXAONE vLLM 공유 설정 (RunPod SSH 터널링 시)
 MODEL_EXAONE_BASE_URL=http://localhost:19010/v1
@@ -103,7 +102,7 @@ PORT_EXAONE_VLLM=19010
 
 #### Retrieval Agent별 LLM 설정 (병렬 처리 최적화, 선택 사항)
 
-4개 Retrieval Agent에 독립 vLLM 인스턴스를 할당할 때 사용합니다.
+3개 Retrieval Agent에 독립 vLLM 인스턴스를 할당할 때 사용합니다.
 설정하지 않으면 공유 `MODEL_EXAONE_BASE_URL`을 사용합니다.
 
 ```bash
@@ -111,7 +110,6 @@ PORT_EXAONE_VLLM=19010
 RETRIEVAL_LLM_LAW_URL=http://localhost:19010/v1
 RETRIEVAL_LLM_CRITERIA_URL=http://localhost:19011/v1
 RETRIEVAL_LLM_CASE_URL=http://localhost:19012/v1
-RETRIEVAL_LLM_COUNSEL_URL=http://localhost:19013/v1
 
 # Query Rewrite 타임아웃 (초)
 RETRIEVAL_LLM_TIMEOUT=3.0
@@ -237,14 +235,14 @@ curl -s http://localhost:8000/health | jq
 
 ### 4.3 LLM 모델 상태 확인
 
-**Supervisor LLM (GPT-5.1 via OpenAI API):**
+**Supervisor LLM (gpt-4o-mini via OpenAI API):**
 ```bash
 curl -s http://localhost:8000/health/llm/supervisor | jq
 ```
 
 **예상 응답:**
 ```json
-{"status": "healthy", "model": "gpt-5.1 (OpenAI API)"}
+{"status": "healthy", "model": "gpt-4o-mini (OpenAI API)"}
 ```
 
 **EXAONE LLM (RunPod vLLM) - 선택 사항:**
@@ -437,7 +435,7 @@ curl -s http://localhost:8000/chat \
 
 ### 7.4 시나리오 4: Retrieval Agent 병렬 처리 테스트
 
-4개 Retrieval Agent (Law, Criteria, Case, Counsel)가 병렬로 Query Rewrite를 수행하는지 확인합니다.
+3개 Retrieval Agent (Law, Criteria, Case)가 병렬로 Query Rewrite를 수행하는지 확인합니다.
 
 **debug 모드로 node_timings 확인:**
 ```bash
@@ -454,13 +452,13 @@ curl -s http://localhost:8000/chat \
 ```
 
 **성공 기준:**
-- 4개 Retrieval Agent의 타이밍이 기록됨
+- 3개 Retrieval Agent의 타이밍이 기록됨
 - 에이전트별 독립 URL 설정 시: 타이밍이 유사 (병렬 처리)
 - 공유 URL 사용 시: 타이밍에 약간의 순차 대기 발생 가능
 
 **로그에서 Query Rewrite 확인:**
 ```bash
-docker compose logs backend --tail 50 | grep -E "domain=(law|criteria|case|counsel).*rewrite"
+docker compose logs backend --tail 50 | grep -E "domain=(law|criteria|case).*rewrite"
 ```
 
 ### 7.5 Backend 로그 확인
@@ -476,9 +474,10 @@ tail -100 backend/app.log | grep -E "(QueryRewriter|Supervisor|Draft|Review|Retr
 ```
 
 **확인할 로그 패턴:**
-- `[Supervisor] LLM 결정: model=gpt-5.1` - Supervisor 동작
+- `[Supervisor] LLM 결정: model=gpt-4o-mini` - Supervisor 동작
 - `[Retrieval] domain=law rewrite` - Law Agent Query Rewrite
 - `[Retrieval] domain=criteria rewrite` - Criteria Agent Query Rewrite
+- `[Retrieval] domain=case rewrite` - Case Agent Query Rewrite
 - `[Draft] 답변 생성 완료` - Draft Agent 동작
 - `[LegalReview] 검토 완료` - Review Agent 동작
 - `Using fallback model: gpt-4.1-nano` - EXAONE 폴백 발생
@@ -574,24 +573,25 @@ echo "Chat (General) Sources: $(jq '.sources | length' $BASE/chat-general.json)"
 | 채팅 API | `curl localhost:8000/chat -d ...` | 답변 생성 |
 | Frontend | `http://localhost:5173` | 페이지 로드 |
 | E2E 분쟁상담 | 복잡한 법률 질의 | 출처 포함 답변 |
-| Retrieval 병렬 | `debug: true` + node_timings | 4개 Agent 타이밍 기록 |
+| Retrieval 병렬 | `debug: true` + node_timings | 3개 Agent 타이밍 기록 |
 | Fallback 동작 | EXAONE 없이 테스트 | gpt-4.1-nano로 답변 생성 |
 
 ---
 
 ## ⚠️ 문제 해결
 
-### DB 연결 실패
+### DB 연결 실패 (RDS)
 
-**Docker DB 상태 확인:**
+**RDS 엔드포인트 직접 연결 테스트:**
 ```bash
-docker compose logs db --tail 20
+psql -h <rds-endpoint> -U readonly_user -d ddoksori -c "SELECT 1;"
 ```
 
-**재시작:**
-```bash
-docker compose restart db
-```
+**확인 사항:**
+- RDS 엔드포인트 주소가 올바른지 확인
+- AWS 보안 그룹에서 현재 IP의 5432 포트 인바운드가 허용되어 있는지 확인
+- Readonly 계정 권한이 올바른지 확인 (`GRANT SELECT ON ALL TABLES`)
+- `backend/.env`의 `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` 값 확인
 
 ### Backend 시작 실패
 

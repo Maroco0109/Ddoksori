@@ -251,6 +251,70 @@ class AgentResultsState(TypedDict, total=False):
     review: Optional[ReviewResult]
 
 
+# =============================================================================
+# MAS v2 타입 정의
+# =============================================================================
+
+class CitedCase(TypedDict):
+    """
+    인용된 사례 정보 (v2)
+
+    AnswerDrafter가 검색 결과에서 추출한 사례 인용 정보입니다.
+
+    Attributes:
+        case_id: 사례 고유 ID (chunk_id)
+        category: 사례 카테고리 ('조정', '해결', '상담')
+        title: 사례 제목
+        summary: 사례 요약
+        relevance: 사용자 질문과의 관련성 설명
+    """
+    case_id: str
+    category: Literal['조정', '해결', '상담']
+    title: str
+    summary: str
+    relevance: str
+
+
+class ViolationV2(TypedDict, total=False):
+    """
+    위반 사항 상세 정보 (v2)
+
+    LegalReviewer가 탐지한 위반 사항의 상세 정보입니다.
+
+    Attributes:
+        type: 위반 유형
+            - 'hallucination': 근거 없는 인용
+            - 'legal_judgment': 법적 판단 표현
+            - 'prohibited_expression': 금지 표현
+            - 'query_mismatch': 질의-답변 불일치
+        description: 위반 설명
+        location: 위반 발생 위치 (문장 또는 단락)
+        severity: 심각도 ('critical', 'warning')
+        suggestion: 수정 제안 (optional)
+    """
+    type: Literal['hallucination', 'legal_judgment', 'prohibited_expression', 'query_mismatch']
+    description: str
+    location: str
+    severity: Literal['critical', 'warning']
+    suggestion: Optional[str]
+
+
+class RetryContext(TypedDict):
+    """
+    재생성 컨텍스트 (v2)
+
+    LegalReviewer가 검토 실패 시 AnswerDrafter에게 전달하는 재시도 정보입니다.
+
+    Attributes:
+        violations: 이전 위반 사항 리스트 (문자열)
+        previous_draft: 이전 생성 답변
+        retry_count: 현재 재시도 횟수 (max 1)
+    """
+    violations: List[str]
+    previous_draft: str
+    retry_count: int
+
+
 __all__ = [
     'QueryAnalysisResult',
     'RetrievalResult',
@@ -260,4 +324,8 @@ __all__ = [
     'LegalJudgmentCheckResult',
     'ReviewResult',
     'AgentResultsState',
+    # v2 타입
+    'CitedCase',
+    'ViolationV2',
+    'RetryContext',
 ]

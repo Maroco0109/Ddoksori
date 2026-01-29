@@ -188,16 +188,14 @@ class ModelConfig(BaseSettings):
     환경변수로 오버라이드 가능하며, 기본값은 최적화된 모델 조합입니다.
 
     환경변수:
-        MODEL_SUPERVISOR: Supervisor 에이전트 모델 (기본값: gpt-5.1)
+        MODEL_SUPERVISOR: Supervisor 에이전트 모델 (기본값: gpt-4o)
         MODEL_DRAFT_AGENT: Draft 에이전트 모델 (기본값: gpt-4o)
         MODEL_REVIEW_AGENT: Review 에이전트 모델 (기본값: gpt-4o)
-        MODEL_RETRIEVAL_LLM: Retrieval LLM 모델 (기본값: LGAI-EXAONE/EXAONE-4.0-1.2B)
-        MODEL_RETRIEVAL_FALLBACK: Retrieval 폴백 모델 (기본값: gpt-4.1-nano)
     """
     model_config = SettingsConfigDict(env_prefix="MODEL_")
 
     supervisor: str = Field(
-        default="gpt-5.1",
+        default="gpt-4o",
         description="Supervisor 에이전트 모델"
     )
     draft_agent: str = Field(
@@ -207,14 +205,6 @@ class ModelConfig(BaseSettings):
     review_agent: str = Field(
         default="gpt-4o",
         description="Review 에이전트 모델"
-    )
-    retrieval_llm: str = Field(
-        default="LGAI-EXAONE/EXAONE-4.0-1.2B",
-        description="Retrieval LLM 모델"
-    )
-    retrieval_fallback: str = Field(
-        default="gpt-4.1-nano",
-        description="Retrieval 폴백 모델"
     )
 
 
@@ -233,66 +223,6 @@ class PortConfig(BaseSettings):
         default=19010,
         description="EXAONE vLLM 서버 포트"
     )
-
-
-class RetrievalLLMConfig(BaseSettings):
-    """
-    Retrieval Agent별 LLM 엔드포인트 설정.
-
-    4개 Retrieval Agent(Law, Criteria, Case, Counsel)가 각각 독립된
-    EXAONE vLLM 인스턴스를 사용할 수 있도록 지원합니다.
-
-    환경변수:
-        RETRIEVAL_LLM_LAW_URL: Law Agent용 EXAONE URL
-        RETRIEVAL_LLM_CRITERIA_URL: Criteria Agent용 EXAONE URL
-        RETRIEVAL_LLM_CASE_URL: Case Agent용 EXAONE URL
-        RETRIEVAL_LLM_COUNSEL_URL: Counsel Agent용 EXAONE URL
-        RETRIEVAL_LLM_TIMEOUT: Query Rewrite 타임아웃 (기본값: 3.0초)
-    """
-    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_LLM_")
-
-    # 에이전트별 EXAONE URL (None이면 공통 EXAONE_RUNPOD_URL 사용)
-    law_url: Optional[str] = Field(
-        default=None,
-        description="Law Agent용 EXAONE vLLM URL"
-    )
-    criteria_url: Optional[str] = Field(
-        default=None,
-        description="Criteria Agent용 EXAONE vLLM URL"
-    )
-    case_url: Optional[str] = Field(
-        default=None,
-        description="Case Agent용 EXAONE vLLM URL"
-    )
-    counsel_url: Optional[str] = Field(
-        default=None,
-        description="Counsel Agent용 EXAONE vLLM URL"
-    )
-
-    # 공통 설정
-    timeout: float = Field(
-        default=3.0,
-        description="Query Rewrite 타임아웃 (초)"
-    )
-
-    def get_url_for_domain(self, domain: str) -> Optional[str]:
-        """
-        도메인별 EXAONE URL을 반환합니다.
-        설정되지 않은 경우 None 반환 (공통 URL 사용).
-
-        Args:
-            domain: 도메인 키 (law, criteria, case, counsel)
-
-        Returns:
-            해당 도메인의 EXAONE URL 또는 None
-        """
-        url_map = {
-            "law": self.law_url,
-            "criteria": self.criteria_url,
-            "case": self.case_url,
-            "counsel": self.counsel_url,
-        }
-        return url_map.get(domain)
 
 
 # ============================================================
@@ -386,11 +316,6 @@ class AgentSettings(BaseSettings):
     )
 
     # Query Analysis 설정
-    query_rewrite_enabled: bool = Field(
-        default=True,
-        alias="QUERY_REWRITE_ENABLED",
-        description="쿼리 재작성 활성화 여부"
-    )
     enable_fast_path_promotion: bool = Field(
         default=True,
         alias="ENABLE_FAST_PATH_PROMOTION",
@@ -440,6 +365,7 @@ class AgentSettings(BaseSettings):
             "law": self.similarity_threshold_law,
             "criteria": self.similarity_threshold_criteria,
             "general": self.similarity_threshold_general,
+            "case": self.similarity_threshold_dispute,  # 분쟁 조정 사례는 dispute 임계값 사용
         }
         if query_type and query_type in thresholds:
             return thresholds[query_type]
@@ -477,40 +403,6 @@ class RedisConfig(BaseSettings):
         default=24,
         alias="ANSWER_CACHE_TTL_HOURS",
         description="답변 캐시 TTL (시간)"
-    )
-
-
-# ============================================================
-# Query Rewriter 설정
-# ============================================================
-
-class QueryRewriterConfig(BaseSettings):
-    """
-    쿼리 재작성기 설정.
-
-    LLM을 활용한 쿼리 재작성 기능의 설정을 관리합니다.
-    """
-    model_config = SettingsConfigDict(env_prefix="QUERY_REWRITE_")
-
-    enabled: bool = Field(
-        default=True,
-        alias="QUERY_REWRITE_ENABLED",
-        description="쿼리 재작성 활성화"
-    )
-    cache_size: int = Field(
-        default=1000,
-        alias="QUERY_REWRITE_CACHE_SIZE",
-        description="캐시 크기"
-    )
-    timeout_ms: int = Field(
-        default=10000,
-        alias="QUERY_REWRITE_TIMEOUT",
-        description="타임아웃 (밀리초)"
-    )
-    min_complexity: int = Field(
-        default=1,
-        alias="QUERY_REWRITE_MIN_COMPLEXITY",
-        description="최소 복잡도"
     )
 
 
@@ -716,7 +608,6 @@ class AppConfig(BaseSettings):
     환경변수:
         DEBUG: 디버그 모드 (기본값: false)
         CORS_ORIGINS: CORS 허용 오리진 (기본값: http://localhost:5173)
-        ORCHESTRATOR_MODE: [DEPRECATED] 그래프 모드 - MAS Supervisor만 지원 (Phase 7)
         RETRIEVAL_MODE: 검색 모드 (기본값: dense)
     """
     model_config = SettingsConfigDict(
@@ -731,11 +622,6 @@ class AppConfig(BaseSettings):
         default="http://localhost:5173",
         alias="CORS_ORIGINS",
         description="CORS 허용 오리진 (쉼표 구분)"
-    )
-    orchestrator_mode: str = Field(
-        default="mas",
-        alias="ORCHESTRATOR_MODE",
-        description="[DEPRECATED] 그래프 모드 - MAS Supervisor만 지원 (Phase 7)"
     )
     retrieval_mode: str = Field(
         default="dense",
@@ -762,11 +648,9 @@ class AppConfig(BaseSettings):
     exaone: ExaoneConfig = Field(default_factory=ExaoneConfig)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     redis: RedisConfig = Field(default_factory=RedisConfig)
-    query_rewriter: QueryRewriterConfig = Field(default_factory=QueryRewriterConfig)
     moderation: ModerationConfig = Field(default_factory=ModerationConfig)
     models: ModelConfig = Field(default_factory=ModelConfig)
     ports: PortConfig = Field(default_factory=PortConfig)
-    retrieval_llm: RetrievalLLMConfig = Field(default_factory=RetrievalLLMConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     chatbot_features: ChatbotFeaturesConfig = Field(default_factory=ChatbotFeaturesConfig)
@@ -918,11 +802,9 @@ __all__ = [
     "ExaoneConfig",
     "AgentSettings",  # 새 이름 (get_config().agent 타입)
     "RedisConfig",
-    "QueryRewriterConfig",
     "ModerationConfig",
     "ModelConfig",
     "PortConfig",
-    "RetrievalLLMConfig",
     "AuthConfig",  # JWT & OAuth 설정
     "MemoryConfig",  # 대화 메모리 설정
     "ChatbotFeaturesConfig",  # 대화형 챗봇 기능 플래그

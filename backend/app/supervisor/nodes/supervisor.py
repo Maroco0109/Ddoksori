@@ -20,8 +20,8 @@ Phase: MAS Supervisor Architecture - Phase 4
 - Agent 응답 실패: 해당 Agent 스킵, 다음 단계 진행
 
 [Fallback 체인]
-1. GPT-5.1 (config.models.supervisor) - Primary
-2. Claude 3.5 Sonnet - Secondary
+1. GPT-4o (config.models.supervisor) - Primary
+2. Claude 3.5 Sonnet (MODEL_SUPERVISOR_FALLBACK) - Secondary
 3. Rule-based - Final fallback
 
 [보안]
@@ -92,8 +92,8 @@ class AsyncLLMWrapper:
     
     async def generate(self, prompt: str) -> str:
         if self.provider == "openai":
-            # gpt-5.1, o1-*, o3-* 등 새 모델은 max_completion_tokens 사용
-            uses_new_api = self.model.startswith(("gpt-5", "o1-", "o3-"))
+            # o1-*, o3-* 등 reasoning 모델은 max_completion_tokens 사용
+            uses_new_api = self.model.startswith(("o1-", "o3-"))
 
             params = {
                 "model": self.model,
@@ -169,8 +169,8 @@ class SupervisorNode:
         >>> print(decision["action"])  # "call_agent", "respond", "clarify"
     """
 
-    # Fallback 모델 체인 (Claude 3.5 Sonnet)
-    FALLBACK_MODEL = "claude-3-5-sonnet-20241022"
+    # Fallback 모델 체인 (환경변수로 설정 가능)
+    FALLBACK_MODEL = os.getenv("MODEL_SUPERVISOR_FALLBACK", "claude-3-5-sonnet-20241022")
 
     def __init__(self, llm: Optional[LLMProtocol] = None):
         """
@@ -239,7 +239,7 @@ class SupervisorNode:
         3. DISPUTE/AMBIGUOUS → LLM 기반 판단
 
         Fallback 체인:
-        1. Primary LLM (GPT-5.1) 시도
+        1. Primary LLM (GPT-4o) 시도
         2. Fallback LLM (Claude 3.5 Sonnet) 시도
         3. 규칙 기반 fallback
 

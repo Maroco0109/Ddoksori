@@ -2,11 +2,11 @@
 똑소리 프로젝트 - 법률검토 에이전트 (Legal Review Agent)
 
 작성일: 2026-01-14
-최종 수정: 2026-01-22
+최종 수정: 2026-01-28 (v2: Violation 상세 정보 + 재생성 루프 지원)
 
 [역할 및 책임]
 생성된 답변(Draft)의 안전성과 신뢰성을 최종적으로 검증합니다.
-LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을 포함하거나, 
+LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을 포함하거나,
 근거 없는 주장을 하는지(Hallucination) 감시합니다.
 
 [주요 로직]
@@ -15,6 +15,11 @@ LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을
 3. 근거 충분성 (Evidence Sufficiency): 검색된 문서가 충분한지 State 기반 확인.
 4. 답변 정제 (Filtering): 경미한 위반은 "가능성이 있습니다" 등으로 표현 완화(Softening).
 5. 재생성 요청 (Retry): 중대한 위반이나 출처 누락 시 Generation 단계로 되돌려 보냄.
+
+[v2 추가 기능]
+- Violation 상세 정보 구조 (type, description, location, severity, suggestion)
+- retry_context 구성: AnswerDrafter에 위반사항 전달
+- next_agent='retry_generation' 반환으로 재생성 루프 지원
 """
 
 import re
@@ -474,3 +479,197 @@ def review_node_wrapper(state: ChatState) -> Dict:
 
     # 분쟁 상담: 전체 리뷰 수행
     return review_node(state)
+
+
+# ========================================
+# v2: Violation 상세 정보 + 재생성 루프 지원
+# ========================================
+
+def _build_violation_details(
+    prohibited_violations: List[Tuple[str, str]],
+    has_citation: bool,
+    has_evidence: bool,
+    citation_verify: CitationVerifyResult
+) -> List[Dict]:
+    """
+    v2 Violation 상세 정보 리스트를 생성합니다.
+
+    Returns:
+        List of Violation dicts
+    """
+    violations = []
+
+    # 1. 금지 표현 위반
+    for description, match_text in prohibited_violations:
+        violations.append({
+            'type': 'prohibited_expression',
+            'description': f"금지 표현 발견: {description}",
+            'location': match_text[:100] if match_text else '',
+            'severity': 'critical' if '법적' in description or '확실' in description else 'warning',
+            'suggestion': SOFTENING_PHRASES.get(match_text, '~할 수 있습니다')[:50] if match_text else None,
+        })
+
+    # 2. Hallucination 의심 (미검증 인용)
+    if not citation_verify.passed and citation_verify.unverified_refs:
+        violations.append({
+            'type': 'hallucination',
+            'description': f"검색 결과에서 확인되지 않은 인용: {', '.join(citation_verify.unverified_refs[:3])}",
+            'location': '',
+            'severity': 'critical',
+            'suggestion': '검색 결과에서 확인된 법령/조문만 인용해주세요.',
+        })
+
+    # 3. 출처 표시 부족
+    if not has_citation:
+        violations.append({
+            'type': 'query_mismatch',  # 출처 누락도 정합성 문제로 분류
+            'description': '답변에 출처/근거가 명시되어 있지 않습니다.',
+            'location': '',
+            'severity': 'warning',
+            'suggestion': '[출처] 또는 관련 법령/기준을 명시해주세요.',
+        })
+
+    # 4. 근거 부족
+    if not has_evidence:
+        violations.append({
+            'type': 'query_mismatch',
+            'description': '검색된 근거 자료가 충분하지 않습니다.',
+            'location': '',
+            'severity': 'warning',
+            'suggestion': None,
+        })
+
+    return violations
+
+
+def _build_retry_context(violations: List[Dict], draft_answer: str, retry_count: int) -> Dict:
+    """
+    AnswerDrafter에 전달할 retry_context를 생성합니다.
+
+    Returns:
+        RetryContext dict
+    """
+    # 위반사항을 간결한 문자열 리스트로 변환
+    violation_summaries = [
+        f"[{v['type']}] {v['description']}" for v in violations[:5]
+    ]
+
+    return {
+        'violations': violation_summaries,
+        'previous_draft': draft_answer,
+        'retry_count': retry_count,
+    }
+
+
+async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
+    """
+    [검토 노드 v2 진입점]
+
+    v2 추가 기능:
+    - Violation 상세 정보 (type, description, location, severity, suggestion)
+    - retry_context 구성: AnswerDrafter에 위반사항 전달
+    - next_agent='retry_generation' 반환으로 재생성 루프 지원
+
+    Args:
+        state: ChatState (v2 호환)
+        config: RunnableConfig (optional)
+
+    Returns:
+        Dict with review 결과, retry_context (필요 시), next_agent
+    """
+    import time
+
+    start_time = time.time()
+
+    draft_answer = state.get('draft_answer', '')
+    query_analysis = state.get('query_analysis', {})
+    sources = state.get('sources', [])
+    claim_evidence_map = state.get('claim_evidence_map', [])
+    cited_cases = state.get('cited_cases', [])
+    retry_count = state.get('retry_count', 0)
+
+    query_type = query_analysis.get('query_type', 'dispute')
+
+    # 일반 대화(General)는 검토 스킵 (Fast Path)
+    if query_type == 'general':
+        return {
+            'review': {
+                'passed': True,
+                'violations': [],
+                'final_answer': draft_answer,
+                'review_time_ms': (time.time() - start_time) * 1000,
+            },
+            'final_answer': draft_answer,
+        }
+
+    # 1. 금지 표현 검사
+    prohibited_violations = _check_prohibited_expressions(draft_answer)
+
+    # 2. 출처 표시 검사
+    has_sources = len(sources) > 0
+    has_citation = _check_citation_presence(draft_answer, has_sources)
+
+    # 3. 근거 충분성 검사
+    has_evidence = _check_evidence_sufficiency(state)
+
+    # 4. 인용 정확성 검사 (Hallucination 방지)
+    citation_verify = verify_citation_accuracy(draft_answer, sources)
+
+    # 5. v2: Violation 상세 정보 생성
+    violation_details = _build_violation_details(
+        prohibited_violations, has_citation, has_evidence, citation_verify
+    )
+
+    # 6. 심각한 위반 개수 계산
+    critical_count = sum(1 for v in violation_details if v['severity'] == 'critical')
+
+    # 7. 재생성 필요 여부 결정
+    # - critical 위반이 있고
+    # - 아직 최대 재시도 횟수(1회)에 도달하지 않았을 때
+    max_retries = 1  # v2: 최대 1회 재생성
+    needs_retry = critical_count > 0 and retry_count < max_retries
+
+    review_time_ms = (time.time() - start_time) * 1000
+
+    if needs_retry:
+        # 재생성 필요 → retry_context 생성 + next_agent='retry_generation'
+        retry_context = _build_retry_context(violation_details, draft_answer, retry_count)
+
+        return {
+            'review': {
+                'passed': False,
+                'violations': violation_details,
+                'final_answer': None,
+                'review_time_ms': review_time_ms,
+            },
+            'retry_context': retry_context,
+            'retry_count': retry_count + 1,
+            'next_agent': 'retry_generation',  # Supervisor가 이를 보고 재생성 라우팅
+        }
+
+    # 8. 경미한 위반은 필터링으로 처리
+    filtered_answer = draft_answer
+    if prohibited_violations:
+        filtered_answer = _filter_prohibited_expressions(draft_answer, prohibited_violations)
+
+    # 9. 통과 여부 결정
+    passed = len(violation_details) == 0
+
+    return {
+        'review': {
+            'passed': passed,
+            'violations': violation_details,
+            'final_answer': filtered_answer,
+            'review_time_ms': review_time_ms,
+        },
+        'final_answer': filtered_answer,
+    }
+
+
+__all__ = [
+    'review_node',
+    'review_node_wrapper',
+    'review_node_v2',
+    'verify_citation_accuracy',
+    'CitationVerifyResult',
+]

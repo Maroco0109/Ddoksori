@@ -2,9 +2,8 @@
 똑소리 프로젝트 - Hybrid Retriever with RRF Fusion
 작성일: 2026-01-11
 Sprint 1 - PR S1-D4: Hybrid Retrieval MVP
-Updated: 2026-01-17 - S2-9: BGE-M3 Sparse + 3-way RRF
 
-Combines dense (pgvector), lexical (PostgreSQL FTS), and sparse (BGE-M3) retrieval
+Combines dense (pgvector) and lexical (PostgreSQL FTS) retrieval
 using Reciprocal Rank Fusion (RRF) algorithm.
 """
 
@@ -26,23 +25,19 @@ from .base import BaseRetriever, Document, to_documents
 # Import embedding configuration
 from utils.embedding_connection import (
     EMBEDDING_MODEL,
-    ENABLE_SPARSE_SEARCH,
     RRF_WEIGHT_DENSE,
     RRF_WEIGHT_LEXICAL,
-    RRF_WEIGHT_SPARSE,
-    get_bge_m3_api_url
 )
 
 
 class HybridRetriever:
     """
     Advanced hybrid retrieval using RRF (Reciprocal Rank Fusion)
-    Combines dense vector search + lexical FTS search + sparse vector search (BGE-M3)
+    Combines dense vector search + lexical FTS search
 
     Architecture:
     - Dense search: Delegates to RAGRetriever.vector_search() (pgvector)
-    - Lexical search: PostgreSQL FTS using mv_searchable_chunks
-    - Sparse search: BGE-M3 sparse vectors with dot product (optional)
+    - Lexical search: PostgreSQL FTS using vector_chunks.text_tsv
     - Fusion: RRF algorithm with configurable weights
     - Graceful degradation: Works with FTS-only when embeddings are NULL
     """
@@ -51,9 +46,7 @@ class HybridRetriever:
         self,
         db_config: Dict[str, str],
         embed_api_url: str = "http://localhost:8001/embed",
-        bge_api_url: Optional[str] = None,
-        embedding_model: Optional[str] = None,
-        enable_sparse: Optional[bool] = None
+        embedding_model: Optional[str] = None
     ):
         """
         Initialize hybrid retriever
@@ -61,23 +54,18 @@ class HybridRetriever:
         Args:
             db_config: Database connection config
             embed_api_url: KURE-v1 embedding API endpoint URL
-            bge_api_url: BGE-M3 embedding API endpoint URL (optional)
-            embedding_model: Active embedding model ('kure-v1' or 'bge-m3')
-            enable_sparse: Enable sparse search (BGE-M3 required)
+            embedding_model: Active embedding model ('kure-v1')
         """
         self.db_config = db_config
         self.embed_api_url = embed_api_url
         self.conn: Any = None
 
-        # BGE-M3 configuration
-        self.bge_api_url = bge_api_url or get_bge_m3_api_url()
+        # Embedding configuration
         self.embedding_model = embedding_model or EMBEDDING_MODEL
-        self.enable_sparse = enable_sparse if enable_sparse is not None else ENABLE_SPARSE_SEARCH
 
         # RRF weights (from environment or defaults)
         self.rrf_weight_dense = RRF_WEIGHT_DENSE
         self.rrf_weight_lexical = RRF_WEIGHT_LEXICAL
-        self.rrf_weight_sparse = RRF_WEIGHT_SPARSE
 
         # Create RAGRetriever instance for dense search
         self.rag_retriever = RAGRetriever(db_config, embed_api_url)
@@ -86,7 +74,6 @@ class HybridRetriever:
         """Connect to database"""
         self.conn = psycopg2.connect(**cast(Any, self.db_config))  # type: ignore[call-overload]
         self.rag_retriever.connect()
-        self._has_vector_chunks = getattr(self.rag_retriever, '_has_vector_chunks', False)
 
     def close(self):
         """Close database connection"""
@@ -106,8 +93,7 @@ class HybridRetriever:
         """
         Main hybrid search with RRF fusion
 
-        Supports 2-way (Dense + Lexical) or 3-way (Dense + Lexical + Sparse) fusion
-        based on configuration.
+        Supports 2-way (Dense + Lexical) fusion.
 
         Args:
             query: Search query
@@ -142,32 +128,12 @@ class HybridRetriever:
             category_filter
         )
 
-        # 3. Sparse retrieval (BGE-M3) - optional
-        sparse_results = []
-        if self.enable_sparse and self.bge_api_url:
-            sparse_results = self._sparse_search(
-                query,
-                candidate_count,
-                doc_type_filter,
-                dataset_type_filter,
-                chunk_type_filter,
-                category_filter
-            )
-
-        # 4. RRF fusion (2-way or 3-way)
-        if sparse_results:
-            fused_results = self._reciprocal_rank_fusion_3way(
-                dense_results,
-                lexical_results,
-                sparse_results,
-                k=60
-            )
-        else:
-            fused_results = self._reciprocal_rank_fusion(
-                dense_results,
-                lexical_results,
-                k=60
-            )
+        # 3. RRF fusion (2-way: Dense + Lexical)
+        fused_results = self._reciprocal_rank_fusion(
+            dense_results,
+            lexical_results,
+            k=60
+        )
 
         return fused_results[:top_k]
 
@@ -279,41 +245,82 @@ class HybridRetriever:
     ) -> List[SearchResult]:
         """
         Lexical retrieval using PostgreSQL FTS
-        Uses mv_searchable_chunks materialized view with ts_rank
+        Uses vector_chunks table with text_tsv FTS index
         """
         with self.conn.cursor() as cur:
-            if getattr(self, '_has_vector_chunks', False):
-                # === PR-3: dataset_type_filter 우선 사용 ===
-                if dataset_type_filter is not None:
-                    final_dataset_type = dataset_type_filter
-                    mapped_category_filter = None
-                else:
-                    final_dataset_type, mapped_category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+            # === PR-3: dataset_type_filter 우선 사용 ===
+            if dataset_type_filter is not None:
+                final_dataset_type = dataset_type_filter
+                mapped_category_filter = None
+            else:
+                final_dataset_type, mapped_category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
 
-                # === PR-4: category 필터 우선순위 ===
-                # category_filter 파라미터가 명시적으로 제공된 경우 우선 사용
-                if category_filter is not None:
-                    final_category_filter = category_filter
-                else:
-                    final_category_filter = mapped_category_filter
+            # === PR-4: category 필터 우선순위 ===
+            # category_filter 파라미터가 명시적으로 제공된 경우 우선 사용
+            if category_filter is not None:
+                final_category_filter = category_filter
+            else:
+                final_category_filter = mapped_category_filter
 
-                # === PR-3: chunk_type 리스트 지원 ===
-                if isinstance(chunk_type_filter, list):
-                    chunk_type_condition = "AND vc.chunk_type = ANY(%s)"
-                elif chunk_type_filter:
-                    chunk_type_condition = "AND vc.chunk_type = %s"
-                else:
-                    chunk_type_condition = ""
+            # === PR-3: chunk_type 리스트 지원 ===
+            if isinstance(chunk_type_filter, list):
+                chunk_type_condition = "AND vc.chunk_type = ANY(%s)"
+            elif chunk_type_filter:
+                chunk_type_condition = "AND vc.chunk_type = %s"
+            else:
+                chunk_type_condition = ""
 
-                # === PR-4: category 리스트 지원 ===
-                if isinstance(final_category_filter, list):
-                    category_condition = "AND vc.category = ANY(%s)"
-                elif final_category_filter:
-                    category_condition = "AND vc.category = %s"
-                else:
-                    category_condition = ""
+            # === PR-4: category 리스트 지원 ===
+            if isinstance(final_category_filter, list):
+                category_condition = "AND vc.category = ANY(%s)"
+            elif final_category_filter:
+                category_condition = "AND vc.category = %s"
+            else:
+                category_condition = ""
 
-                query_sql = f"""
+            query_sql = f"""
+                SELECT
+                    vc.chunk_id,
+                    vc.dataset_type,
+                    vc.text,
+                    vc.law_name,
+                    vc.chunk_type,
+                    vc.category,
+                    vc.source_url,
+                    vc.source_year,
+                    vc.metadata,
+                    vc.created_at,
+                    ts_rank(vc.text_tsv, plainto_tsquery('simple', %s)) AS rank_score
+                FROM vector_chunks vc
+                WHERE
+                    vc.text_tsv @@ plainto_tsquery('simple', %s)
+                    AND (%s IS NULL OR vc.dataset_type = %s)
+                    {category_condition}
+                    {chunk_type_condition}
+                ORDER BY rank_score DESC
+                LIMIT %s
+            """
+
+            params = [
+                query,
+                query,
+                final_dataset_type, final_dataset_type,
+            ]
+            if final_category_filter:
+                params.append(final_category_filter)
+            if chunk_type_filter:
+                params.append(chunk_type_filter)
+            params.append(top_k)
+
+            cur.execute(query_sql, tuple(params))
+
+            rows = cur.fetchall()
+            if not rows:
+                # FTS can return 0 for Korean depending on how text_tsv was built.
+                # Fall back to ILIKE to keep retrieval functional.
+                search_pattern = f"%{query}%"
+
+                fallback_sql = f"""
                     SELECT
                         vc.chunk_id,
                         vc.dataset_type,
@@ -325,185 +332,73 @@ class HybridRetriever:
                         vc.source_year,
                         vc.metadata,
                         vc.created_at,
-                        ts_rank(vc.text_tsv, plainto_tsquery('simple', %s)) AS rank_score
+                        0.5 AS rank_score
                     FROM vector_chunks vc
                     WHERE
-                        vc.text_tsv @@ plainto_tsquery('simple', %s)
+                        vc.text ILIKE %s
                         AND (%s IS NULL OR vc.dataset_type = %s)
                         {category_condition}
                         {chunk_type_condition}
-                    ORDER BY rank_score DESC
                     LIMIT %s
                 """
 
-                params = [
-                    query,
-                    query,
+                fallback_params = [
+                    search_pattern,
                     final_dataset_type, final_dataset_type,
                 ]
                 if final_category_filter:
-                    params.append(final_category_filter)
+                    fallback_params.append(final_category_filter)
                 if chunk_type_filter:
-                    params.append(chunk_type_filter)
-                params.append(top_k)
+                    fallback_params.append(chunk_type_filter)
+                fallback_params.append(top_k)
 
-                cur.execute(query_sql, tuple(params))
-
+                cur.execute(fallback_sql, tuple(fallback_params))
                 rows = cur.fetchall()
-                if not rows:
-                    # FTS can return 0 for Korean depending on how text_tsv was built.
-                    # Fall back to ILIKE to keep retrieval functional.
-                    search_pattern = f"%{query}%"
-
-                    fallback_sql = f"""
-                        SELECT
-                            vc.chunk_id,
-                            vc.dataset_type,
-                            vc.text,
-                            vc.law_name,
-                            vc.chunk_type,
-                            vc.category,
-                            vc.source_url,
-                            vc.source_year,
-                            vc.metadata,
-                            vc.created_at,
-                            0.5 AS rank_score
-                        FROM vector_chunks vc
-                        WHERE
-                            vc.text ILIKE %s
-                            AND (%s IS NULL OR vc.dataset_type = %s)
-                            {category_condition}
-                            {chunk_type_condition}
-                        LIMIT %s
-                    """
-
-                    fallback_params = [
-                        search_pattern,
-                        final_dataset_type, final_dataset_type,
-                    ]
-                    if final_category_filter:
-                        fallback_params.append(final_category_filter)
-                    if chunk_type_filter:
-                        fallback_params.append(chunk_type_filter)
-                    fallback_params.append(top_k)
-
-                    cur.execute(fallback_sql, tuple(fallback_params))
-                    rows = cur.fetchall()
-
-                results = []
-                for row in rows:
-                    metadata_json = row[8] if row[8] else {}
-                    dataset_type = row[1]
-                    category = row[5]
-                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
-
-                    title = None
-                    if isinstance(metadata_json, dict):
-                        title = metadata_json.get('title')
-                    if not title and dataset_type == 'law_guide':
-                        if isinstance(metadata_json, dict):
-                            article_no = metadata_json.get('조문번호')
-                            article_title = metadata_json.get('조문제목')
-                        else:
-                            article_no, article_title = None, None
-                        parts = [p for p in [row[3], article_no, article_title] if p]
-                        title = ' '.join(parts) if parts else (row[3] or row[0])
-
-                    doc_id = row[0]
-                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
-                        doc_id = str(metadata_json.get('number'))
-                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
-                    source_org = None
-                    if dataset_type == 'law_guide':
-                        source_org = 'statute'
-                    elif isinstance(metadata_json, dict):
-                        source_org = metadata_json.get('source')
-                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
-
-                    results.append(SearchResult(
-                        chunk_id=row[0],
-                        doc_id=doc_id,
-                        chunk_type=row[4] or '',
-                        content=row[2] or '',
-                        doc_title=title or '',
-                        doc_type=doc_type,
-                        category_path=_to_category_path(category),
-                        similarity=float(row[10]) if row[10] is not None else 0.0,
-                        source_org=source_org,
-                        url=url,
-                        collected_at=row[9].isoformat() if row[9] else None,
-                        decision_date=decision_date,
-                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
-                    ))
-
-                return results
-
-            # Build tsquery from query string (using 'simple' parser for Korean)
-            # Split query into tokens and join with '&' for AND search
-            tokens = query.split()
-            tsquery = ' & '.join(tokens)
-
-            # === PR-3: chunk_type 리스트 지원 (mv_searchable_chunks) ===
-            if isinstance(chunk_type_filter, list):
-                chunk_type_condition = "AND chunk_type = ANY(%s)"
-            elif chunk_type_filter:
-                chunk_type_condition = "AND chunk_type = %s"
-            else:
-                chunk_type_condition = ""
-
-            query_sql = f"""
-                SELECT
-                    chunk_id,
-                    doc_id,
-                    chunk_type,
-                    content,
-                    doc_type,
-                    source_org,
-                    category_path,
-                    title,
-                    url,
-                    collected_at,
-                    metadata,
-                    ts_rank(content_vector, to_tsquery('simple', %s)) AS rank_score
-                FROM mv_searchable_chunks
-                WHERE
-                    content_vector @@ to_tsquery('simple', %s)
-                    AND (%s IS NULL OR doc_type = %s)
-                    {chunk_type_condition}
-                ORDER BY rank_score DESC
-                LIMIT %s
-            """
-
-            params = [
-                tsquery, tsquery,
-                doc_type_filter, doc_type_filter,
-            ]
-            if chunk_type_filter:
-                params.append(chunk_type_filter)
-            params.append(top_k)
-
-            cur.execute(query_sql, tuple(params))
 
             results = []
-            for row in cur.fetchall():
-                # Parse decision_date from metadata if exists
-                metadata_json = row[10] if len(row) > 10 and row[10] else {}
+            for row in rows:
+                metadata_json = row[8] if row[8] else {}
+                dataset_type = row[1]
+                category = row[5]
+                doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+
+                title = None
+                if isinstance(metadata_json, dict):
+                    title = metadata_json.get('title')
+                if not title and dataset_type == 'law_guide':
+                    if isinstance(metadata_json, dict):
+                        article_no = metadata_json.get('조문번호')
+                        article_title = metadata_json.get('조문제목')
+                    else:
+                        article_no, article_title = None, None
+                    parts = [p for p in [row[3], article_no, article_title] if p]
+                    title = ' '.join(parts) if parts else (row[3] or row[0])
+
+                doc_id = row[0]
+                if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                    doc_id = str(metadata_json.get('number'))
+                url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                source_org = None
+                if dataset_type == 'law_guide':
+                    source_org = 'statute'
+                elif isinstance(metadata_json, dict):
+                    source_org = metadata_json.get('source')
                 decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
 
                 results.append(SearchResult(
                     chunk_id=row[0],
-                    doc_id=row[1],
-                    chunk_type=row[2],
-                    content=row[3],
-                    doc_title=row[7],         # From title column
-                    doc_type=row[4],
-                    category_path=row[6] or [],
-                    similarity=float(row[11]),  # ts_rank score
-                    source_org=row[5],
-                    url=row[8],
+                    doc_id=doc_id,
+                    chunk_type=row[4] or '',
+                    content=row[2] or '',
+                    doc_title=title or '',
+                    doc_type=doc_type,
+                    category_path=_to_category_path(category),
+                    similarity=float(row[10]) if row[10] is not None else 0.0,
+                    source_org=source_org,
+                    url=url,
                     collected_at=row[9].isoformat() if row[9] else None,
                     decision_date=decision_date,
-                    metadata=metadata_json
+                    metadata=metadata_json if isinstance(metadata_json, dict) else None,
                 ))
 
             return results
@@ -545,206 +440,6 @@ class HybridRetriever:
             chunk_id = result.chunk_id
             rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + (1.0 / (k + rank))
             # Store result data if not already stored (from dense search)
-            if chunk_id not in chunk_data:
-                chunk_data[chunk_id] = result
-
-        # Sort by RRF score (descending)
-        sorted_chunk_ids = sorted(
-            rrf_scores.keys(),
-            key=lambda cid: rrf_scores[cid],
-            reverse=True
-        )
-
-        # Create final result list with updated similarity scores
-        final_results = []
-        for chunk_id in sorted_chunk_ids:
-            result = chunk_data[chunk_id]
-            # Update similarity to RRF score for consistency
-            result.similarity = rrf_scores[chunk_id]
-            final_results.append(result)
-
-        return final_results
-
-    def _sparse_search(
-        self,
-        query: str,
-        top_k: int,
-        doc_type_filter: Optional[str] = None,
-        dataset_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[Union[str, List[str]]] = None,
-        category_filter: Optional[Union[str, List[str]]] = None
-    ) -> List[SearchResult]:
-        """
-        Sparse retrieval using BGE-M3 sparse vectors
-
-        Uses dot product calculation with bge_sparse_dot_product() function.
-        Requires BGE-M3 embeddings to be generated for chunks.
-
-        Args:
-            query: Search query
-            top_k: Number of results to return
-            doc_type_filter: Filter by document type
-            chunk_type_filter: Filter by chunk type
-            category_filter: Filter by category (single string or list)
-
-        Returns:
-            List of SearchResult objects sorted by sparse similarity
-        """
-        if not self.bge_api_url:
-            return []
-
-        try:
-            # 1. Get sparse embedding for query
-            response = requests.post(
-                self.bge_api_url,
-                json={'text': query, 'return_dense': False, 'return_sparse': True},
-                timeout=30
-            )
-
-            if response.status_code != 200:
-                print(f"BGE-M3 API error: {response.status_code}")
-                return []
-
-            query_sparse = response.json().get('sparse_embedding', {})
-
-            if not query_sparse:
-                return []
-
-            # 2. Search using sparse dot product
-            with self.conn.cursor() as cur:
-                # === PR-3: chunk_type 리스트 지원 ===
-                if isinstance(chunk_type_filter, list):
-                    chunk_type_condition = "AND c.chunk_type = ANY(%s)"
-                elif chunk_type_filter:
-                    chunk_type_condition = "AND c.chunk_type = %s"
-                else:
-                    chunk_type_condition = ""
-
-                # === PR-4: category 리스트 지원 (documents.category_path는 배열) ===
-                if isinstance(category_filter, list):
-                    # 여러 카테고리 중 하나라도 포함되면 매칭 (overlap 연산자)
-                    category_condition = "AND d.category_path && %s::text[]"
-                elif category_filter:
-                    # 단일 카테고리 포함 확인 (contains 연산자)
-                    category_condition = "AND d.category_path @> ARRAY[%s]::text[]"
-                else:
-                    category_condition = ""
-
-                query_sql = f"""
-                    SELECT
-                        c.chunk_id,
-                        c.doc_id,
-                        c.chunk_type,
-                        c.content,
-                        d.title AS doc_title,
-                        d.doc_type,
-                        d.category_path,
-                        bge_sparse_dot_product(c.bge_sparse_vector, %s::jsonb) AS similarity,
-                        d.source_org,
-                        d.url,
-                        d.collected_at,
-                        d.metadata
-                    FROM chunks c
-                    JOIN documents d ON c.doc_id = d.doc_id
-                    WHERE
-                        c.bge_sparse_vector IS NOT NULL
-                        AND c.bge_m3_encoded = TRUE
-                        AND c.drop = FALSE
-                        AND (%s IS NULL OR d.doc_type = %s)
-                        {chunk_type_condition}
-                        {category_condition}
-                    ORDER BY bge_sparse_dot_product(c.bge_sparse_vector, %s::jsonb) DESC
-                    LIMIT %s
-                """
-
-                params = [
-                    json.dumps(query_sparse),
-                    doc_type_filter, doc_type_filter,
-                ]
-                if chunk_type_filter:
-                    params.append(chunk_type_filter)
-                if category_filter:
-                    params.append(category_filter)
-                params.extend([json.dumps(query_sparse), top_k])
-
-                cur.execute(query_sql, tuple(params))
-
-                results = []
-                for row in cur.fetchall():
-                    metadata_json = row[11] if len(row) > 11 and row[11] else {}
-                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
-
-                    results.append(SearchResult(
-                        chunk_id=row[0],
-                        doc_id=row[1],
-                        chunk_type=row[2],
-                        content=row[3],
-                        doc_title=row[4],
-                        doc_type=row[5],
-                        category_path=row[6] or [],
-                        similarity=float(row[7]) if row[7] else 0.0,
-                        source_org=row[8],
-                        url=row[9],
-                        collected_at=row[10].isoformat() if row[10] else None,
-                        decision_date=decision_date,
-                        metadata=metadata_json
-                    ))
-
-                return results
-
-        except requests.exceptions.RequestException as e:
-            print(f"Sparse search API error: {e}")
-            return []
-        except Exception as e:
-            print(f"Sparse search failed: {e}")
-            return []
-
-    def _reciprocal_rank_fusion_3way(
-        self,
-        results_a: List[SearchResult],
-        results_b: List[SearchResult],
-        results_c: List[SearchResult],
-        k: int = 60
-    ) -> List[SearchResult]:
-        """
-        3-way Reciprocal Rank Fusion (RRF) algorithm
-
-        Combines Dense + Lexical + Sparse search results with configurable weights.
-
-        Formula: score(d) = w_dense * 1/(k + rank_dense(d))
-                          + w_lexical * 1/(k + rank_lexical(d))
-                          + w_sparse * 1/(k + rank_sparse(d))
-
-        Args:
-            results_a: First ranked list (dense results)
-            results_b: Second ranked list (lexical results)
-            results_c: Third ranked list (sparse results)
-            k: RRF constant (default 60)
-
-        Returns:
-            Merged and re-ranked list of SearchResult objects
-        """
-        # Calculate RRF scores with weights
-        rrf_scores = {}  # {chunk_id: rrf_score}
-        chunk_data = {}  # {chunk_id: SearchResult}
-
-        # Score from dense results (with weight)
-        for rank, result in enumerate(results_a, start=1):
-            chunk_id = result.chunk_id
-            rrf_scores[chunk_id] = self.rrf_weight_dense * (1.0 / (k + rank))
-            chunk_data[chunk_id] = result
-
-        # Score from lexical results (with weight)
-        for rank, result in enumerate(results_b, start=1):
-            chunk_id = result.chunk_id
-            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + self.rrf_weight_lexical * (1.0 / (k + rank))
-            if chunk_id not in chunk_data:
-                chunk_data[chunk_id] = result
-
-        # Score from sparse results (with weight)
-        for rank, result in enumerate(results_c, start=1):
-            chunk_id = result.chunk_id
-            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + self.rrf_weight_sparse * (1.0 / (k + rank))
             if chunk_id not in chunk_data:
                 chunk_data[chunk_id] = result
 
@@ -879,13 +574,10 @@ class HybridRetriever:
 
     def _search_criteria(self, query: str, top_k: int = 3) -> List[SearchResult]:
         """
-        기준(criteria) 검색
-
-        criteria_* doc_type들을 모두 검색
+        기준(criteria) 검색 - vector_chunks 스키마 사용
         """
         candidate_count = top_k * 3
 
-        # Dense search
         dense_results = []
         try:
             query_embedding = self.rag_retriever.embed_query(query)
@@ -894,48 +586,67 @@ class HybridRetriever:
                 cur.execute(
                     """
                     SELECT
-                        c.chunk_id,
-                        c.doc_id,
-                        c.chunk_type,
-                        c.content,
-                        d.title AS doc_title,
-                        d.doc_type,
-                        d.category_path,
-                        1 - (c.embedding <=> %s::vector) AS similarity,
-                        d.source_org,
-                        d.url,
-                        d.collected_at,
-                        d.metadata
-                    FROM chunks c
-                    JOIN documents d ON c.doc_id = d.doc_id
+                        vc.chunk_id,
+                        vc.dataset_type,
+                        vc.text,
+                        vc.law_name,
+                        vc.chunk_type,
+                        vc.category,
+                        vc.source_url,
+                        vc.source_year,
+                        vc.metadata,
+                        vc.created_at,
+                        1 - (vc.embedding <=> %s::vector) AS similarity
+                    FROM vector_chunks vc
                     WHERE
-                        c.embedding IS NOT NULL
-                        AND c.drop = FALSE
-                        AND d.doc_type LIKE 'criteria_%%'
-                    ORDER BY c.embedding <=> %s::vector
+                        vc.embedding IS NOT NULL
+                        AND vc.dataset_type = 'law_guide'
+                        AND vc.chunk_type LIKE '별표%%'
+                    ORDER BY vc.embedding <=> %s::vector
                     LIMIT %s
                     """,
                     (query_embedding, query_embedding, candidate_count)
                 )
 
                 for row in cur.fetchall():
-                    metadata_json = row[11] if len(row) > 11 and row[11] else {}
+                    metadata_json = row[8] if row[8] else {}
+                    dataset_type = row[1]
+                    category = row[5]
+                    doc_type = _map_vector_chunks_doc_type(dataset_type, category)
+
+                    title = None
+                    if isinstance(metadata_json, dict):
+                        title = metadata_json.get('title')
+                    if not title and dataset_type == 'law_guide':
+                        if isinstance(metadata_json, dict):
+                            article_no = metadata_json.get('조문번호')
+                            article_title = metadata_json.get('조문제목')
+                        else:
+                            article_no, article_title = None, None
+                        parts = [p for p in [row[3], article_no, article_title] if p]
+                        title = ' '.join(parts) if parts else (row[3] or row[0])
+
+                    doc_id = row[0]
+                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
+                        doc_id = str(metadata_json.get('number'))
+                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                    source_org = 'statute' if dataset_type == 'law_guide' else (metadata_json.get('source') if isinstance(metadata_json, dict) else None)
                     decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
 
                     dense_results.append(SearchResult(
                         chunk_id=row[0],
-                        doc_id=row[1],
-                        chunk_type=row[2],
-                        content=row[3],
-                        doc_title=row[4],
-                        doc_type=row[5],
-                        category_path=row[6] or [],
-                        similarity=float(row[7]),
-                        source_org=row[8],
-                        url=row[9],
-                        collected_at=row[10].isoformat() if row[10] else None,
+                        doc_id=doc_id,
+                        chunk_type=row[4] or '',
+                        content=row[2] or '',
+                        doc_title=title or '',
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
                         decision_date=decision_date,
-                        metadata=metadata_json
+                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
                     ))
         except Exception as e:
             print(f"Criteria dense search failed: {e}")

@@ -10,41 +10,32 @@
     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  QueryAnalyst (질의분석)                                    │
-│  담당: Query Analysis 작업자                                 │
-│  문서: query_analysis/INTERFACE.md                          │
+│  LLM 기반 다중 쿼리 확장, 의도 분류                          │
+│  문서: docs/guides/supervisor/agent-protocols.md             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
-    ┌────────────┬───────┴───────┬────────────┐
-    ▼            ▼               ▼            ▼
-┌────────┐  ┌────────┐  ┌────────────┐  ┌────────────┐
-│  Law   │  │Criteria│  │   Case     │  │  Counsel   │
-│ Agent  │  │ Agent  │  │   Agent    │  │   Agent    │
-└────────┘  └────────┘  └────────────┘  └────────────┘
-    │            │               │            │
-    └──────┬─────┴───────┬───────┴────────────┘
-           │             │
-           ▼             ▼
-┌──────────────────┐  ┌──────────────────────┐
-│ Legal & Criteria │  │ Counsel & Dispute    │
-│ 작업자           │  │ 작업자               │
-│ INTERFACE_LAW_   │  │ INTERFACE_COUNSEL_   │
-│ CRITERIA.md      │  │ CASE.md              │
-└────────┬─────────┘  └──────────┬───────────┘
-         │                       │
-         └───────────┬───────────┘
-                     ▼
+    ┌────────────┬───────┴───────┐
+    ▼            ▼               ▼
+┌────────┐  ┌────────┐  ┌────────────┐
+│  Law   │  │Criteria│  │   Case     │
+│ Agent  │  │ Agent  │  │   Agent    │
+└────────┘  └────────┘  └────────────┘
+    │            │               │
+    └────────────┴───────┬───────┘
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  AnswerDrafter (답변생성)                                   │
 │  담당: Answer Generator 작업자                               │
-│  문서: answer_generation/INTERFACE.md                        │
+│  문서: docs/guides/supervisor/agent-protocols.md             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  LegalReviewer (법률검토)                                   │
 │  담당: Legal Review 작업자                                   │
-│  문서: legal_review/INTERFACE.md                             │
+│  문서: docs/guides/supervisor/agent-protocols.md             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -55,19 +46,19 @@
 
 | 작업자 | 담당 에이전트 | 인터페이스 문서 |
 |--------|--------------|-----------------|
-| Query Analysis | QueryAnalyst | `query_analysis/INTERFACE.md` |
-| Answer Generator | AnswerDrafter | `answer_generation/INTERFACE.md` |
-| Legal & Criteria | LawRetrievalAgent, CriteriaRetrievalAgent | `retrieval/INTERFACE_LAW_CRITERIA.md` |
-| Counsel & Dispute | CounselRetrievalAgent, CaseRetrievalAgent | `retrieval/INTERFACE_COUNSEL_CASE.md` |
-| Legal Review | LegalReviewer | `legal_review/INTERFACE.md` |
+| Query Analysis | QueryAnalyst | `docs/guides/supervisor/agent-protocols.md` |
+| Answer Generator | AnswerDrafter | `docs/guides/supervisor/agent-protocols.md` |
+| Law & Criteria | LawRetrievalAgent, CriteriaRetrievalAgent | `docs/guides/supervisor/agent-protocols.md` |
+| Case (분쟁사례+상담사례) | CaseRetrievalAgent | `docs/guides/supervisor/agent-protocols.md` |
+| Legal Review | LegalReviewer | `docs/guides/supervisor/agent-protocols.md` |
 
 ## 데이터 흐름 요약
 
 ```python
 # 1. QueryAnalyst 출력 → 모든 Retrieval Agent 입력
-QueryAnalysisResult → RetrievalInput.query_analysis
+QueryAnalysisOutput → expanded_queries, retriever_types
 
-# 2. 4개 Retrieval Agent 출력 → 병합 → AnswerDrafter 입력
+# 2. 3개 Retrieval Agent 출력 → 병합 → AnswerDrafter 입력
 IndividualRetrievalResult[] → RetrievalResult → GenerationInput.retrieval
 
 # 3. AnswerDrafter 출력 → LegalReviewer 입력
@@ -86,30 +77,30 @@ ReviewOutput.final_answer → API Response
 from app.agents.protocols import (
     # 공통
     OnboardingInfo,
-    ChatType,        # Literal['dispute', 'general']
-    QueryType,       # Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']
-    RoutingMode,     # Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
+    ChatType,          # Literal['dispute', 'general']
+    IntentType,        # Literal['general', 'information_search']
+    RoutingMode,       # Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
+    RetrieverType,     # Literal['law', 'criteria', 'case']
+    MetadataFilter,
 
     # 질의분석
     QueryAnalysisInput,
-    QueryAnalysisResult,
     QueryAnalysisOutput,
 
     # 정보검색
-    RetrievalInput,
+    RetrievalTaskInput,
     RetrievalResult,
-    RetrievalOutput,
-    AgencyInfo,
 
     # 답변생성
     GenerationInput,
     GenerationOutput,
-    ClaimEvidenceMapping,
+    ClaimEvidence,
+    CitedCase,
 
     # 법률검토
     ReviewInput,
     ReviewOutput,
-    ReviewResult,
+    Violation,
 )
 ```
 

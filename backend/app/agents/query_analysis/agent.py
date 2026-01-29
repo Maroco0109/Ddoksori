@@ -29,7 +29,7 @@ Output State:
 """
 
 import logging
-from typing import Dict
+from typing import Any, Dict
 
 from ...supervisor.state import (
     ChatState,
@@ -278,9 +278,119 @@ from .expanders import (
 )
 
 
+async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
+    """
+    [질의분석 노드 v2 진입점]
+    LLM 기반 다중 쿼리 확장이 적용된 새로운 질의분석 노드입니다.
+
+    [주요 변경사항]
+    - gpt-4o-mini 기반 쿼리 확장
+    - 의도 분류: 'general' | 'information_search'
+    - 다중 확장 쿼리 리스트 반환
+
+    [Output State]
+    - intent: 의도 ('general' | 'information_search')
+    - original_query: 원본 질문
+    - expanded_queries: 확장된 쿼리 리스트 (최대 5개)
+    - keywords: 핵심 키워드
+    - retriever_types: 추천 검색 에이전트
+    - needs_clarification: 추가 정보 필요 여부
+    - missing_fields: 누락된 필드
+    """
+    _ = config  # LangGraph 노드 호환성 (unused)
+    from .expanders import expand_query_with_llm_v2
+
+    user_query = state.get("user_query", "")
+    chat_type = state.get("chat_type", "general")
+    onboarding = state.get("onboarding")
+
+    # Step 1: 쿼리 정규화
+    normalized_query = normalize_query(user_query)
+
+    # Step 2: 질의 유형 분류 (기존 로직 재사용)
+    query_type = classify_query_type(normalized_query)
+
+    # Step 3: 의도 분류 (v2 신규)
+    # 'general'은 일반 대화, 나머지는 'information_search'
+    if query_type in ("general", "system_meta"):
+        intent = "general"
+    else:
+        intent = "information_search"
+
+    # PR-7: 일반 채팅에서도 분쟁 의도 키워드가 있으면 information_search로 처리
+    if chat_type == "general" and intent == "general":
+        has_dispute_intent = any(
+            kw in normalized_query for kw in DISPUTE_INTENT_KEYWORDS
+        )
+        if has_dispute_intent:
+            intent = "information_search"
+            query_type = "dispute"
+
+    # Step 4: 키워드 추출
+    keywords = extract_keywords(normalized_query)
+
+    # Step 5: LLM 기반 쿼리 확장 (v2 핵심)
+    expanded_queries = await expand_query_with_llm_v2(
+        query=normalized_query,
+        keywords=keywords,
+        intent=intent,
+        use_fallback=True,
+    )
+
+    # Step 6: 정보 추출 및 누락 필드 확인
+    extracted_info = extract_info_from_message(user_query)
+    missing_fields = check_missing_onboarding_fields(
+        chat_type, onboarding, extracted_info
+    )
+
+    # 최소 정보 확인
+    has_minimal_info = bool(
+        extracted_info.get("purchase_item")
+        or extracted_info.get("dispute_details")
+        or (
+            onboarding
+            and (onboarding.get("purchase_item") or onboarding.get("dispute_details"))
+        )
+    )
+    needs_clarification = not has_minimal_info and query_type == "dispute"
+
+    # Step 7: retriever_types 결정 (하이브리드 방식)
+    # 질의분석에서 기본값 제공, Supervisor가 조정 가능
+    retriever_types = QUERY_TYPE_TO_RETRIEVERS.get(query_type, ["law", "criteria"])
+
+    # 'case' 추가 (사례 검색 기본 포함)
+    if "case" not in retriever_types and intent == "information_search":
+        retriever_types = list(retriever_types) + ["case"]
+
+    logger.info(
+        f"[QueryAnalysis v2] intent={intent}, query_type={query_type}, "
+        f"expanded_queries={len(expanded_queries)}, retriever_types={retriever_types}"
+    )
+
+    # v2 출력 형식
+    return {
+        "query_analysis": {
+            "intent": intent,
+            "original_query": user_query,
+            "expanded_queries": expanded_queries,
+            "keywords": keywords,
+            "retriever_types": retriever_types,
+            "needs_clarification": needs_clarification,
+            "missing_fields": missing_fields,
+            # v1 호환 필드
+            "query_type": query_type,
+            "extracted_info": extracted_info,
+            "rewritten_query": expanded_queries[0] if expanded_queries else user_query,
+            "search_queries": expanded_queries,
+        },
+        "mode": "NO_RETRIEVAL" if intent == "general" else "NEED_RAG",
+    }
+
+
 __all__ = [
-    # Main entry point
+    # Main entry points
     "query_analysis_node",
+    "query_analysis_node_v2",
     # Constants (backward compat)
     "QUERY_TYPE_TO_RETRIEVERS",
     "RESTRICTED_DOMAIN_KEYWORDS",

@@ -1,30 +1,22 @@
 """
 똑소리 프로젝트 - 에이전트 프로토콜 정의
 
-작성일: 2026-01-24
-최종 수정: 2026-01-24
+작성일: 2026-01-28
+최종 수정: 2026-01-29
 
 [역할 및 책임]
-각 에이전트가 준수해야 하는 입출력 인터페이스를 Protocol로 정의합니다.
-LangGraph 노드로 등록되기 전에 타입 검증을 수행할 수 있습니다.
+MAS 아키텍처의 에이전트 간 인터페이스를 정의합니다.
+각 에이전트가 준수해야 하는 입출력 인터페이스를 TypedDict로 정의합니다.
 
-[에이전트 목록]
-1. QueryAnalysisAgent: 사용자 쿼리 분석 및 의도 파악
-2. RetrievalAgent: 벡터 DB에서 관련 문서 검색
-3. AnswerGenerationAgent: LLM을 활용한 답변 생성
-4. LegalReviewAgent: 생성된 답변의 법률적 검토
+[주요 기능]
+1. QueryAnalyst: LLM 기반 다중 쿼리 확장
+2. Supervisor: 하이브리드 에이전트 선택
+3. Retrieval Agents: 메타데이터 필터 기반 검색 최적화
+4. AnswerDrafter: 사례 인용 기능 강화
+5. LegalReviewer: 재생성 루프 (max 1회)
 
-[사용 예시]
-    from app.agents.protocols import QueryAnalysisProtocol
-
-    class MyQueryAnalyzer(QueryAnalysisProtocol):
-        def analyze(self, input: QueryAnalysisInput) -> QueryAnalysisOutput:
-            # 구현...
-            pass
-
-[주의사항]
-- Protocol은 구조적 서브타이핑을 사용합니다 (duck typing)
-- 명시적 상속 없이도 메서드 시그니처가 일치하면 프로토콜을 만족합니다
+[에이전트 흐름]
+QueryAnalyst → Supervisor → Retrieval Agents → AnswerDrafter → LegalReviewer → Final Answer
 """
 
 from typing import Protocol, List, Dict, Optional, Literal, Any, runtime_checkable
@@ -40,14 +32,6 @@ class OnboardingInfo(TypedDict, total=False):
     온보딩 폼 데이터.
 
     분쟁 상담 시 프론트엔드에서 수집한 사용자 정보입니다.
-
-    Attributes:
-        purchase_date: 구매일자 (YYYY-MM-DD)
-        purchase_place: 구매처 (판매자 상호/브랜드)
-        purchase_platform: 구매 플랫폼 (온라인/오프라인)
-        purchase_item: 구매 품목
-        purchase_amount: 구매 금액
-        dispute_details: 분쟁 상세 내용
     """
     purchase_date: Optional[str]
     purchase_place: Optional[str]
@@ -57,25 +41,38 @@ class OnboardingInfo(TypedDict, total=False):
     dispute_details: Optional[str]
 
 
+# 의도 타입
+IntentType = Literal['general', 'information_search']
+
 # 라우팅 모드 타입
 RoutingMode = Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
 
-# 쿼리 타입
-QueryType = Literal['dispute', 'general', 'law', 'criteria', 'system_meta', 'ambiguous']
+# 검색 에이전트 타입
+RetrieverType = Literal['law', 'criteria', 'case']
 
 # 채팅 타입
 ChatType = Literal['dispute', 'general']
 
+# 위반 유형
+ViolationType = Literal['hallucination', 'legal_judgment', 'prohibited_expression', 'query_mismatch']
+
+# 심각도
+SeverityLevel = Literal['critical', 'warning']
+
+# 사례 카테고리
+CaseCategory = Literal['조정', '해결', '상담']
+
+# 근거 소스
+EvidenceSource = Literal['law', 'criteria', 'case', 'counsel']
+
 
 # ============================================================
-# 질의분석 에이전트 (Query Analysis Agent)
+# 질의분석 에이전트 (Query Analysis Agent) - v2
 # ============================================================
 
 class QueryAnalysisInput(TypedDict):
     """
-    질의분석 노드 입력.
-
-    사용자의 원본 쿼리와 컨텍스트 정보를 포함합니다.
+    질의분석 노드 입력 (v2).
 
     Attributes:
         user_query: 사용자가 입력한 원본 질문
@@ -87,428 +84,374 @@ class QueryAnalysisInput(TypedDict):
     onboarding: Optional[OnboardingInfo]
 
 
-class QueryAnalysisResult(TypedDict, total=False):
-    """
-    질의분석 결과 상세.
-
-    쿼리 분석 후 추출된 정보와 재작성된 쿼리를 포함합니다.
-
-    Attributes:
-        query_type: 쿼리 유형 (dispute, general, law, criteria, system_meta, ambiguous)
-        keywords: 추출된 키워드 목록
-        agency_hint: 담당 기관 힌트 (KCA, ECMC, KCDRC)
-        needs_clarification: 추가 정보 필요 여부
-        missing_fields: 누락된 필드 목록
-        missing_fields_description: 누락 필드 설명 (사용자 안내용)
-        extracted_info: 추출된 정보 (품목, 금액 등)
-        rewritten_query: 정규화/확장된 검색 쿼리
-        search_queries: 다중 쿼리 검색용 쿼리 리스트
-        expansion_applied: 적용된 확장 규칙 설명
-    """
-    query_type: QueryType
-    keywords: List[str]
-    agency_hint: Optional[str]
-    needs_clarification: bool
-    missing_fields: List[str]
-    missing_fields_description: str
-    extracted_info: Dict[str, str]
-    rewritten_query: str
-    search_queries: List[str]
-    expansion_applied: str
-
-
 class QueryAnalysisOutput(TypedDict):
     """
-    질의분석 노드 출력.
+    질의분석 노드 출력 (v2).
 
-    분석 결과와 다음 노드 라우팅 정보를 포함합니다.
+    LLM 기반 다중 쿼리 확장이 적용된 출력입니다.
 
     Attributes:
-        query_analysis: 분석 결과 상세
-        mode: 라우팅 모드 (NO_RETRIEVAL, NEED_RAG, NEED_USER_CLARIFICATION 등)
+        intent: 의도 분류 ('general' | 'information_search')
+        original_query: 원본 질문
+        expanded_queries: 다중 확장 쿼리 리스트 (최대 5개)
+        keywords: 핵심 키워드 목록
+        retriever_types: 추천 검색 에이전트 타입 목록
+        needs_clarification: 추가 정보 필요 여부
+        missing_fields: 누락된 필드 목록
     """
-    query_analysis: QueryAnalysisResult
-    mode: RoutingMode
+    intent: IntentType
+    original_query: str
+    expanded_queries: List[str]
+    keywords: List[str]
+    retriever_types: List[RetrieverType]
+    needs_clarification: bool
+    missing_fields: List[str]
 
 
 @runtime_checkable
 class QueryAnalysisProtocol(Protocol):
-    """
-    질의분석 에이전트 프로토콜.
+    """질의분석 에이전트 프로토콜 (v2)."""
 
-    사용자 쿼리를 분석하여 의도, 키워드, 필요한 정보를 추출합니다.
-    """
-
-    def analyze(self, input_data: QueryAnalysisInput) -> QueryAnalysisOutput:
-        """
-        사용자 쿼리를 분석합니다.
-
-        Args:
-            input_data: 분석할 입력 데이터
-
-        Returns:
-            분석 결과 및 라우팅 정보
-        """
+    async def analyze(self, input_data: QueryAnalysisInput) -> QueryAnalysisOutput:
+        """사용자 쿼리를 분석하고 확장합니다."""
         ...
 
 
 # ============================================================
-# 정보검색 에이전트 (Retrieval Agent)
+# 메타데이터 필터 (Retrieval용)
 # ============================================================
 
-class RetrievalInput(TypedDict):
+class MetadataFilter(TypedDict, total=False):
     """
-    정보검색 노드 입력.
-
-    검색에 필요한 쿼리와 분석 결과를 포함합니다.
+    검색 메타데이터 필터.
 
     Attributes:
-        user_query: 원본 사용자 쿼리
-        query_analysis: 질의분석 결과
-        onboarding: 온보딩 폼 데이터
-        top_k: 검색 결과 개수 (기본값: 5)
+        dataset_type: 데이터셋 타입 ('law_guide' 등)
+        document_types: 문서 타입 목록 (['법률', '시행령'] or ['행정규칙', '별표'])
+        categories: 카테고리 목록 (['조정', '해결'] or ['상담'])
     """
-    user_query: str
-    query_analysis: QueryAnalysisResult
-    onboarding: Optional[OnboardingInfo]
+    dataset_type: Optional[str]
+    document_types: Optional[List[str]]
+    categories: Optional[List[str]]
+
+
+# ============================================================
+# Supervisor 관련 타입
+# ============================================================
+
+class SupervisorPhase(TypedDict):
+    """Supervisor 현재 단계."""
+    current_phase: Literal['analyzing', 'retrieving', 'drafting', 'reviewing', 'done']
+
+
+class SupervisorState(TypedDict):
+    """
+    Supervisor 상태 (v2).
+
+    Attributes:
+        current_phase: 현재 실행 단계
+        selected_retrievers: 선택된 검색 에이전트 목록
+        agent_keywords: 에이전트별 키워드 매핑
+        iteration_count: 반복 횟수
+        reasoning: 의사결정 근거
+    """
+    current_phase: Literal['analyzing', 'retrieving', 'drafting', 'reviewing', 'done']
+    selected_retrievers: List[RetrieverType]
+    agent_keywords: Dict[str, List[str]]
+    iteration_count: int
+    reasoning: str
+
+
+# ============================================================
+# 정보검색 에이전트 (Retrieval Agent) - v2
+# ============================================================
+
+class RetrievalTaskInput(TypedDict):
+    """
+    Supervisor → Retrieval Agent 입력 (v2).
+
+    Attributes:
+        expanded_queries: 확장 쿼리 리스트
+        agent_keywords: 해당 에이전트용 추출 키워드
+        metadata_filter: 메타데이터 필터
+        top_k: 반환 문서 수
+        ignore_threshold: 임계치 무시 여부
+    """
+    expanded_queries: List[str]
+    agent_keywords: List[str]
+    metadata_filter: MetadataFilter
     top_k: int
+    ignore_threshold: bool
 
 
-class AgencyInfo(TypedDict, total=False):
+class DocumentMetadata(TypedDict, total=False):
     """
-    기관 추천 정보.
-
-    분쟁 유형에 따른 담당 기관 정보입니다.
+    검색된 문서 메타데이터 (v2).
 
     Attributes:
-        agency: 추천 기관 (KCA, ECMC, KCDRC)
-        dispute_type: 분쟁 유형 (1:N, 1:1, contents)
-        reason: 추천 사유
-        confidence: 신뢰도 점수 (0.0~1.0)
-        matched_keywords: 매칭된 키워드
+        doc_id: 문서 ID
+        title: 문서 제목
+        dataset_type: 데이터셋 타입
+        document_type: 문서 타입 ('법률', '시행령', '행정규칙', '별표')
+        category: 카테고리 ('조정', '해결', '상담')
+        article: 법령 조문 번호
+        source_url: 출처 URL
     """
-    agency: str
-    dispute_type: str
-    reason: str
-    confidence: float
-    matched_keywords: List[str]
+    doc_id: str
+    title: str
+    dataset_type: str
+    document_type: str
+    category: str
+    article: Optional[str]
+    source_url: Optional[str]
 
 
-class RetrievalResult(TypedDict, total=False):
+class RetrievedDocument(TypedDict):
     """
-    검색 결과 상세.
-
-    4섹션(기관, 분쟁조정, 상담, 법령, 기준) 검색 결과입니다.
+    검색된 단일 문서 (v2).
 
     Attributes:
-        agency: 기관 추천 정보
-        disputes: 분쟁조정 사례 목록
-        counsels: 상담 사례 목록
-        laws: 관련 법령 목록
-        criteria: 분쟁해결기준 목록
-        max_similarity: 최대 유사도 점수
-        avg_similarity: 평균 유사도 점수
+        chunk_id: 청크 ID
+        content: 청크 텍스트
+        metadata: 문서 메타데이터
+        similarity: 유사도 점수
     """
-    agency: AgencyInfo
-    disputes: List[Dict[str, Any]]
-    counsels: List[Dict[str, Any]]
-    laws: List[Dict[str, Any]]
-    criteria: List[Dict[str, Any]]
+    chunk_id: str
+    content: str
+    metadata: DocumentMetadata
+    similarity: float
+
+
+class RetrievalResult(TypedDict):
+    """
+    Retrieval Agent → Supervisor 출력 (v2).
+
+    Attributes:
+        source: 검색 소스 ('law' | 'criteria' | 'case')
+        documents: 검색된 문서 목록
+        max_similarity: 최대 유사도
+        avg_similarity: 평균 유사도
+        search_time_ms: 검색 소요 시간 (ms)
+        error: 오류 메시지 (실패 시)
+    """
+    source: RetrieverType
+    documents: List[RetrievedDocument]
     max_similarity: float
     avg_similarity: float
-
-
-class RetrievalOutput(TypedDict):
-    """
-    정보검색 노드 출력.
-
-    검색 결과와 출처 목록을 포함합니다.
-
-    Attributes:
-        retrieval: 4섹션 검색 결과
-        sources: 인용 출처 목록 (프론트엔드 표시용)
-    """
-    retrieval: RetrievalResult
-    sources: List[Dict[str, Any]]
+    search_time_ms: float
+    error: Optional[str]
 
 
 @runtime_checkable
 class RetrievalProtocol(Protocol):
-    """
-    정보검색 에이전트 프로토콜.
+    """정보검색 에이전트 프로토콜 (v2)."""
 
-    벡터 DB에서 관련 문서를 검색하여 4섹션 구조로 반환합니다.
-    """
-
-    def retrieve(self, input_data: RetrievalInput) -> RetrievalOutput:
-        """
-        관련 문서를 검색합니다.
-
-        Args:
-            input_data: 검색 입력 데이터
-
-        Returns:
-            검색 결과 및 출처 목록
-        """
+    async def retrieve(self, input_data: RetrievalTaskInput) -> RetrievalResult:
+        """관련 문서를 검색합니다."""
         ...
 
 
 # ============================================================
-# 답변생성 에이전트 (Answer Generation Agent)
+# 답변생성 에이전트 (Answer Generation Agent) - v2
 # ============================================================
+
+class RetryContext(TypedDict):
+    """
+    재생성 컨텍스트.
+
+    검토 실패 시 AnswerDrafter에게 전달되는 정보입니다.
+
+    Attributes:
+        violations: 이전 답변의 위반 사항 목록
+        previous_draft: 이전 답변
+        retry_count: 재시도 횟수 (max 1)
+    """
+    violations: List[str]
+    previous_draft: str
+    retry_count: int
+
 
 class GenerationInput(TypedDict):
     """
-    답변생성 노드 입력.
-
-    답변 생성에 필요한 쿼리, 검색 결과, 분석 결과를 포함합니다.
+    답변생성 노드 입력 (v2).
 
     Attributes:
         user_query: 원본 사용자 쿼리
-        retrieval: 검색 결과
-        query_analysis: 질의분석 결과
-        onboarding: 온보딩 폼 데이터
-        chat_type: 채팅 유형
+        expanded_queries: 확장 쿼리 리스트 (컨텍스트 제공용)
+        retrieval_results: 모든 검색 결과
+        retry_context: 재생성 시 위반사항 정보
     """
     user_query: str
-    retrieval: RetrievalResult
-    query_analysis: QueryAnalysisResult
-    onboarding: Optional[OnboardingInfo]
-    chat_type: ChatType
+    expanded_queries: List[str]
+    retrieval_results: List[RetrievalResult]
+    retry_context: Optional[RetryContext]
 
 
-class ClaimEvidenceMapping(TypedDict):
+class ClaimEvidence(TypedDict):
     """
-    주장-근거 매핑.
-
-    생성된 답변의 각 주장에 대한 근거 정보입니다.
+    주장-근거 매핑 (v2).
 
     Attributes:
-        claim: 답변에 포함된 주장
-        evidence_chunk_ids: 근거 청크 ID 목록
+        claim: 답변 내 주장
+        evidence_chunk_ids: 근거가 되는 청크 ID 목록
         evidence_texts: 근거 텍스트 목록
-        grounded: 근거 충분 여부
+        evidence_source: 근거 소스 ('law' | 'criteria' | 'case' | 'counsel')
+        grounded: 근거 있음 여부
     """
     claim: str
     evidence_chunk_ids: List[str]
     evidence_texts: List[str]
+    evidence_source: EvidenceSource
     grounded: bool
+
+
+class CitedCase(TypedDict):
+    """
+    인용된 사례 정보.
+
+    Attributes:
+        case_id: 사례 ID
+        category: 카테고리 ('조정' | '해결' | '상담')
+        title: 사례 제목
+        summary: 사례 요약 (답변에 포함된 내용)
+        relevance: 현재 질의와의 관련성 설명
+    """
+    case_id: str
+    category: CaseCategory
+    title: str
+    summary: str
+    relevance: str
 
 
 class GenerationOutput(TypedDict):
     """
-    답변생성 노드 출력.
-
-    생성된 답변과 관련 메타데이터를 포함합니다.
+    답변생성 노드 출력 (v2).
 
     Attributes:
-        draft_answer: LLM이 생성한 초안 답변
-        has_sufficient_evidence: 근거 충분 여부
-        clarifying_questions: 추가 질문 목록 (근거 부족 시)
+        draft_answer: 생성된 답변 초안
         claim_evidence_map: 주장-근거 매핑 목록
+        cited_cases: 인용된 사례 정보 목록
+        has_sufficient_evidence: 근거 충분 여부
+        generation_time_ms: 생성 소요 시간 (ms)
     """
     draft_answer: str
+    claim_evidence_map: List[ClaimEvidence]
+    cited_cases: List[CitedCase]
     has_sufficient_evidence: bool
-    clarifying_questions: List[str]
-    claim_evidence_map: List[ClaimEvidenceMapping]
+    generation_time_ms: float
 
 
 @runtime_checkable
 class GenerationProtocol(Protocol):
-    """
-    답변생성 에이전트 프로토콜.
+    """답변생성 에이전트 프로토콜 (v2)."""
 
-    검색 결과를 기반으로 LLM을 활용하여 답변을 생성합니다.
-    """
-
-    def generate(self, input_data: GenerationInput) -> GenerationOutput:
-        """
-        답변을 생성합니다.
-
-        Args:
-            input_data: 생성 입력 데이터
-
-        Returns:
-            생성된 답변 및 메타데이터
-        """
+    async def generate(self, input_data: GenerationInput) -> GenerationOutput:
+        """답변을 생성합니다."""
         ...
 
 
 # ============================================================
-# 법률검토 에이전트 (Legal Review Agent)
+# 법률검토 에이전트 (Legal Review Agent) - v2
 # ============================================================
 
 class ReviewInput(TypedDict):
     """
-    법률검토 노드 입력.
-
-    검토할 답변과 관련 정보를 포함합니다.
+    법률검토 노드 입력 (v2).
 
     Attributes:
-        draft_answer: 검토할 초안 답변
-        retrieval: 검색 결과 (출처 검증용)
-        sources: 인용 출처 목록
-        claim_evidence_map: 주장-근거 매핑 (할루시네이션 검증용)
+        user_query: 원본 질문
+        draft_answer: 검토할 답변
+        claim_evidence_map: 주장-근거 매핑
+        cited_cases: 인용된 사례 목록
+        retrieval_results: 원본 검색 결과 (검증용)
+        retry_count: 현재 재시도 횟수
     """
+    user_query: str
     draft_answer: str
-    retrieval: RetrievalResult
-    sources: List[Dict[str, Any]]
-    claim_evidence_map: List[ClaimEvidenceMapping]
+    claim_evidence_map: List[ClaimEvidence]
+    cited_cases: List[CitedCase]
+    retrieval_results: List[RetrievalResult]
+    retry_count: int
 
 
-class ReviewResult(TypedDict, total=False):
+class Violation(TypedDict):
     """
-    검토 결과 상세.
-
-    검토 통과 여부와 발견된 위반 사항을 포함합니다.
+    위반 사항 상세.
 
     Attributes:
-        passed: 검토 통과 여부
-        violations: 발견된 위반 사항 목록
-        filtered_answer: 위반 사항 수정 후 답변 (passed=False 시)
+        type: 위반 유형 ('hallucination' | 'legal_judgment' | 'prohibited_expression' | 'query_mismatch')
+        description: 위반 내용 상세
+        location: 위반 위치 (문장 또는 단락)
+        severity: 심각도 ('critical' | 'warning')
+        suggestion: 수정 제안
     """
-    passed: bool
-    violations: List[str]
-    filtered_answer: Optional[str]
+    type: ViolationType
+    description: str
+    location: str
+    severity: SeverityLevel
+    suggestion: Optional[str]
 
 
 class ReviewOutput(TypedDict):
     """
-    법률검토 노드 출력.
-
-    검토 결과와 최종 답변을 포함합니다.
+    법률검토 노드 출력 (v2).
 
     Attributes:
-        review: 검토 결과 상세
-        final_answer: 최종 확정 답변 (검토 통과 또는 수정 완료)
-        retry_count: 재검토 횟수 (무한 루프 방지)
+        passed: 검토 통과 여부
+        violations: 위반 사항 목록 (passed=False일 때)
+        final_answer: 수정된 최종 답변 (passed=True일 때)
+        review_time_ms: 검토 소요 시간 (ms)
     """
-    review: ReviewResult
+    passed: bool
+    violations: List[Violation]
     final_answer: Optional[str]
-    retry_count: int
+    review_time_ms: float
 
 
 @runtime_checkable
 class ReviewProtocol(Protocol):
-    """
-    법률검토 에이전트 프로토콜.
+    """법률검토 에이전트 프로토콜 (v2)."""
 
-    생성된 답변의 법률적 정확성과 금지 표현을 검토합니다.
-    """
-
-    def review(self, input_data: ReviewInput) -> ReviewOutput:
-        """
-        답변을 검토합니다.
-
-        Args:
-            input_data: 검토 입력 데이터
-
-        Returns:
-            검토 결과 및 최종 답변
-        """
+    async def review(self, input_data: ReviewInput) -> ReviewOutput:
+        """답변을 검토합니다."""
         ...
 
 
 # ============================================================
-# ReAct 패턴 관련 타입
-# ============================================================
+# 통합 ChatState # ============================================================
 
-class ReActStep(TypedDict):
+class ProtocolChatState(TypedDict, total=False):
     """
-    ReAct 단일 스텝 기록.
+    통합 채팅 상태 (v2).
 
-    Thought-Action-Observation 사이클의 단위 기록입니다.
-
-    Attributes:
-        thought: 현재 상황 분석 및 추론
-        action: 선택된 액션 (search_all, search_criteria, ask_clarification 등)
-        action_input: 액션에 전달되는 입력값
-        observation: 액션 실행 결과 요약
+    모든 에이전트 간 데이터가 저장되는 중앙 상태입니다.
     """
-    thought: str
-    action: str
-    action_input: Dict[str, Any]
-    observation: str
-
-
-class ReActInput(TypedDict):
-    """
-    ReAct 노드 입력.
-
-    ReAct 패턴 실행에 필요한 상태 정보를 포함합니다.
-
-    Attributes:
-        user_query: 사용자 쿼리
-        query_analysis: 질의분석 결과
-        retrieval: 현재까지의 검색 결과 (있는 경우)
-        react_steps: 이전 ReAct 스텝 기록
-        current_iteration: 현재 반복 횟수
-        max_iterations: 최대 반복 횟수
-    """
+    # === 세션 정보 ===
     user_query: str
-    query_analysis: QueryAnalysisResult
-    retrieval: Optional[RetrievalResult]
-    react_steps: List[ReActStep]
-    current_iteration: int
-    max_iterations: int
+    chat_type: ChatType
+    onboarding: Optional[OnboardingInfo]
 
+    # === QueryAnalyst 결과 ===
+    query_analysis: QueryAnalysisOutput
 
-class ReActOutput(TypedDict):
-    """
-    ReAct 노드 출력.
+    # === Supervisor 상태 ===
+    supervisor: SupervisorState
 
-    ReAct 실행 결과와 다음 단계 정보를 포함합니다.
+    # === Retrieval 결과 ===
+    retrieval_results: List[RetrievalResult]
 
-    Attributes:
-        react_steps: 업데이트된 ReAct 스텝 기록
-        should_continue: 추가 반복 필요 여부
-        current_iteration: 현재 반복 횟수
-        last_thought: 마지막 추론 내용
-        last_action: 마지막 실행 액션
-        last_observation: 마지막 관찰 결과
-        retrieval: 업데이트된 검색 결과 (검색 액션 실행 시)
-    """
-    react_steps: List[ReActStep]
-    should_continue: bool
-    current_iteration: int
-    last_thought: Optional[str]
-    last_action: Optional[str]
-    last_observation: Optional[str]
-    retrieval: Optional[RetrievalResult]
+    # === Generation 결과 ===
+    draft_answer: str
+    claim_evidence_map: List[ClaimEvidence]
+    cited_cases: List[CitedCase]
 
+    # === Review 결과 ===
+    review: ReviewOutput
+    retry_count: int
 
-@runtime_checkable
-class ReActProtocol(Protocol):
-    """
-    ReAct 에이전트 프로토콜.
-
-    Thought-Action-Observation 패턴으로 반복적 추론을 수행합니다.
-    """
-
-    def think(self, input_data: ReActInput) -> Dict[str, Any]:
-        """
-        현재 상태를 분석하고 다음 액션을 결정합니다.
-
-        Args:
-            input_data: ReAct 입력 데이터
-
-        Returns:
-            추론 결과 (thought, action, action_input)
-        """
-        ...
-
-    def act(self, action: str, action_input: Dict[str, Any]) -> str:
-        """
-        선택된 액션을 실행하고 결과를 반환합니다.
-
-        Args:
-            action: 실행할 액션 이름
-            action_input: 액션 입력값
-
-        Returns:
-            액션 실행 결과 (observation)
-        """
-        ...
+    # === 최종 출력 ===
+    final_answer: str
+    sources: List[Dict[str, Any]]
 
 
 # ============================================================
@@ -516,58 +459,26 @@ class ReActProtocol(Protocol):
 # ============================================================
 
 def validate_query_analysis_output(output: Dict[str, Any]) -> bool:
-    """
-    질의분석 출력이 프로토콜을 만족하는지 검증합니다.
-
-    Args:
-        output: 검증할 출력 딕셔너리
-
-    Returns:
-        유효성 검증 결과
-    """
-    required_keys = {'query_analysis', 'mode'}
+    """질의분석 출력(v2)이 프로토콜을 만족하는지 검증합니다."""
+    required_keys = {'intent', 'original_query', 'expanded_queries', 'keywords', 'retriever_types'}
     return required_keys.issubset(output.keys())
 
 
-def validate_retrieval_output(output: Dict[str, Any]) -> bool:
-    """
-    검색 출력이 프로토콜을 만족하는지 검증합니다.
-
-    Args:
-        output: 검증할 출력 딕셔너리
-
-    Returns:
-        유효성 검증 결과
-    """
-    required_keys = {'retrieval', 'sources'}
+def validate_retrieval_result(output: Dict[str, Any]) -> bool:
+    """검색 결과(v2)가 프로토콜을 만족하는지 검증합니다."""
+    required_keys = {'source', 'documents', 'max_similarity', 'avg_similarity', 'search_time_ms'}
     return required_keys.issubset(output.keys())
 
 
 def validate_generation_output(output: Dict[str, Any]) -> bool:
-    """
-    답변생성 출력이 프로토콜을 만족하는지 검증합니다.
-
-    Args:
-        output: 검증할 출력 딕셔너리
-
-    Returns:
-        유효성 검증 결과
-    """
-    required_keys = {'draft_answer', 'has_sufficient_evidence', 'clarifying_questions', 'claim_evidence_map'}
+    """답변생성 출력(v2)이 프로토콜을 만족하는지 검증합니다."""
+    required_keys = {'draft_answer', 'claim_evidence_map', 'cited_cases', 'has_sufficient_evidence'}
     return required_keys.issubset(output.keys())
 
 
 def validate_review_output(output: Dict[str, Any]) -> bool:
-    """
-    검토 출력이 프로토콜을 만족하는지 검증합니다.
-
-    Args:
-        output: 검증할 출력 딕셔너리
-
-    Returns:
-        유효성 검증 결과
-    """
-    required_keys = {'review', 'final_answer', 'retry_count'}
+    """검토 출력(v2)이 프로토콜을 만족하는지 검증합니다."""
+    required_keys = {'passed', 'violations', 'final_answer', 'review_time_ms'}
     return required_keys.issubset(output.keys())
 
 
@@ -578,44 +489,50 @@ def validate_review_output(output: Dict[str, Any]) -> bool:
 __all__ = [
     # 공통 타입
     'OnboardingInfo',
+    'IntentType',
     'RoutingMode',
-    'QueryType',
+    'RetrieverType',
     'ChatType',
+    'ViolationType',
+    'SeverityLevel',
+    'CaseCategory',
+    'EvidenceSource',
 
-    # 질의분석 에이전트
-    'QueryAnalysisInput',
-    'QueryAnalysisResult',
+    # 메타데이터 필터
+    'MetadataFilter',
+
+    # Supervisor
+    'SupervisorPhase',
+    'SupervisorState',
+
+    # 질의분석 에이전트     'QueryAnalysisInput',
     'QueryAnalysisOutput',
     'QueryAnalysisProtocol',
 
-    # 정보검색 에이전트
-    'RetrievalInput',
-    'AgencyInfo',
+    # 정보검색 에이전트     'RetrievalTaskInput',
+    'DocumentMetadata',
+    'RetrievedDocument',
     'RetrievalResult',
-    'RetrievalOutput',
     'RetrievalProtocol',
 
-    # 답변생성 에이전트
+    # 답변생성 에이전트     'RetryContext',
     'GenerationInput',
-    'ClaimEvidenceMapping',
+    'ClaimEvidence',
+    'CitedCase',
     'GenerationOutput',
     'GenerationProtocol',
 
-    # 법률검토 에이전트
-    'ReviewInput',
-    'ReviewResult',
+    # 법률검토 에이전트     'ReviewInput',
+    'Violation',
     'ReviewOutput',
     'ReviewProtocol',
 
-    # ReAct 패턴
-    'ReActStep',
-    'ReActInput',
-    'ReActOutput',
-    'ReActProtocol',
+    # 통합 상태
+    'ProtocolChatState',
 
     # 검증 유틸리티
     'validate_query_analysis_output',
-    'validate_retrieval_output',
+    'validate_retrieval_result',
     'validate_generation_output',
     'validate_review_output',
 ]

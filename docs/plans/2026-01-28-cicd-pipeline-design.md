@@ -636,4 +636,36 @@ pytest -m "not skip_ci and not llm"  # LLM API 호출 제외 (빠른 테스트)
 pytest -m "unit"                  # 유닛 테스트만
 pytest -m "integration"           # DB 필요 테스트
 pytest -m "e2e"                   # E2E 테스트
+
+# v2 아키텍처 테스트 (MAS v2 그래프 전용)
+pytest backend/scripts/testing/test_mas_v2_architecture.py -v
 ```
+
+---
+
+## MAS v2 아키텍처 반영 사항 (2026-01-29 업데이트)
+
+MAS v2 아키텍처 개편 후 CI/CD 계획에 반영된 변경사항:
+(상세 설계: `docs/plans/2026-01-28-mas-architecture-v2-design.md`)
+
+### 변경된 항목
+
+| 항목 | 기존 (v1) | 변경 후 (v2) | 이유 |
+|------|----------|-------------|------|
+| **Retrieval Agent 수** | 4개 (law, criteria, case, counsel) | 3개 (law, criteria, case) | counsel → case에 통합 |
+| **QueryAnalyst 모델** | 규칙 기반 | gpt-4o-mini (LLM 기반) | 쿼리 확장 품질 향상 |
+| **Supervisor 모델** | gpt-4o | gpt-4o-mini | 비용 최적화 |
+| **Agent Registry** | 없음 | 동적 에이전트 등록 | 확장성 향상 |
+| **재생성 루프** | 없음 | LegalReviewer → AnswerDrafter (max 1회) | 품질 보증 |
+| **프로토콜** | protocols.py (v1) | protocols.py (v2 통합) | 메타데이터 필터, CitedCase 등 |
+
+### v2로 추가된 모듈 (CI/CD 영향 없음)
+
+- `backend/app/agents/query_analysis/llm_expander.py` - LLM 기반 쿼리 확장
+- `backend/app/agents/registry/agent_registry.py` - Agent Registry (동적 에이전트 등록)
+- `backend/app/supervisor/nodes/` - Supervisor 노드 분리 (supervisor.py, retrieval_merge.py, clarify.py)
+- `backend/scripts/testing/test_mas_v2_architecture.py` - v2 통합 테스트
+
+### v2로 삭제된 파일
+
+- `backend/app/agents/retrieval/counsel_agent.py` - case_agent에 통합 (상담사례 검색을 CaseRetrievalAgent가 처리)

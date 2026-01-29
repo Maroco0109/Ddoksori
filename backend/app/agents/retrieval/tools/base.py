@@ -141,8 +141,6 @@ def to_document(result: Any) -> Document:
 
     다음 타입들을 처리합니다:
     - SearchResult (retriever.py에서 사용)
-    - LawSearchResult (specialized_retrievers.py 법령 검색 결과)
-    - CriteriaSearchResult (specialized_retrievers.py 기준 검색 결과)
     - 표준 필드를 가진 Dict
 
     Args:

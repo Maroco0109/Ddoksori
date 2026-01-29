@@ -22,9 +22,6 @@ from .checkpointer import get_checkpointer
 from .nodes.supervisor import SupervisorNode
 from .nodes.retrieval_merge import retrieval_merge_node_sync
 from .nodes.clarify import ask_clarification_node
-from ..agents.query_analysis.agent import query_analysis_node
-from ..agents.answer_generation.agent import generation_node
-from ..agents.legal_review.agent import review_node_wrapper
 from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
 
 logger = logging.getLogger(__name__)
@@ -86,53 +83,79 @@ def _route_cache_check(state: ChatState) -> str:
 
 
 # ============================================================================
-# Retrieval Agent 노드 팩토리
+# MAS Supervisor (formerly v2)
 # ============================================================================
 
 def _create_retrieval_agent_node(agent_type: str) -> Callable:
     """
-    특정 타입의 Retrieval Agent 노드 함수를 생성합니다.
+    Retrieval Agent 노드 v2 (메타데이터 필터 지원)
 
-    Args:
-        agent_type: 'law', 'criteria', 'case', 'counsel' 중 하나
-
-    Returns:
-        LangGraph 노드 함수
+    변경사항:
+    - metadata_filter 파라미터 지원
+    - expanded_queries 사용
+    - agent_keywords 사용
     """
     from ..agents.retrieval.law_agent import law_retrieval_agent
     from ..agents.retrieval.criteria_agent import criteria_retrieval_agent
     from ..agents.retrieval.case_agent import case_retrieval_agent
-    from ..agents.retrieval.counsel_agent import counsel_retrieval_agent
 
     agent_map = {
         'law': law_retrieval_agent,
         'criteria': criteria_retrieval_agent,
         'case': case_retrieval_agent,
-        'counsel': counsel_retrieval_agent,
     }
 
     agent = agent_map.get(agent_type)
 
     async def retrieval_agent_node(state: ChatState) -> Dict[str, Any]:
-        """개별 Retrieval Agent 노드"""
+        """개별 Retrieval Agent 노드 (v2)"""
         start_time = time.time()
 
-        user_query = state.get('user_query', '')
+        # v2: query_analysis에서 expanded_queries 사용
         query_analysis = state.get('query_analysis', {})
+        expanded_queries = query_analysis.get('expanded_queries', [])
+        user_query = state.get('user_query', '')
+
+        # v2: supervisor에서 전달받은 agent_keywords 사용
+        supervisor_state = state.get('supervisor', {})
+        agent_keywords = supervisor_state.get('agent_keywords', {})
+        keywords = agent_keywords.get(agent_type, query_analysis.get('keywords', []))
+
+        # 메타데이터 필터 설정 (agent_type에 따라)
+        metadata_filter = {}
+        if agent_type == 'law':
+            metadata_filter = {
+                'dataset_type': 'law_guide',
+                'document_types': ['법률', '시행령'],
+            }
+        elif agent_type == 'criteria':
+            metadata_filter = {
+                'dataset_type': 'law_guide',
+                'document_types': ['행정규칙', '별표'],
+            }
+        elif agent_type == 'case':
+            metadata_filter = {
+                'categories': ['조정', '해결', '상담'],
+            }
 
         request = {
             'context': {
                 'user_query': user_query,
                 'query_analysis': query_analysis,
+                'expanded_queries': expanded_queries,
+                'agent_keywords': keywords,
             },
-            'params': {'top_k': 3},
+            'params': {
+                'top_k': 5,
+                'metadata_filter': metadata_filter,
+                'ignore_threshold': agent_type in ('law', 'criteria'),
+            },
         }
 
         try:
             result = await agent.process(request)
             search_time_ms = (time.time() - start_time) * 1000
 
-            # IndividualRetrievalResult 형식으로 변환
             individual_result = {
                 'source': agent_type,
                 'documents': result.get('result', {}).get('results', []),
@@ -145,7 +168,7 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 individual_result['error'] = result.get('message', 'Unknown error')
 
             logger.info(
-                f"[RetrievalAgent:{agent_type}] {len(individual_result['documents'])} docs, "
+                f"[RetrievalAgent_v2:{agent_type}] {len(individual_result['documents'])} docs, "
                 f"max_sim={individual_result['max_similarity']:.3f}, "
                 f"time={search_time_ms:.1f}ms"
             )
@@ -159,78 +182,60 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 'search_time_ms': (time.time() - start_time) * 1000,
                 'error': str(e),
             }
-            logger.error(f"[RetrievalAgent:{agent_type}] Error: {e}")
+            logger.error(f"[RetrievalAgent_v2:{agent_type}] Error: {e}")
 
-        # operator.add로 누적되도록 리스트로 반환
         return {'individual_retrieval_results': [individual_result]}
 
     return retrieval_agent_node
 
 
-# ============================================================================
-# MAS Supervisor 라우팅
-# ============================================================================
-
 def _route_mas_supervisor(state: ChatState):
     """
-    MAS Supervisor의 결정을 기반으로 다음 노드를 결정합니다.
+    MAS Supervisor v2 라우팅
 
-    routing 맵:
-    - query_analyst → query_analysis 노드
-    - retrieval_team → Fan-out (4개 Agent 병렬 실행) - List[Send] 반환
-    - answer_drafter → generation 노드
-    - legal_reviewer → review 노드
-    - respond/None → output_guardrail
-
-    Args:
-        state: 현재 ChatState
-
-    Returns:
-        다음 노드 이름 (str) 또는 List[Send] (Fan-out)
+    변경사항:
+    - 재생성 루프 지원 (max 1회)
+    - 3개 Retrieval Agent만 사용 (law, criteria, case)
     """
     supervisor_state = state.get('supervisor') or {}
     next_agent = supervisor_state.get('next_agent')
+    retry_count = state.get('retry_count', 0)
 
-    logger.info(f"[MAS Router] next_agent={next_agent}")
+    logger.info(f"[MAS Router v2] next_agent={next_agent}, retry_count={retry_count}")
 
     mode = state.get("mode", "NEED_RAG")
     if mode in ('NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION'):
-        logger.info(f"[MAS Router] Routing to ask_clarification for mode={mode}")
         return 'ask_clarification'
 
     if mode == "NO_RETRIEVAL" and next_agent == "retrieval_team":
-        logger.info("[MAS Router] Fast path: NO_RETRIEVAL - skipping retrieval, routing to generation")
         return "generation"
 
-    # === PR-2: Selective Retrieval 시작 ===
+    # 재생성 요청 처리 (review → generation)
+    if next_agent == 'retry_generation':
+        if retry_count < 1:
+            logger.info("[MAS Router v2] Retry generation requested")
+            return 'generation'
+        else:
+            logger.info("[MAS Router v2] Max retries reached, routing to output")
+            return 'output_guardrail'
+
+    # Selective Retrieval (v2: 3개 Agent만 사용)
     if next_agent == 'retrieval_team':
         query_analysis = state.get('query_analysis', {})
         retriever_types = query_analysis.get('retriever_types', ['law', 'criteria', 'case'])
 
         fan_out_list = []
+        for rt in ['law', 'criteria', 'case']:
+            if rt in retriever_types:
+                fan_out_list.append(Send(f'retrieval_{rt}', state))
 
-        if 'law' in retriever_types:
-            fan_out_list.append(Send('retrieval_law', state))
+        logger.info(f"[MAS Router v2] Fan-out to {len(fan_out_list)} agents: {retriever_types}")
 
-        if 'criteria' in retriever_types:
-            fan_out_list.append(Send('retrieval_criteria', state))
-
-        if 'case' in retriever_types:
-            fan_out_list.append(Send('retrieval_case', state))
-
-        # counsel agent는 현재 사용하지 않음 (case로 통합)
-
-        logger.info(f"[MAS Router] Selective fan-out to {len(fan_out_list)} retrieval agents: {retriever_types}")
-
-        # 빈 리스트면 generation으로 (검색 불필요)
         if not fan_out_list:
-            logger.info("[MAS Router] No retrievers needed, routing to generation")
             return "generation"
 
         return fan_out_list
-    # === PR-2: Selective Retrieval 끝 ===
 
-    # 라우팅 맵
     routing_map = {
         'query_analyst': 'query_analysis',
         'answer_drafter': 'generation',
@@ -240,101 +245,64 @@ def _route_mas_supervisor(state: ChatState):
     if next_agent in routing_map:
         return routing_map[next_agent]
 
-    # respond 또는 None → 출력
     return 'output_guardrail'
 
 
-# ============================================================================
-# MAS Supervisor 그래프 생성
-# ============================================================================
-
 def create_mas_supervisor_graph() -> StateGraph:
     """
-    MAS Supervisor 그래프 생성 (Phase 5)
+    MAS Supervisor 그래프 생성
 
-    [Architecture - Hub-Spoke Pattern]
-
-    Entry → input_guardrail → supervisor ←→ [Agents] → output_guardrail → END
-
-    [Supervisor → Agent 라우팅]
-    - query_analyst → query_analysis 노드
-    - retrieval_team → Fan-out (4개 Retrieval Agent 병렬) → retrieval_merge
-    - answer_drafter → generation 노드
-    - legal_reviewer → review 노드
-
-    [Fan-out/Fan-in for Retrieval]
-    supervisor → fan_out → [law|criteria|case|counsel] → retrieval_merge → supervisor
-
-    [주요 특징]
-    1. ReAct 루프 제거 → Supervisor 기반 의사결정
-    2. 4개 Retrieval Agent 병렬 실행 (LangGraph Send API)
-    3. 규칙 기반 fallback으로 안정성 보장
-    4. 최대 10회 iteration 제한
-
-    Returns:
-        컴파일 전 StateGraph
+    [아키텍처]
+    1. LLM 기반 쿼리 확장
+    2. 3개 Retrieval Agent (law, criteria, case)
+    3. 메타데이터 필터 기반 검색
+    4. 재생성 루프 지원 (max 1회)
     """
+    from ..agents.query_analysis.agent import query_analysis_node_v2 as qa_node
+    from ..agents.answer_generation.agent import generation_node_v2 as gen_node
+    from ..agents.legal_review.agent import review_node_v2 as rev_node
+
     graph = StateGraph(ChatState)
 
     # === 노드 등록 ===
-
-    # === PR-6: L1 캐시 노드 추가 ===
     graph.add_node('cache_check', _cache_check_node)
     graph.add_node('cache_response', _cache_response_node)
-    # === PR-6 끝 ===
-
-    # 1. 가드레일
     graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
     graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
 
-    # 2. Supervisor (LLM 없이 규칙 기반으로 시작)
+    # v2: Supervisor (추후 LLM 기반으로 변경)
     supervisor = SupervisorNode(llm=None)
     graph.add_node('supervisor', supervisor.as_node())
 
-    # 3. 기능 에이전트
-    graph.add_node('query_analysis', _create_timed_node(query_analysis_node, 'query_analysis'))
-    graph.add_node('generation', _create_timed_node(generation_node, 'generation'))
-    graph.add_node('review', _create_timed_node(review_node_wrapper, 'review'))
+    graph.add_node('query_analysis', _create_timed_node(qa_node, 'query_analysis'))
+    graph.add_node('generation', _create_timed_node(gen_node, 'generation'))
+    graph.add_node('review', _create_timed_node(rev_node, 'review'))
     graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
 
-    # 4. Retrieval Agents (4개 병렬)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+    # v2: 3개 Retrieval Agent (counsel 제외)
+    for agent_type in ['law', 'criteria', 'case']:
         node_fn = _create_retrieval_agent_node(agent_type)
         graph.add_node(f'retrieval_{agent_type}', node_fn)
 
-    # 5. Retrieval Merge (Fan-in)
     graph.add_node('retrieval_merge', retrieval_merge_node_sync)
 
     # === 엣지 설정 ===
-
-    # === PR-6: 엔트리포인트 변경 ===
-    logger.info("[PR-6 DEBUG] Setting entry point to 'cache_check'")
     graph.set_entry_point('cache_check')
-    logger.info("[PR-6 DEBUG] Entry point set successfully")
 
-    # cache_check → cache_response 또는 input_guardrail
     graph.add_conditional_edges(
         'cache_check',
         _route_cache_check,
-        {
-            'cache_response': 'cache_response',
-            'input_guardrail': 'input_guardrail',
-        }
+        {'cache_response': 'cache_response', 'input_guardrail': 'input_guardrail'}
     )
-
-    # cache_response → END
     graph.add_edge('cache_response', END)
-    # === PR-6 끝 ===
 
-    # input_guardrail → supervisor 또는 END
     graph.add_conditional_edges(
         'input_guardrail',
         lambda state: END if state.get('guardrail_blocked') else 'supervisor',
         {END: END, 'supervisor': 'supervisor'}
     )
 
-    # supervisor → 다음 노드 (conditional routing)
-    # Fan-out: retrieval_team → List[Send] 반환으로 4개 Agent 병렬 실행
+    # v2 라우팅
     graph.add_conditional_edges(
         'supervisor',
         _route_mas_supervisor,
@@ -343,7 +311,6 @@ def create_mas_supervisor_graph() -> StateGraph:
             'retrieval_law': 'retrieval_law',
             'retrieval_criteria': 'retrieval_criteria',
             'retrieval_case': 'retrieval_case',
-            'retrieval_counsel': 'retrieval_counsel',
             'generation': 'generation',
             'review': 'review',
             'output_guardrail': 'output_guardrail',
@@ -351,56 +318,36 @@ def create_mas_supervisor_graph() -> StateGraph:
         }
     )
 
-    # 각 Retrieval Agent → retrieval_merge (Fan-in)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+    # Fan-in
+    for agent_type in ['law', 'criteria', 'case']:
         graph.add_edge(f'retrieval_{agent_type}', 'retrieval_merge')
 
-    # retrieval_merge → supervisor (결과 보고)
     graph.add_edge('retrieval_merge', 'supervisor')
-
-    # query_analysis → supervisor (결과 보고)
     graph.add_edge('query_analysis', 'supervisor')
-
-    # generation → supervisor (결과 보고)
     graph.add_edge('generation', 'supervisor')
-
-    # review → supervisor (결과 보고)
     graph.add_edge('review', 'supervisor')
-
-    # output_guardrail → END
     graph.add_edge('output_guardrail', END)
-
-    # ask_clarification → END
     graph.add_edge('ask_clarification', END)
 
-    logger.info("[MAS Graph] Created MAS Supervisor graph with Fan-out/Fan-in architecture")
+    logger.info("[MAS Graph v2] Created MAS Supervisor v2 graph")
 
     return graph
 
 
-# ============================================================================
-# 컴파일 및 싱글톤
-# ============================================================================
-
 _mas_compiled_graph = None
 
 
-def get_mas_supervisor_compiled_graph():
-    """MAS Supervisor 그래프 컴파일"""
-    graph = create_mas_supervisor_graph()
-    checkpointer = get_checkpointer()
-    return graph.compile(checkpointer=checkpointer)
-
-
 def get_mas_supervisor_graph():
-    """MAS Supervisor 그래프 싱글톤"""
+    """MAS Supervisor v2 그래프 싱글톤"""
     global _mas_compiled_graph
     if _mas_compiled_graph is None:
-        _mas_compiled_graph = get_mas_supervisor_compiled_graph()
+        graph = create_mas_supervisor_graph()
+        checkpointer = get_checkpointer()
+        _mas_compiled_graph = graph.compile(checkpointer=checkpointer)
     return _mas_compiled_graph
 
 
 def reset_mas_graph():
-    """MAS 그래프 리셋"""
+    """MAS 그래프 리셋 (테스트용)"""
     global _mas_compiled_graph
     _mas_compiled_graph = None

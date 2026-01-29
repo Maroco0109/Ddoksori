@@ -145,6 +145,21 @@ UNION ALL SELECT 'oauth_users', COUNT(*) FROM oauth_users
 UNION ALL SELECT 'conversation_turns', COUNT(*) FROM conversation_turns;
 ```
 
+### Agent별 데이터 소스 검증 (MAS v2)
+
+v2 아키텍처에서 3개 Retrieval Agent (law, criteria, case)가 각각 다른 데이터를 검색합니다.
+복구 후 각 데이터 소스의 무결성을 확인하세요:
+
+```sql
+-- 데이터 소스별 document/chunk 수 확인
+SELECT d.doc_type, COUNT(DISTINCT d.doc_id) as doc_count, COUNT(c.*) as chunk_count,
+       COUNT(c.embedding) as with_embedding
+FROM documents d
+LEFT JOIN chunks c ON c.doc_id = d.doc_id
+GROUP BY d.doc_type
+ORDER BY chunk_count DESC;
+```
+
 ### API 검증
 
 - [ ] **헬스체크**
@@ -159,7 +174,7 @@ UNION ALL SELECT 'conversation_turns', COUNT(*) FROM conversation_turns;
     -d '{"query": "청약철회 기간", "top_k": 3}'
   ```
 
-- [ ] **챗봇 테스트**
+- [ ] **챗봇 테스트** (MAS v2: law, criteria, case 3개 Agent 병렬 검색)
   ```bash
   curl -X POST http://localhost:8000/chat \
     -H "Content-Type: application/json" \
@@ -209,5 +224,6 @@ UNION ALL SELECT 'conversation_turns', COUNT(*) FROM conversation_turns;
 ## 관련 문서
 
 - [백업 스크립트 README](../../backend/scripts/backup/README.md)
+- [MAS v2 아키텍처 설계](../plans/2026-01-28-mas-architecture-v2-design.md)
 - [AWS RDS 문서](https://docs.aws.amazon.com/rds/)
 - [PostgreSQL pg_dump 문서](https://www.postgresql.org/docs/current/app-pgdump.html)

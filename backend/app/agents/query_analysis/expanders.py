@@ -2,6 +2,11 @@
 Query Expanders
 
 쿼리 확장 및 다중 검색 쿼리 생성 함수들.
+
+v2 업데이트 (2026-01-28):
+- LLM 기반 다중 쿼리 확장 추가 (gpt-4o-mini)
+- expand_query_with_llm_v2() 함수 추가
+- generate_search_queries_v2() 함수 추가
 """
 
 import logging
@@ -166,8 +171,123 @@ def create_synonym_variant_query(original: str, keywords: List[str]) -> Optional
     return variant if variant != original else None
 
 
+async def expand_query_with_llm_v2(
+    query: str,
+    keywords: List[str],
+    intent: Literal['general', 'information_search'] = 'information_search',
+    use_fallback: bool = True,
+) -> List[str]:
+    """
+    LLM 기반 다중 쿼리 확장 (v2)
+
+    gpt-4o-mini를 사용하여 사용자 쿼리를 다양한 검색 쿼리로 확장합니다.
+    LLM 실패 시 규칙 기반 확장으로 폴백합니다.
+
+    Args:
+        query: 원본 사용자 쿼리
+        keywords: 추출된 키워드 목록
+        intent: 의도 ('general' | 'information_search')
+        use_fallback: LLM 실패 시 규칙 기반 폴백 사용 여부
+
+    Returns:
+        확장된 쿼리 목록 (최대 5개, 원본 쿼리 포함)
+    """
+    # general 의도는 확장 불필요
+    if intent == 'general':
+        return [query]
+
+    try:
+        from .llm_expander import expand_query_with_llm
+
+        expanded = await expand_query_with_llm(
+            query=query,
+            keywords=keywords,
+            max_queries=5,
+            timeout=3.0,
+        )
+
+        if expanded:
+            return expanded
+
+    except Exception as e:
+        logger.warning(f"[LLM Expander v2] Error: {e}")
+
+    # 폴백: 규칙 기반 확장
+    if use_fallback:
+        return generate_search_queries_v2_fallback(query, keywords)
+
+    return [query]
+
+
+def generate_search_queries_v2_fallback(
+    query: str,
+    keywords: List[str],
+) -> List[str]:
+    """
+    규칙 기반 다중 쿼리 생성 (v2 폴백)
+
+    LLM 확장 실패 시 사용되는 규칙 기반 확장입니다.
+    """
+    queries = [query]
+
+    # 키워드 조합 쿼리
+    if len(keywords) >= 2:
+        keyword_query = " ".join(keywords[:4])
+        if keyword_query not in queries:
+            queries.append(keyword_query)
+
+    # 동의어 변형 쿼리
+    synonym_query = create_synonym_variant_query(query, keywords)
+    if synonym_query and synonym_query not in queries:
+        queries.append(synonym_query)
+
+    # 법률 용어 추가 쿼리
+    legal_terms = ["분쟁", "피해구제", "소비자"]
+    has_legal_term = any(term in query for term in legal_terms)
+    if not has_legal_term and keywords:
+        legal_query = f"{' '.join(keywords[:2])} 분쟁 피해구제"
+        if legal_query not in queries:
+            queries.append(legal_query)
+
+    return queries[:5]
+
+
+def generate_search_queries_v2(
+    original: str,
+    expanded_queries: List[str],
+    keywords: List[str],
+) -> List[str]:
+    """
+    다중 검색 쿼리 최종 정리 (v2)
+
+    LLM 확장 결과와 규칙 기반 확장을 조합하여 최종 쿼리 목록을 생성합니다.
+    """
+    result = []
+
+    # 원본 쿼리 우선
+    if original not in result:
+        result.append(original)
+
+    # LLM 확장 쿼리 추가
+    for eq in expanded_queries:
+        if eq not in result and len(result) < 5:
+            result.append(eq)
+
+    # 키워드 조합 쿼리 (부족하면 추가)
+    if len(result) < 4 and len(keywords) >= 2:
+        keyword_query = " ".join(keywords[:4])
+        if keyword_query not in result:
+            result.append(keyword_query)
+
+    return result[:5]
+
+
 __all__ = [
     "expand_query_by_type",
     "generate_search_queries",
     "create_synonym_variant_query",
+    # v2 exports
+    "expand_query_with_llm_v2",
+    "generate_search_queries_v2",
+    "generate_search_queries_v2_fallback",
 ]

@@ -1,0 +1,84 @@
+# Production Docker Compose for DDOKSORI
+# Usage:
+#   export ECR_REGISTRY=123456789.dkr.ecr.ap-northeast-2.amazonaws.com
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    image: ${ECR_REGISTRY}/ddoksori-backend:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+
+      # Redis (3-tier caching)
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - ENABLE_ANSWER_CACHE=${ENABLE_ANSWER_CACHE:-true}
+
+      # LLM API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # MAS Supervisor Settings
+      - MODEL_SUPERVISOR=${MODEL_SUPERVISOR:-gpt-4o}
+      - MODEL_DRAFT_AGENT=${MODEL_DRAFT_AGENT:-gpt-4o}
+      - MODEL_REVIEW_AGENT=${MODEL_REVIEW_AGENT:-gpt-4o}
+
+      # Embedding
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-large}
+      - USE_OPENAI_EMBEDDING=${USE_OPENAI_EMBEDDING:-true}
+
+      # Agent Tuning
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.55}
+      - MAX_SUPERVISOR_ITERATIONS=${MAX_SUPERVISOR_ITERATIONS:-10}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ddoksori-net
+
+  frontend:
+    image: ${ECR_REGISTRY}/ddoksori-frontend:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ddoksori-net
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ddoksori-net
+
+networks:
+  ddoksori-net:
+    driver: bridge
+
+volumes:
+  redis-data:

@@ -10,6 +10,7 @@ from fastapi import APIRouter
 
 from app.agents.retrieval.tools.retriever import RAGRetriever
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
+from app.common.config import get_config
 from .dependencies import get_db_config, get_embed_api_url, get_retrieval_mode
 
 
@@ -85,7 +86,8 @@ async def check_supervisor_llm():
                 timeout=5.0
             )
             if response.status_code == 200:
-                return {"status": "healthy", "model": "gpt-5.1 (OpenAI API)"}
+                model_name = get_config().models.supervisor
+                return {"status": "healthy", "model": f"{model_name} (OpenAI API)"}
             else:
                 return {"status": "unhealthy", "error": f"OpenAI API returned {response.status_code}"}
     except Exception as e:

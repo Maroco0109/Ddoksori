@@ -12,14 +12,8 @@ REMOTE_EMBED_URL = os.getenv("REMOTE_EMBED_URL")
 LOCAL_PORT = int(os.getenv("KURE_LOCAL_PORT", 9001))
 LOCAL_EMBED_URL = f"http://localhost:{LOCAL_PORT}"
 
-# Configuration - BGE-M3 (Dense + Sparse Embedding)
-BGE_M3_REMOTE_URL = os.getenv("BGE_M3_REMOTE_URL")
-BGE_M3_LOCAL_PORT = int(os.getenv("BGE_M3_LOCAL_PORT", 9003))
-BGE_M3_LOCAL_URL = f"http://localhost:{BGE_M3_LOCAL_PORT}"
-
 # Embedding Model Selection
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "kure-v1")  # kure-v1 | bge-m3
-ENABLE_SPARSE_SEARCH = os.getenv("ENABLE_SPARSE_SEARCH", "false").lower() == "true"
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "kure-v1")
 
 # Docker/CI safety: avoid blocking startup by auto-starting a local embedding server.
 DISABLE_LOCAL_EMBED_AUTO_START = os.getenv("DISABLE_LOCAL_EMBED_AUTO_START", "false").lower() == "true"
@@ -27,7 +21,6 @@ DISABLE_LOCAL_EMBED_AUTO_START = os.getenv("DISABLE_LOCAL_EMBED_AUTO_START", "fa
 # RRF Weight Parameters (for A/B testing)
 RRF_WEIGHT_DENSE = float(os.getenv("RRF_WEIGHT_DENSE", "1.0"))
 RRF_WEIGHT_LEXICAL = float(os.getenv("RRF_WEIGHT_LEXICAL", "1.0"))
-RRF_WEIGHT_SPARSE = float(os.getenv("RRF_WEIGHT_SPARSE", "1.0"))
 
 def check_url(url: str, timeout: int = 2) -> bool:
     """Checks if the health endpoint of the given URL returns 200 OK."""
@@ -112,31 +105,6 @@ def get_embedding_api_url() -> str:
     return f"{LOCAL_EMBED_URL}/embed"  # Return default, will fail connection later
 
 
-def get_bge_m3_api_url() -> Optional[str]:
-    """
-    Determines the best available BGE-M3 API URL using Adaptive Strategy.
-    Order: Remote -> Local Running
-    Note: BGE-M3 server must be started separately (no auto-start due to size).
-    """
-    # 1. Check Remote
-    if BGE_M3_REMOTE_URL:
-        base_remote = BGE_M3_REMOTE_URL.rstrip('/')
-        if check_url(base_remote):
-            print(f"Using REMOTE BGE-M3 server at {base_remote}")
-            return f"{base_remote}/embed"
-        else:
-            print(f"Remote BGE-M3 server at {base_remote} is not reachable.")
-
-    # 2. Check if Local is already running
-    if check_url(BGE_M3_LOCAL_URL):
-        print(f"Using existing LOCAL BGE-M3 server at {BGE_M3_LOCAL_URL}")
-        return f"{BGE_M3_LOCAL_URL}/embed"
-
-    # 3. Fallback (Fail) - No auto-start for BGE-M3 due to size
-    print("BGE-M3 server not available. Sparse search will be disabled.")
-    return None
-
-
 def get_embedding_config() -> dict:
     """
     Returns the current embedding configuration.
@@ -144,13 +112,10 @@ def get_embedding_config() -> dict:
     """
     return {
         "embedding_model": EMBEDDING_MODEL,
-        "enable_sparse_search": ENABLE_SPARSE_SEARCH,
         "kure_url": get_embedding_api_url() if EMBEDDING_MODEL == "kure-v1" else None,
-        "bge_m3_url": get_bge_m3_api_url() if EMBEDDING_MODEL == "bge-m3" or ENABLE_SPARSE_SEARCH else None,
         "rrf_weights": {
             "dense": RRF_WEIGHT_DENSE,
             "lexical": RRF_WEIGHT_LEXICAL,
-            "sparse": RRF_WEIGHT_SPARSE
         }
     }
 
@@ -159,12 +124,4 @@ def get_active_embedding_url() -> str:
     """
     Returns the embedding URL based on the active embedding model.
     """
-    if EMBEDDING_MODEL == "bge-m3":
-        url = get_bge_m3_api_url()
-        if url:
-            return url
-        # Fallback to KURE if BGE-M3 not available
-        print("Falling back to KURE-v1 embedding...")
-        return get_embedding_api_url()
-    else:
-        return get_embedding_api_url()
+    return get_embedding_api_url()
