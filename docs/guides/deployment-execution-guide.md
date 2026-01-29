@@ -50,7 +50,7 @@ git --version             # Git 2.0+ 필요
 
 ```bash
 # RDS 연결 테스트
-psql -h dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com \
+psql -h ["rds address'] \
      -U ddoksori_ro \
      -d ddoksori \
      -c "SELECT 1;"
