@@ -20,7 +20,7 @@ from .state import ChatState
 from .graph import _create_timed_node
 from .checkpointer import get_checkpointer
 from .nodes.supervisor import SupervisorNode
-from .nodes.retrieval_merge import retrieval_merge_node_sync
+from .nodes.retrieval_merge import retrieval_merge_node
 from .nodes.clarify import ask_clarification_node
 from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
 
@@ -207,7 +207,9 @@ def _route_mas_supervisor(state: ChatState):
     if mode in ('NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION'):
         return 'ask_clarification'
 
-    if mode == "NO_RETRIEVAL" and next_agent == "retrieval_team":
+    # Fast Path: NO_RETRIEVAL 또는 CACHED_RAG → Retrieval 생략
+    if mode in ("NO_RETRIEVAL", "CACHED_RAG") and next_agent == "retrieval_team":
+        logger.info(f"[MAS Router v2] mode={mode}, skipping retrieval → generation")
         return "generation"
 
     # 재생성 요청 처리 (review → generation)
@@ -265,14 +267,14 @@ def create_mas_supervisor_graph() -> StateGraph:
     graph = StateGraph(ChatState)
 
     # === 노드 등록 ===
-    graph.add_node('cache_check', _cache_check_node)
-    graph.add_node('cache_response', _cache_response_node)
+    graph.add_node('cache_check', _create_timed_node(_cache_check_node, 'cache_check'))
+    graph.add_node('cache_response', _create_timed_node(_cache_response_node, 'cache_response'))
     graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
     graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
 
     # v2: Supervisor (추후 LLM 기반으로 변경)
     supervisor = SupervisorNode(llm=None)
-    graph.add_node('supervisor', supervisor.as_node())
+    graph.add_node('supervisor', _create_timed_node(supervisor.as_node(), 'supervisor'))
 
     graph.add_node('query_analysis', _create_timed_node(qa_node, 'query_analysis'))
     graph.add_node('generation', _create_timed_node(gen_node, 'generation'))
@@ -282,9 +284,9 @@ def create_mas_supervisor_graph() -> StateGraph:
     # v2: 3개 Retrieval Agent (counsel 제외)
     for agent_type in ['law', 'criteria', 'case']:
         node_fn = _create_retrieval_agent_node(agent_type)
-        graph.add_node(f'retrieval_{agent_type}', node_fn)
+        graph.add_node(f'retrieval_{agent_type}', _create_timed_node(node_fn, f'retrieval_{agent_type}'))
 
-    graph.add_node('retrieval_merge', retrieval_merge_node_sync)
+    graph.add_node('retrieval_merge', _create_timed_node(retrieval_merge_node, 'retrieval_merge'))
 
     # === 엣지 설정 ===
     graph.set_entry_point('cache_check')
