@@ -265,6 +265,7 @@ class RAGLogEntry:
     response: ResponseSummary = field(default_factory=ResponseSummary)
     total_time_ms: float = 0.0                  # 전체 실행 시간 (밀리초)
     node_timings: List[NodeTimingLog] = field(default_factory=list)
+    pipeline_trace: Optional[Dict] = None
 
 
 # ============================================================
@@ -583,6 +584,26 @@ class RAGLogger:
                 state_changes=timing.get('state_changes', [])
             ))
         entry.node_timings = timing_logs
+
+    def log_pipeline_trace(
+        self,
+        entry: RAGLogEntry,
+        pipeline_summary: Dict,
+    ) -> None:
+        """
+        에이전트 파이프라인 트레이스를 기록합니다.
+
+        Args:
+            entry: 로그 엔트리
+            pipeline_summary: build_pipeline_summary()의 반환값
+        """
+        entry.pipeline_trace = pipeline_summary
+        logger.info(
+            f"[PIPELINE TRACE] request={entry.request_id[:8]} "
+            f"nodes={pipeline_summary.get('node_count', 0)} "
+            f"total={pipeline_summary.get('total_duration_ms', 0):.0f}ms | "
+            f"path: {' > '.join(pipeline_summary.get('node_sequence', []))}"
+        )
 
     def finalize(self, entry: RAGLogEntry, start_time: float) -> None:
         """

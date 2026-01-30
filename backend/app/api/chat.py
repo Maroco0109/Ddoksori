@@ -132,6 +132,28 @@ async def chat(
             initial_state['compact_summary'] = memory_context.get('compact_summary')
             initial_state['total_turn_count'] = session_memory.get_total_turn_count()
 
+        # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
+        initial_state['session_id'] = session_id
+
+        # Progressive Disclosure: 이전 턴의 conversation_phase/dispute_slots 복원
+        from app.common.cache import get_redis_client
+        _redis = get_redis_client()
+        if _redis and request.session_id:
+            import json as _json
+            _phase_key = f"session_phase:{session_id}"
+            _saved = _redis.get(_phase_key)
+            if _saved:
+                try:
+                    _phase_data = _json.loads(_saved)
+                    initial_state['conversation_phase'] = _phase_data.get('conversation_phase', 'initial')
+                    if _phase_data.get('dispute_slots'):
+                        initial_state['dispute_slots'] = _phase_data['dispute_slots']
+                    if _phase_data.get('dispute_slot_status'):
+                        initial_state['dispute_slot_status'] = _phase_data['dispute_slot_status']
+                    logger.info(f"[chat] Restored phase={initial_state['conversation_phase']} for session={session_id[:8]}...")
+                except Exception as e:
+                    logger.warning(f"[chat] Failed to restore phase: {e}")
+
         config = cast(Any, {
             "configurable": {"thread_id": session_id},
             "recursion_limit": GRAPH_RECURSION_LIMIT
@@ -155,10 +177,23 @@ async def chat(
         else:
             # === PR-6 끝 ===
             # MAS graph includes async nodes; prefer the async API when available.
-            if hasattr(graph, 'ainvoke'):
-                final_state = await graph.ainvoke(initial_state, config)
-            else:
-                final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
+            GRAPH_TIMEOUT_SECONDS = getattr(get_config(), 'graph_timeout_seconds', 120)
+            logger.info(f"[chat] Starting graph execution for session={session_id[:8]}...")
+            try:
+                if hasattr(graph, 'ainvoke'):
+                    final_state = await asyncio.wait_for(
+                        graph.ainvoke(initial_state, config),
+                        timeout=GRAPH_TIMEOUT_SECONDS
+                    )
+                else:
+                    final_state = await asyncio.wait_for(
+                        asyncio.to_thread(graph.invoke, initial_state, config),
+                        timeout=GRAPH_TIMEOUT_SECONDS
+                    )
+            except asyncio.TimeoutError:
+                logger.error(f"[chat] Graph execution timed out after {GRAPH_TIMEOUT_SECONDS}s for session={session_id[:8]}")
+                raise HTTPException(status_code=504, detail="요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.")
+            logger.info(f"[chat] Graph execution completed for session={session_id[:8]}")
 
             # === PR-6: L1 Cache Save ===
             if final_state.get('final_answer') and not final_state.get('guardrail_blocked'):
@@ -190,8 +225,29 @@ async def chat(
         answer = final_state.get('final_answer') or ''
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
+
+        # Progressive Disclosure: conversation_phase 저장
+        if _redis:
+            import json as _json
+            _phase_key = f"session_phase:{session_id}"
+            _phase_data = {
+                'conversation_phase': final_state.get('conversation_phase', 'initial'),
+                'dispute_slots': final_state.get('dispute_slots', {}),
+                'dispute_slot_status': final_state.get('dispute_slot_status', {}),
+            }
+            try:
+                _redis.setex(_phase_key, 3600, _json.dumps(_phase_data, default=str))
+            except Exception as e:
+                logger.warning(f"[chat] Failed to save phase: {e}")
         questions = final_state.get('clarifying_questions', [])
         followup_questions = final_state.get('followup_questions', [])
+
+        # Progressive Disclosure: 후속 질문 옵션 생성
+        _conv_phase = final_state.get('conversation_phase', 'initial')
+        if _conv_phase == 'providing_case_summary' and not followup_questions:
+            followup_questions = ["네, 법령/기준도 알려주세요", "아니요, 괜찮습니다"]
+        elif _conv_phase == 'providing_law_detail' and not followup_questions:
+            followup_questions = ["네, 절차도 안내해주세요", "아니요, 충분합니다"]
 
         # 어시스턴트 응답을 메모리에 추가
         if session_memory:
@@ -200,6 +256,16 @@ async def chat(
         node_timings = final_state.get('_node_timings', {})
         if node_timings:
             rag_logger.log_node_timings(log_entry, node_timings)
+
+        # 에이전트 트레이스 로깅
+        trace_entries = final_state.get('_agent_trace_entries', [])
+        if trace_entries:
+            from app.supervisor.graph import build_pipeline_summary
+            pipeline_summary = build_pipeline_summary(
+                trace_entries,
+                total_duration_ms=log_entry.total_time_ms or 0,
+            )
+            rag_logger.log_pipeline_trace(log_entry, pipeline_summary)
 
         rag_logger.log_response(
             entry=log_entry,
@@ -294,8 +360,24 @@ async def chat_stream_sse(
         data: {"type": "complete", "data": {"session_id": "...", "answer": "...", "sources": [...]}}
     """
     async def event_generator():
+        start_time = time.time()
+        log_entry = rag_logger.create_entry(query=request.message)
+        rag_logger.log_input(
+            entry=log_entry,
+            message=request.message,
+            session_id=request.session_id,
+            chat_type=request.chat_type,
+            onboarding=request.onboarding,
+            top_k=request.top_k or 5,
+            chunk_types=request.chunk_types,
+            agencies=request.agencies
+        )
+
         session_id = request.session_id or str(uuid.uuid4())
         final_state = None
+
+        # 즉시 연결 확인 이벤트 전송 (클라이언트에 연결 성공 알림)
+        yield f"data: {json.dumps({'type': 'status', 'data': {'node': 'init', 'status': '연결됨', 'progress': 0}}, ensure_ascii=False)}\n\n"
 
         # Get user_id from JWT token
         user_id = current_user.user_id if current_user else None
@@ -333,16 +415,45 @@ async def chat_stream_sse(
                 initial_state['compact_summary'] = memory_context.get('compact_summary')
                 initial_state['total_turn_count'] = session_memory.get_total_turn_count()
 
+            # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
+            initial_state['session_id'] = session_id
+
+            # Progressive Disclosure: 이전 턴의 conversation_phase 복원
+            _redis_stream = None
+            try:
+                from app.common.cache import get_redis_client
+                _redis_stream = get_redis_client()
+                if _redis_stream and request.session_id:
+                    import json as _json_s
+                    _phase_key_s = f"session_phase:{session_id}"
+                    _saved_s = _redis_stream.get(_phase_key_s)
+                    if _saved_s:
+                        try:
+                            _phase_data_s = _json_s.loads(_saved_s)
+                            initial_state['conversation_phase'] = _phase_data_s.get('conversation_phase', 'initial')
+                            if _phase_data_s.get('dispute_slots'):
+                                initial_state['dispute_slots'] = _phase_data_s['dispute_slots']
+                            if _phase_data_s.get('dispute_slot_status'):
+                                initial_state['dispute_slot_status'] = _phase_data_s['dispute_slot_status']
+                        except Exception as e:
+                            logger.warning(f"[chat_stream] Failed to restore phase: {e}")
+            except Exception as e:
+                logger.warning(f"[chat_stream] Redis unavailable, skipping phase restore: {e}")
+
             runnable_config = cast(Any, {
                 "configurable": {"thread_id": session_id},
                 "recursion_limit": GRAPH_RECURSION_LIMIT
             })
+
+            logger.info(f"[chat_stream] Starting graph streaming for session={session_id[:8]}...")
 
             # LangGraph astream_events로 실시간 토큰 스트리밍 + 노드 진행 상황
             # on_custom_event: 토큰, fallback 이벤트 (generation_node가 발생)
             # on_chain_start/end: 노드 시작/종료
             full_answer = ""
             final_state = {}
+            SSE_HEARTBEAT_INTERVAL = 15  # 초
+            last_heartbeat = time.monotonic()
 
             async for event in graph.astream_events(initial_state, runnable_config, version="v2"):
                 event_type = event.get("event")
@@ -405,6 +516,12 @@ async def chat_stream_sse(
                     if isinstance(node_output, dict):
                         final_state.update(node_output)
 
+                # 4. Heartbeat: 프록시/브라우저 idle timeout 방지
+                now = time.monotonic()
+                if now - last_heartbeat >= SSE_HEARTBEAT_INTERVAL:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = now
+
             # 최종 결과 전송
             if final_state:
                 answer = final_state.get('final_answer', '')
@@ -458,6 +575,28 @@ async def chat_stream_sse(
                         'content': criterion.get('content', ''),
                     })
 
+                # Progressive Disclosure: conversation_phase 저장
+                if _redis_stream:
+                    import json as _json_s2
+                    _phase_key_s2 = f"session_phase:{session_id}"
+                    _phase_data_s2 = {
+                        'conversation_phase': final_state.get('conversation_phase', 'initial'),
+                        'dispute_slots': final_state.get('dispute_slots', {}),
+                        'dispute_slot_status': final_state.get('dispute_slot_status', {}),
+                    }
+                    try:
+                        _redis_stream.setex(_phase_key_s2, 3600, _json_s2.dumps(_phase_data_s2, default=str))
+                    except Exception:
+                        pass
+
+                # Progressive Disclosure: 후속 질문 옵션 생성
+                _followup_qs = final_state.get('followup_questions', [])
+                _conv_phase = final_state.get('conversation_phase', 'initial')
+                if _conv_phase == 'providing_case_summary' and not _followup_qs:
+                    _followup_qs = ["네, 법령/기준도 알려주세요", "아니요, 괜찮습니다"]
+                elif _conv_phase == 'providing_law_detail' and not _followup_qs:
+                    _followup_qs = ["네, 절차도 안내해주세요", "아니요, 충분합니다"]
+
                 complete_event = {
                     'type': 'complete',
                     'data': {
@@ -466,7 +605,7 @@ async def chat_stream_sse(
                         'sources': sources,
                         'awaiting_user_choice': final_state.get('awaiting_user_choice', False),
                         'clarifying_questions': final_state.get('clarifying_questions', []),
-                        'followup_questions': final_state.get('followup_questions', []),
+                        'followup_questions': _followup_qs,
                         'has_sufficient_evidence': final_state.get('has_sufficient_evidence', True),
                         'domain': agency_info if agency_info else None,
                         'similar_cases': {
@@ -479,8 +618,60 @@ async def chat_stream_sse(
                 }
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
 
+                # 에이전트 트레이스 로깅
+                trace_entries = final_state.get('_agent_trace_entries', []) if final_state else []
+                if trace_entries:
+                    from app.supervisor.graph import build_pipeline_summary
+                    pipeline_summary = build_pipeline_summary(
+                        trace_entries,
+                        total_duration_ms=(time.time() - start_time) * 1000,
+                    )
+                    rag_logger.log_pipeline_trace(log_entry, pipeline_summary)
+
+                # RAG 로깅 - /chat 엔드포인트와 동일
+                rag_logger.log_structured_retrieval(
+                    entry=log_entry,
+                    agency_info=agency_info,
+                    disputes=disputes,
+                    counsels=counsels,
+                    laws=laws,
+                    criteria=criteria
+                )
+                rag_logger.log_response(
+                    entry=log_entry,
+                    answer=answer,
+                    chunks_used=len(sources),
+                    sources_count=len(sources),
+                    status="success"
+                )
+                rag_logger.finalize(log_entry, start_time)
+                rag_logger.save(log_entry)
+
+        except asyncio.CancelledError:
+            logger.info(f"[chat_stream] Client disconnected during streaming, session={session_id[:8]}")
+            rag_logger.log_response(
+                entry=log_entry,
+                answer="",
+                chunks_used=0,
+                sources_count=0,
+                status="cancelled",
+                error_message="Client disconnected"
+            )
+            rag_logger.finalize(log_entry, start_time)
+            rag_logger.save(log_entry)
+            return
         except Exception as e:
-            logger.error(f"[chat_stream_sse] Error: {e}")
+            logger.error(f"[chat_stream_sse] Error: {e}", exc_info=True)
+            rag_logger.log_response(
+                entry=log_entry,
+                answer="",
+                chunks_used=0,
+                sources_count=0,
+                status="error",
+                error_message=str(e)
+            )
+            rag_logger.finalize(log_entry, start_time)
+            rag_logger.save(log_entry)
             error_event = {
                 'type': 'error',
                 'data': {
