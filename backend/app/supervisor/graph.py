@@ -21,11 +21,11 @@ import os
 import time
 import logging
 import inspect
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, List, Optional
 
 from langchain_core.runnables import RunnableConfig
 
-from .state import ChatState
+from .state import ChatState, TraceEntry
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,8 @@ def _snapshot_state(state: Dict[str, Any], fields: list) -> Dict[str, Any]:
                     import json
                     serialized = json.dumps(value, ensure_ascii=False, default=str)
                     snapshot[field] = json.loads(serialized[:2000])  # 2KB 제한
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"[StateSnapshot] Serialization fallback for {field}: {e}")
                     snapshot[field] = str(value)[:500]
             else:
                 snapshot[field] = value
@@ -105,6 +106,121 @@ def _detect_state_changes(input_state: Dict[str, Any], output: Dict[str, Any]) -
         elif input_state.get(key) != output.get(key):
             changes.append(f"~{key}")  # 변경된 필드
     return changes
+
+
+AGENT_TRACE_KEY = '_agent_trace_entries'
+
+
+def summarize_node_output(node_name: str, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """노드 출력을 트레이스 로깅용 축약 프로토콜 요약으로 변환.
+
+    각 노드 타입별로 핵심 메트릭만 추출합니다.
+    원본 텍스트는 포함하지 않습니다 (PII 방지).
+    """
+    if node_name == 'cache_check':
+        return {'cache_hit': bool(result.get('_cache_hit'))}
+
+    if node_name == 'cache_response':
+        answer = result.get('final_answer', '')
+        return {'final_answer_preview': (answer[:100] + '...') if len(answer or '') > 100 else answer}
+
+    if node_name in ('input_guardrail', 'output_guardrail'):
+        return {
+            'guardrail_blocked': result.get('guardrail_blocked', False),
+            'guardrail_type': result.get('guardrail_type'),
+        }
+
+    if node_name == 'supervisor':
+        sup = result.get('supervisor') or {}
+        reasoning = sup.get('reasoning', '')
+        return {
+            'current_phase': sup.get('current_phase'),
+            'next_agent': sup.get('next_agent'),
+            'iteration_count': sup.get('iteration_count', 0),
+            'reasoning_preview': (reasoning[:200] + '...') if len(reasoning or '') > 200 else reasoning,
+        }
+
+    if node_name == 'query_analysis':
+        qa = result.get('query_analysis') or {}
+        return {
+            'intent': qa.get('intent'),
+            'retriever_types': qa.get('retriever_types', []),
+            'keyword_count': len(qa.get('keywords', [])),
+            'expanded_query_count': len(result.get('expanded_queries', [])),
+        }
+
+    if node_name.startswith('retrieval_') and node_name != 'retrieval_merge':
+        # 개별 retrieval agent: result는 {'individual_retrieval_results': [individual_result]}
+        results_list = result.get('individual_retrieval_results', [])
+        if results_list:
+            ir = results_list[0]
+            return {
+                'source': ir.get('source'),
+                'document_count': len(ir.get('documents', [])),
+                'max_similarity': ir.get('max_similarity', 0.0),
+                'search_time_ms': round(ir.get('search_time_ms', 0), 1),
+                'has_error': bool(ir.get('error')),
+            }
+        return {'source': node_name.replace('retrieval_', ''), 'document_count': 0}
+
+    if node_name == 'retrieval_merge':
+        retrieval = result.get('retrieval') or {}
+        sections = {}
+        for section_key in ('law_results', 'criteria_results', 'dispute_results', 'counsel_results'):
+            items = retrieval.get(section_key, [])
+            sections[section_key] = len(items) if isinstance(items, list) else 0
+        return {
+            'total_documents': sum(sections.values()),
+            'sections': sections,
+        }
+
+    if node_name == 'generation':
+        answer = result.get('draft_answer') or result.get('final_answer') or ''
+        return {
+            'has_sufficient_evidence': result.get('has_sufficient_evidence', True),
+            'answer_length': len(answer),
+            'cited_case_count': len(result.get('cited_cases', [])),
+        }
+
+    if node_name == 'review':
+        review = result.get('review') or {}
+        return {
+            'passed': review.get('passed', True),
+            'violation_count': len(review.get('violations', [])),
+        }
+
+    if node_name == 'ask_clarification':
+        return {
+            'clarifying_question_count': len(result.get('clarifying_questions', [])),
+        }
+
+    return None
+
+
+def build_pipeline_summary(
+    trace_entries: List[TraceEntry],
+    total_duration_ms: float,
+) -> Dict[str, Any]:
+    """트레이스 엔트리로부터 구조화된 파이프라인 실행 요약을 빌드.
+
+    엔트리는 timestamp 기준으로 정렬하여 실행 순서를 재구성합니다.
+    병렬 브랜치(retrieval agent)는 timestamp 순서로 나타납니다.
+    """
+    sorted_entries = sorted(trace_entries, key=lambda e: e['timestamp'])
+    return {
+        'total_duration_ms': round(total_duration_ms, 2),
+        'node_count': len(sorted_entries),
+        'node_sequence': [e['node_name'] for e in sorted_entries],
+        'per_node': [
+            {
+                'seq': idx,
+                'node': e['node_name'],
+                'duration_ms': round(e['duration_ms'], 2),
+                'summary': e.get('protocol_summary'),
+            }
+            for idx, e in enumerate(sorted_entries)
+        ],
+    }
 
 
 def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
@@ -147,6 +263,16 @@ def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
             }
             result[NODE_TIMINGS_KEY] = timings
 
+            # 트레이스 엔트리 추가 (operator.add용 단일 요소 리스트)
+            trace_entry: TraceEntry = {
+                'node_name': node_name,
+                'timestamp': start_time,
+                'duration_ms': duration_ms,
+                'protocol_summary': summarize_node_output(node_name, result),
+                'metadata': None,
+            }
+            result[AGENT_TRACE_KEY] = [trace_entry]
+
             return result
 
         return async_timed_wrapper
@@ -183,6 +309,16 @@ def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
                 'state_changes': state_changes,
             }
             result[NODE_TIMINGS_KEY] = timings
+
+            # 트레이스 엔트리 추가 (operator.add용 단일 요소 리스트)
+            trace_entry: TraceEntry = {
+                'node_name': node_name,
+                'timestamp': start_time,
+                'duration_ms': duration_ms,
+                'protocol_summary': summarize_node_output(node_name, result),
+                'metadata': None,
+            }
+            result[AGENT_TRACE_KEY] = [trace_entry]
 
             return result
 
