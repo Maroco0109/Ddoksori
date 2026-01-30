@@ -150,16 +150,16 @@ MAS_SUPERVISOR_CANARY_PERCENT=0
 ln -s backend/.env .env
 ```
 
-### 3.1 서비스 시작 (RDS 연결)
+### 3.1 서비스 시작
 
 ```bash
 cd /home/maroco/LLM
-    
-# RDS 오버라이드로 시작 (--no-deps로 의존 서비스 제외)
-docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file backend/.env up --no-deps -d backend frontend prometheus grafana
+
+# 전체 서비스 시작
+docker compose up -d
 
 # 서비스 상태 확인
-docker compose -f docker-compose.yml -f docker-compose.rds.yml ps
+docker compose ps
 ```
 
 **예상 결과:**
@@ -167,16 +167,16 @@ docker compose -f docker-compose.yml -f docker-compose.rds.yml ps
 NAME                    STATUS         PORTS
 ddoksori_backend        running        0.0.0.0:8000->8000/tcp
 ddoksori_frontend       running        0.0.0.0:5173->5173/tcp
-ddoksori_prometheus     running        0.0.0.0:9090->9090/tcp
-ddoksori_grafana        running        0.0.0.0:3000->3000/tcp
+ddoksori_cloudbeaver    running        0.0.0.0:8978->8978/tcp
+ddoksori_redis          running        0.0.0.0:6379->6379/tcp
 ```
 
-> **주의**: `--no-deps` 플래그가 필요합니다. `docker-compose.yml`에서 backend가 db에 의존하지만, RDS 모드에서는 로컬 db 컨테이너가 불필요합니다.
+> **참고**: Backend는 `.env` 파일의 `DB_HOST` 설정을 통해 RDS에 연결됩니다.
 
 ### 3.2 서비스 중지
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.rds.yml down
+docker compose down
 ```
 
 ### 3.3 로그 확인

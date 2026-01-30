@@ -1,11 +1,16 @@
 """
 BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 
-4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
+3개의 Retrieval Agent(Law, Criteria, Case)가 공유하는 공통 로직을 정의합니다.
 
-각 에이전트는 원본 쿼리를 사용하여 검색을 수행합니다.
+검색 방식:
+- UnifiedRetriever를 사용한 통합 RRF 검색 (BM25 + Vector + SQL search_hybrid_rrf)
+- 각 에이전트는 _get_search_filters()로 도메인별 필터만 지정
+
+[LEGACY] 기존 HybridRetriever 기반 계층적 검색은 제거됨 (Phase 8)
 """
 
+import asyncio
 import logging
 import os
 from abc import abstractmethod
@@ -20,20 +25,8 @@ logger = logging.getLogger(__name__)
 def _get_db_config() -> Dict[str, str]:
     """
     데이터베이스 설정을 반환합니다.
-    USE_RDS_FOR_TESTS=true인 경우 RDS READ_ONLY 설정을 사용합니다.
-    기본값은 get_config().database에서 중앙 관리됩니다.
+    get_config().database에서 중앙 관리되는 DB_* 환경변수를 사용합니다.
     """
-    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
-
-    if use_rds:
-        return {
-            'host': os.getenv('DB_TEST_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'dbname': os.getenv('DB_TEST_NAME', 'ddoksori'),
-            'user': os.getenv('DB_TEST_USER', 'readonly_user'),
-            'password': os.getenv('DB_TEST_PASSWORD', ''),
-        }
-
     config = get_config().database
     conn = config.get_connection_dict()
     # psycopg2는 'dbname' 키를 사용하지만 get_connection_dict()는 'database'를 반환
@@ -140,7 +133,19 @@ class BaseRetrievalAgent(BaseAgent):
             return rewritten
         return user_query
 
-    @abstractmethod
+    def _get_search_filters(
+        self,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        서브클래스에서 오버라이드: 도메인별 검색 필터 반환
+
+        Returns:
+            UnifiedRetriever.search()에 전달할 키워드 인자 dict
+            예: {"dataset_filter": "law_guide", "document_type_filter": "별표"}
+        """
+        return {}
+
     async def _execute_search(
         self,
         query: str,
@@ -149,21 +154,28 @@ class BaseRetrievalAgent(BaseAgent):
         ignore_threshold: bool = False
     ) -> List[Any]:
         """
-        서브클래스에서 구현: 실제 검색 수행
+        통합 RRF 검색 - UnifiedRetriever를 사용하여 SQL search_hybrid_rrf() 호출
 
-        Args:
-            query: 검색 쿼리
-            top_k: 반환할 결과 수
-            metadata_filter: v2 메타데이터 필터 (optional)
-                - dataset_type: 데이터셋 유형 ('law_guide', 'case')
-                - document_types: 문서 유형 리스트 (['법률', '시행령'] 등)
-                - categories: 카테고리 리스트 (['조정', '해결', '상담'] 등)
-            ignore_threshold: True면 유사도 임계치 무시
-
-        Returns:
-            검색 결과 리스트
+        모든 에이전트가 동일한 로직을 사용합니다.
+        도메인별 차이는 _get_search_filters()로 처리합니다.
         """
-        pass
+        from .tools.unified_retriever import UnifiedRetriever
+
+        db_config = _get_db_config()
+        retriever = UnifiedRetriever(db_config)
+        retriever.connect()
+
+        try:
+            filters = self._get_search_filters(metadata_filter)
+            results = await asyncio.to_thread(
+                retriever.search,
+                query=query,
+                top_k=top_k,
+                **filters,
+            )
+            return results
+        finally:
+            retriever.close()
 
     @abstractmethod
     def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:

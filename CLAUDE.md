@@ -44,11 +44,10 @@ npm run lint         # ESLint
 ### Docker Compose (repo root)
 
 ```bash
-docker compose up -d                      # Start stack (excludes BGE-M3)
-docker compose --profile bge-m3 up -d     # Include BGE-M3 embedding service
+docker compose up -d                      # Start stack (cloudbeaver, backend, frontend, redis)
 ```
 
-Services: Postgres:5432, Backend:8000, Frontend:5173, CloudBeaver:8978, Redis:6379, Prometheus:9090, Grafana:3000
+Services: Backend:8000, Frontend:5173, CloudBeaver:8978, Redis:6379
 
 ### Testing
 
@@ -209,7 +208,8 @@ widgets/    # Cross-feature composite widgets
 - `backend/.env` - 백엔드 환경변수 (DB, API 키, 에이전트 설정)
 - `backend/.env.example` - 환경변수 템플릿 (상세 설명 포함)
 - `backend/app/common/config.py` - Pydantic Settings 기반 설정 관리
-- `docker-compose.yml` - 전체 스택 정의
+- `docker-compose.yml` - Local dev stack (RDS + CloudBeaver + Redis)
+- `docker-compose.prod.yml` - Production stack (ECR images)
 - `.agent/rules/environment.md` - 항상 활성화 규칙: `conda activate dsr` 사용
 
 ### 주요 환경변수 카테고리

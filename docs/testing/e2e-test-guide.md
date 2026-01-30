@@ -9,33 +9,23 @@
 
 ### Environment Setup
 
-#### 1. Database Connection
-
-**⚠️ 중요: 로컬 vs RDS 환경 확인**
+#### 1. Database Connection (RDS)
 
 ```bash
 # 현재 DB 설정 확인
 grep -E "DB_HOST|DB_USER" backend/.env
 ```
 
-**옵션 A - 로컬 테스트 환경 (권장)**:
+**RDS 환경** (기본):
 ```bash
-# 로컬 Docker PostgreSQL 사용
-docker compose up -d postgres
-
-# .env 설정
-# DB_HOST=localhost
-# DB_USER=postgres
-# USE_RDS_FOR_TESTS=false
-```
-
-**옵션 B - RDS 환경**:
-```bash
-# .env 설정
-# DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+# backend/.env 설정 확인
+# DB_HOST=<your-rds-endpoint>.ap-northeast-2.rds.amazonaws.com
 # DB_USER=ddoksori_ro  (READ-ONLY)
-# USE_RDS_FOR_TESTS=true
+# DB_PASSWORD=<your-password>
 ```
+
+> 로컬 PostgreSQL 컨테이너는 더 이상 사용하지 않습니다.
+> 모든 테스트는 RDS에 직접 연결합니다.
 
 **READ-ONLY 계정 제약사항**:
 - ✅ E2E-01 ~ E2E-06: 정상 실행 (조회만 사용)

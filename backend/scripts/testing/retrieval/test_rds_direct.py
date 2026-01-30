@@ -15,11 +15,11 @@ load_dotenv(dotenv_path=env_path)
 
 # DB Config
 db_config = {
-    'host': os.getenv('DB_TEST_HOST'),
+    'host': os.getenv('DB_HOST'),
     'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_TEST_NAME', 'ddoksori'),
-    'user': os.getenv('DB_TEST_USER'),
-    'password': os.getenv('DB_TEST_PASSWORD'),
+    'dbname': os.getenv('DB_NAME', 'ddoksori'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
 }
 
 print("=" * 80)

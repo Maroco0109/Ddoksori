@@ -10,34 +10,43 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Database
-      - DATABASE_URL=${DATABASE_URL}
+      # === AWS Secrets Manager ===
+      - USE_AWS_SECRETS=${USE_AWS_SECRETS:-false}
+      - SECRETS_ENV=${SECRETS_ENV:-staging}
+      - AWS_DEFAULT_REGION=ap-northeast-2
+
+      # === Database (비-시크릿만, 시크릿은 Secrets Manager) ===
       - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
+      # DATABASE_URL → Secrets Manager (USE_AWS_SECRETS=true 시)
+      # 또는 호스트 환경변수에서 주입 (USE_AWS_SECRETS=false 시)
+      - DATABASE_URL=${DATABASE_URL:-}
 
-      # Redis (3-tier caching)
+      # === Redis (3-tier caching) ===
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - ENABLE_ANSWER_CACHE=${ENABLE_ANSWER_CACHE:-true}
 
-      # LLM API Keys
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # === LLM API Keys ===
+      # Secrets Manager 사용 시 자동 로딩됨
+      # 미사용 시 호스트 환경변수에서 주입
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 
-      # MAS Supervisor Settings
+      # === MAS Supervisor Settings ===
       - MODEL_SUPERVISOR=${MODEL_SUPERVISOR:-gpt-4o}
       - MODEL_DRAFT_AGENT=${MODEL_DRAFT_AGENT:-gpt-4o}
       - MODEL_REVIEW_AGENT=${MODEL_REVIEW_AGENT:-gpt-4o}
 
-      # Embedding
+      # === Embedding ===
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-large}
       - USE_OPENAI_EMBEDDING=${USE_OPENAI_EMBEDDING:-true}
 
-      # Agent Tuning
+      # === Agent Tuning ===
       - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.55}
       - MAX_SUPERVISOR_ITERATIONS=${MAX_SUPERVISOR_ITERATIONS:-10}
 
-      # Logging
+      # === Logging ===
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

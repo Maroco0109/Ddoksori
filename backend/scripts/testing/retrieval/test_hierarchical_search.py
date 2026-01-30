@@ -16,25 +16,14 @@ from app.common.config import get_config
 
 @pytest.fixture
 def db_config():
-    """데이터베이스 설정 (RDS 지원)"""
-    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
-
-    if use_rds:
-        return {
-            'host': os.getenv('DB_TEST_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', '5432')),
-            'dbname': os.getenv('DB_TEST_NAME', 'ddoksori'),
-            'user': os.getenv('DB_TEST_USER', 'readonly_user'),
-            'password': os.getenv('DB_TEST_PASSWORD', '')
-        }
-    else:
-        return {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', '5432')),
-            'dbname': os.getenv('DB_NAME', 'ddoksori'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'postgres')
-        }
+    """데이터베이스 설정"""
+    return {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': int(os.getenv('DB_PORT', '5432')),
+        'dbname': os.getenv('DB_NAME', 'ddoksori'),
+        'user': os.getenv('DB_USER', 'postgres'),
+        'password': os.getenv('DB_PASSWORD', 'postgres')
+    }
 
 
 @pytest.fixture

@@ -7,11 +7,13 @@
 본 프로젝트는 복잡하고 전문적인 한국의 소비자 분쟁 관련 문의에 대해 정확하고 신뢰도 높은 답변을 제공하는 MAS(Multi-Agent System) 챗봇입니다. React, FastAPI, LangGraph, PostgreSQL 등 현대적인 기술 스택을 활용하여 분쟁조정사례, 상담사례, 법령 데이터를 기반으로 최적의 해결 방안을 제시합니다.
 
 ### 핵심 기능
-- **MAS Supervisor 아키텍처**: GPT-5.1 기반 Supervisor가 6개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **MAS Supervisor v2 아키텍처**: GPT-5.1 기반 Supervisor가 6개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **Selective Retrieval**: 쿼리 분석 결과에 따라 필요한 Retrieval Agent만 선택적 병렬 실행 (법령/기준/사례)
 - **Conversation Phase System**: Rule-based 대화 단계 상태 머신으로 점진적 정보 수집 및 단계별 안내 (법령→사례→절차)
 - **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합
 - **실시간 스트리밍**: SSE(Server-Sent Events)를 통한 실시간 답변 생성 및 출처 제공
 - **신뢰성 보장**: 법률 검토 에이전트(gpt-4o)를 통한 환각 방지 및 면책 문구 자동 포함
+- **Fallback 체인**: LLM 실패 시 자동 전환 (gpt-4o → gpt-4o-mini → rule_based → safe_fallback)
 
 ---
 
@@ -44,11 +46,12 @@ npm run dev
 
 ## 3. Quickstart (Docker)
 
-Docker Compose를 사용하여 전체 스택(DB, Redis, Backend, Frontend, Monitoring)을 한 번에 실행할 수 있습니다.
+Docker Compose를 사용하여 서비스 스택(Backend, Frontend, Redis, CloudBeaver)을 한 번에 실행할 수 있습니다.
+데이터베이스는 AWS RDS를 사용하므로 로컬에서 실행되지 않습니다.
 
 ```bash
 # 전체 서비스 실행
-docker compose up --build -d
+docker compose up -d
 
 ```
 
@@ -57,11 +60,8 @@ docker compose up --build -d
 |--------|------|------|
 | Frontend | 5173 | React Web UI |
 | Backend | 8000 | FastAPI API Server |
-| Database | 5432 | PostgreSQL + pgvector |
 | Redis | 6379 | Answer Caching |
 | CloudBeaver | 8978 | Web-based DB Manager |
-| Prometheus | 9090 | Monitoring Metrics |
-| Grafana | 3000 | Monitoring Dashboard |
 
 ---
 
@@ -116,7 +116,7 @@ docker compose up --build -d
 
 ## 6. Architecture
 
-### 전체 시스템 구조
+### 전체 시스템 구조 (MAS Supervisor v2)
 ```mermaid
 graph TB
     subgraph "Frontend Layer"
@@ -130,10 +130,12 @@ graph TB
         D --> F[SSE Handler]
         E --> G[LangGraph Orchestrator]
 
-        subgraph "MAS Supervisor (Hub-Spoke)"
+        subgraph "MAS Supervisor v2 (Hub-Spoke)"
             G --> SUP[Supervisor<br/>GPT-5.1]
-            SUP --> H[Query Analysis]
-            SUP --> I[Retrieval Team<br/>3개 Agent 병렬]
+            SUP --> H[Query Analysis<br/>쿼리 확장 + 의도 분류]
+            SUP --> I[Selective Retrieval<br/>Law/Criteria/Case]
+            I --> RM[Retrieval Merge<br/>결과 병합 + RRF]
+            RM --> SUP
             SUP --> J[Answer Generation<br/>gpt-4o]
             SUP --> K[Legal Review<br/>gpt-4o]
         end
@@ -141,7 +143,7 @@ graph TB
 
     subgraph "Data & Infrastructure"
         I --> L[(PostgreSQL/pgvector<br/>text-embedding-3-large)]
-        J --> M[(Redis Cache)]
+        J --> M[(Redis Cache<br/>L1 Response Cache)]
         G --> O[Prometheus/Grafana]
     end
 
@@ -159,27 +161,29 @@ graph TB
 | **Draft Agent** | gpt-4o | gpt-4o-mini → rule_based → safe_fallback |
 | **Review Agent** | gpt-4o | 규칙 기반 검토 |
 
-### 에이전트 데이터 흐름
+### 에이전트 데이터 흐름 (v2)
 ```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as API Gateway
     participant SUP as Supervisor (GPT-5.1)
     participant QA as Query Analysis
-    participant IR as Retrieval (3 Agents)
+    participant IR as Selective Retrieval
+    participant MG as Retrieval Merge
     participant AG as Draft Agent (gpt-4o)
     participant LR as Review Agent (gpt-4o)
 
     FE->>API: POST /chat/stream
     API->>SUP: 워크플로우 시작
     SUP->>QA: 질의 분석 (의도/키워드/쿼리 확장)
-    QA-->>SUP: 분석 결과
-    SUP->>IR: 3개 Agent 병렬 검색
-    IR-->>SUP: 검색 결과 병합
+    QA-->>SUP: 분석 결과 + retriever_types
+    SUP->>IR: Selective Fan-out (Law/Criteria/Case)
+    IR-->>MG: 개별 검색 결과
+    MG-->>SUP: 병합된 RetrievalResult + 출처
     SUP->>AG: 답변 초안 생성
     AG-->>SUP: 초안 + 인용
     SUP->>LR: 법률 검토 및 가드레일
-    LR-->>SUP: 최종 승인
+    LR-->>SUP: 최종 승인 (재생성 루프 가능, max 1회)
     SUP->>API: 최종 답변 + 출처
     API->>FE: SSE 스트리밍 응답
 ```

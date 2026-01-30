@@ -37,46 +37,32 @@ def api_client():
 
 
 def _get_db_conninfo() -> str:
-    """Build database connection string based on USE_RDS_FOR_TESTS flag."""
-    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
-    
-    if use_rds:
-        return (
-            f"host={os.getenv('DB_TEST_HOST', 'localhost')} "
-            f"port={os.getenv('DB_PORT', '5432')} "
-            f"dbname={os.getenv('DB_TEST_NAME', 'ddoksori')} "
-            f"user={os.getenv('DB_TEST_USER', 'readonly_user')} "
-            f"password={os.getenv('DB_TEST_PASSWORD', '')}"
-        )
-    else:
-        return (
-            f"host={os.getenv('DB_HOST', 'localhost')} "
-            f"port={os.getenv('DB_PORT', '5432')} "
-            f"dbname={os.getenv('DB_NAME', 'ddoksori')} "
-            f"user={os.getenv('DB_USER', 'postgres')} "
-            f"password={os.getenv('DB_PASSWORD', 'postgres')}"
-        )
+    """Build database connection string from DB_* environment variables."""
+    return (
+        f"host={os.getenv('DB_HOST', 'localhost')} "
+        f"port={os.getenv('DB_PORT', '5432')} "
+        f"dbname={os.getenv('DB_NAME', 'ddoksori')} "
+        f"user={os.getenv('DB_USER', 'postgres')} "
+        f"password={os.getenv('DB_PASSWORD', 'postgres')}"
+    )
 
 
 @pytest.fixture(scope="session")
 def db_connection():
     """
     Database connection for validation queries.
-    
-    Supports both local DB and RDS READ_ONLY connections based on USE_RDS_FOR_TESTS.
+
+    Uses DB_* environment variables (RDS endpoint from .env).
     """
     conninfo = _get_db_conninfo()
-    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
 
     try:
         conn = psycopg.connect(conninfo, autocommit=True)
-        if use_rds:
-            print(f"\n✅  RDS READ_ONLY 연결 성공: {os.getenv('DB_TEST_HOST')}")
+        print(f"\n  DB 연결 성공: {os.getenv('DB_HOST')}")
         yield conn
         conn.close()
     except psycopg.OperationalError as e:
-        db_type = "RDS" if use_rds else "PostgreSQL"
-        print(f"\n⚠️  {db_type} 연결 실패 (Unit 테스트는 계속 실행됨): {e}")
+        print(f"\n  DB 연결 실패 (Unit 테스트는 계속 실행됨): {e}")
         yield None
 
 
@@ -84,34 +70,25 @@ def db_connection():
 def rds_readonly_connection():
     """
     RDS READ_ONLY connection fixture for integration tests.
-    
-    This fixture explicitly connects to RDS regardless of USE_RDS_FOR_TESTS.
-    Use this when you need to test against real RDS data.
-    
-    Yields:
-        psycopg.Connection: RDS READ_ONLY connection (or None if unavailable)
+
+    Uses DB_* environment variables (same as db_connection).
+    Yields None if DB_HOST is not configured.
     """
-    host = os.getenv('DB_TEST_HOST')
-    if not host:
-        print("\n⚠️  DB_TEST_HOST not configured, skipping RDS connection")
+    host = os.getenv('DB_HOST')
+    if not host or host == 'localhost':
+        print("\n  DB_HOST not configured for RDS, skipping RDS connection")
         yield None
         return
-    
-    conninfo = (
-        f"host={host} "
-        f"port={os.getenv('DB_PORT', '5432')} "
-        f"dbname={os.getenv('DB_TEST_NAME', 'ddoksori')} "
-        f"user={os.getenv('DB_TEST_USER', 'readonly_user')} "
-        f"password={os.getenv('DB_TEST_PASSWORD', '')}"
-    )
-    
+
+    conninfo = _get_db_conninfo()
+
     try:
         conn = psycopg.connect(conninfo, autocommit=True)
-        print(f"\n✅  RDS READ_ONLY 연결 성공: {host}")
+        print(f"\n  RDS READ_ONLY 연결 성공: {host}")
         yield conn
         conn.close()
     except psycopg.OperationalError as e:
-        print(f"\n⚠️  RDS 연결 실패: {e}")
+        print(f"\n  RDS 연결 실패: {e}")
         yield None
 
 
@@ -139,11 +116,11 @@ def ensure_test_data(db_connection, request):
 
     if db_connection is None:
         return
-    
-    # RDS READ_ONLY 모드에서는 스키마 체크 스킵 (다른 스키마 사용)
-    use_rds = os.getenv('USE_RDS_FOR_TESTS', 'false').lower() == 'true'
-    if use_rds:
-        print("\n✅  RDS READ_ONLY 모드: 스키마 체크 스킵 (vector_chunks 테이블 사용)")
+
+    # RDS 연결 시 스키마 체크 스킵 (RDS는 이미 초기화됨)
+    host = os.getenv('DB_HOST', 'localhost')
+    if host != 'localhost' and not host.startswith('127.'):
+        print("\n  RDS 연결: 스키마 체크 스킵 (이미 초기화됨)")
         return
 
     with db_connection.cursor() as cur:

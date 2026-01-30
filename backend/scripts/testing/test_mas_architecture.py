@@ -14,14 +14,6 @@ import pytest
 import asyncio
 import os
 
-# RDS 연결 사용 (테스트용 DB)
-os.environ['USE_RDS_FOR_TESTS'] = 'true'
-os.environ['DB_HOST'] = os.environ.get('DB_TEST_HOST', 'ddoksori-postgres.czocsimuw0dc.ap-northeast-2.rds.amazonaws.com')
-os.environ['DB_PORT'] = '5432'
-os.environ['DB_NAME'] = os.environ.get('DB_TEST_NAME', 'ddoksori')
-os.environ['DB_USER'] = os.environ.get('DB_TEST_USER', 'postgres')
-os.environ['DB_PASSWORD'] = os.environ.get('DB_TEST_PASSWORD', 'kppll2026!')
-
 # pytest-asyncio 설정
 pytestmark = pytest.mark.asyncio
 
