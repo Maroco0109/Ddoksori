@@ -53,6 +53,7 @@ from .output import (
 from .control import (
     RoutingMode,
     ConversationPhase,
+    TraceEntry,
     ControlState,
 )
 # =============================================================================
@@ -234,6 +235,9 @@ class ChatState(MessagesState):
     # === 노드 타이밍 ===
     _node_timings: Optional[Dict[str, Dict]]
 
+    # === 에이전트 트레이스 (append-only, 병렬 fan-out 호환) ===
+    _agent_trace_entries: Annotated[List[TraceEntry], operator.add]
+
     # === 메모리 관리 ===
     conversation_history: List[Dict[str, Any]]
     compact_summary: Optional[Dict[str, Any]]
@@ -332,6 +336,9 @@ def create_initial_state(
         # 노드 타이밍
         _node_timings={},
 
+        # 에이전트 트레이스
+        _agent_trace_entries=[],
+
         # 메모리 관리
         conversation_history=[],
         compact_summary=None,
@@ -368,6 +375,7 @@ __all__ = [
     # 제어
     'RoutingMode',
     'ConversationPhase',
+    'TraceEntry',
     'ControlState',
 
     # ReAct

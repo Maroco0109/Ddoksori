@@ -4,36 +4,63 @@
 그래프 실행 흐름을 제어하는 플래그와 라우팅 정보를 관리합니다.
 """
 
-from typing import Optional, Literal, Dict
+from typing import Optional, Literal, Dict, Any
 from typing_extensions import TypedDict
 
 
 # 라우팅 모드 타입 정의
 # - NO_RETRIEVAL: 검색 불필요 (인사, 시스템 질문 등)
-# - NEED_RAG: RAG 파이프라인 필요
+# - NEED_RAG: RAG 파이프라인 필요 → Full Pipeline
+# - CACHED_RAG: 후속 턴 → 캐시된 Retrieval 사용
 # - NEED_USER_CLARIFICATION: 사용자 추가 정보 필요
 # - NEED_CLARIFICATION: NEED_USER_CLARIFICATION과 동일 (통합 그래프용)
 # - RESTRICTED_DOMAIN: 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
 RoutingMode = Literal[
     'NO_RETRIEVAL',
     'NEED_RAG',
+    'CACHED_RAG',
     'NEED_USER_CLARIFICATION',
     'NEED_CLARIFICATION',
     'RESTRICTED_DOMAIN',
 ]
 
 
+# === Progressive Disclosure 대화 Phase ===
+# Turn 1: initial → providing_case_summary (사례 중심 답변)
+# Turn 2: awaiting_law_confirm → providing_law_detail (법령/기준 상세)
+# Turn 3: awaiting_procedure_confirm → providing_procedure (절차 안내)
 ConversationPhase = Literal[
-    'initial',
-    'info_gathering',
-    'ready_for_analysis',
-    'providing_law',
-    'awaiting_case_confirm',
-    'providing_case',
-    'awaiting_procedure_confirm',
-    'providing_procedure',
-    'completed',
+    'initial',                    # 첫 질문 대기
+    'info_gathering',             # 온보딩 정보 수집 중
+    'providing_case_summary',     # Turn 1: 사례 요약 제공
+    'awaiting_law_confirm',       # 법령/기준 제공 여부 대기
+    'providing_law_detail',       # Turn 2: 법령/기준 상세 제공
+    'awaiting_procedure_confirm', # 절차 안내 여부 대기
+    'providing_procedure',        # Turn 3: 절차 안내
+    'completed',                  # 대화 완료
 ]
+
+
+class TraceEntry(TypedDict):
+    """
+    단일 노드 실행 트레이스 엔트리.
+
+    MAS 파이프라인의 각 노드 실행 시 생성되며,
+    _agent_trace_entries 리스트에 append-only로 축적됩니다.
+    순서는 timestamp 기준으로 summary 빌드 시 결정됩니다.
+
+    Attributes:
+        node_name: 그래프 노드 이름 (예: 'supervisor', 'retrieval_law')
+        timestamp: Unix epoch 시작 시각
+        duration_ms: 실행 시간 (밀리초)
+        protocol_summary: 노드별 축약된 프로토콜 요약 (선택)
+        metadata: 추가 컨텍스트 (예: error, cache_hit 등, 선택)
+    """
+    node_name: str
+    timestamp: float
+    duration_ms: float
+    protocol_summary: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, Any]]
 
 
 class ControlState(TypedDict, total=False):
@@ -94,5 +121,6 @@ class ControlState(TypedDict, total=False):
 __all__ = [
     'RoutingMode',
     'ConversationPhase',
+    'TraceEntry',
     'ControlState',
 ]
