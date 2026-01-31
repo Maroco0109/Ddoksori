@@ -142,6 +142,15 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
           </div>
         )}
 
+        {/* Notice for case-sharing category */}
+        {formData.category === 'case-sharing' && (
+          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg">
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold text-amber-700">안내:</span> &lt;분쟁해결사례 공유&gt;에 게시된 내용은 개인정보나 상호명 등 민감한 정보를 마스킹한 채 <span className="font-bold">필요한 정보(분쟁 상황과 해결)만을 추출</span>하여 AI 상담을 위한 데이터에 활용될 수 있습니다.
+            </p>
+          </div>
+        )}
+
         {/* Title Input */}
         <div className="mb-6">
           <label htmlFor="title" className="block text-sm font-semibold text-gray-700 mb-3">
