@@ -7,10 +7,11 @@
 본 프로젝트는 복잡하고 전문적인 한국의 소비자 분쟁 관련 문의에 대해 정확하고 신뢰도 높은 답변을 제공하는 MAS(Multi-Agent System) 챗봇입니다. React, FastAPI, LangGraph, PostgreSQL 등 현대적인 기술 스택을 활용하여 분쟁조정사례, 상담사례, 법령 데이터를 기반으로 최적의 해결 방안을 제시합니다.
 
 ### 핵심 기능
-- **MAS Supervisor v2 아키텍처**: GPT-5.1 기반 Supervisor가 6개 전문 에이전트를 조율하는 Hub-Spoke 구조
+- **MAS Supervisor v2 아키텍처**: gpt-4o 기반 Supervisor가 전문 에이전트를 조율하는 Hub-Spoke 구조
 - **Selective Retrieval**: 쿼리 분석 결과에 따라 필요한 Retrieval Agent만 선택적 병렬 실행 (법령/기준/사례)
-- **Conversation Phase System**: Rule-based 대화 단계 상태 머신으로 점진적 정보 수집 및 단계별 안내 (법령→사례→절차)
-- **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합
+- **Progressive Disclosure**: 적응형 응답 모드 (legacy/minimal/adaptive) + 후속 질문 기반 점진적 상세 안내
+- **온보딩 컨텍스트 영속화**: 구매일/품목/금액 등 온보딩 데이터를 세션 간 유지, 경과 일수 자동 계산
+- **하이브리드 검색**: pgvector (text-embedding-3-large 1536d) + 전문(Full-text) 검색 결합 + 품목 관련도 필터링
 - **실시간 스트리밍**: SSE(Server-Sent Events)를 통한 실시간 답변 생성 및 출처 제공
 - **신뢰성 보장**: 법률 검토 에이전트(gpt-4o)를 통한 환각 방지 및 면책 문구 자동 포함
 - **Fallback 체인**: LLM 실패 시 자동 전환 (gpt-4o → gpt-4o-mini → rule_based → safe_fallback)
@@ -90,11 +91,12 @@ docker compose up -d
 | `ANTHROPIC_API_KEY` | Anthropic API 키 | `sk-ant-...` |
 | `RETRIEVAL_MODE` | 검색 모드 | `hybrid` |
 | `ENABLE_ANSWER_CACHE` | Redis 캐싱 활성화 | `false` |
+| `RESPONSE_MODE` | 응답 처리 방식 | `legacy` / `minimal` / `adaptive` |
 
 ### 모델 설정
 | 변수명 | 설명 | 기본값 |
 |--------|------|--------|
-| `MODEL_SUPERVISOR` | Supervisor 모델 (라우팅/조율) | `gpt-5.1` |
+| `MODEL_SUPERVISOR` | Supervisor 모델 (라우팅/조율) | `gpt-4o` |
 | `MODEL_DRAFT_AGENT` | Draft Agent 모델 (답변 생성) | `gpt-4o` |
 | `MODEL_REVIEW_AGENT` | Review Agent 모델 (법률 검토) | `gpt-4o` |
 
@@ -131,10 +133,10 @@ graph TB
         E --> G[LangGraph Orchestrator]
 
         subgraph "MAS Supervisor v2 (Hub-Spoke)"
-            G --> SUP[Supervisor<br/>GPT-5.1]
+            G --> SUP[Supervisor<br/>gpt-4o]
             SUP --> H[Query Analysis<br/>쿼리 확장 + 의도 분류]
             SUP --> I[Selective Retrieval<br/>Law/Criteria/Case]
-            I --> RM[Retrieval Merge<br/>결과 병합 + RRF]
+            I --> RM[Retrieval Merge<br/>결과 병합 + 품목 필터링]
             RM --> SUP
             SUP --> J[Answer Generation<br/>gpt-4o]
             SUP --> K[Legal Review<br/>gpt-4o]
@@ -143,12 +145,12 @@ graph TB
 
     subgraph "Data & Infrastructure"
         I --> L[(PostgreSQL/pgvector<br/>text-embedding-3-large)]
-        J --> M[(Redis Cache<br/>L1 Response Cache)]
+        J --> M[(Redis Cache<br/>L1~L5 Multi-level Cache)]
         G --> O[Prometheus/Grafana]
     end
 
     subgraph "External LLM"
-        J -.-> P[OpenAI GPT-5.1/4o]
+        J -.-> P[OpenAI gpt-4o]
         K -.-> P
         SUP -.-> P
     end
@@ -157,7 +159,7 @@ graph TB
 ### 에이전트별 모델 할당
 | 에이전트 | 모델 | Fallback |
 |---------|------|----------|
-| **Supervisor** | GPT-5.1 | Claude 3.5 Sonnet → Rule-based |
+| **Supervisor** | gpt-4o | Claude 3.5 Sonnet → Rule-based |
 | **Draft Agent** | gpt-4o | gpt-4o-mini → rule_based → safe_fallback |
 | **Review Agent** | gpt-4o | 규칙 기반 검토 |
 
@@ -166,7 +168,7 @@ graph TB
 sequenceDiagram
     participant FE as Frontend
     participant API as API Gateway
-    participant SUP as Supervisor (GPT-5.1)
+    participant SUP as Supervisor (gpt-4o)
     participant QA as Query Analysis
     participant IR as Selective Retrieval
     participant MG as Retrieval Merge
@@ -179,8 +181,8 @@ sequenceDiagram
     QA-->>SUP: 분석 결과 + retriever_types
     SUP->>IR: Selective Fan-out (Law/Criteria/Case)
     IR-->>MG: 개별 검색 결과
-    MG-->>SUP: 병합된 RetrievalResult + 출처
-    SUP->>AG: 답변 초안 생성
+    MG-->>SUP: 병합된 RetrievalResult + 품목 필터링 + 출처
+    SUP->>AG: 답변 초안 생성 (온보딩 컨텍스트 포함)
     AG-->>SUP: 초안 + 인용
     SUP->>LR: 법률 검토 및 가드레일
     LR-->>SUP: 최종 승인 (재생성 루프 가능, max 1회)

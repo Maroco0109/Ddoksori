@@ -74,12 +74,7 @@ backend/data/dispute/
 backend/data/law/raw
 backend/data/evaluation
 backend/data/golden_set
-
-
-# Backup Data
-backup.sql
-backup_v2.sql
-backup_v3.sql
+backend/app/database
 
 
 # Agents
@@ -87,6 +82,7 @@ Agents
 .agent
 .claude
 .sisyphus
+.omc
 .cursorrules
 AGENTS.md
 CLAUDE.md
