@@ -39,13 +39,22 @@ class OnboardingInfo(TypedDict, total=False):
     purchase_item: Optional[str]
     purchase_amount: Optional[str]
     dispute_details: Optional[str]
+    days_since_purchase: Optional[int]     # 구매 후 경과 일수 (자동 계산)
+    product_category: Optional[str]        # 품목 카테고리 (전자제품, 의류 등)
 
 
 # 의도 타입
 IntentType = Literal['general', 'information_search']
 
 # 라우팅 모드 타입
-RoutingMode = Literal['NO_RETRIEVAL', 'NEED_RAG', 'NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION']
+RoutingMode = Literal[
+    'NO_RETRIEVAL',              # 단순 인사/시스템 → Fast Path
+    'NEED_RAG',                  # 정보 검색 필요 → Full Pipeline
+    'CACHED_RAG',                # 후속 턴 → 캐시된 Retrieval 사용
+    'RESTRICTED_DOMAIN',         # 전문기관 도메인
+    'META_CONVERSATIONAL',       # 메타 대화 (시스템 질문 등)
+    'FOLLOWUP_WITH_CONTEXT',     # 이전 컨텍스트 기반 후속 질문
+]
 
 # 검색 에이전트 타입
 RetrieverType = Literal['law', 'criteria', 'case']
@@ -96,16 +105,12 @@ class QueryAnalysisOutput(TypedDict):
         expanded_queries: 다중 확장 쿼리 리스트 (최대 5개)
         keywords: 핵심 키워드 목록
         retriever_types: 추천 검색 에이전트 타입 목록
-        needs_clarification: 추가 정보 필요 여부
-        missing_fields: 누락된 필드 목록
     """
     intent: IntentType
     original_query: str
     expanded_queries: List[str]
     keywords: List[str]
     retriever_types: List[RetrieverType]
-    needs_clarification: bool
-    missing_fields: List[str]
 
 
 @runtime_checkable
@@ -206,7 +211,7 @@ class DocumentMetadata(TypedDict, total=False):
     source_url: Optional[str]
 
 
-class RetrievedDocument(TypedDict):
+class RetrievedDocument(TypedDict, total=False):
     """
     검색된 단일 문서 (v2).
 
@@ -215,11 +220,13 @@ class RetrievedDocument(TypedDict):
         content: 청크 텍스트
         metadata: 문서 메타데이터
         similarity: 유사도 점수
+        product_relevance: 온보딩 품목 관련성 (0.0~1.0)
     """
     chunk_id: str
     content: str
     metadata: DocumentMetadata
     similarity: float
+    product_relevance: Optional[float]     # 온보딩 품목 관련성 (0.0~1.0)
 
 
 class RetrievalResult(TypedDict):
@@ -333,12 +340,20 @@ class GenerationOutput(TypedDict):
         cited_cases: 인용된 사례 정보 목록
         has_sufficient_evidence: 근거 충분 여부
         generation_time_ms: 생성 소요 시간 (ms)
+        response_depth: "summary" | "detail" | "full"
+        available_details: 미표시 상세 정보 메타
+        followup_questions: 제안 후속 질문
+        detail_type: "laws" | "cases" | "procedure"
     """
     draft_answer: str
     claim_evidence_map: List[ClaimEvidence]
     cited_cases: List[CitedCase]
     has_sufficient_evidence: bool
     generation_time_ms: float
+    response_depth: Optional[str]          # "summary" | "detail" | "full"
+    available_details: Optional[Dict]      # 미표시 상세 정보 메타
+    followup_questions: Optional[List[str]]  # 제안 후속 질문
+    detail_type: Optional[str]             # "laws" | "cases" | "procedure"
 
 
 @runtime_checkable

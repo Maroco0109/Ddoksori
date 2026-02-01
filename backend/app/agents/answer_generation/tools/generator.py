@@ -389,6 +389,8 @@ class RAGGenerator:
         laws: List[Dict],
         criteria: List[Dict],
         include_disclaimer: bool = True,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Dict] = None
     ) -> Dict:
         """
         4개 섹션을 포함한 구조화된 응답 생성
@@ -453,8 +455,10 @@ class RAGGenerator:
 
         # LLM 프롬프트 생성
         system_prompt = self._get_structured_system_prompt(include_disclaimer=include_disclaimer)
+        if retry_supplement:
+            system_prompt += f"\n\n## 재생성 지침\n{retry_supplement}"
         user_prompt = self._build_structured_prompt(
-            query, agency_info, disputes, counsels, laws, criteria
+            query, agency_info, disputes, counsels, laws, criteria, onboarding
         )
 
         # LLM 호출 with timing
@@ -552,7 +556,8 @@ class RAGGenerator:
         disputes: List[Dict],
         counsels: List[Dict],
         laws: List[Dict],
-        criteria: List[Dict]
+        criteria: List[Dict],
+        onboarding: Optional[Dict] = None
     ) -> str:
         """3섹션 구조화 프롬프트 생성 (PR-6: 2026-01-20)
 
@@ -562,6 +567,34 @@ class RAGGenerator:
         3. 추가 안내 (agency_info)
         """
         lines = [f"사용자 질문: {query}\n"]
+
+        # 온보딩 컨텍스트 추가
+        if onboarding:
+            parts = []
+            if onboarding.get('purchase_item'):
+                parts.append(f"구매 품목: {onboarding['purchase_item']}")
+            if onboarding.get('purchase_amount'):
+                parts.append(f"구매 금액: {onboarding['purchase_amount']}")
+            if onboarding.get('purchase_date'):
+                parts.append(f"구매일: {onboarding['purchase_date']}")
+            if onboarding.get('days_since_purchase') is not None:
+                days = onboarding['days_since_purchase']
+                parts.append(f"구매 후 경과일: {days}일")
+                if days <= 7:
+                    parts.append("→ 청약철회 기간(7일) 이내")
+                elif days <= 14:
+                    parts.append("→ 청약철회 기간(7일) 경과, 단 전자상거래법상 14일 이내 가능할 수 있음")
+                elif days <= 30:
+                    parts.append("→ 구매 후 1개월 이내, 소비자분쟁해결기준 품질보증기간 확인 필요")
+            if onboarding.get('product_category'):
+                parts.append(f"품목 카테고리: {onboarding['product_category']}")
+            if onboarding.get('dispute_details'):
+                parts.append(f"분쟁 내용: {onboarding['dispute_details']}")
+
+            if parts:
+                lines.append("\n## 사용자 상황 정보")
+                lines.extend([f"- {p}" for p in parts])
+                lines.append("")
 
         # 섹션 1: 유사 사례 분석 (disputes + counsels)
         lines.append("=" * 50)
@@ -952,6 +985,8 @@ class RAGGenerator:
         laws: List[Dict],
         criteria: List[Dict],
         include_disclaimer: bool = True,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Dict] = None
     ):
         """
         구조화된 답변을 스트리밍 방식으로 생성 (토큰 단위)
@@ -986,8 +1021,10 @@ class RAGGenerator:
 
         # 프롬프트 생성
         system_prompt = self._get_structured_system_prompt(include_disclaimer)
+        if retry_supplement:
+            system_prompt += f"\n\n## 재생성 지침\n{retry_supplement}"
         user_prompt = self._build_structured_prompt(
-            query, agency_info, disputes, counsels, laws, criteria
+            query, agency_info, disputes, counsels, laws, criteria, onboarding
         )
 
         # OpenAI Streaming API 호출

@@ -22,8 +22,76 @@ import time
 from typing import Dict, Any, List, Optional
 
 from ..state import ChatState, RetrievalResult, IndividualRetrievalResult
+from ..cache import RetrievalResultCache
+from ...common.config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+# Product category mapping for relevance scoring
+# Based on COMMON_PRODUCTS from query_analysis/constants.py
+PRODUCT_CATEGORY_MAP = {
+    "전자기기": [
+        "노트북", "컴퓨터", "pc", "스마트폰", "휴대폰", "핸드폰", "아이폰", "갤럭시",
+        "태블릿", "아이패드", "에어팟", "이어폰", "헤드폰", "스피커", "모니터", "키보드", "마우스",
+        "프린터", "카메라", "렌즈", "드론",
+    ],
+    "가전제품": [
+        "tv", "텔레비전", "냉장고", "세탁기", "에어컨", "청소기", "전자레인지", "오븐", "건조기",
+        "로봇청소기", "공기청정기", "제습기", "가습기", "전기밥솥", "믹서기", "커피머신",
+    ],
+    "가구": ["침대", "소파", "책상", "의자", "옷장", "매트리스", "가구"],
+    "서비스": [
+        "헬스장", "pt", "피티", "수영장", "필라테스", "요가", "학원", "영어",
+        "웨딩", "결혼", "스튜디오", "여행", "항공권", "호텔", "숙박",
+    ],
+    "의류잡화": ["옷", "신발", "가방", "지갑", "시계", "악세서리"],
+    "차량": ["자동차", "차량", "중고차", "오토바이", "자전거", "킥보드", "전동킥보드"],
+}
+
+
+def _compute_product_relevance(
+    document: Dict[str, Any],
+    purchase_item: Optional[str],
+    product_category: Optional[str],
+) -> float:
+    """
+    검색된 문서의 품목 관련성을 계산합니다.
+
+    Args:
+        document: 검색된 문서 dict (content, metadata 등)
+        purchase_item: 온보딩 구매 품목
+        product_category: 온보딩 품목 카테고리
+
+    Returns:
+        관련성 점수 (0.0 ~ 1.0)
+    """
+    if not purchase_item:
+        return 1.0  # 품목 정보 없으면 모든 문서 관련
+
+    content = (document.get('content') or '').lower()
+    title = (document.get('doc_title') or document.get('title') or '').lower()
+    text = f"{title} {content}"
+
+    item_lower = purchase_item.lower()
+
+    # 직접 품목명 매칭
+    if item_lower in text:
+        return 1.0
+
+    # 카테고리 키워드 매칭
+    if product_category:
+        category_keywords = PRODUCT_CATEGORY_MAP.get(product_category, [])
+        for keyword in category_keywords:
+            if keyword.lower() in text:
+                return 0.8
+
+    # 분쟁 유형 매칭 (환불, 교환 등은 범용)
+    dispute_keywords = ['환불', '교환', '수리', '취소', '해지', '청약철회']
+    if any(kw in text for kw in dispute_keywords):
+        return 0.4  # 분쟁 관련이지만 품목 불일치
+
+    return 0.2  # 무관
 
 
 def _calculate_merged_statistics(
@@ -140,6 +208,50 @@ def _update_supervisor_state(
     }
 
 
+def _apply_display_limits(
+    merged: RetrievalResult,
+    session_id: Optional[str],
+) -> RetrievalResult:
+    """
+    도메인별 노출 수 제한을 적용하고 오버플로 결과를 캐시합니다.
+
+    Args:
+        merged: 병합된 전체 결과
+        session_id: 세션 ID (캐시 키)
+
+    Returns:
+        노출 수 제한이 적용된 RetrievalResult
+    """
+    config = get_config().retrieval
+    limits = {
+        'laws': config.display_law,
+        'criteria': config.display_criteria,
+        'disputes': config.display_case,
+        'counsels': config.display_counsel,
+    }
+
+    overflow: Dict[str, list] = {}
+
+    for section_key, limit in limits.items():
+        docs = merged.get(section_key, [])
+        if len(docs) > limit:
+            # 상위 N개만 노출, 나머지는 오버플로
+            merged[section_key] = docs[:limit]
+            overflow[section_key] = docs[limit:]
+
+    # 오버플로 캐시 저장
+    if overflow and session_id and config.cache_overflow:
+        try:
+            from ..cache import RetrievalOverflowCache
+            RetrievalOverflowCache.set_by_session(session_id, overflow)
+            overflow_counts = {k: len(v) for k, v in overflow.items()}
+            logger.info(f"[RetrievalMerge] Overflow cached: {overflow_counts}")
+        except Exception as e:
+            logger.warning(f"[RetrievalMerge] Overflow cache save failed: {e}")
+
+    return merged
+
+
 async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     """
     Retrieval 결과 병합 노드 (async)
@@ -165,6 +277,46 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     # 결과 병합
     merged = _merge_to_retrieval_result(individual_results)
 
+    # Post-retrieval product relevance filtering
+    onboarding = state.get('onboarding') or {}
+    purchase_item = onboarding.get('purchase_item')
+    product_category = onboarding.get('product_category')
+
+    if purchase_item:
+        logger.info(f"[RetrievalMerge] Applying product relevance filter for item='{purchase_item}'")
+        # Score and filter case results (disputes/counsels) only
+        # Laws and criteria are not product-specific
+        for section_key in ['disputes', 'counsels']:
+            docs = merged.get(section_key, [])
+            if docs:
+                # Calculate product relevance for each document
+                for doc in docs:
+                    doc['product_relevance'] = _compute_product_relevance(
+                        doc, purchase_item, product_category
+                    )
+
+                # Sort by (product_relevance * similarity) descending
+                docs.sort(
+                    key=lambda d: d.get('product_relevance', 1.0) * d.get('similarity', 0.0),
+                    reverse=True
+                )
+
+                # Filter out very low relevance (< 0.3) only if we have enough high-relevance results
+                high_relevance = [d for d in docs if d.get('product_relevance', 1.0) >= 0.3]
+                if len(high_relevance) >= 2:
+                    filtered_count = len(docs) - len(high_relevance)
+                    merged[section_key] = high_relevance
+                    if filtered_count > 0:
+                        logger.info(
+                            f"[RetrievalMerge] Filtered {filtered_count} low-relevance "
+                            f"{section_key} (kept {len(high_relevance)})"
+                        )
+                # else: keep all results to maintain minimum coverage
+
+    # 도메인별 노출 수 제한 적용
+    session_id = state.get('session_id')
+    merged = _apply_display_limits(merged, session_id)
+
     # 출처 목록 생성 (sources 필드용)
     sources = []
     for section_key in ['laws', 'criteria', 'disputes', 'counsels']:
@@ -187,6 +339,14 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
         f"disputes={len(merged['disputes'])}, counsels={len(merged['counsels'])}"
     )
 
+    # L4 캐시: 세션별 Retrieval 결과 저장 (Progressive Disclosure용)
+    if session_id:
+        try:
+            RetrievalResultCache.set_by_session(session_id, merged)
+            logger.info(f"[RetrievalMerge] L4 cache saved for session={session_id[:8]}...")
+        except Exception as e:
+            logger.warning(f"[RetrievalMerge] L4 cache save failed: {e}")
+
     return {
         'retrieval': merged,
         'sources': sources,
@@ -194,14 +354,4 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     }
 
 
-def retrieval_merge_node_sync(state: ChatState) -> Dict[str, Any]:
-    """
-    Retrieval 결과 병합 노드 (sync 버전)
-
-    LangGraph 노드로 직접 사용 가능한 동기 버전입니다.
-    """
-    import asyncio
-    return asyncio.run(retrieval_merge_node(state))
-
-
-__all__ = ['retrieval_merge_node', 'retrieval_merge_node_sync']
+__all__ = ['retrieval_merge_node']

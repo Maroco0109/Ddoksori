@@ -10,7 +10,7 @@ import pytest
 from typing import Dict, Any, List
 
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 
 # === Test Fixtures ===
@@ -225,13 +225,13 @@ class TestUpdateSupervisorState:
 
 
 class TestRetrievalMergeNode:
-    """retrieval_merge_node 전체 테스트 (동기 버전 사용)"""
+    """retrieval_merge_node 전체 테스트"""
 
-    def test_full_merge_workflow(self, mock_state_with_results):
+    async def test_full_merge_workflow(self, mock_state_with_results):
         """전체 병합 워크플로우"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
-        result = retrieval_merge_node_sync(mock_state_with_results)
+        result = await retrieval_merge_node(mock_state_with_results)
 
         # 필수 출력 필드 확인
         assert 'retrieval' in result
@@ -249,16 +249,16 @@ class TestRetrievalMergeNode:
         assert retrieval['max_similarity'] > 0
         assert retrieval['avg_similarity'] > 0
 
-    def test_sources_generation(self, mock_state_with_results):
+    async def test_sources_generation(self, mock_state_with_results):
         """출처 목록 생성 검증"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
-        result = retrieval_merge_node_sync(mock_state_with_results)
+        result = await retrieval_merge_node(mock_state_with_results)
 
         sources = result['sources']
 
-        # 6개 문서 → 6개 출처
-        assert len(sources) == 6
+        # display_law=1이므로 법령 2개 중 1개만 노출 → 총 5개
+        assert len(sources) == 5
 
         # 출처 타입 확인
         source_types = [s['type'] for s in sources]
@@ -267,11 +267,11 @@ class TestRetrievalMergeNode:
         assert 'disputes' in source_types
         assert 'counsels' in source_types
 
-    def test_supervisor_state_updated(self, mock_state_with_results):
+    async def test_supervisor_state_updated(self, mock_state_with_results):
         """Supervisor 상태 업데이트 확인"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
-        result = retrieval_merge_node_sync(mock_state_with_results)
+        result = await retrieval_merge_node(mock_state_with_results)
 
         supervisor = result['supervisor']
 
@@ -282,20 +282,20 @@ class TestRetrievalMergeNode:
 class TestEdgeCases:
     """Edge cases 테스트"""
 
-    def test_missing_individual_results(self):
+    async def test_missing_individual_results(self):
         """individual_retrieval_results 필드 없음"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
         state = {'user_query': 'test', 'supervisor': None}
-        result = retrieval_merge_node_sync(state)
+        result = await retrieval_merge_node(state)
 
         # 빈 결과지만 정상 처리
         assert result['retrieval']['laws'] == []
         assert result['sources'] == []
 
-    def test_agent_with_error(self):
+    async def test_agent_with_error(self):
         """에러가 있는 Agent 결과 처리"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
         state = {
             'individual_retrieval_results': [
@@ -306,21 +306,7 @@ class TestEdgeCases:
         }
 
         # 에러 있어도 나머지 결과는 정상 처리
-        result = retrieval_merge_node_sync(state)
+        result = await retrieval_merge_node(state)
         assert len(result['retrieval']['criteria']) == 1
 
 
-# === Sync Version Test ===
-
-class TestRetrievalMergeNodeSync:
-    """동기 버전 테스트"""
-
-    def test_sync_version(self, mock_state_with_results):
-        """retrieval_merge_node_sync 동작 확인"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
-
-        result = retrieval_merge_node_sync(mock_state_with_results)
-
-        assert 'retrieval' in result
-        assert 'sources' in result
-        assert 'supervisor' in result

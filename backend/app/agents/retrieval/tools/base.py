@@ -1,9 +1,14 @@
 """
-똑소리 프로젝트 - 리트리버 베이스 클래스
+[LEGACY] 이 모듈은 더 이상 사용되지 않습니다.
+대체: app.agents.retrieval.tools.unified_retriever.UnifiedRetriever
 
+Document dataclass와 to_documents()는 HybridRetriever에서만 사용되었으며,
+Phase 8 이후 UnifiedRetriever로 전환되어 직접 참조되지 않습니다.
+
+---
+(원본) 똑소리 프로젝트 - 리트리버 베이스 클래스
 모든 리트리버가 구현해야 하는 추상 인터페이스를 정의합니다.
 통일된 검색 결과 타입(Document)과 공통 메서드 시그니처를 제공합니다.
-
 Sprint 3 - s3-4: 통합 리트리버 인터페이스 정의
 """
 

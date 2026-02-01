@@ -25,14 +25,14 @@
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Optional
 
 from app.common.config import DatabaseConfig, MemoryConfig, get_config
-from app.common.logging.rag_logger import get_rag_logger
 from app.supervisor.persistence.db import ConversationDB
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 
 
 class ConversationCleanupService:

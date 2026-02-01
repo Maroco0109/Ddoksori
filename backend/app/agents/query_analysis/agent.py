@@ -35,11 +35,6 @@ from ...supervisor.state import (
     ChatState,
     QueryAnalysisResult,
 )
-from ...supervisor.conversation_manager import (
-    update_slots_and_phase,
-    should_trigger_clarification,
-    get_retriever_types_for_phase,
-)
 
 # 분할된 모듈에서 import
 from .constants import (
@@ -48,7 +43,7 @@ from .constants import (
     DISPUTE_INTENT_KEYWORDS,
 )
 from .detectors import detect_restricted_domain
-from .classifiers import classify_query_type, classify_mode
+from .classifiers import classify_query_type, classify_query_type_with_confidence, classify_mode, classify_query_complexity
 from .extractors import (
     extract_info_from_message,
     get_missing_fields_description,
@@ -91,19 +86,25 @@ def query_analysis_node(state: ChatState) -> Dict:
 
     cached = QueryAnalysisCache.get(user_query)
     if cached:
-        logger.info(f"[QueryAnalysis] Cache HIT for: {user_query[:30]}...")
+        cached_mode = cached.get("mode", "NEED_RAG")
+        logger.info(
+            f"[QueryAnalysis] Cache HIT for: '{user_query[:30]}...', mode={cached_mode}"
+        )
         return {
-            'query_analysis': cached,
-            'mode': cached.get('mode', 'NEED_RAG'),
-            '_qa_cache_hit': True,
+            "query_analysis": cached,
+            "mode": cached_mode,
+            "_qa_cache_hit": True,
         }
     # === PR-6 끝 ===
 
     # Step 1: 쿼리 정규화
     normalized_query = normalize_query(user_query)
 
-    # Step 2: 질의 유형 분류
-    query_type = classify_query_type(normalized_query)
+    # Step 2: 질의 유형 분류 (with confidence for logging)
+    query_type, rule_confidence = classify_query_type_with_confidence(normalized_query)
+
+    # Step 2.5: 쿼리 복잡도 분류 (Adaptive RAG)
+    query_complexity = classify_query_complexity(normalized_query)
 
     # PR-7: 일반 채팅에서도 분쟁 의도 키워드가 있으면 dispute로 처리 (Safety Net)
     if chat_type == "general":
@@ -127,7 +128,11 @@ def query_analysis_node(state: ChatState) -> Dict:
     keywords = extract_keywords(normalized_query)
 
     # Step 4: 기관 추천 힌트 및 Restricted 도메인 감지
-    restricted_domain = detect_restricted_domain(normalized_query) if query_type == "restricted" else None
+    restricted_domain = (
+        detect_restricted_domain(normalized_query)
+        if query_type == "restricted"
+        else None
+    )
     agency_hint = (
         determine_agency_hint(normalized_query)
         if query_type in ("dispute", "procedure", "criteria")
@@ -159,22 +164,11 @@ def query_analysis_node(state: ChatState) -> Dict:
         missing_fields, extracted_info
     )
 
-    # 최소 정보가 있는지 확인 (품목이나 상세 내용 중 하나라도 있으면 진행)
-    has_minimal_info = bool(
-        extracted_info.get("purchase_item")
-        or extracted_info.get("dispute_details")
-        or (
-            onboarding
-            and (onboarding.get("purchase_item") or onboarding.get("dispute_details"))
-        )
-    )
-    needs_clarification = not has_minimal_info and query_type == "dispute"
-
-    # 라우팅 모드 결정
-    mode = classify_mode(query_type, needs_clarification, user_query)
+    # 라우팅 모드 결정 (clarification 제거됨)
+    mode = classify_mode(query_type, False, user_query)
 
     logger.info(
-        f"[QueryAnalysis] mode={mode}, query_type={query_type}, needs_clarification={needs_clarification}"
+        f"[QueryAnalysis] mode={mode}, query_type={query_type}"
     )
 
     # v1 호환 결과 구조
@@ -182,52 +176,38 @@ def query_analysis_node(state: ChatState) -> Dict:
         "query_type": query_type,
         "keywords": keywords,
         "agency_hint": agency_hint,
-        "needs_clarification": needs_clarification,
-        "missing_fields": missing_fields,
         "extracted_info": extracted_info,
         "missing_fields_description": missing_fields_description,
         "rewritten_query": rewritten_query,
         "search_queries": search_queries,
         "expansion_applied": expansion_applied,
-
         # === PR-2: Selective Retrieval 시작 ===
-        "retriever_types": QUERY_TYPE_TO_RETRIEVERS.get(query_type, ["law", "criteria"]),
+        "retriever_types": QUERY_TYPE_TO_RETRIEVERS.get(
+            query_type, ["law", "criteria"]
+        ),
         # === PR-2: Selective Retrieval 끝 ===
-
         # === Phase 9: Restricted Domain 정보 ===
         "restricted_domain": restricted_domain,
-        "restricted_agency_info": RESTRICTED_DOMAIN_AGENCIES.get(restricted_domain) if restricted_domain else None,
+        "restricted_agency_info": RESTRICTED_DOMAIN_AGENCIES.get(restricted_domain)
+        if restricted_domain
+        else None,
+        # === Adaptive RAG: 쿼리 복잡도 ===
+        "query_complexity": query_complexity.value,
     }
 
     # === PR-6: L2 캐시 저장 ===
     cache_data = dict(analysis_result)
-    cache_data['mode'] = mode
+    cache_data["mode"] = mode
     QueryAnalysisCache.set(user_query, cache_data)
     # === PR-6 끝 ===
 
-    temp_state_for_phase = {
-        'user_query': user_query,
-        'conversation_phase': state.get('conversation_phase', 'initial'),
-        'dispute_slots': state.get('dispute_slots', {}),
-        'onboarding': onboarding,
-        'query_analysis': analysis_result,
-    }
-    phase_updates = update_slots_and_phase(temp_state_for_phase)
-
-    new_phase = phase_updates.get('conversation_phase', 'initial')
-    if should_trigger_clarification({'conversation_phase': new_phase}):
-        mode = 'NEED_USER_CLARIFICATION'
-
-    if new_phase in ('providing_law', 'providing_case', 'providing_procedure'):
-        analysis_result['retriever_types'] = get_retriever_types_for_phase(new_phase)
+    phase_result = {}
 
     return {
         "query_analysis": analysis_result,
         "mode": mode,
-        "conversation_phase": phase_updates.get('conversation_phase'),
-        "dispute_slots": phase_updates.get('dispute_slots'),
-        "dispute_slot_status": phase_updates.get('dispute_slot_status'),
-        "last_phase_transition_reason": phase_updates.get('last_phase_transition_reason'),
+        "query_complexity": query_complexity.value,
+        **phase_result,
     }
 
 
@@ -255,11 +235,14 @@ from .detectors import (
     detect_restricted_domain as _detect_restricted_domain,
     is_procedure_query as _is_procedure_query,
     should_promote_to_rag as _should_promote_to_rag,
+    is_meta_conversational as _is_meta_conversational,
 )
 
 from .classifiers import (
     classify_query_type as _classify_query_type,
+    classify_query_type_with_confidence as _classify_query_type_with_confidence,
     classify_mode as _classify_mode,
+    classify_query_complexity as _classify_query_complexity,
 )
 
 from .extractors import (
@@ -285,11 +268,12 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
 
     [주요 변경사항]
     - gpt-4o-mini 기반 쿼리 확장
-    - 의도 분류: 'general' | 'information_search'
+    - 의도 분류: 'general' | 'information_search' | 'followup'
     - 다중 확장 쿼리 리스트 반환
+    - Progressive Disclosure: 후속 턴 감지 및 CACHED_RAG 모드 지원
 
     [Output State]
-    - intent: 의도 ('general' | 'information_search')
+    - intent: 의도 ('general' | 'information_search' | 'followup')
     - original_query: 원본 질문
     - expanded_queries: 확장된 쿼리 리스트 (최대 5개)
     - keywords: 핵심 키워드
@@ -307,8 +291,48 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     # Step 1: 쿼리 정규화
     normalized_query = normalize_query(user_query)
 
-    # Step 2: 질의 유형 분류 (기존 로직 재사용)
-    query_type = classify_query_type(normalized_query)
+    # Step 2: 질의 유형 분류 (Hybrid: Rule + LLM Fallback)
+    from .classifiers import classify_query_type_with_confidence
+    from .llm_classifier import llm_classify
+
+    query_type, rule_confidence = classify_query_type_with_confidence(normalized_query)
+    logger.info(
+        f"[QueryAnalysis v2] Rule-based classification: query_type={query_type}, confidence={rule_confidence:.2f}"
+    )
+
+    # LLM Fallback: confidence < 0.7이면 LLM으로 2차 분류
+    llm_used = False
+    if rule_confidence < 0.7:
+        logger.info(
+            f"[QueryAnalysis v2] Low confidence ({rule_confidence:.2f}), trying LLM fallback..."
+        )
+        try:
+            llm_result = await llm_classify(normalized_query)
+            if llm_result:
+                llm_type, llm_confidence, llm_reasoning = llm_result
+                logger.info(
+                    f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}, "
+                    f"reasoning='{llm_reasoning[:100]}'"
+                )
+                if llm_confidence > rule_confidence:
+                    logger.info(
+                        f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
+                    )
+                    query_type = llm_type
+                    llm_used = True
+                else:
+                    logger.info(
+                        f"[QueryAnalysis v2] Rule-based confidence higher, keeping: {query_type}({rule_confidence:.2f})"
+                    )
+        except Exception as e:
+            logger.warning(f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}")
+    else:
+        logger.info(
+            f"[QueryAnalysis v2] High confidence ({rule_confidence:.2f}), skipping LLM fallback"
+        )
+
+    # Step 2.5: 쿼리 복잡도 분류 (Adaptive RAG)
+    query_complexity = classify_query_complexity(normalized_query)
 
     # Step 3: 의도 분류 (v2 신규)
     # 'general'은 일반 대화, 나머지는 'information_search'
@@ -343,48 +367,79 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         chat_type, onboarding, extracted_info
     )
 
-    # 최소 정보 확인
-    has_minimal_info = bool(
-        extracted_info.get("purchase_item")
-        or extracted_info.get("dispute_details")
-        or (
-            onboarding
-            and (onboarding.get("purchase_item") or onboarding.get("dispute_details"))
-        )
-    )
-    needs_clarification = not has_minimal_info and query_type == "dispute"
+    # Step 6.5: 날짜 계산 및 카테고리 결정 (Onboarding 정보 보강)
+    from .extractors import compute_days_since_purchase, determine_product_category
+
+    # onboarding dict을 수정 가능한 dict로 변환
+    enriched_onboarding = dict(onboarding) if onboarding else {}
+
+    if enriched_onboarding.get('purchase_date'):
+        days = compute_days_since_purchase(enriched_onboarding['purchase_date'])
+        if days is not None:
+            enriched_onboarding['days_since_purchase'] = days
+            logger.info(
+                f"[QueryAnalysis v2] Computed days_since_purchase: {days} days from {enriched_onboarding['purchase_date']}"
+            )
+
+    if enriched_onboarding.get('purchase_item'):
+        category = determine_product_category(enriched_onboarding['purchase_item'])
+        if category:
+            enriched_onboarding['product_category'] = category
+            logger.info(
+                f"[QueryAnalysis v2] Determined product_category: {category} for {enriched_onboarding['purchase_item']}"
+            )
+
+    needs_clarification = False  # LEGACY: clarification 제거됨
 
     # Step 7: retriever_types 결정 (하이브리드 방식)
-    # 질의분석에서 기본값 제공, Supervisor가 조정 가능
     retriever_types = QUERY_TYPE_TO_RETRIEVERS.get(query_type, ["law", "criteria"])
 
     # 'case' 추가 (사례 검색 기본 포함)
     if "case" not in retriever_types and intent == "information_search":
         retriever_types = list(retriever_types) + ["case"]
 
+    # Step 8: 라우팅 모드 결정
     logger.info(
-        f"[QueryAnalysis v2] intent={intent}, query_type={query_type}, "
+        f"[QueryAnalysis v2] Before classify_mode: query_type={query_type}, intent={intent}"
+    )
+    mode = classify_mode(query_type, needs_clarification, user_query)
+    logger.info(
+        f"[QueryAnalysis v2] After classify_mode: mode={mode}"
+    )
+
+    phase_result = {}
+
+    logger.info(
+        f"[QueryAnalysis v2] Final result: intent={intent}, query_type={query_type}, "
+        f"mode={mode}, llm_used={llm_used}, "
         f"expanded_queries={len(expanded_queries)}, retriever_types={retriever_types}"
     )
 
     # v2 출력 형식
-    return {
+    result = {
         "query_analysis": {
             "intent": intent,
             "original_query": user_query,
             "expanded_queries": expanded_queries,
             "keywords": keywords,
             "retriever_types": retriever_types,
-            "needs_clarification": needs_clarification,
-            "missing_fields": missing_fields,
             # v1 호환 필드
             "query_type": query_type,
             "extracted_info": extracted_info,
             "rewritten_query": expanded_queries[0] if expanded_queries else user_query,
             "search_queries": expanded_queries,
+            "query_complexity": query_complexity.value,
         },
-        "mode": "NO_RETRIEVAL" if intent == "general" else "NEED_RAG",
+        "mode": mode,
+        "query_complexity": query_complexity.value,
+        **phase_result,
     }
+
+    # enriched_onboarding이 변경되었다면 state에 반영
+    if enriched_onboarding and enriched_onboarding != onboarding:
+        result["onboarding"] = enriched_onboarding
+
+    return result
 
 
 __all__ = [
@@ -411,7 +466,9 @@ __all__ = [
     "_detect_restricted_domain",
     "_is_procedure_query",
     "_should_promote_to_rag",
+    "_is_meta_conversational",
     # Classifiers (backward compat)
     "_classify_query_type",
     "_classify_mode",
+    "_classify_query_complexity",
 ]

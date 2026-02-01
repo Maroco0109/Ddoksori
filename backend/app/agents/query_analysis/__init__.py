@@ -31,6 +31,8 @@ from .constants import (
     VERB_SYNONYMS,
     DISPUTE_INTENT_KEYWORDS,
     AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
+    META_CONVERSATIONAL_PATTERNS,
+    META_CONVERSATIONAL_KEYWORDS,
 )
 
 # Detectors
@@ -40,11 +42,13 @@ from .detectors import (
     detect_restricted_domain,
     is_procedure_query,
     should_promote_to_rag,
+    is_meta_conversational,
 )
 
 # Classifiers
 from .classifiers import (
     classify_query_type,
+    classify_query_type_with_confidence,
     classify_mode,
     QueryType,
 )
@@ -75,6 +79,9 @@ from .classifier import (
     get_intent_classifier,
 )
 
+# LLM Fallback Classifier (Issue #3: Hybrid Intent Classification)
+from .llm_classifier import llm_classify
+
 # Backward compatibility alias
 _classify_query_type = classify_query_type
 
@@ -95,17 +102,23 @@ __all__ = [
     "VERB_SYNONYMS",
     "DISPUTE_INTENT_KEYWORDS",
     "AMBIGUOUS_QUERY_PATTERNS",
+    "META_CONVERSATIONAL_PATTERNS",
+    "META_CONVERSATIONAL_KEYWORDS",
     # Detectors
     "is_ambiguous_query",
     "is_system_meta_query",
     "detect_restricted_domain",
     "is_procedure_query",
     "should_promote_to_rag",
+    "is_meta_conversational",
     # Classifiers
     "classify_query_type",
+    "classify_query_type_with_confidence",
     "classify_mode",
     "QueryType",
     "_classify_query_type",  # backward compat
+    # LLM Fallback Classifier
+    "llm_classify",
     # Extractors
     "extract_info_from_message",
     "extract_keywords",

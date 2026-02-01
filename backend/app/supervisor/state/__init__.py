@@ -48,11 +48,11 @@ from .agent_results import (
 )
 from .output import (
     ClaimEvidenceMapping,
+    ResponseDepth,
     OutputState,
 )
 from .control import (
     RoutingMode,
-    ConversationPhase,
     TraceEntry,
     ControlState,
 )
@@ -81,6 +81,8 @@ from .memory import (
     ConversationTurn,
     CompactSummary,
     MemoryState,
+    RAGConversationMemory,
+    RAGTurn,
 )
 from .supervisor import (
     AgentMessage,
@@ -88,26 +90,15 @@ from .supervisor import (
 )
 
 
-# === SlotStatus (분쟁 슬롯 채움 상태) ===
-class SlotStatus(TypedDict):
-    """
-    분쟁 슬롯 채움 상태
 
-    분쟁 상담에서 필수 정보 수집 상태를 추적합니다.
 
-    Attributes:
-        slot_name: 슬롯 이름 (예: 'purchase_date', 'purchase_item')
-        status: 채움 상태
-            - 'filled': 완전히 채워짐
-            - 'partial': 부분적으로 채워짐
-            - 'missing': 누락됨
-        evidence_chunk_ids: 근거 문서 ID 목록
-        confidence: 추출 신뢰도 (0.0~1.0)
-    """
-    slot_name: str
-    status: Literal['filled', 'partial', 'missing']
-    evidence_chunk_ids: List[str]
-    confidence: float
+def _merge_dicts(existing: Optional[Dict], new: Optional[Dict]) -> Dict:
+    """Dict-merge reducer for _node_timings (병렬 노드 타이밍 병합)."""
+    if existing is None:
+        return new or {}
+    if new is None:
+        return existing
+    return {**existing, **new}
 
 
 # === 통합 ChatState ===
@@ -150,12 +141,10 @@ class ChatState(MessagesState):
         final_answer: 최종 확정 답변
         sources: 인용 출처 목록 (operator.add로 누적)
         has_sufficient_evidence: 근거 충분 여부
-        clarifying_questions: 추가 질문 목록 (되묻기용)
         claim_evidence_map: 주장-근거 매핑
 
         # 제어 플래그 (ControlState)
         retry_count: 재생성 횟수 (무한 루프 방지, max=2)
-        awaiting_user_choice: 사용자 선택 대기 여부
         low_similarity_mode: 저유사도 모드 여부
         mode: 라우팅 모드 (NO_RETRIEVAL, NEED_RAG, NEED_CLARIFICATION)
         guardrail_blocked: 가드레일 차단 여부
@@ -182,6 +171,7 @@ class ChatState(MessagesState):
     chat_type: Literal['dispute', 'general']
     onboarding: Optional[OnboardingInfo]
     user_query: str
+    session_id: Optional[str]  # 세션 ID (캐시 키로 사용)
 
     # === 에이전트 결과 ===
     query_analysis: Optional[QueryAnalysisResult]
@@ -193,22 +183,17 @@ class ChatState(MessagesState):
     final_answer: Optional[str]
     sources: Annotated[List[Dict], operator.add]
     has_sufficient_evidence: bool
-    clarifying_questions: List[str]
+    retrieval_confidence: float  # 검색 결과 충분성 점수 (0.0~1.0)
     claim_evidence_map: List[ClaimEvidenceMapping]
+    response_depth: ResponseDepth  # Progressive Disclosure 응답 깊이
+    available_details: Optional[Dict]  # 아직 제공하지 않은 상세 정보 메타데이터
 
     # === 제어 플래그 ===
     retry_count: int
-    awaiting_user_choice: bool
     low_similarity_mode: bool
     mode: RoutingMode
     guardrail_blocked: bool
     guardrail_type: Optional[str]
-
-    # === 대화 단계 (Conversation Phase) ===
-    conversation_phase: ConversationPhase
-    dispute_slots: Dict[str, Optional[str]]
-    dispute_slot_status: Dict[str, SlotStatus]
-    last_phase_transition_reason: Optional[str]
 
     # === ReAct 패턴 ===
     react_steps: Annotated[List[ReActStep], operator.add]
@@ -233,7 +218,7 @@ class ChatState(MessagesState):
     expanded_queries: List[str]  # LLM 기반 확장 쿼리 리스트
 
     # === 노드 타이밍 ===
-    _node_timings: Optional[Dict[str, Dict]]
+    _node_timings: Annotated[Dict[str, Dict], _merge_dicts]
 
     # === 에이전트 트레이스 (append-only, 병렬 fan-out 호환) ===
     _agent_trace_entries: Annotated[List[TraceEntry], operator.add]
@@ -242,6 +227,19 @@ class ChatState(MessagesState):
     conversation_history: List[Dict[str, Any]]
     compact_summary: Optional[Dict[str, Any]]
     total_turn_count: int
+
+    # === RAG 대화 메모리 (PR-B: 선별 히스토리) ===
+    rag_conversation_memory: Optional[List[Dict[str, Any]]]
+
+    # === Phase D: 이전 턴 컨텍스트 (FOLLOWUP_WITH_CONTEXT용) ===
+    _last_turn_context: Optional[Dict[str, Any]]
+
+    # === 후속 질문 ===
+    followup_questions: List[str]
+
+    # === 분쟁 슬롯 (온보딩 영속화용) ===
+    dispute_slots: Dict[str, Optional[str]]
+    conversation_phase: str
 
 
 def create_initial_state(
@@ -279,6 +277,7 @@ def create_initial_state(
         chat_type=chat_type,
         onboarding=onboarding,
         user_query=user_query,
+        session_id=None,
 
         # 에이전트 결과
         query_analysis=None,
@@ -290,28 +289,17 @@ def create_initial_state(
         final_answer=None,
         sources=[],
         has_sufficient_evidence=True,
-        clarifying_questions=[],
+        retrieval_confidence=0.0,
         claim_evidence_map=[],
+        response_depth='full',
+        available_details=None,
 
         # 제어 플래그
         retry_count=0,
-        awaiting_user_choice=False,
         low_similarity_mode=False,
         mode='NEED_RAG',
         guardrail_blocked=False,
         guardrail_type=None,
-
-        # 대화 단계
-        conversation_phase='initial',
-        dispute_slots={
-            'purchase_item': None,
-            'dispute_type': None,
-            'problem_details': None,
-            'purchase_date': None,
-            'purchase_place': None,
-        },
-        dispute_slot_status={},
-        last_phase_transition_reason=None,
 
         # ReAct 패턴
         react_steps=[],
@@ -343,6 +331,19 @@ def create_initial_state(
         conversation_history=[],
         compact_summary=None,
         total_turn_count=0,
+
+        # RAG 대화 메모리
+        rag_conversation_memory=[],
+
+        # Phase D: 이전 턴 컨텍스트
+        _last_turn_context=None,
+
+        # 후속 질문
+        followup_questions=[],
+
+        # 분쟁 슬롯
+        dispute_slots={},
+        conversation_phase='initial',
     )
 
 
@@ -370,11 +371,11 @@ __all__ = [
 
     # 출력
     'ClaimEvidenceMapping',
+    'ResponseDepth',
     'OutputState',
 
     # 제어
     'RoutingMode',
-    'ConversationPhase',
     'TraceEntry',
     'ControlState',
 
@@ -386,13 +387,12 @@ __all__ = [
     'ConversationTurn',
     'CompactSummary',
     'MemoryState',
+    'RAGConversationMemory',
+    'RAGTurn',
 
     # 슈퍼바이저
     'AgentMessage',
     'SupervisorState',
-
-    # 기타
-    'SlotStatus',
 
     # 통합 상태
     'ChatState',

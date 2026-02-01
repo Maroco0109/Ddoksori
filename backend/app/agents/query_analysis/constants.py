@@ -35,6 +35,7 @@ QUERY_TYPE_TO_RETRIEVERS: Dict[str, List[str]] = {
     "general": [],                                   # 검색 불필요
     "system_meta": [],                               # 검색 불필요
     "ambiguous": ["law", "criteria"],                # 법령 + 기준 (사례는 나중에)
+    "meta_conversational": [],                       # 검색 불필요 - 가이드 응답만
 }
 
 
@@ -268,7 +269,8 @@ DISPUTE_INTENT_KEYWORDS: List[str] = [
 GENERAL_PATTERNS: List[str] = [
     r"^안녕", r"^반갑", r"^감사", r"^고마", r"^네$", r"^예$",
     r"^알겠", r"^네\s*알겠", r"^네,?\s*알겠", r"^ㅋ+$", r"^ㅎ+$", r"^ㅇㅇ$",
-    r"^오케이", r"^ok", r"^hello", r"^hi$", r"^bye", r"^thanks",
+    r"^ㅎㅇ$", r"^ㅎ2$", r"^ㅎㅇ\s*ㅎㅇ$",  # 인사말 약어
+    r"^오케이", r"^ok", r"^hello", r"^hi$", r"^하이$", r"^bye", r"^thanks",
 ]
 
 # 정의형 질문 패턴 ("환불이 뭐예요?" 같은)
@@ -287,6 +289,32 @@ PROCEDURE_PATTERNS: List[str] = [
     r"뭐\s*필요해",
     r"서류.*뭐",
     r"기간.*얼마나",
+]
+
+
+# ============================================================
+# Meta-Conversational Patterns (대화형 안내 쿼리)
+# "뭘 물어봐야 할까?", "도와줘", "어떻게 시작해?" 등
+# RAG 없이 가이드 응답을 생성해야 하는 메타 쿼리 패턴
+# ============================================================
+META_CONVERSATIONAL_PATTERNS: List[str] = [
+    r"(뭘|무엇을?|어떤\s*걸?)\s*(물어|질문|문의)",
+    r"(도와|도움)\s*(줘|주세요|줄래|필요)",
+    r"(어떻게|뭐부터)\s*(시작|해야|하면)",
+    r"(알려|가르쳐)\s*(줘|주세요)",
+    r"^(안내|설명|소개)\s*(해|좀|부탁)",
+    r"(뭘|무엇을?|어떤)\s*(알아야|준비|필요)",
+    r"(상담|문의)\s*(하고\s*싶|받고\s*싶|하려)",
+]
+
+META_CONVERSATIONAL_KEYWORDS: List[str] = [
+    # 주의: system_meta(SYSTEM_META_KEYWORDS)가 우선 체크됨.
+    # "사용법"은 system_meta에도 있으므로 여기에 포함하지 않음.
+    "뭘 물어봐야", "무엇을 물어", "어떤 걸 물어",
+    "도와줘", "도와주세요", "도움이 필요",
+    "어떻게 시작", "뭐부터 해야", "뭐부터 하면",
+    "어떻게 이용", "이용법",
+    "상담하고 싶", "문의하고 싶", "문의하려",
 ]
 
 
@@ -325,4 +353,7 @@ __all__ = [
     "GENERAL_PATTERNS",
     "DEFINITIONAL_PATTERNS",
     "PROCEDURE_PATTERNS",
+    # Meta-Conversational
+    "META_CONVERSATIONAL_PATTERNS",
+    "META_CONVERSATIONAL_KEYWORDS",
 ]

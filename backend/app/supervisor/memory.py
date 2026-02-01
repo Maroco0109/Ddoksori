@@ -311,6 +311,18 @@ class ConversationMemory:
         """전체 대화 턴 수 (Compact로 삭제된 것 포함)"""
         return self.total_turn_count
 
+    def save_metadata(self, key: str, value: Any) -> None:
+        """Save metadata associated with the conversation session."""
+        if not hasattr(self, '_metadata'):
+            self._metadata = {}
+        self._metadata[key] = value
+
+    def get_metadata(self, key: str) -> Optional[Any]:
+        """Retrieve metadata associated with the conversation session."""
+        if not hasattr(self, '_metadata'):
+            return None
+        return self._metadata.get(key)
+
     def clear(self) -> None:
         """메모리 초기화"""
         self.turns = []

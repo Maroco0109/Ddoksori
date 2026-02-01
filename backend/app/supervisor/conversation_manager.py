@@ -8,7 +8,21 @@ without LLM calls for cost-efficient progressive dispute consultation.
 from typing import Dict, List, Optional, Any, Tuple
 import re
 
-from .state import ChatState, ConversationPhase, SlotStatus
+# LEGACY: Phase System removed. This module is kept for backward compatibility.
+# SlotStatus and ConversationPhase are defined locally for legacy code.
+from typing_extensions import TypedDict
+
+
+class SlotStatus(TypedDict):
+    slot_name: str
+    status: str  # 'filled' | 'partial' | 'missing'
+    evidence_chunk_ids: List[str]
+    confidence: float
+
+
+ConversationPhase = str  # Was a Literal type, now just str for legacy compat
+
+from .state import ChatState
 
 
 REQUIRED_SLOTS = ['purchase_item', 'problem_details']
@@ -173,6 +187,20 @@ def get_missing_slot_questions(slot_status: Dict[str, SlotStatus], max_questions
     return questions
 
 
+def is_new_topic(user_query: str, current_phase: ConversationPhase) -> bool:
+    """
+    사용자가 새로운 주제를 질문하는지 판단합니다.
+    awaiting_* phase에서 단순 긍정/부정이 아닌 새로운 키워드가 포함된 경우.
+    """
+    if current_phase not in ('awaiting_law_confirm', 'awaiting_procedure_confirm'):
+        return False
+    # 긍정/부정 응답이 아니면서 길이가 충분한 경우 새 토픽으로 판단
+    yes_no = detect_yes_no(user_query)
+    if yes_no is not None:
+        return False
+    return len(user_query.strip()) > 5
+
+
 def compute_phase_transition(
     current_phase: ConversationPhase,
     user_query: str,
@@ -180,39 +208,50 @@ def compute_phase_transition(
     query_type: Optional[str] = None,
 ) -> Tuple[ConversationPhase, str]:
     """
-    Compute the next conversation phase based on current state and user input.
-    Returns (new_phase, transition_reason).
+    Progressive Disclosure 기반 대화 phase 전이를 계산합니다.
+
+    흐름:
+    - initial → info_gathering (슬롯 미충족) 또는 providing_case_summary (슬롯 충족/NEED_RAG)
+    - providing_case_summary → awaiting_law_confirm (사례 제공 완료)
+    - awaiting_law_confirm → providing_law_detail (긍정) / initial (새 토픽) / awaiting_procedure_confirm (부정)
+    - providing_law_detail → awaiting_procedure_confirm (법령 제공 완료)
+    - awaiting_procedure_confirm → providing_procedure (긍정) / completed (부정) / initial (새 토픽)
+    - providing_procedure → completed
     """
     if current_phase == 'initial':
-        if detect_dispute_intent(user_query):
+        if detect_dispute_intent(user_query) or query_type not in (None, 'general', 'system_meta'):
             if are_required_slots_filled(slot_status):
-                return 'ready_for_analysis', 'dispute_intent_with_complete_info'
+                return 'providing_case_summary', 'ready_for_case_summary'
             return 'info_gathering', 'dispute_intent_detected'
+        # NEED_RAG 쿼리는 슬롯과 무관하게 사례 요약부터 시작
+        if query_type and query_type not in ('general', 'system_meta'):
+            return 'providing_case_summary', 'need_rag_query'
         return 'initial', 'no_dispute_intent'
 
     if current_phase == 'info_gathering':
         if are_required_slots_filled(slot_status):
-            return 'ready_for_analysis', 'required_slots_filled'
+            return 'providing_case_summary', 'required_slots_filled'
         return 'info_gathering', 'slots_still_missing'
 
-    if current_phase == 'ready_for_analysis':
-        return 'providing_law', 'auto_transition_to_law'
+    if current_phase == 'providing_case_summary':
+        return 'awaiting_law_confirm', 'case_summary_provided'
 
-    if current_phase == 'providing_law':
-        return 'awaiting_case_confirm', 'law_provided'
-
-    if current_phase == 'awaiting_case_confirm':
+    if current_phase == 'awaiting_law_confirm':
+        if is_new_topic(user_query, current_phase):
+            return 'initial', 'new_topic_detected'
         yes_no = detect_yes_no(user_query)
         if yes_no is True:
-            return 'providing_case', 'user_requested_case'
+            return 'providing_law_detail', 'user_requested_law_detail'
         if yes_no is False:
-            return 'awaiting_procedure_confirm', 'user_declined_case'
-        return 'awaiting_case_confirm', 'awaiting_user_response'
+            return 'awaiting_procedure_confirm', 'user_declined_law_detail'
+        return 'awaiting_law_confirm', 'awaiting_user_response'
 
-    if current_phase == 'providing_case':
-        return 'awaiting_procedure_confirm', 'case_provided'
+    if current_phase == 'providing_law_detail':
+        return 'awaiting_procedure_confirm', 'law_detail_provided'
 
     if current_phase == 'awaiting_procedure_confirm':
+        if is_new_topic(user_query, current_phase):
+            return 'initial', 'new_topic_detected'
         yes_no = detect_yes_no(user_query)
         if yes_no is True:
             return 'providing_procedure', 'user_requested_procedure'
@@ -222,6 +261,10 @@ def compute_phase_transition(
 
     if current_phase == 'providing_procedure':
         return 'completed', 'procedure_provided'
+
+    if current_phase == 'completed':
+        # 완료 후 새 질문 시 초기화
+        return 'initial', 'restart_from_completed'
 
     return current_phase, 'no_transition'
 
@@ -262,15 +305,15 @@ def update_slots_and_phase(state: ChatState) -> Dict[str, Any]:
 
 
 def get_next_questions(state: ChatState) -> List[str]:
-    """Get appropriate questions based on current phase and slot status."""
+    """Phase별 후속 질문을 반환합니다."""
     phase = state.get('conversation_phase', 'initial')
     slot_status = state.get('dispute_slot_status', {})
 
     if phase in ('initial', 'info_gathering'):
         return get_missing_slot_questions(slot_status)
 
-    if phase == 'awaiting_case_confirm':
-        return ["관련 분쟁조정 사례도 보여드릴까요?"]
+    if phase == 'awaiting_law_confirm':
+        return ["관련 법령과 분쟁해결기준도 상세히 알려드릴까요?"]
 
     if phase == 'awaiting_procedure_confirm':
         return ["분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해 드릴까요?"]
@@ -281,18 +324,23 @@ def get_next_questions(state: ChatState) -> List[str]:
 def should_trigger_clarification(state: ChatState) -> bool:
     """Determine if clarification node should be triggered."""
     phase = state.get('conversation_phase', 'initial')
-    return phase in ('info_gathering', 'awaiting_case_confirm', 'awaiting_procedure_confirm')
+    return phase in ('info_gathering', 'awaiting_law_confirm', 'awaiting_procedure_confirm')
 
 
 def get_retriever_types_for_phase(phase: ConversationPhase) -> List[str]:
-    """Get appropriate retriever types for the current phase."""
-    if phase == 'providing_law':
-        return ['law', 'criteria']
-    if phase == 'providing_case':
-        return ['case']
-    if phase == 'providing_procedure':
-        return ['procedure']
-    return ['law', 'criteria', 'case', 'consultation']
+    """
+    Phase별 Retrieval 에이전트 타입을 반환합니다.
+
+    Progressive Disclosure:
+    - providing_case_summary: 전체 검색 (첫 턴에 모든 소스 캐싱)
+    - providing_law_detail: 캐시 사용 (재검색 불필요)
+    - providing_procedure: 캐시 사용 (재검색 불필요)
+    """
+    if phase == 'providing_case_summary':
+        return ['law', 'criteria', 'case']  # 전체 검색 (캐싱용)
+    if phase in ('providing_law_detail', 'providing_procedure'):
+        return []  # 캐시 사용, 재검색 불필요
+    return ['law', 'criteria', 'case']  # 기본값
 
 
 __all__ = [
@@ -303,6 +351,7 @@ __all__ = [
     'detect_yes_no',
     'detect_dispute_intent',
     'extract_dispute_type',
+    'is_new_topic',
     'merge_slots',
     'compute_slot_status',
     'are_required_slots_filled',

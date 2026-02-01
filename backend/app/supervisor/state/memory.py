@@ -5,6 +5,8 @@
 대화 히스토리 압축 및 요약 기능을 지원합니다.
 """
 
+import os
+from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional, Any
 from typing_extensions import TypedDict
 
@@ -122,4 +124,99 @@ __all__ = [
     'ConversationTurn',
     'CompactSummary',
     'MemoryState',
+    'RAGConversationMemory',
+    'RAGTurn',
 ]
+
+
+@dataclass
+class RAGTurn:
+    """NEED_RAG 대화 턴 1개"""
+    user_query: str
+    answer_summary: str  # final_answer의 앞 200자
+    mode: str = 'NEED_RAG'
+
+
+class RAGConversationMemory:
+    """
+    NEED_RAG 대화 턴만 선별 기억하는 유틸리티.
+
+    NO_RETRIEVAL(인사, 시스템 질문) 턴은 저장하지 않습니다.
+    윈도우 크기(기본 5)를 초과하면 가장 오래된 턴을 제거합니다.
+
+    Usage:
+        memory = RAGConversationMemory.from_state(state.get('rag_conversation_memory', []))
+        memory.add_turn(mode='NEED_RAG', query='헬스장 환불', answer_summary='소비자분쟁...')
+        updated_list = memory.to_state()  # List[Dict]로 반환
+    """
+
+    WINDOW_SIZE_DEFAULT = 5
+    ANSWER_SUMMARY_MAX_LENGTH = 200
+
+    def __init__(self, turns: List[RAGTurn] = None, window_size: int = None):
+        self.turns: List[RAGTurn] = turns or []
+        self.window_size = window_size or int(os.environ.get('CONVERSATION_MEMORY_WINDOW', self.WINDOW_SIZE_DEFAULT))
+
+    @classmethod
+    def from_state(cls, state_list: Optional[List[Dict]]) -> 'RAGConversationMemory':
+        """ChatState의 rag_conversation_memory 필드(List[Dict])에서 복원"""
+        if not state_list:
+            return cls()
+        turns = [RAGTurn(**item) for item in state_list]
+        return cls(turns=turns)
+
+    def add_turn(self, mode: str, query: str, answer_summary: str) -> bool:
+        """
+        대화 턴을 추가합니다.
+
+        Args:
+            mode: 라우팅 모드 ('NEED_RAG', 'NO_RETRIEVAL', 'NEED_CLARIFICATION')
+            query: 사용자 질문
+            answer_summary: final_answer 요약 (최대 200자)
+
+        Returns:
+            True if 저장됨 (NEED_RAG), False if 스킵됨 (기타 모드)
+        """
+        if mode != 'NEED_RAG':
+            return False
+
+        # 요약 길이 제한
+        truncated = answer_summary[:self.ANSWER_SUMMARY_MAX_LENGTH]
+        if len(answer_summary) > self.ANSWER_SUMMARY_MAX_LENGTH:
+            truncated = truncated.rstrip() + '...'
+
+        self.turns.append(RAGTurn(
+            user_query=query,
+            answer_summary=truncated,
+            mode=mode
+        ))
+
+        # 윈도우 초과 시 오래된 턴 제거
+        while len(self.turns) > self.window_size:
+            self.turns.pop(0)
+
+        return True
+
+    def get_recent_turns(self, n: Optional[int] = None) -> List[RAGTurn]:
+        """최근 N턴 반환 (기본: 전체)"""
+        if n is None:
+            return list(self.turns)
+        return self.turns[-n:]
+
+    def get_context_for_rewriting(self) -> str:
+        """Query Rewriter에 전달할 컨텍스트 문자열 생성"""
+        if not self.turns:
+            return ""
+        lines = ["[이전 대화 이력]"]
+        for i, turn in enumerate(self.turns, 1):
+            lines.append(f"턴 {i}:")
+            lines.append(f"  질문: {turn.user_query}")
+            lines.append(f"  답변 요약: {turn.answer_summary}")
+        return "\n".join(lines)
+
+    def to_state(self) -> List[Dict]:
+        """ChatState 저장용 List[Dict]로 변환"""
+        return [asdict(turn) for turn in self.turns]
+
+    def __len__(self) -> int:
+        return len(self.turns)

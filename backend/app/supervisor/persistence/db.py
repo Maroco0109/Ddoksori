@@ -37,6 +37,7 @@ PostgreSQL 기반 대화 이력 저장 및 조회를 담당합니다.
 """
 
 import asyncio
+import logging
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta
@@ -44,9 +45,8 @@ from typing import List, Dict, Optional, Any
 from uuid import UUID
 
 from app.common.config import DatabaseConfig, get_config
-from app.common.logging.rag_logger import get_rag_logger
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 
 
 class ConversationDB:

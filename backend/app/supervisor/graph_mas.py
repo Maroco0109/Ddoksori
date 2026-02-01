@@ -21,7 +21,7 @@ from .graph import _create_timed_node
 from .checkpointer import get_checkpointer
 from .nodes.supervisor import SupervisorNode
 from .nodes.retrieval_merge import retrieval_merge_node
-from .nodes.clarify import ask_clarification_node
+from .nodes.memory_save import memory_save_node
 from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ from .cache import SupervisorResponseCache, QueryAnalysisCache
 
 
 def _cache_check_node(state: ChatState) -> Dict[str, Any]:
-    """L1 캐시 체크 노드"""
+    """L1 캐시 체크 노드 (Phase 3-E: 턴 번호 포함하여 반복 답변 방지)"""
     messages = state.get('messages', [])
     if not messages:
         return {'_cache_hit': False}
@@ -47,10 +47,19 @@ def _cache_check_node(state: ChatState) -> Dict[str, Any]:
         user_query = str(last_msg)
 
     session_id = state.get('session_id')
+    total_turn_count = state.get('total_turn_count', 0)
 
-    cached = SupervisorResponseCache.get(user_query, session_id)
+    # Phase 3-E: Prevent repeat answers by including turn count in cache key
+    # For turn 2+, append turn context to prevent exact cache hits
+    if total_turn_count > 1:
+        cache_query = f"{user_query}::turn{total_turn_count}"
+        logger.debug(f"[L1 Cache] Modified cache key for turn {total_turn_count}")
+    else:
+        cache_query = user_query
+
+    cached = SupervisorResponseCache.get(cache_query, session_id)
     if cached:
-        logger.info(f"[L1 Cache] HIT for query: {user_query[:30]}...")
+        logger.info(f"[L1 Cache] HIT for query: {user_query[:30]}... (turn={total_turn_count})")
         return {
             '_cache_hit': True,
             '_cached_response': cached,
@@ -79,6 +88,42 @@ def _route_cache_check(state: ChatState) -> str:
     if state.get('_cache_hit'):
         return "cache_response"
     return "input_guardrail"
+
+
+def _inject_cached_retrieval_node(state: ChatState) -> Dict[str, Any]:
+    """
+    Phase 3-C: FOLLOWUP_WITH_CONTEXT 모드에서 캐시된 retrieval 결과를 state에 주입
+
+    동작 순서:
+    1. _last_turn_context.retrieval 우선 사용 (in-memory)
+    2. 없으면 L4 RetrievalResultCache(Redis) 사용
+    3. 둘 다 없으면 경고 로그 (generation이 fallback 처리)
+    """
+    session_id = state.get('session_id')
+    mode = state.get('mode', '')
+
+    if mode != 'FOLLOWUP_WITH_CONTEXT':
+        logger.warning(f"[inject_cached_retrieval] Called with mode={mode}, skipping")
+        return {}
+
+    # Try _last_turn_context first (in-memory from previous turn)
+    last_context = state.get('_last_turn_context') or {}
+    cached_retrieval = last_context.get('retrieval')
+
+    if cached_retrieval:
+        logger.info("[inject_cached_retrieval] Using _last_turn_context.retrieval")
+        return {'retrieval': cached_retrieval}
+
+    # Fallback to L4 Redis cache
+    if session_id:
+        from .cache import RetrievalResultCache
+        cached = RetrievalResultCache.get_by_session(session_id)
+        if cached:
+            logger.info(f"[inject_cached_retrieval] Using L4 RetrievalResultCache for session={session_id[:8]}")
+            return {'retrieval': cached}
+
+    logger.warning(f"[inject_cached_retrieval] No cached retrieval found for session={session_id[:8] if session_id else 'None'}")
+    return {}
 # === PR-6 끝 ===
 
 
@@ -204,11 +249,14 @@ def _route_mas_supervisor(state: ChatState):
     logger.info(f"[MAS Router v2] next_agent={next_agent}, retry_count={retry_count}")
 
     mode = state.get("mode", "NEED_RAG")
-    if mode in ('NEED_USER_CLARIFICATION', 'NEED_CLARIFICATION'):
-        return 'ask_clarification'
 
-    # Fast Path: NO_RETRIEVAL 또는 CACHED_RAG → Retrieval 생략
-    if mode in ("NO_RETRIEVAL", "CACHED_RAG") and next_agent == "retrieval_team":
+    # Phase 3-C: FOLLOWUP_WITH_CONTEXT → inject cached retrieval before generation
+    if mode == "FOLLOWUP_WITH_CONTEXT" and next_agent == "retrieval_team":
+        logger.info("[MAS Router v2] FOLLOWUP_WITH_CONTEXT → inject_cached_retrieval")
+        return "inject_cached_retrieval"
+
+    # Fast Path: NO_RETRIEVAL / CACHED_RAG / META_CONVERSATIONAL → Retrieval 생략
+    if mode in ("NO_RETRIEVAL", "CACHED_RAG", "META_CONVERSATIONAL") and next_agent == "retrieval_team":
         logger.info(f"[MAS Router v2] mode={mode}, skipping retrieval → generation")
         return "generation"
 
@@ -279,7 +327,6 @@ def create_mas_supervisor_graph() -> StateGraph:
     graph.add_node('query_analysis', _create_timed_node(qa_node, 'query_analysis'))
     graph.add_node('generation', _create_timed_node(gen_node, 'generation'))
     graph.add_node('review', _create_timed_node(rev_node, 'review'))
-    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
 
     # v2: 3개 Retrieval Agent (counsel 제외)
     for agent_type in ['law', 'criteria', 'case']:
@@ -287,6 +334,10 @@ def create_mas_supervisor_graph() -> StateGraph:
         graph.add_node(f'retrieval_{agent_type}', _create_timed_node(node_fn, f'retrieval_{agent_type}'))
 
     graph.add_node('retrieval_merge', _create_timed_node(retrieval_merge_node, 'retrieval_merge'))
+    graph.add_node('memory_save', _create_timed_node(memory_save_node, 'memory_save'))
+
+    # Phase 3-C: Cache injection node for FOLLOWUP_WITH_CONTEXT
+    graph.add_node('inject_cached_retrieval', _create_timed_node(_inject_cached_retrieval_node, 'inject_cached_retrieval'))
 
     # === 엣지 설정 ===
     graph.set_entry_point('cache_check')
@@ -304,7 +355,7 @@ def create_mas_supervisor_graph() -> StateGraph:
         {END: END, 'supervisor': 'supervisor'}
     )
 
-    # v2 라우팅
+    # v2 라우팅 (Phase 3-C: inject_cached_retrieval 추가)
     graph.add_conditional_edges(
         'supervisor',
         _route_mas_supervisor,
@@ -316,7 +367,7 @@ def create_mas_supervisor_graph() -> StateGraph:
             'generation': 'generation',
             'review': 'review',
             'output_guardrail': 'output_guardrail',
-            'ask_clarification': 'ask_clarification',
+            'inject_cached_retrieval': 'inject_cached_retrieval',
         }
     )
 
@@ -328,8 +379,11 @@ def create_mas_supervisor_graph() -> StateGraph:
     graph.add_edge('query_analysis', 'supervisor')
     graph.add_edge('generation', 'supervisor')
     graph.add_edge('review', 'supervisor')
-    graph.add_edge('output_guardrail', END)
-    graph.add_edge('ask_clarification', END)
+    graph.add_edge('output_guardrail', 'memory_save')
+    graph.add_edge('memory_save', END)
+
+    # Phase 3-C: inject_cached_retrieval → generation
+    graph.add_edge('inject_cached_retrieval', 'generation')
 
     logger.info("[MAS Graph v2] Created MAS Supervisor v2 graph")
 

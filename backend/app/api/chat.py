@@ -44,12 +44,21 @@ rag_logger = get_rag_logger()
 NODE_LABELS: Dict[str, tuple[str, int]] = {
     'input_guardrail': ('입력 검증중...', 5),
     'query_analysis': ('질의 분석중...', 15),
-    'ask_clarification': ('추가 정보 요청중...', 20),
     'react_think': ('추론중...', 25),
     'react_act': ('정보 검색중...', 50),
     'generation': ('답변 생성중...', 80),
     'review': ('검토중...', 95),
     'output_guardrail': ('완료', 100),
+}
+
+# on_chain_end 이벤트 필터링: 등록된 그래프 노드만 final_state에 반영
+KNOWN_GRAPH_NODES = {
+    'cache_check', 'cache_response',
+    'input_guardrail', 'output_guardrail',
+    'supervisor',
+    'query_analysis', 'generation', 'review',
+    'retrieval_law', 'retrieval_criteria', 'retrieval_case',
+    'retrieval_merge',
 }
 
 
@@ -126,6 +135,14 @@ async def chat(
             onboarding=cast(Any, request.onboarding),
         )
 
+        # 온보딩 데이터 영속화
+        if request.onboarding and session_memory:
+            session_memory.save_metadata('onboarding', dict(request.onboarding))
+        elif session_memory:
+            saved_onboarding = session_memory.get_metadata('onboarding')
+            if saved_onboarding:
+                initial_state['onboarding'] = saved_onboarding
+
         # 메모리 컨텍스트를 초기 상태에 병합
         if memory_context and session_memory:
             initial_state['conversation_history'] = memory_context.get('conversation_history', [])
@@ -134,25 +151,6 @@ async def chat(
 
         # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
         initial_state['session_id'] = session_id
-
-        # Progressive Disclosure: 이전 턴의 conversation_phase/dispute_slots 복원
-        from app.common.cache import get_redis_client
-        _redis = get_redis_client()
-        if _redis and request.session_id:
-            import json as _json
-            _phase_key = f"session_phase:{session_id}"
-            _saved = _redis.get(_phase_key)
-            if _saved:
-                try:
-                    _phase_data = _json.loads(_saved)
-                    initial_state['conversation_phase'] = _phase_data.get('conversation_phase', 'initial')
-                    if _phase_data.get('dispute_slots'):
-                        initial_state['dispute_slots'] = _phase_data['dispute_slots']
-                    if _phase_data.get('dispute_slot_status'):
-                        initial_state['dispute_slot_status'] = _phase_data['dispute_slot_status']
-                    logger.info(f"[chat] Restored phase={initial_state['conversation_phase']} for session={session_id[:8]}...")
-                except Exception as e:
-                    logger.warning(f"[chat] Failed to restore phase: {e}")
 
         config = cast(Any, {
             "configurable": {"thread_id": session_id},
@@ -226,28 +224,8 @@ async def chat(
         sources = final_state.get('sources', [])
         has_evidence = final_state.get('has_sufficient_evidence', True)
 
-        # Progressive Disclosure: conversation_phase 저장
-        if _redis:
-            import json as _json
-            _phase_key = f"session_phase:{session_id}"
-            _phase_data = {
-                'conversation_phase': final_state.get('conversation_phase', 'initial'),
-                'dispute_slots': final_state.get('dispute_slots', {}),
-                'dispute_slot_status': final_state.get('dispute_slot_status', {}),
-            }
-            try:
-                _redis.setex(_phase_key, 3600, _json.dumps(_phase_data, default=str))
-            except Exception as e:
-                logger.warning(f"[chat] Failed to save phase: {e}")
-        questions = final_state.get('clarifying_questions', [])
+        questions = []  # LEGACY: clarification 제거됨
         followup_questions = final_state.get('followup_questions', [])
-
-        # Progressive Disclosure: 후속 질문 옵션 생성
-        _conv_phase = final_state.get('conversation_phase', 'initial')
-        if _conv_phase == 'providing_case_summary' and not followup_questions:
-            followup_questions = ["네, 법령/기준도 알려주세요", "아니요, 괜찮습니다"]
-        elif _conv_phase == 'providing_law_detail' and not followup_questions:
-            followup_questions = ["네, 절차도 안내해주세요", "아니요, 충분합니다"]
 
         # 어시스턴트 응답을 메모리에 추가
         if session_memory:
@@ -342,6 +320,24 @@ async def chat(
         raise HTTPException(status_code=500, detail=f"답변 생성 중 오류 발생: {str(e)}")
 
 
+async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
+    """astream_events에 heartbeat를 인터리브하는 래퍼.
+
+    이벤트 간 간격이 heartbeat_interval을 초과하면 heartbeat를 yield합니다.
+    generation_node_v2 같은 blocking LLM 호출 중에도 heartbeat를 전송하여
+    프론트엔드 SSE 타임아웃을 방지합니다.
+    """
+    aiter = async_iterable.__aiter__()
+    while True:
+        try:
+            event = await asyncio.wait_for(aiter.__anext__(), timeout=heartbeat_interval)
+            yield ("event", event)
+        except asyncio.TimeoutError:
+            yield ("heartbeat", None)
+        except StopAsyncIteration:
+            break
+
+
 @router.post("/chat/stream")
 async def chat_stream_sse(
     request: ChatRequest,
@@ -409,6 +405,14 @@ async def chat_stream_sse(
                 onboarding=cast(Any, request.onboarding),
             )
 
+            # 온보딩 데이터 영속화
+            if request.onboarding and session_memory:
+                session_memory.save_metadata('onboarding', dict(request.onboarding))
+            elif session_memory:
+                saved_onboarding = session_memory.get_metadata('onboarding')
+                if saved_onboarding:
+                    initial_state['onboarding'] = saved_onboarding
+
             # 메모리 컨텍스트 병합
             if memory_context and session_memory:
                 initial_state['conversation_history'] = memory_context.get('conversation_history', [])
@@ -417,28 +421,6 @@ async def chat_stream_sse(
 
             # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
             initial_state['session_id'] = session_id
-
-            # Progressive Disclosure: 이전 턴의 conversation_phase 복원
-            _redis_stream = None
-            try:
-                from app.common.cache import get_redis_client
-                _redis_stream = get_redis_client()
-                if _redis_stream and request.session_id:
-                    import json as _json_s
-                    _phase_key_s = f"session_phase:{session_id}"
-                    _saved_s = _redis_stream.get(_phase_key_s)
-                    if _saved_s:
-                        try:
-                            _phase_data_s = _json_s.loads(_saved_s)
-                            initial_state['conversation_phase'] = _phase_data_s.get('conversation_phase', 'initial')
-                            if _phase_data_s.get('dispute_slots'):
-                                initial_state['dispute_slots'] = _phase_data_s['dispute_slots']
-                            if _phase_data_s.get('dispute_slot_status'):
-                                initial_state['dispute_slot_status'] = _phase_data_s['dispute_slot_status']
-                        except Exception as e:
-                            logger.warning(f"[chat_stream] Failed to restore phase: {e}")
-            except Exception as e:
-                logger.warning(f"[chat_stream] Redis unavailable, skipping phase restore: {e}")
 
             runnable_config = cast(Any, {
                 "configurable": {"thread_id": session_id},
@@ -453,9 +435,16 @@ async def chat_stream_sse(
             full_answer = ""
             final_state = {}
             SSE_HEARTBEAT_INTERVAL = 15  # 초
-            last_heartbeat = time.monotonic()
 
-            async for event in graph.astream_events(initial_state, runnable_config, version="v2"):
+            async for item_type, item in _stream_with_heartbeat(
+                graph.astream_events(initial_state, runnable_config, version="v2"),
+                heartbeat_interval=SSE_HEARTBEAT_INTERVAL,
+            ):
+                if item_type == "heartbeat":
+                    yield ": heartbeat\n\n"
+                    continue
+
+                event = item
                 event_type = event.get("event")
 
                 # 1. Custom Events (token, fallback, error)
@@ -511,20 +500,46 @@ async def chat_stream_sse(
 
                 # 3. Node End Events (capture final state)
                 elif event_type == "on_chain_end":
-                    # Capture node outputs to build final_state
+                    chain_name = event.get("name", "")
                     node_output = event.get("data", {}).get("output", {})
-                    if isinstance(node_output, dict):
+
+                    if isinstance(node_output, dict) and chain_name in KNOWN_GRAPH_NODES:
+                        existing_answer = final_state.get('final_answer', '')
                         final_state.update(node_output)
 
-                # 4. Heartbeat: 프록시/브라우저 idle timeout 방지
-                now = time.monotonic()
-                if now - last_heartbeat >= SSE_HEARTBEAT_INTERVAL:
-                    yield ": heartbeat\n\n"
-                    last_heartbeat = now
+                        # final_answer가 유효한 값에서 빈 값으로 덮어쓰여진 경우 복원
+                        new_answer = final_state.get('final_answer', '')
+                        if existing_answer and not new_answer:
+                            final_state['final_answer'] = existing_answer
+                            logger.warning(
+                                f"[SSE] Restored final_answer overwritten by node={chain_name}"
+                            )
 
             # 최종 결과 전송
             if final_state:
                 answer = final_state.get('final_answer', '')
+
+                # Fallback: final_answer가 비어있을 때 토큰 누적 답변 사용
+                if not answer and full_answer:
+                    review_executed = bool(final_state.get('review'))
+                    if review_executed:
+                        review_answer = (final_state.get('review', {}) or {}).get('final_answer', '')
+                        if review_answer:
+                            answer = review_answer
+                            logger.warning("[SSE] Using review.final_answer as fallback")
+                        else:
+                            answer = full_answer
+                            logger.error(
+                                "[SSE] final_answer is empty after review execution. "
+                                "Falling back to pre-review full_answer as last resort."
+                            )
+                    else:
+                        answer = full_answer
+                        logger.warning(
+                            "[SSE] Using streamed full_answer as fallback "
+                            "(final_state.final_answer was empty, no review executed)"
+                        )
+
                 retrieval = final_state.get('retrieval') or {}
 
                 # retrieval 정보 추출 (기존 /chat endpoint와 동일)
@@ -575,27 +590,7 @@ async def chat_stream_sse(
                         'content': criterion.get('content', ''),
                     })
 
-                # Progressive Disclosure: conversation_phase 저장
-                if _redis_stream:
-                    import json as _json_s2
-                    _phase_key_s2 = f"session_phase:{session_id}"
-                    _phase_data_s2 = {
-                        'conversation_phase': final_state.get('conversation_phase', 'initial'),
-                        'dispute_slots': final_state.get('dispute_slots', {}),
-                        'dispute_slot_status': final_state.get('dispute_slot_status', {}),
-                    }
-                    try:
-                        _redis_stream.setex(_phase_key_s2, 3600, _json_s2.dumps(_phase_data_s2, default=str))
-                    except Exception:
-                        pass
-
-                # Progressive Disclosure: 후속 질문 옵션 생성
                 _followup_qs = final_state.get('followup_questions', [])
-                _conv_phase = final_state.get('conversation_phase', 'initial')
-                if _conv_phase == 'providing_case_summary' and not _followup_qs:
-                    _followup_qs = ["네, 법령/기준도 알려주세요", "아니요, 괜찮습니다"]
-                elif _conv_phase == 'providing_law_detail' and not _followup_qs:
-                    _followup_qs = ["네, 절차도 안내해주세요", "아니요, 충분합니다"]
 
                 complete_event = {
                     'type': 'complete',
@@ -603,7 +598,6 @@ async def chat_stream_sse(
                         'session_id': session_id,
                         'answer': answer,
                         'sources': sources,
-                        'awaiting_user_choice': final_state.get('awaiting_user_choice', False),
                         'clarifying_questions': final_state.get('clarifying_questions', []),
                         'followup_questions': _followup_qs,
                         'has_sufficient_evidence': final_state.get('has_sufficient_evidence', True),

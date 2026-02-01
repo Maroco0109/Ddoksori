@@ -12,7 +12,7 @@ S1-PR5: LLM API 오류 시 다중 폴백 전략
 
 import os
 import logging
-from typing import Dict, Tuple, List, Any, Mapping, AsyncGenerator
+from typing import Dict, Tuple, List, Any, Mapping, AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +41,24 @@ class AnswerGenerationFallback:
         retrieval: Mapping[str, Any],
         agency_info: Mapping[str, Any],
         include_disclaimer: bool = True,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Mapping[str, Any]] = None,
     ) -> Tuple[str, str, List[Dict]]:
         """
         폴백 체인을 통한 답변 생성
-        
+
         Returns:
             (generated_answer, model_used, claim_evidence_map)
         """
         last_error = None
-        
+
         for model, provider in cls.FALLBACK_CHAIN:
             try:
                 if model == 'rule_based':
                     answer = cls._rule_based_generation(retrieval, agency_info)
                     logger.info(f"[fallback] Using rule_based generation")
                     return answer, model, []
-                
+
                 answer, claim_evidence_map = cls._try_llm_generation(
                     model=model,
                     provider=provider,
@@ -64,10 +66,12 @@ class AnswerGenerationFallback:
                     retrieval=retrieval,
                     agency_info=agency_info,
                     include_disclaimer=include_disclaimer,
+                    retry_supplement=retry_supplement,
+                    onboarding=onboarding,
                 )
                 logger.info(f"[fallback] Successfully generated with {provider}/{model}")
                 return answer, model, claim_evidence_map
-                
+
             except Exception as e:
                 logger.warning(f"[fallback] {provider}/{model} failed: {e}")
                 last_error = e
@@ -85,12 +89,14 @@ class AnswerGenerationFallback:
         retrieval: Mapping[str, Any],
         agency_info: Mapping[str, Any],
         include_disclaimer: bool,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Mapping[str, Any]] = None,
     ) -> Tuple[str, List[Dict]]:
         """LLM을 통한 답변 생성 시도"""
         from .tools.generator import RAGGenerator
-        
+
         generator = RAGGenerator(model=model, use_llm=True)
-        
+
         result = generator.generate_structured_answer(
             query=query,
             agency_info=dict(agency_info),
@@ -99,8 +105,10 @@ class AnswerGenerationFallback:
             laws=list(retrieval.get('laws', [])),
             criteria=list(retrieval.get('criteria', [])),
             include_disclaimer=include_disclaimer,
+            retry_supplement=retry_supplement,
+            onboarding=dict(onboarding) if onboarding else None,
         )
-        
+
         answer = result.get('answer', '')
         claim_evidence_map = result.get('claim_evidence_map', [])
         
@@ -187,6 +195,8 @@ class AnswerGenerationFallback:
         retrieval: Mapping[str, Any],
         agency_info: Mapping[str, Any],
         include_disclaimer: bool = True,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Mapping[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         폴백 체인을 통한 스트리밍 답변 생성
@@ -235,6 +245,8 @@ class AnswerGenerationFallback:
                     retrieval=retrieval,
                     agency_info=agency_info,
                     include_disclaimer=include_disclaimer,
+                    retry_supplement=retry_supplement,
+                    onboarding=onboarding,
                 )
 
                 # 토큰 스트리밍
@@ -293,6 +305,8 @@ class AnswerGenerationFallback:
         retrieval: Mapping[str, Any],
         agency_info: Mapping[str, Any],
         include_disclaimer: bool,
+        retry_supplement: Optional[str] = None,
+        onboarding: Optional[Mapping[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
         """단일 LLM으로 스트리밍 시도"""
         from .tools.generator import RAGGenerator
@@ -307,5 +321,7 @@ class AnswerGenerationFallback:
             laws=list(retrieval.get('laws', [])),
             criteria=list(retrieval.get('criteria', [])),
             include_disclaimer=include_disclaimer,
+            retry_supplement=retry_supplement,
+            onboarding=dict(onboarding) if onboarding else None,
         ):
             yield token

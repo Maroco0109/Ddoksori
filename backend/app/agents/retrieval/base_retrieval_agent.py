@@ -45,7 +45,7 @@ class BaseRetrievalAgent(BaseAgent):
     required_inputs: ClassVar[List[str]] = ["user_query"]
     provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
 
-    default_top_k: ClassVar[int] = 3
+    default_top_k: ClassVar[int] = 10
 
     # 서브클래스에서 오버라이드: 도메인 키 (law, criteria, case, counsel)
     domain_key: ClassVar[str] = ""
@@ -77,24 +77,13 @@ class BaseRetrievalAgent(BaseAgent):
                 search_query, top_k, metadata_filter, ignore_threshold
             )
 
-            # === P0.3: Similarity Threshold Filtering ===
-            # 도메인별 threshold 적용 (law=0.60, criteria=0.50, dispute=0.55, general=0.45)
-            threshold = get_config().agent.get_similarity_threshold(self.domain_key or None)
-            # Filter results by similarity threshold
-            filtered_results = [r for r in results if r.similarity >= threshold]
-
-            logger.info(f"[{self.agent_name}] Threshold filtering: {len(results)} -> {len(filtered_results)} results (threshold={threshold:.2f})")
-
-            if not filtered_results:
-                return self.report_to_supervisor(
-                    status="failure",
-                    result={"results": [], "sources": []},
-                    message=f"{self.agent_name}: 검색 결과 없음 (similarity < {threshold:.2f}). 다른 키워드로 재시도 권장."
+            # Threshold 필터링 제거됨 (Adaptive RAG + HyDE에서 관련성 판단은 Answer Drafter가 수행)
+            if results:
+                logger.info(
+                    f"[{self.agent_name}] {len(results)} results retrieved "
+                    f"(top_sim={results[0].similarity:.3f}, "
+                    f"top_rrf={getattr(results[0], 'rrf_score', 0):.4f})"
                 )
-
-            # Use filtered results
-            results = filtered_results
-            # === End P0.3 ===
 
             if not results:
                 return self.report_to_supervisor(

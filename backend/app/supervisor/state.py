@@ -57,9 +57,6 @@ from app.supervisor.state import (
     SupervisorState,
     AgentMessage,
 
-    # 기타
-    SlotStatus,
-
     # 통합 상태
     ChatState,
     UnifiedState,
@@ -98,9 +95,6 @@ __all__ = [
     # Supervisor
     'SupervisorState',
     'AgentMessage',
-
-    # 기타
-    'SlotStatus',
 
     # 통합 상태
     'ChatState',

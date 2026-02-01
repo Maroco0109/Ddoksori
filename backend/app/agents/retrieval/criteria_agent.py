@@ -1,10 +1,12 @@
-"""CriteriaRetrievalAgent - 분쟁조정기준 검색 전용 에이전트"""
+"""CriteriaRetrievalAgent - 분쟁조정기준 검색 전용 에이전트
 
-import asyncio
+통합 RRF 검색 사용 (Phase 8): SQL search_hybrid_rrf() → dataset_filter='law_guide', document_type_filter='별표'
+[LEGACY] 기존 계층적 검색 (품목매핑 → 기준 → 보충정보) 로직은 제거됨
+"""
+
 from typing import Dict, Any, List, ClassVar, Optional
 
-from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
-from .tools.hybrid_retriever import HybridRetriever
+from .base_retrieval_agent import BaseRetrievalAgent
 from .tools.retriever import SearchResult
 
 
@@ -15,86 +17,23 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
     agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
     domain_key: ClassVar[str] = "criteria"
 
-    async def _execute_search(
+    def _get_search_filters(
         self,
-        query: str,
-        top_k: int,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        ignore_threshold: bool = False
-    ) -> List[SearchResult]:
-        """
-        계층적 기준 검색: 품목 식별 → 구체적 기준 → 보충정보
+    ) -> Dict[str, Any]:
+        """기준 도메인 필터: dataset_filter='law_guide', document_type_filter='별표'"""
+        filters: Dict[str, Any] = {
+            "dataset_filter": "law_guide",
+            "document_type_filter": "별표",
+        }
 
-        검색 전략:
-        1단계: 별표1_품목매핑으로 품목 식별 (상위 3개)
-        2단계: 손자_청크 > 자식_청크 > 부모_청크 (구체적→추상적)
-        3단계: 별표3_품질보증, 별표4_내용연수 보충정보
+        if metadata_filter:
+            if metadata_filter.get("dataset_type"):
+                filters["dataset_filter"] = metadata_filter["dataset_type"]
+            if metadata_filter.get("document_types"):
+                filters["document_type_filter"] = metadata_filter["document_types"][0]
 
-        v2: metadata_filter 지원
-            - dataset_type: 기본값 'law_guide'
-            - document_types: ['행정규칙', '별표'] 등 (chunk_type_filter로 매핑)
-        """
-        db_config = _get_db_config()
-        embed_url = _get_embed_api_url()
-
-        retriever = HybridRetriever(db_config, embed_url)
-        retriever.connect()
-
-        try:
-            # === v2: 메타데이터 필터 적용 ===
-            dataset_type = 'law_guide'  # 기본값
-
-            if metadata_filter:
-                # dataset_type 오버라이드
-                if metadata_filter.get('dataset_type'):
-                    dataset_type = metadata_filter['dataset_type']
-
-            # === PR-3: 계층적 기준 검색 시작 ===
-
-            # 1단계: 품목 식별 (별표1)
-            product_results = await asyncio.to_thread(
-                retriever.search,
-                query=query,
-                top_k=3,  # 품목 후보 3개
-                dataset_type_filter=dataset_type,
-                chunk_type_filter=['별표1_품목매핑'],
-            )
-
-            # 2단계: 구체적 기준 검색 (손자 > 자식 > 부모 순서)
-            criteria_results = await asyncio.to_thread(
-                retriever.search,
-                query=query,
-                top_k=top_k,
-                dataset_type_filter=dataset_type,
-                chunk_type_filter=['손자_청크', '자식_청크', '부모_청크'],
-            )
-
-            # 3단계: 보충정보 (품질보증, 내용연수)
-            supplement_results = await asyncio.to_thread(
-                retriever.search,
-                query=query,
-                top_k=2,  # 보충정보 2개
-                dataset_type_filter=dataset_type,
-                chunk_type_filter=['별표3_품질보증', '별표4_내용연수'],
-            )
-
-            # 결과 병합 (품목 + 기준 + 보충정보)
-            # 중복 제거
-            seen_ids = set()
-            combined = []
-
-            for result_list in [product_results, criteria_results, supplement_results]:
-                for r in result_list:
-                    if r.chunk_id not in seen_ids:
-                        seen_ids.add(r.chunk_id)
-                        combined.append(r)
-
-            # === PR-3: 계층적 기준 검색 끝 ===
-
-            return combined[:top_k]
-
-        finally:
-            retriever.close()
+        return filters
     
     def _format_results(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
         formatted: List[Dict[str, Any]] = []

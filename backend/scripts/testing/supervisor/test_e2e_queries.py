@@ -67,7 +67,7 @@ def mock_general_state() -> Dict[str, Any]:
 
 @pytest.fixture
 def mock_retrieval_results() -> List[Dict[str, Any]]:
-    """Mock Retrieval 결과"""
+    """Mock Retrieval 결과 (v2: 3개 Agent — counsel 제거)"""
     return [
         {
             'source': 'law',
@@ -94,15 +94,6 @@ def mock_retrieval_results() -> List[Dict[str, Any]]:
             'avg_similarity': 0.0,
             'search_time_ms': 30.0,
         },
-        {
-            'source': 'counsel',
-            'documents': [
-                {'content': '상담 사례: 노트북 환불 성공', 'similarity': 0.72},
-            ],
-            'max_similarity': 0.72,
-            'avg_similarity': 0.72,
-            'search_time_ms': 40.0,
-        },
     ]
 
 
@@ -119,41 +110,46 @@ class TestE2EDisputeQueryFullFlow:
         """
         분쟁 질의가 Supervisor를 통해 정상 처리되는지 검증
 
-        Expected flow:
-        supervisor → query_analyst → supervisor → retrieval_team →
-        supervisor → answer_drafter → supervisor → legal_reviewer →
-        supervisor → output_guardrail
+        Expected flow (v2, _rule_based_fallback):
+        supervisor → retrieval_team → supervisor → answer_drafter →
+        supervisor → legal_reviewer → supervisor → output_guardrail
+
+        Note: query_analyst는 decide_next_action에서 처리됨.
+        _rule_based_fallback은 mode 기반 2-전략 라우팅으로, NEED_RAG 시
+        retrieval → generation → review → respond 순서를 따름.
         """
         # 초기 상태에 supervisor 상태 설정
         mock_dispute_state['supervisor'] = {
             'current_phase': 'analyzing',
             'agent_messages': [],
-            'pending_tasks': ['analyze_query', 'retrieve_documents', 'generate_answer', 'review_answer'],
+            'pending_tasks': ['retrieve_documents', 'generate_answer', 'review_answer'],
             'completed_tasks': [],
             'supervisor_reasoning': 'Starting dispute resolution workflow',
             'next_agent': None,
             'iteration_count': 0,
         }
+        mock_dispute_state['mode'] = 'NEED_RAG'
 
-        # 첫 번째 결정: query_analyst 호출
+        # 첫 번째 결정: retrieval_team 호출 (NEED_RAG 모드, retrieval 없음)
         decision1 = mock_supervisor_node._rule_based_fallback(mock_dispute_state)
 
         assert decision1['action'] == 'call_agent'
-        assert decision1['target_agent'] == 'query_analyst'
+        assert decision1['target_agent'] == 'retrieval_team'
 
-    def test_supervisor_calls_retrieval_after_query_analysis(
+    def test_supervisor_calls_retrieval_when_no_retrieval_result(
         self, mock_supervisor_node, mock_dispute_state
     ):
-        """query_analysis 완료 후 retrieval_team 호출 검증"""
+        """retrieval 결과 없을 때 retrieval_team 호출 검증"""
         mock_dispute_state['supervisor'] = {
             'current_phase': 'analyzing',
             'agent_messages': [],
             'pending_tasks': ['retrieve_documents', 'generate_answer', 'review_answer'],
-            'completed_tasks': ['query_analysis'],
-            'supervisor_reasoning': 'Query analyzed, proceeding to retrieval',
+            'completed_tasks': [],
+            'supervisor_reasoning': 'No retrieval result, proceeding to retrieval',
             'next_agent': None,
             'iteration_count': 1,
         }
+        mock_dispute_state['mode'] = 'NEED_RAG'
         mock_dispute_state['query_analysis'] = {
             'query_type': 'dispute',
             'keywords': ['노트북', '환불', '고장'],
@@ -172,12 +168,21 @@ class TestE2EDisputeQueryFullFlow:
             'current_phase': 'retrieving',
             'agent_messages': [],
             'pending_tasks': ['generate_answer', 'review_answer'],
-            'completed_tasks': ['query_analysis', 'retrieval'],
+            'completed_tasks': ['retrieval_team'],
             'supervisor_reasoning': 'Documents retrieved, generating answer',
             'next_agent': None,
             'iteration_count': 2,
         }
+        mock_dispute_state['mode'] = 'NEED_RAG'
         mock_dispute_state['individual_retrieval_results'] = mock_retrieval_results
+        # _full_pipeline_decision checks 'retrieval' field, not just completed_tasks
+        mock_dispute_state['retrieval'] = {
+            'laws': [{'content': '전자상거래법 제17조'}],
+            'criteria': [{'content': '환불 기준표'}],
+            'disputes': [],
+            'counsels': [{'content': '상담 사례'}],
+            'max_similarity': 0.85,
+        }
 
         decision = mock_supervisor_node._rule_based_fallback(mock_dispute_state)
 
@@ -211,7 +216,7 @@ class TestE2ERetrievalParallelExecution:
     """4개 Retrieval Agent 병렬 실행 테스트"""
 
     def test_retrieval_fan_out_returns_send_list(self, mock_dispute_state):
-        """retrieval_team이 4개 Send 객체 리스트를 반환하는지 검증"""
+        """retrieval_team이 3개 Send 객체 리스트를 반환하는지 검증 (v2: counsel 제거)"""
         mock_dispute_state['supervisor'] = {
             'current_phase': 'retrieving',
             'agent_messages': [],
@@ -221,26 +226,32 @@ class TestE2ERetrievalParallelExecution:
             'next_agent': 'retrieval_team',
             'iteration_count': 1,
         }
+        # _route_mas_supervisor는 query_analysis.get('retriever_types') 참조
+        mock_dispute_state['query_analysis'] = {
+            'query_type': 'dispute',
+            'keywords': ['노트북', '환불'],
+            'retriever_types': ['law', 'criteria', 'case'],
+        }
 
-        from app.supervisor.graph import _route_mas_supervisor
+        from app.supervisor.graph_mas import _route_mas_supervisor
         from langgraph.types import Send
 
         result = _route_mas_supervisor(mock_dispute_state)
 
-        # Fan-out: 4개 Send 객체 반환
+        # Fan-out: 3개 Send 객체 반환 (v2: counsel 제거)
         assert isinstance(result, list)
-        assert len(result) == 4
+        assert len(result) == 3
 
         # 각 Send 객체가 올바른 노드를 타겟으로 하는지 확인
         target_nodes = [send.node for send in result]
         assert 'retrieval_law' in target_nodes
         assert 'retrieval_criteria' in target_nodes
         assert 'retrieval_case' in target_nodes
-        assert 'retrieval_counsel' in target_nodes
 
-    def test_retrieval_merge_combines_results(self, mock_retrieval_results):
+    @pytest.mark.asyncio
+    async def test_retrieval_merge_combines_results(self, mock_retrieval_results):
         """retrieval_merge가 4개 결과를 올바르게 병합하는지 검증"""
-        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node_sync
+        from app.supervisor.nodes.retrieval_merge import retrieval_merge_node
 
         state = {
             'user_query': '환불 받고 싶어요',
@@ -251,26 +262,24 @@ class TestE2ERetrievalParallelExecution:
             },
         }
 
-        result = retrieval_merge_node_sync(state)
+        result = await retrieval_merge_node(state)
 
         # 병합 결과 검증
         assert 'retrieval' in result
         retrieval = result['retrieval']
 
-        # 4개 섹션 존재 확인
+        # 섹션 존재 확인 (v2: 3개 Agent 결과)
         assert 'laws' in retrieval
         assert 'criteria' in retrieval
         assert 'disputes' in retrieval  # case → disputes로 매핑
-        assert 'counsels' in retrieval
 
-        # 문서 수 검증 (law(1) + criteria(1) + counsel(1) = 3)
+        # 문서 수 검증 (law(1) + criteria(1) + case(0) = 2)
         total_docs = (
             len(retrieval.get('laws', [])) +
             len(retrieval.get('criteria', [])) +
-            len(retrieval.get('disputes', [])) +
-            len(retrieval.get('counsels', []))
+            len(retrieval.get('disputes', []))
         )
-        assert total_docs >= 3
+        assert total_docs >= 2
 
         # 유사도 통계 검증
         assert retrieval.get('max_similarity') == 0.85  # law의 max
@@ -287,19 +296,45 @@ class TestE2EFallbackOnFailure:
     """Supervisor 실패 시 규칙 기반 fallback 테스트"""
 
     def test_rule_based_fallback_order(self, mock_supervisor_node):
-        """규칙 기반 fallback이 올바른 순서로 진행되는지 검증"""
-        # 순서: query_analyst → retrieval_team → answer_drafter → legal_reviewer → respond
+        """규칙 기반 fallback이 올바른 순서로 진행되는지 검증
 
+        _rule_based_fallback (NEED_RAG 모드) 흐름:
+        retrieval_team → answer_drafter → legal_reviewer → respond
+
+        Note: _full_pipeline_decision은 state 필드(retrieval, draft_answer, review)를
+        기준으로 다음 단계를 결정합니다. completed_tasks만으로는 판단하지 않습니다.
+        """
+        # 순서: retrieval_team → answer_drafter → legal_reviewer → respond
         states = [
-            {'supervisor': {'completed_tasks': [], 'iteration_count': 0}},
-            {'supervisor': {'completed_tasks': ['query_analysis'], 'iteration_count': 1}},
-            {'supervisor': {'completed_tasks': ['query_analysis', 'retrieval'], 'iteration_count': 2}},
-            {'supervisor': {'completed_tasks': ['query_analysis', 'retrieval', 'draft'], 'iteration_count': 3}},
-            {'supervisor': {'completed_tasks': ['query_analysis', 'retrieval', 'draft', 'review'], 'iteration_count': 4}},
+            # 1. retrieval 없음 → retrieval_team
+            {
+                'mode': 'NEED_RAG',
+                'supervisor': {'completed_tasks': [], 'iteration_count': 0},
+            },
+            # 2. retrieval 있음, draft 없음 → answer_drafter
+            {
+                'mode': 'NEED_RAG',
+                'retrieval': {'laws': [{'content': '법령'}], 'max_similarity': 0.8},
+                'supervisor': {'completed_tasks': ['retrieval_team'], 'iteration_count': 1},
+            },
+            # 3. retrieval+draft 있음, review 없음 → legal_reviewer
+            {
+                'mode': 'NEED_RAG',
+                'retrieval': {'laws': [{'content': '법령'}], 'max_similarity': 0.8},
+                'draft_answer': '환불 가능합니다.',
+                'supervisor': {'completed_tasks': ['retrieval_team', 'answer_drafter'], 'iteration_count': 2},
+            },
+            # 4. 전부 있음 → respond
+            {
+                'mode': 'NEED_RAG',
+                'retrieval': {'laws': [{'content': '법령'}], 'max_similarity': 0.8},
+                'draft_answer': '환불 가능합니다.',
+                'review': {'passed': True, 'violations': []},
+                'supervisor': {'completed_tasks': ['retrieval_team', 'answer_drafter', 'legal_reviewer'], 'iteration_count': 3},
+            },
         ]
 
         expected_targets = [
-            'query_analyst',
             'retrieval_team',
             'answer_drafter',
             'legal_reviewer',
@@ -347,18 +382,19 @@ class TestE2EMaxIterationProtection:
         mock_dispute_state['supervisor'] = {
             'current_phase': 'analyzing',
             'agent_messages': [],
-            'pending_tasks': ['analyze_query'],
+            'pending_tasks': ['retrieve_documents'],
             'completed_tasks': [],
             'supervisor_reasoning': 'Normal iteration',
             'next_agent': None,
             'iteration_count': 5,  # < 10
         }
+        mock_dispute_state['mode'] = 'NEED_RAG'
 
         decision = mock_supervisor_node._rule_based_fallback(mock_dispute_state)
 
-        # 5회 반복 후에도 정상 진행
+        # 5회 반복 후에도 정상 진행 (NEED_RAG, retrieval 없음 → retrieval_team)
         assert decision['action'] == 'call_agent'
-        assert decision['target_agent'] == 'query_analyst'
+        assert decision['target_agent'] == 'retrieval_team'
 
 
 # ============================================================================
@@ -370,11 +406,12 @@ class TestMASGraphStructure:
 
     def test_mas_graph_has_all_required_nodes(self):
         """MAS 그래프에 필수 노드가 모두 있는지 검증"""
-        from app.supervisor.graph import create_mas_supervisor_graph
+        from app.supervisor.graph_mas import create_mas_supervisor_graph
 
         graph = create_mas_supervisor_graph()
         nodes = list(graph.nodes.keys())
 
+        # v2: counsel 제거, memory_save 추가
         required_nodes = [
             'input_guardrail',
             'supervisor',
@@ -382,29 +419,29 @@ class TestMASGraphStructure:
             'retrieval_law',
             'retrieval_criteria',
             'retrieval_case',
-            'retrieval_counsel',
             'retrieval_merge',
             'generation',
             'review',
             'output_guardrail',
+            'memory_save',
         ]
 
         for node in required_nodes:
             assert node in nodes, f"Missing node: {node}"
 
-    def test_mas_graph_entry_point_is_input_guardrail(self):
-        """MAS 그래프 진입점이 input_guardrail인지 검증"""
-        from app.supervisor.graph import create_mas_supervisor_graph
+    def test_mas_graph_entry_point_is_cache_check(self):
+        """MAS 그래프 진입점이 cache_check인지 검증"""
+        from app.supervisor.graph_mas import create_mas_supervisor_graph
         from langgraph.graph import START
 
         graph = create_mas_supervisor_graph()
 
-        # 진입점 확인 (edges에서 START → input_guardrail)
+        # 진입점 확인 (edges에서 START → cache_check)
         # LangGraph에서는 set_entry_point()가 START → node 엣지 생성
         entry_edges = [edge for edge in graph.edges if edge[0] == START]
 
         assert len(entry_edges) == 1
-        assert entry_edges[0][1] == 'input_guardrail'
+        assert entry_edges[0][1] == 'cache_check'
 
 
 if __name__ == '__main__':

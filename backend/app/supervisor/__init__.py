@@ -12,7 +12,6 @@ from .state import (
     RetrievalResult,
     ReviewResult,
     RoutingMode,
-    SlotStatus,
     ClaimEvidenceMapping,
     ReActStep,  # [DEPRECATED] 하위 호환성 유지용
     UnifiedState,  # ChatState 별칭
@@ -35,7 +34,6 @@ __all__ = [
     'RetrievalResult',
     'ReviewResult',
     'RoutingMode',
-    'SlotStatus',
     'ClaimEvidenceMapping',
     'ReActStep',  # [DEPRECATED]
     'UnifiedState',  # [DEPRECATED] ChatState 사용 권장

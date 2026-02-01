@@ -98,10 +98,14 @@ export function MessageBubble({
           }`}
         >
           {isAI ? (
-            <MarkdownRenderer
-              content={message.content}
-              onCitationClick={setSelectedCitationId}
-            />
+            message.content ? (
+              <MarkdownRenderer
+                content={message.content}
+                onCitationClick={setSelectedCitationId}
+              />
+            ) : (
+              <span className="text-gray-400 animate-pulse">답변 생성 중...</span>
+            )
           ) : (
             message.content
           )}

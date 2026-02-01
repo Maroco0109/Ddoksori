@@ -1,5 +1,12 @@
 """
-똑소리 프로젝트 - Hybrid Retriever with RRF Fusion
+[LEGACY] 이 모듈은 더 이상 사용되지 않습니다.
+대체: app.agents.retrieval.tools.unified_retriever.UnifiedRetriever
+
+Phase 8에서 모든 Retrieval Agent가 SQL search_hybrid_rrf() 기반
+UnifiedRetriever로 전환되었습니다.
+
+---
+(원본) 똑소리 프로젝트 - Hybrid Retriever with RRF Fusion
 작성일: 2026-01-11
 Sprint 1 - PR S1-D4: Hybrid Retrieval MVP
 

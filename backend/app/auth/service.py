@@ -25,13 +25,13 @@ OAuth 인증 흐름을 관리하고 JWT 토큰을 발행합니다.
 from typing import Tuple, Optional
 
 from app.common.config import get_config
-from app.common.logging.rag_logger import get_rag_logger
+import logging
 from app.auth.models import User, AuthResponse
 from app.auth.oauth import GoogleOAuth, KakaoOAuth, NaverOAuth
 from app.auth.user_db import UserDB
 from app.auth.dependencies import create_access_token
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 
 
 class AuthService:

@@ -25,6 +25,7 @@ RAG 파이프라인 실행 과정을 상세하게 기록하는 구조화된 JSON
 logs/rag/YYYY-MM-DD/HHMMSS_{request_id}.json
 """
 
+import logging
 import os
 import json
 import uuid
@@ -35,6 +36,8 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 from .config import RAG_LOG_DIR, is_rag_logging_enabled
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================

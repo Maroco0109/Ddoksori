@@ -6,7 +6,7 @@ Query Detectors
 
 import logging
 import re
-from typing import Optional
+from typing import Optional, Dict
 
 from .constants import (
     ENABLE_AMBIGUOUS_DETECTION,
@@ -23,6 +23,8 @@ from .constants import (
     LAW_KEYWORDS,
     CRITERIA_KEYWORDS,
     PROCEDURE_PATTERNS,
+    META_CONVERSATIONAL_PATTERNS,
+    META_CONVERSATIONAL_KEYWORDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,7 +138,7 @@ def is_ambiguous_query(query: str) -> bool:
 
     # Layer 0.6: 법령명 패턴 있으면 → NOT ambiguous (예: "소비자기본법", "전자상거래법")
     law_pattern_match = re.search(r'\S+법', query_lower)
-    logger.info(f"[DEBUG] query_lower='{query_lower}', law_pattern_match={law_pattern_match}")
+    logger.debug(f"law_pattern_match check: law_pattern_match={law_pattern_match}")
     if law_pattern_match:
         return False
 
@@ -242,6 +244,131 @@ def is_procedure_query(query: str) -> bool:
     return False
 
 
+def is_meta_conversational(query: str) -> bool:
+    """
+    대화형 안내 쿼리 감지.
+
+    사용자가 "뭘 물어봐야 할까?", "도와줘" 같은 메타 수준의 질문을 했을 때,
+    RAG 검색 없이 가이드 응답을 생성하기 위한 감지 함수입니다.
+
+    system_meta (시스템/봇 관련)과 구분:
+    - system_meta: "네가 뭐야?", "어떤 AI야?" → 봇 자체에 대한 질문
+    - meta_conversational: "뭘 물어봐야 할까?" → 서비스 이용 가이드 요청
+
+    Args:
+        query: 사용자 쿼리
+
+    Returns:
+        True if query is a meta-conversational guide request
+    """
+    query_lower = query.lower().strip()
+
+    # 키워드 매칭 (우선)
+    if any(kw in query_lower for kw in META_CONVERSATIONAL_KEYWORDS):
+        logger.info(f"[QueryAnalysis] Meta-conversational by keyword: '{query[:30]}'")
+        return True
+
+    # 패턴 매칭
+    for pattern in META_CONVERSATIONAL_PATTERNS:
+        if re.search(pattern, query_lower):
+            logger.info(f"[QueryAnalysis] Meta-conversational by pattern: '{query[:30]}'")
+            return True
+
+    return False
+
+
+def is_followup_with_context(
+    query: str,
+    previous_followups: list,
+    threshold: float = 0.8,
+) -> bool:
+    """
+    현재 쿼리가 이전 턴의 후속 질문 중 하나와 매칭되는지 확인합니다.
+
+    Args:
+        query: 현재 사용자 쿼리
+        previous_followups: 이전 턴의 followup_questions 리스트
+        threshold: SequenceMatcher 유사도 임계값 (기본 0.8)
+
+    Returns:
+        True if 매칭됨
+    """
+    if not previous_followups:
+        return False
+
+    import difflib
+    query_normalized = query.strip()
+
+    for followup in previous_followups:
+        if not followup:
+            continue
+        ratio = difflib.SequenceMatcher(None, query_normalized, followup.strip()).ratio()
+        if ratio >= threshold:
+            return True
+
+    return False
+
+
+def detect_requested_detail_type(query: str, available_details: Optional[Dict] = None) -> str:
+    """
+    후속 질문에서 요청된 상세 정보 유형을 감지합니다.
+
+    Returns:
+        'laws' | 'cases' | 'criteria' | 'procedure' | 'full'
+    """
+    query_lower = query.strip().lower()
+
+    # 법령 관련 키워드
+    law_patterns = ['법령', '법률', '법적', '법', '조항', '조문', '규정', '전자상거래법',
+                    '소비자기본법', '소비자보호법', '약관규제법', '시행령',
+                    '법적 근거', '법에', '법으로', '법상']
+
+    # 절차 관련 키워드 (procedure는 case보다 먼저 체크 - '조정신청'이 '조정'에 선행)
+    procedure_patterns = ['절차', '방법', '어떻게', '신청', '접수', '소비자원',
+                         '분쟁조정', '조정신청', '어디에', '어디로', '과정']
+
+    # 사례 관련 키워드 ('조정'은 '조정사례'로 구체화 - '조정신청'과 구분)
+    case_patterns = ['사례', '케이스', '판례', '조정사례', '비슷한', '유사한', '다른 사람',
+                     '남들은', '보통', '일반적', '건도']
+
+    # 기준 관련 키워드
+    criteria_patterns = ['기준', '해결기준', '분쟁해결', '배상', '보상', '환불 기준',
+                        '교환 기준', '수리 기준']
+
+    # Yes/No 패턴 (이전 후속 질문에 대한 긍정 응답)
+    yes_patterns = ['네', '예', '응', '어', '그래', '좋아', '알려', '보여', '궁금', '보고 싶']
+
+    # 긍정 응답인 경우 available_details에서 첫 번째 항목 반환
+    is_yes = any(p in query_lower for p in yes_patterns) and len(query_lower) < 20
+
+    # 키워드 매칭 (순서 중요: laws → procedure → cases → criteria)
+    for pattern in law_patterns:
+        if pattern in query_lower:
+            return 'laws'
+
+    for pattern in procedure_patterns:
+        if pattern in query_lower:
+            return 'procedure'
+
+    for pattern in case_patterns:
+        if pattern in query_lower:
+            return 'cases'
+
+    for pattern in criteria_patterns:
+        if pattern in query_lower:
+            return 'criteria'
+
+    # 긍정 응답 + available_details 기반 추론
+    if is_yes and available_details:
+        # 첫 번째 available detail type 반환
+        for detail_type in ['laws', 'cases', 'criteria']:
+            if detail_type in available_details:
+                return detail_type
+        return 'procedure'
+
+    return 'full'
+
+
 __all__ = [
     "should_promote_to_rag",
     "check_ambiguity_with_llm",
@@ -249,4 +376,7 @@ __all__ = [
     "is_system_meta_query",
     "detect_restricted_domain",
     "is_procedure_query",
+    "is_meta_conversational",
+    "is_followup_with_context",
+    "detect_requested_detail_type",
 ]

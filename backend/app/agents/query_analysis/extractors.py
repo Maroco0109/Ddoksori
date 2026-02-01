@@ -6,10 +6,29 @@ Query Extractors
 
 import logging
 import re
+from datetime import datetime, date
 from typing import Dict, List, Optional, Literal
 
 from ...supervisor.state import OnboardingInfo
-from ...supervisor.conversation_manager import extract_dispute_type
+
+# Local implementation of extract_dispute_type (moved from conversation_manager)
+DISPUTE_TYPE_MAPPING = {
+    '환불': 'refund',
+    '반품': 'refund',
+    '교환': 'exchange',
+    '수리': 'repair',
+    '취소': 'cancellation',
+    '해지': 'cancellation',
+    '청약철회': 'withdrawal',
+}
+
+
+def extract_dispute_type(text: str) -> Optional[str]:
+    """Extract dispute type from user message using keyword matching."""
+    for korean_keyword, dispute_type in DISPUTE_TYPE_MAPPING.items():
+        if korean_keyword in text:
+            return dispute_type
+    return None
 from .constants import (
     COMMON_PRODUCTS,
     DISPUTE_VERBS,
@@ -19,6 +38,73 @@ from .constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+PRODUCT_CATEGORY_MAP = {
+    '전자제품': ['노트북', '컴퓨터', 'PC', '태블릿', '갤럭시', '아이폰', '아이패드', '맥북',
+                '스마트폰', '핸드폰', '휴대폰', 'TV', '텔레비전', '모니터', '냉장고', '세탁기',
+                '에어컨', '건조기', '청소기', '전자레인지', '이어폰', '헤드폰', '스피커'],
+    '의류/패션': ['옷', '의류', '신발', '가방', '지갑', '모자', '자켓', '코트', '원피스'],
+    '가구/인테리어': ['소파', '침대', '매트리스', '책상', '의자', '테이블', '가구'],
+    '건강/미용': ['화장품', '헬스장', '피트니스', '필라테스', '요가', 'PT', '퍼스널트레이닝',
+                  '피부관리', '에스테틱', '마사지'],
+    '교육/학원': ['학원', '교육', '인강', '온라인강의', '수강', '과외'],
+    '여행/숙박': ['항공', '호텔', '숙박', '여행', '펜션', '리조트'],
+    '식품': ['식품', '건강식품', '음식', '배달'],
+    '자동차': ['자동차', '차량', '중고차', '렌트카'],
+}
+
+
+def compute_days_since_purchase(purchase_date_str: Optional[str]) -> Optional[int]:
+    """
+    구매일로부터 경과 일수를 계산합니다.
+
+    Args:
+        purchase_date_str: 구매일 문자열 (YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD 등)
+
+    Returns:
+        경과 일수 (int) 또는 None (파싱 실패 시)
+    """
+    if not purchase_date_str:
+        return None
+
+    # 다양한 날짜 포맷 지원
+    date_formats = ['%Y-%m-%d', '%Y.%m.%d', '%Y/%m/%d', '%Y년%m월%d일']
+    purchase_date_clean = purchase_date_str.strip().replace(' ', '')
+
+    for fmt in date_formats:
+        try:
+            purchase_date = datetime.strptime(purchase_date_clean, fmt).date()
+            days = (date.today() - purchase_date).days
+            return max(0, days)  # 미래 날짜인 경우 0
+        except ValueError:
+            continue
+
+    logger.warning(f"[extractors] Failed to parse purchase_date: {purchase_date_str}")
+    return None
+
+
+def determine_product_category(purchase_item: Optional[str]) -> Optional[str]:
+    """
+    구매 품목에서 카테고리를 결정합니다.
+
+    Args:
+        purchase_item: 구매 품목 문자열
+
+    Returns:
+        카테고리 문자열 또는 None
+    """
+    if not purchase_item:
+        return None
+
+    item_lower = purchase_item.lower().replace(' ', '')
+
+    for category, keywords in PRODUCT_CATEGORY_MAP.items():
+        for keyword in keywords:
+            if keyword.lower().replace(' ', '') in item_lower:
+                return category
+
+    return None
 
 
 def extract_info_from_message(query: str) -> Dict[str, str]:
@@ -276,4 +362,6 @@ __all__ = [
     "normalize_query",
     "check_missing_onboarding_fields",
     "determine_agency_hint",
+    "compute_days_since_purchase",
+    "determine_product_category",
 ]

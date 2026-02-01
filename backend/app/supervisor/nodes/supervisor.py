@@ -5,13 +5,17 @@ MAS(Multi-Agent System) 슈퍼바이저 아키텍처의 중앙 관제자 노드�
 LLM을 사용하여 다음 행동을 동적으로 결정하고, 에이전트 간 워크플로우를 조율합니다.
 
 작성일: 2026-01-26
-Phase: MAS Supervisor Architecture - Phase 4
+Phase: MAS Supervisor Architecture - Phase 8 (Progressive Disclosure)
 
 [역할 및 책임]
 1. 현재 상태 분석 (어떤 정보가 있고 무엇이 부족한가?)
 2. 다음 행동 결정 (어떤 Agent를 호출할 것인가?)
 3. Agent 결과 평가 (결과가 충분한가? 재시도가 필요한가?)
 4. 최종 판단 (사용자에게 응답할 준비가 되었는가?)
+
+[라우팅 전략 - 2-전략]
+- NO_RETRIEVAL / RESTRICTED_DOMAIN → Fast Path (검색/검토 생략)
+- NEED_RAG / CACHED_RAG → Full Pipeline (검토 항상 포함)
 
 [오류 처리]
 - LLM 타임아웃: 다음 fallback 모델로 전환
@@ -232,16 +236,9 @@ class SupervisorNode:
         """
         현재 상태를 분석하고 다음 행동을 결정합니다.
 
-        === PR-5: Deterministic Routing ===
-        라우팅 전략:
-        1. NO_RETRIEVAL → Fast Path (LLM 없이)
-        2. LAW/CRITERIA → Straightforward Path (LLM 없이, Review 생략)
-        3. DISPUTE/AMBIGUOUS → LLM 기반 판단
-
-        Fallback 체인:
-        1. Primary LLM (GPT-4o) 시도
-        2. Fallback LLM (Claude 3.5 Sonnet) 시도
-        3. 규칙 기반 fallback
+        === 2-전략 라우팅 ===
+        1. NO_RETRIEVAL → Fast Path (검색/검토 생략)
+        2. NEED_RAG / CACHED_RAG → Full Pipeline (검토 항상 포함)
 
         Args:
             state: 현재 ChatState
@@ -257,7 +254,7 @@ class SupervisorNode:
         supervisor_state = state.get("supervisor") or {}
         iteration = supervisor_state.get("iteration_count", 0) if supervisor_state else 0
 
-        # 1. 무한 루프 방지
+        # 무한 루프 방지
         if iteration >= MAX_SUPERVISOR_ITERATIONS:
             logger.warning(
                 f"[SupervisorNode] 최대 반복 횟수({MAX_SUPERVISOR_ITERATIONS}) 도달. 강제 종료."
@@ -267,67 +264,42 @@ class SupervisorNode:
         query_analysis = state.get("query_analysis")
         mode = state.get("mode", "NEED_RAG")
 
-        # === PR-5: Deterministic Routing 시작 ===
+        logger.info(
+            f"[SupervisorNode] decide_next_action: mode={mode}, "
+            f"query_analysis={'present' if query_analysis else 'absent'}, "
+            f"iteration={iteration}"
+        )
 
-        # 0. Query Analysis가 없으면 먼저 수행
+        # Query Analysis가 없으면 먼저 수행
         supervisor_state = state.get("supervisor") or {}
         completed = supervisor_state.get("completed_tasks", [])
 
         if not query_analysis and "query_analyst" not in completed and "query_analysis" not in completed:
-            logger.info("[SupervisorNode] Deterministic: Query Analysis 필요")
+            logger.info("[SupervisorNode] Query Analysis 필요")
             return {
                 "action": "call_agent",
                 "target_agent": "query_analyst",
                 "request": {},
-                "reasoning": "Deterministic: Query Analysis 필요"
+                "reasoning": "Query Analysis 필요"
             }
 
-        query_type = (query_analysis or {}).get("query_type", "dispute")
+        # === 2-전략 라우팅 ===
 
-        # 1. Fast Path (NO_RETRIEVAL) - PR-1에서 이미 처리됨
+        # 1. NO_RETRIEVAL → Fast Path
         if mode == "NO_RETRIEVAL":
-            return self._fast_path_decision(state)
+            return self._no_retrieval_decision(state)
 
-        # 2. Straightforward Path (LAW, CRITERIA)
-        if mode == "NEED_RAG" and query_type in ["law", "criteria"]:
-            return self._straightforward_rag_decision(state)
+        # 2. RESTRICTED_DOMAIN → 전문기관 안내 (기존 유지)
+        if mode == "RESTRICTED_DOMAIN":
+            return self._no_retrieval_decision(state)
 
-        # 3. LLM Path (DISPUTE, AMBIGUOUS) - 복잡한 케이스만
-        if query_type in ["dispute", "ambiguous"]:
-            return await self._llm_based_decision(state)
+        # 3. NEED_RAG / CACHED_RAG → Full Pipeline (항상 Review 포함)
+        if mode in ("NEED_RAG", "CACHED_RAG"):
+            return self._full_pipeline_decision(state)
 
-        # === PR-5: Deterministic Routing 끝 ===
-
-        # 2. LLM이 없으면 규칙 기반 fallback
-        if self._primary_llm is None and self._fallback_llm is None:
-            logger.info("[SupervisorNode] LLM 미설정. 규칙 기반 모드 사용.")
-            return self._rule_based_fallback(state)
-
-        prompt = self._build_decision_prompt(state)
-
-        # 3. Primary LLM 시도 (GPT-5.1)
-        if self._primary_llm is not None:
-            decision = await self._try_llm_decision(
-                self._primary_llm,
-                prompt,
-                self._current_model_name
-            )
-            if decision is not None:
-                return decision
-
-        # 4. Fallback LLM 시도 (Claude 3.5 Sonnet)
-        if self._fallback_llm is not None:
-            decision = await self._try_llm_decision(
-                self._fallback_llm,
-                prompt,
-                self.FALLBACK_MODEL
-            )
-            if decision is not None:
-                return decision
-
-        # 5. 최종 규칙 기반 fallback
-        logger.warning("[SupervisorNode] 모든 LLM 실패. 규칙 기반 fallback.")
-        return self._rule_based_fallback(state)
+        # Fallback → Full Pipeline
+        logger.warning(f"[SupervisorNode] 알 수 없는 mode={mode}. Full Pipeline fallback.")
+        return self._full_pipeline_decision(state)
 
     async def _try_llm_decision(
         self,
@@ -361,11 +333,11 @@ class SupervisorNode:
             logger.warning(f"[SupervisorNode] {model_name} 호출 실패: {e}")
             return None
 
-    def _fast_path_decision(self, state: ChatState) -> Dict[str, Any]:
+    def _no_retrieval_decision(self, state: ChatState) -> Dict[str, Any]:
         """
-        Fast Path: NO_RETRIEVAL 쿼리 처리 (LLM 없음)
+        Fast Path: NO_RETRIEVAL / RESTRICTED_DOMAIN 쿼리 처리
 
-        흐름: Query Analysis → Generation → END
+        흐름: Query Analysis → Generation → END (검색/검토 생략)
 
         Args:
             state: 현재 ChatState
@@ -377,74 +349,27 @@ class SupervisorNode:
         completed = supervisor_state.get("completed_tasks", [])
         draft_answer = state.get("draft_answer")
 
-        # 답변이 없으면 Generation
         if not draft_answer and "answer_drafter" not in completed:
-            logger.info("[SupervisorNode] Deterministic: NO_RETRIEVAL → Generation")
+            logger.info("[SupervisorNode] Fast Path → Generation")
             return {
                 "action": "call_agent",
                 "target_agent": "answer_drafter",
                 "request": {},
-                "reasoning": "Deterministic: NO_RETRIEVAL → Generation"
+                "reasoning": "Fast Path: NO_RETRIEVAL → Generation"
             }
 
-        # 답변이 있으면 응답 (Review 생략)
-        logger.info("[SupervisorNode] Deterministic: NO_RETRIEVAL 완료")
+        logger.info("[SupervisorNode] Fast Path 완료")
         return {
             "action": "respond",
-            "reasoning": "Deterministic: NO_RETRIEVAL 완료"
+            "reasoning": "Fast Path 완료"
         }
 
-    def _straightforward_rag_decision(self, state: ChatState) -> Dict[str, Any]:
+    def _full_pipeline_decision(self, state: ChatState) -> Dict[str, Any]:
         """
-        Straightforward Path: LAW/CRITERIA 쿼리 처리 (LLM 없음)
-
-        흐름: Query Analysis → Retrieval → Generation → END
-        (Review 생략 - 단순 정보 제공)
-
-        Args:
-            state: 현재 ChatState
-
-        Returns:
-            결정 딕셔너리
-        """
-        supervisor_state = state.get("supervisor") or {}
-        completed = supervisor_state.get("completed_tasks", [])
-        retrieval = state.get("retrieval")
-        draft_answer = state.get("draft_answer")
-
-        # Retrieval이 없으면 검색
-        if not retrieval and "retrieval_team" not in completed:
-            logger.info("[SupervisorNode] Deterministic: LAW/CRITERIA → Retrieval")
-            return {
-                "action": "call_agent",
-                "target_agent": "retrieval_team",
-                "request": {},
-                "reasoning": "Deterministic: LAW/CRITERIA → Retrieval"
-            }
-
-        # 답변이 없으면 Generation
-        if not draft_answer and "answer_drafter" not in completed:
-            logger.info("[SupervisorNode] Deterministic: LAW/CRITERIA → Generation")
-            return {
-                "action": "call_agent",
-                "target_agent": "answer_drafter",
-                "request": {},
-                "reasoning": "Deterministic: LAW/CRITERIA → Generation"
-            }
-
-        # 답변이 있으면 응답 (Review 생략)
-        logger.info("[SupervisorNode] Deterministic: LAW/CRITERIA 완료")
-        return {
-            "action": "respond",
-            "reasoning": "Deterministic: LAW/CRITERIA 완료 (Review 생략)"
-        }
-
-    async def _llm_based_decision(self, state: ChatState) -> Dict[str, Any]:
-        """
-        LLM Path: DISPUTE/AMBIGUOUS 쿼리 처리
+        Full Pipeline: NEED_RAG / CACHED_RAG 쿼리 처리
 
         흐름: Query Analysis → Retrieval → Generation → Review → END
-        복잡한 케이스만 LLM 판단 사용
+        CACHED_RAG일 때는 Retrieval 단계를 생략합니다.
 
         Args:
             state: 현재 ChatState
@@ -454,45 +379,61 @@ class SupervisorNode:
         """
         supervisor_state = state.get("supervisor") or {}
         completed = supervisor_state.get("completed_tasks", [])
+        mode = state.get("mode", "NEED_RAG")
         retrieval = state.get("retrieval")
         draft_answer = state.get("draft_answer")
         review = state.get("review")
 
-        # Retrieval이 없으면 검색
-        if not retrieval and "retrieval_team" not in completed:
-            logger.info("[SupervisorNode] LLM Path: DISPUTE → Retrieval")
+        # 1. Retrieval (NEED_RAG일 때만 실행, CACHED_RAG는 생략)
+        if mode == "NEED_RAG" and not retrieval and "retrieval_team" not in completed:
+            # Adaptive RAG: 쿼리 복잡도에 따라 검색 전략 결정
+            query_complexity = state.get("query_complexity", "moderate")
+            retrieval_config = get_config().retrieval
+
+            use_hyde = retrieval_config.hyde_enabled
+            if query_complexity == "simple" and retrieval_config.simple_skip_hyde:
+                use_hyde = False
+
+            strategy = "BM25-focused" if not use_hyde else "HyDE+RRF"
+            logger.info(
+                f"[SupervisorNode] Full Pipeline → Retrieval "
+                f"(complexity={query_complexity}, strategy={strategy})"
+            )
             return {
                 "action": "call_agent",
                 "target_agent": "retrieval_team",
-                "request": {},
-                "reasoning": "LLM Path: DISPUTE → Retrieval"
+                "request": {
+                    "use_hyde": use_hyde,
+                    "query_complexity": query_complexity,
+                },
+                "reasoning": f"Full Pipeline: Retrieval 필요 (complexity={query_complexity}, strategy={strategy})"
             }
 
-        # 답변이 없으면 Generation
+        # 2. Generation
         if not draft_answer and "answer_drafter" not in completed:
-            logger.info("[SupervisorNode] LLM Path: DISPUTE → Generation")
+            logger.info("[SupervisorNode] Full Pipeline → Generation")
             return {
                 "action": "call_agent",
                 "target_agent": "answer_drafter",
                 "request": {},
-                "reasoning": "LLM Path: DISPUTE → Generation"
+                "reasoning": "Full Pipeline: Generation 필요"
             }
 
-        # Review가 없으면 검토 (DISPUTE는 법적 검토 필요)
+        # 3. Review (항상 실행)
         if not review and "legal_reviewer" not in completed:
-            logger.info("[SupervisorNode] LLM Path: DISPUTE → Review (법적 검토)")
+            logger.info("[SupervisorNode] Full Pipeline → Review")
             return {
                 "action": "call_agent",
                 "target_agent": "legal_reviewer",
                 "request": {},
-                "reasoning": "LLM Path: DISPUTE → Review (법적 검토)"
+                "reasoning": "Full Pipeline: Review 필요"
             }
 
-        # 모든 단계 완료 → 응답
-        logger.info("[SupervisorNode] LLM Path: DISPUTE 완료")
+        # 모든 단계 완료
+        logger.info("[SupervisorNode] Full Pipeline 완료")
         return {
             "action": "respond",
-            "reasoning": "LLM Path: DISPUTE 완료"
+            "reasoning": "Full Pipeline 완료"
         }
 
     def _build_decision_prompt(self, state: ChatState) -> str:
@@ -646,7 +587,7 @@ class SupervisorNode:
                     try:
                         return json.loads(match.group())
                     except json.JSONDecodeError:
-                        pass
+                        logger.warning("[SupervisorNode] JSON re-parse failed after cleanup")
                 return self._parse_decision_with_retry(cleaned, retries + 1)
 
             logger.warning(
@@ -658,11 +599,9 @@ class SupervisorNode:
         """
         규칙 기반 의사결정 (LLM 실패 시 사용)
 
-        === PR-5: Deterministic Routing 적용 ===
-        순서:
-        - NO_RETRIEVAL: query_analysis → draft → respond (review 생략)
-        - LAW/CRITERIA: query_analysis → retrieval → draft → respond (review 생략)
-        - DISPUTE/AMBIGUOUS: query_analysis → retrieval → draft → review → respond
+        === 2-전략 라우팅 ===
+        - NO_RETRIEVAL / RESTRICTED: query_analysis → draft → respond
+        - NEED_RAG / CACHED_RAG: query_analysis → retrieval → draft → review → respond
 
         Args:
             state: 현재 ChatState
@@ -670,84 +609,14 @@ class SupervisorNode:
         Returns:
             결정 딕셔너리
         """
-        supervisor_state = state.get("supervisor") or {}
-        completed = supervisor_state.get("completed_tasks", [])
-
-        # Prefer explicit state fields when available; completed_tasks may be stale.
-        query_analysis = state.get("query_analysis", {})
-        query_type = query_analysis.get("query_type", "dispute")
-        retrieval = state.get("retrieval")
-        draft_answer = state.get("draft_answer")
-        review = state.get("review")
-
         mode = state.get("mode", "NEED_RAG")
 
-        # === PR-1: NO_RETRIEVAL Fast Path 시작 ===
-        # Fast Path: NO_RETRIEVAL일 때 retrieval 건너뛰기
-        if mode == "NO_RETRIEVAL":
-            # 답변이 없으면 바로 answer_drafter 호출
-            if not draft_answer and ("answer_drafter" not in completed):
-                return {
-                    "action": "call_agent",
-                    "target_agent": "answer_drafter",
-                    "request": {},
-                    "reasoning": "Rule-based Fast path: NO_RETRIEVAL - 검색 없이 바로 답변 생성"
-                }
-            # 답변이 있으면 바로 응답 (review 생략)
-            if draft_answer:
-                return {
-                    "action": "respond",
-                    "reasoning": "Rule-based Fast path: NO_RETRIEVAL 답변 완료"
-                }
-        # === PR-1: NO_RETRIEVAL Fast Path 끝 ===
+        # NO_RETRIEVAL / RESTRICTED → Fast Path
+        if mode in ("NO_RETRIEVAL", "RESTRICTED_DOMAIN"):
+            return self._no_retrieval_decision(state)
 
-        if not query_analysis and ("query_analyst" not in completed and "query_analysis" not in completed):
-            return {
-                "action": "call_agent",
-                "target_agent": "query_analyst",
-                "request": {},
-                "reasoning": "Rule-based: 질의 분석 필요"
-            }
-
-        if not retrieval and ("retrieval_team" not in completed and "retrieval" not in completed):
-            return {
-                "action": "call_agent",
-                "target_agent": "retrieval_team",
-                "request": {},
-                "reasoning": "Rule-based: 정보 검색 필요"
-            }
-
-        if not draft_answer and ("answer_drafter" not in completed and "draft" not in completed):
-            return {
-                "action": "call_agent",
-                "target_agent": "answer_drafter",
-                "request": {},
-                "reasoning": "Rule-based: 답변 초안 작성 필요"
-            }
-
-        # === PR-5: LAW/CRITERIA는 Review 생략 시작 ===
-        # LAW/CRITERIA 쿼리는 Review 생략하고 바로 응답
-        if query_type in ["law", "criteria"]:
-            if draft_answer:
-                return {
-                    "action": "respond",
-                    "reasoning": "Rule-based: LAW/CRITERIA 답변 완료 (Review 생략)"
-                }
-        # === PR-5: LAW/CRITERIA는 Review 생략 끝 ===
-
-        # DISPUTE/AMBIGUOUS는 Review 필요
-        if not review and ("legal_reviewer" not in completed and "review" not in completed):
-            return {
-                "action": "call_agent",
-                "target_agent": "legal_reviewer",
-                "request": {},
-                "reasoning": "Rule-based: 법적 검토 필요"
-            }
-
-        return {
-            "action": "respond",
-            "reasoning": "Rule-based: 모든 태스크 완료"
-        }
+        # NEED_RAG / CACHED_RAG → Full Pipeline
+        return self._full_pipeline_decision(state)
 
     def _fallback_respond(self, state: ChatState) -> Dict[str, Any]:
         """

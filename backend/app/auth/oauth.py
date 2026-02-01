@@ -39,9 +39,9 @@ from urllib.parse import urlencode
 import secrets
 
 from app.common.config import AuthConfig, get_config
-from app.common.logging.rag_logger import get_rag_logger
+import logging
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 
 
 class OAuthProvider(ABC):
@@ -163,7 +163,7 @@ class GoogleOAuth(OAuthProvider):
         }
 
         auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
-        logger.info(f"[GoogleOAuth] 인증 URL 생성: state={state[:8]}...")
+        logger.info(f"[GoogleOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}...")
         return auth_url, state
 
     async def exchange_code_for_token(self, code: str) -> Dict:
@@ -189,6 +189,7 @@ class GoogleOAuth(OAuthProvider):
             "grant_type": "authorization_code"
         }
 
+        logger.info(f"[GoogleOAuth] 토큰 교환 시도: redirect_uri={redirect_uri}")
         try:
             response = await self.client.post(self.TOKEN_URL, data=data)
             response.raise_for_status()
@@ -267,7 +268,7 @@ class KakaoOAuth(OAuthProvider):
         }
 
         auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
-        logger.info(f"[KakaoOAuth] 인증 URL 생성: state={state[:8]}...")
+        logger.info(f"[KakaoOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}...")
         return auth_url, state
 
     async def exchange_code_for_token(self, code: str) -> Dict:
@@ -293,6 +294,7 @@ class KakaoOAuth(OAuthProvider):
             "grant_type": "authorization_code"
         }
 
+        logger.info(f"[KakaoOAuth] 토큰 교환 시도: redirect_uri={redirect_uri}")
         try:
             response = await self.client.post(self.TOKEN_URL, data=data)
             response.raise_for_status()
@@ -374,7 +376,7 @@ class NaverOAuth(OAuthProvider):
         }
 
         auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
-        logger.info(f"[NaverOAuth] 인증 URL 생성: state={state[:8]}...")
+        logger.info(f"[NaverOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}...")
         return auth_url, state
 
     async def exchange_code_for_token(self, code: str) -> Dict:
@@ -390,6 +392,11 @@ class NaverOAuth(OAuthProvider):
         Raises:
             httpx.HTTPError: API 호출 실패
         """
+        # Note: Naver doesn't require redirect_uri in token exchange
+        # but log for consistency
+        redirect_uri = f"{self.auth_config.backend_url}/auth/naver/callback"
+        logger.info(f"[NaverOAuth] 토큰 교환 시도: redirect_uri={redirect_uri} (not sent to Naver)")
+
         params = {
             "code": code,
             "client_id": self.auth_config.naver_client_id,

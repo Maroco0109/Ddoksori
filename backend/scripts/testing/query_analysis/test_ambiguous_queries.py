@@ -80,28 +80,33 @@ class TestAmbiguousQueryPatternMatching:
         assert result is True, f"Expected ambiguous for '{query}' ({description})"
 
     @pytest.mark.parametrize(
-        "query,description",
+        "query,description,expected_type",
         [
-            ("요약", "단독 동사"),
-            ("도와줘", "단독 요청"),
-            ("이거 어떻게", "지시대명사+질문"),
+            ("요약", "단독 동사", "ambiguous"),
+            ("도와줘", "단독 요청", "meta_conversational"),  # meta_conversational이 ambiguous보다 우선
+            ("이거 어떻게", "지시대명사+질문", "ambiguous"),
         ],
     )
-    def test_pattern_matched_classify_type(self, query, description):
-        """Pattern 매칭 쿼리가 'ambiguous' 타입으로 분류되는지 확인"""
+    def test_pattern_matched_classify_type(self, query, description, expected_type):
+        """Pattern 매칭 쿼리가 올바른 타입으로 분류되는지 확인"""
         query_type = self.classify_type(query)
-        assert query_type == "ambiguous", f"Expected 'ambiguous' type for '{query}', got '{query_type}'"
+        assert query_type == expected_type, f"Expected '{expected_type}' type for '{query}', got '{query_type}'"
 
     @pytest.mark.parametrize(
-        "query",
-        ["요약", "도와줘", "뭐", "?"],
+        "query,expected_mode",
+        [
+            ("요약", "NEED_RAG"),       # ambiguous → NEED_RAG
+            ("도와줘", "NO_RETRIEVAL"),  # meta_conversational → NO_RETRIEVAL (legacy mode)
+            ("뭐", "NEED_RAG"),          # ambiguous → NEED_RAG
+            ("?", "NEED_RAG"),           # ambiguous → NEED_RAG
+        ],
     )
-    def test_pattern_matched_mode(self, query):
-        """Pattern 매칭 쿼리가 NEED_USER_CLARIFICATION 모드로 설정되는지 확인"""
+    def test_pattern_matched_mode(self, query, expected_mode):
+        """Pattern 매칭 쿼리가 올바른 모드로 설정되는지 확인"""
         state = create_initial_state(user_query=query, chat_type="dispute")
         result = self.qa_node(state)
-        assert result.get("mode") == "NEED_USER_CLARIFICATION", \
-            f"Expected NEED_USER_CLARIFICATION for '{query}', got {result.get('mode')}"
+        assert result.get("mode") == expected_mode, \
+            f"Expected {expected_mode} for '{query}', got {result.get('mode')}"
 
 
 class TestAmbiguousQueryLLMFallback:
@@ -343,9 +348,8 @@ class TestIntegrationFullFlow:
         result = self.qa_node(state)
 
         # 검증
-        assert result.get("mode") == "NEED_USER_CLARIFICATION"
+        assert result.get("mode") == "NEED_RAG"  # Phase System 제거: ambiguous→RAG
         assert result.get("query_analysis", {}).get("query_type") == "ambiguous"
-        assert result.get("query_analysis_v2", {}).get("query_type") == "ambiguous"
 
     def test_specific_query_bypasses_ambiguous(self):
         """구체적 분쟁 쿼리는 ambiguous를 건너뜀"""

@@ -232,33 +232,35 @@ class TestPhaseTransitions:
         phase, reason = compute_phase_transition('initial', '안녕하세요', slot_status)
         assert phase == 'initial'
 
-    def test_info_gathering_to_ready(self):
+    def test_info_gathering_to_providing_case_summary(self):
+        """필수 슬롯이 채워지면 사례 요약 제공 단계로 전이"""
         slot_status = {
             'purchase_item': {'status': 'filled', 'slot_name': 'purchase_item', 'evidence_chunk_ids': [], 'confidence': 1.0},
             'problem_details': {'status': 'filled', 'slot_name': 'problem_details', 'evidence_chunk_ids': [], 'confidence': 1.0},
         }
         phase, reason = compute_phase_transition('info_gathering', '헬스장 환불', slot_status)
-        assert phase == 'ready_for_analysis'
+        assert phase == 'providing_case_summary'
         assert 'required_slots_filled' in reason
 
-    def test_ready_to_providing_law(self):
-        phase, reason = compute_phase_transition('ready_for_analysis', '', {})
-        assert phase == 'providing_law'
+    def test_providing_case_summary_to_awaiting_law_confirm(self):
+        """사례 요약 후 법령 제공 여부 확인 단계로 전이"""
+        phase, reason = compute_phase_transition('providing_case_summary', '', {})
+        assert phase == 'awaiting_law_confirm'
+        assert reason == 'case_summary_provided'
 
-    def test_providing_law_to_awaiting_case(self):
-        phase, reason = compute_phase_transition('providing_law', '', {})
-        assert phase == 'awaiting_case_confirm'
+    def test_awaiting_law_confirm_yes_to_providing_law_detail(self):
+        """법령 제공 긍정 응답 → 법령 상세 단계"""
+        phase, reason = compute_phase_transition('awaiting_law_confirm', '네', {})
+        assert phase == 'providing_law_detail'
 
-    def test_awaiting_case_yes_to_providing_case(self):
-        phase, reason = compute_phase_transition('awaiting_case_confirm', '네', {})
-        assert phase == 'providing_case'
-
-    def test_awaiting_case_no_to_awaiting_procedure(self):
-        phase, reason = compute_phase_transition('awaiting_case_confirm', '아니요', {})
+    def test_awaiting_law_confirm_no_to_awaiting_procedure(self):
+        """법령 제공 거절 → 절차 확인 단계"""
+        phase, reason = compute_phase_transition('awaiting_law_confirm', '아니요', {})
         assert phase == 'awaiting_procedure_confirm'
 
-    def test_providing_case_to_awaiting_procedure(self):
-        phase, reason = compute_phase_transition('providing_case', '', {})
+    def test_providing_law_detail_to_awaiting_procedure(self):
+        """법령 상세 제공 후 절차 확인 단계로 전이"""
+        phase, reason = compute_phase_transition('providing_law_detail', '', {})
         assert phase == 'awaiting_procedure_confirm'
 
     def test_awaiting_procedure_yes_to_providing_procedure(self):
@@ -273,6 +275,12 @@ class TestPhaseTransitions:
         phase, reason = compute_phase_transition('providing_procedure', '', {})
         assert phase == 'completed'
 
+    def test_awaiting_law_confirm_new_topic_resets(self):
+        """awaiting 상태에서 새 토픽 → initial로 리셋"""
+        phase, reason = compute_phase_transition('awaiting_law_confirm', '자동차 수리비 환불 방법이 궁금합니다', {})
+        assert phase == 'initial'
+        assert reason == 'new_topic_detected'
+
 
 class TestUpdateSlotsAndPhase:
     """Test the main update_slots_and_phase function."""
@@ -284,7 +292,7 @@ class TestUpdateSlotsAndPhase:
             'dispute_details': '3개월 이용 후 환불 요청',
         }
         updates = update_slots_and_phase(state)
-        assert updates['conversation_phase'] == 'ready_for_analysis'
+        assert updates['conversation_phase'] == 'providing_case_summary'
         assert updates['dispute_slots']['purchase_item'] == '헬스장 회원권'
 
     def test_full_flow_with_incomplete_info(self):
@@ -305,11 +313,11 @@ class TestGetNextQuestions:
         questions = get_next_questions(state)
         assert len(questions) > 0
 
-    def test_awaiting_case_confirm_returns_case_question(self):
+    def test_awaiting_law_confirm_returns_law_question(self):
         state = create_initial_state('', chat_type='dispute')
-        state['conversation_phase'] = 'awaiting_case_confirm'
+        state['conversation_phase'] = 'awaiting_law_confirm'
         questions = get_next_questions(state)
-        assert '관련 분쟁조정 사례도 보여드릴까요?' in questions
+        assert '관련 법령과 분쟁해결기준도 상세히 알려드릴까요?' in questions
 
     def test_awaiting_procedure_confirm_returns_procedure_question(self):
         state = create_initial_state('', chat_type='dispute')
@@ -325,28 +333,31 @@ class TestShouldTriggerClarification:
         state = {'conversation_phase': 'info_gathering'}
         assert should_trigger_clarification(state) is True
 
-    def test_awaiting_case_confirm_triggers_clarification(self):
-        state = {'conversation_phase': 'awaiting_case_confirm'}
+    def test_awaiting_law_confirm_triggers_clarification(self):
+        state = {'conversation_phase': 'awaiting_law_confirm'}
         assert should_trigger_clarification(state) is True
 
-    def test_providing_law_does_not_trigger(self):
-        state = {'conversation_phase': 'providing_law'}
+    def test_providing_law_detail_does_not_trigger(self):
+        state = {'conversation_phase': 'providing_law_detail'}
         assert should_trigger_clarification(state) is False
 
 
 class TestGetRetrieverTypesForPhase:
     """Test retriever type selection per phase."""
 
-    def test_providing_law_returns_law_criteria(self):
-        types = get_retriever_types_for_phase('providing_law')
+    def test_providing_case_summary_returns_full_search(self):
+        """providing_case_summary: 전체 검색 (첫 턴 캐싱용)"""
+        types = get_retriever_types_for_phase('providing_case_summary')
         assert 'law' in types
         assert 'criteria' in types
-        assert 'case' not in types
+        assert 'case' in types
 
-    def test_providing_case_returns_case_only(self):
-        types = get_retriever_types_for_phase('providing_case')
-        assert types == ['case']
+    def test_providing_law_detail_returns_empty(self):
+        """providing_law_detail: 캐시 사용, 재검색 불필요"""
+        types = get_retriever_types_for_phase('providing_law_detail')
+        assert types == []
 
-    def test_providing_procedure_returns_procedure(self):
+    def test_providing_procedure_returns_empty(self):
+        """providing_procedure: 캐시 사용, 재검색 불필요"""
         types = get_retriever_types_for_phase('providing_procedure')
-        assert types == ['procedure']
+        assert types == []

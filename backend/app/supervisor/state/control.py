@@ -12,32 +12,14 @@ from typing_extensions import TypedDict
 # - NO_RETRIEVAL: 검색 불필요 (인사, 시스템 질문 등)
 # - NEED_RAG: RAG 파이프라인 필요 → Full Pipeline
 # - CACHED_RAG: 후속 턴 → 캐시된 Retrieval 사용
-# - NEED_USER_CLARIFICATION: 사용자 추가 정보 필요
-# - NEED_CLARIFICATION: NEED_USER_CLARIFICATION과 동일 (통합 그래프용)
 # - RESTRICTED_DOMAIN: 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
 RoutingMode = Literal[
     'NO_RETRIEVAL',
     'NEED_RAG',
     'CACHED_RAG',
-    'NEED_USER_CLARIFICATION',
-    'NEED_CLARIFICATION',
     'RESTRICTED_DOMAIN',
-]
-
-
-# === Progressive Disclosure 대화 Phase ===
-# Turn 1: initial → providing_case_summary (사례 중심 답변)
-# Turn 2: awaiting_law_confirm → providing_law_detail (법령/기준 상세)
-# Turn 3: awaiting_procedure_confirm → providing_procedure (절차 안내)
-ConversationPhase = Literal[
-    'initial',                    # 첫 질문 대기
-    'info_gathering',             # 온보딩 정보 수집 중
-    'providing_case_summary',     # Turn 1: 사례 요약 제공
-    'awaiting_law_confirm',       # 법령/기준 제공 여부 대기
-    'providing_law_detail',       # Turn 2: 법령/기준 상세 제공
-    'awaiting_procedure_confirm', # 절차 안내 여부 대기
-    'providing_procedure',        # Turn 3: 절차 안내
-    'completed',                  # 대화 완료
+    'META_CONVERSATIONAL',
+    'FOLLOWUP_WITH_CONTEXT',
 ]
 
 
@@ -74,19 +56,14 @@ class ControlState(TypedDict, total=False):
             - 검토 실패 시 답변 재생성 카운트
             - max=2 (무한 루프 방지)
 
-        awaiting_user_choice: 사용자 선택 대기 중
-            - True: 사용자 입력 필요 (되묻기 상태)
-            - 다음 입력 시 선택으로 처리
-
         low_similarity_mode: 저유사도 모드
             - True: 검색 결과 유사도가 threshold 미만
-            - 규칙 기반 폴백 또는 되묻기 활성화
+            - 규칙 기반 폴백 활성화
 
         mode: 라우팅 모드
             - 질의분석 후 결정되는 처리 경로
             - NO_RETRIEVAL: Fast Path (검색 생략)
             - NEED_RAG: 일반 RAG 파이프라인
-            - NEED_CLARIFICATION: 되묻기 필요
 
         guardrail_blocked: 가드레일 차단 여부
             - True: 모더레이션에서 차단됨
@@ -102,6 +79,11 @@ class ControlState(TypedDict, total=False):
             - 디버깅 및 성능 모니터링용
             - 키: 노드명, 값: {start, end, duration_ms}
 
+        query_complexity: Adaptive RAG 복잡도 분류
+            - 'simple': 단순 키워드 질문
+            - 'moderate': 일반적 분쟁 상담
+            - 'complex': 복잡한 상황 설명
+
     Example:
         >>> state: ControlState = {
         ...     'retry_count': 0,
@@ -110,17 +92,16 @@ class ControlState(TypedDict, total=False):
         ... }
     """
     retry_count: int
-    awaiting_user_choice: bool
     low_similarity_mode: bool
     mode: RoutingMode
     guardrail_blocked: bool
     guardrail_type: Optional[str]
-    _node_timings: Optional[Dict[str, Dict]]
+    _node_timings: Dict[str, Dict]
+    query_complexity: Optional[str]
 
 
 __all__ = [
     'RoutingMode',
-    'ConversationPhase',
     'TraceEntry',
     'ControlState',
 ]

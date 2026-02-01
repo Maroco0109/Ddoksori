@@ -285,19 +285,19 @@ def _check_citation_presence(answer: str, has_sources: bool) -> bool:
 def _check_evidence_sufficiency(state: ChatState) -> bool:
     """
     검색 단계에서 충분한 근거(분쟁사례, 법령 등)를 찾았는지 확인합니다.
+    RetrievalSufficiencyChecker를 사용하여 정량적으로 평가합니다.
     """
+    from app.agents.retrieval.sufficiency import RetrievalSufficiencyChecker
+
     retrieval = state.get('retrieval')
     if not retrieval:
         return False
-    
-    # 분쟁조정사례 또는 법령이 있으면 충분하다고 간주
-    disputes = retrieval.get('disputes', [])
-    laws = retrieval.get('laws', [])
-    
-    if disputes or laws:
-        return True
-    
-    return False
+
+    # RetrievalSufficiencyChecker로 정량적 평가
+    checker = RetrievalSufficiencyChecker()
+    result = checker.evaluate(retrieval)
+
+    return result.is_sufficient
 
 
 def _filter_prohibited_expressions(answer: str, violations: List[Tuple[str, str]]) -> str:
@@ -569,6 +569,10 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     - Violation 상세 정보 (type, description, location, severity, suggestion)
     - retry_context 구성: AnswerDrafter에 위반사항 전달
     - next_agent='retry_generation' 반환으로 재생성 루프 지원
+    - Progressive Disclosure: Phase별 엄격도 분기
+      - providing_case_summary: Standard (경미한 위반 필터링)
+      - providing_law_detail: Strict (법령 인용 정확성 중점)
+      - providing_procedure / completed: 템플릿이므로 리뷰 스킵
 
     Args:
         state: ChatState (v2 호환)
@@ -578,7 +582,9 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
         Dict with review 결과, retry_context (필요 시), next_agent
     """
     import time
+    import logging
 
+    _logger = logging.getLogger(__name__)
     start_time = time.time()
 
     draft_answer = state.get('draft_answer', '')
@@ -587,11 +593,19 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     claim_evidence_map = state.get('claim_evidence_map', [])
     cited_cases = state.get('cited_cases', [])
     retry_count = state.get('retry_count', 0)
+    conversation_phase = state.get('conversation_phase', 'initial')
 
     query_type = query_analysis.get('query_type', 'dispute')
 
-    # 일반 대화(General)는 검토 스킵 (Fast Path)
-    if query_type == 'general':
+    # === Phase-based 리뷰 스킵 ===
+    # 템플릿 기반 응답 (procedure, completed, followup)은 리뷰 불필요
+    skip_phases = ('providing_procedure', 'completed')
+    skip_query_types = ('general', 'followup')
+
+    if conversation_phase in skip_phases or query_type in skip_query_types:
+        _logger.info(
+            f"[Review v2] Skipping review: phase={conversation_phase}, query_type={query_type}"
+        )
         return {
             'review': {
                 'passed': True,
@@ -601,6 +615,13 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
             },
             'final_answer': draft_answer,
         }
+
+    # === Phase-based 엄격도 결정 ===
+    # providing_law_detail: Strict 모드 (법령 인용 정확성 중점)
+    # 그 외: Standard 모드
+    strict_mode = (conversation_phase == 'providing_law_detail')
+    if strict_mode:
+        _logger.info("[Review v2] Strict mode enabled for providing_law_detail phase")
 
     # 1. 금지 표현 검사
     prohibited_violations = _check_prohibited_expressions(draft_answer)
@@ -613,7 +634,9 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     has_evidence = _check_evidence_sufficiency(state)
 
     # 4. 인용 정확성 검사 (Hallucination 방지)
-    citation_verify = verify_citation_accuracy(draft_answer, sources)
+    citation_verify = verify_citation_accuracy(
+        draft_answer, sources, strict_mode=strict_mode
+    )
 
     # 5. v2: Violation 상세 정보 생성
     violation_details = _build_violation_details(
@@ -624,10 +647,14 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     critical_count = sum(1 for v in violation_details if v['severity'] == 'critical')
 
     # 7. 재생성 필요 여부 결정
-    # - critical 위반이 있고
-    # - 아직 최대 재시도 횟수(1회)에 도달하지 않았을 때
+    # Strict 모드: warning도 재생성 트리거 가능
     max_retries = 1  # v2: 최대 1회 재생성
-    needs_retry = critical_count > 0 and retry_count < max_retries
+    if strict_mode:
+        # Strict: critical 또는 hallucination 위반 시 재생성
+        needs_retry = critical_count > 0 and retry_count < max_retries
+    else:
+        # Standard: critical 위반만 재생성
+        needs_retry = critical_count > 0 and retry_count < max_retries
 
     review_time_ms = (time.time() - start_time) * 1000
 
@@ -641,6 +668,7 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
                 'violations': violation_details,
                 'final_answer': None,
                 'review_time_ms': review_time_ms,
+                'strict_mode': strict_mode,
             },
             'retry_context': retry_context,
             'retry_count': retry_count + 1,
@@ -661,6 +689,7 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
             'violations': violation_details,
             'final_answer': filtered_answer,
             'review_time_ms': review_time_ms,
+            'strict_mode': strict_mode,
         },
         'final_answer': filtered_answer,
     }

@@ -27,7 +27,7 @@ Pydantic Settings를 활용하여 환경변수 기반 설정을 타입 안전하
 
 import os
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -373,6 +373,57 @@ class AgentSettings(BaseSettings):
 
 
 # ============================================================
+# 검색 전략 설정 (Retrieval Strategy)
+# ============================================================
+
+class RetrievalSettings(BaseSettings):
+    """
+    검색 전략 설정.
+
+    RRF 파라미터, HyDE, Adaptive RAG, 도메인별 노출 제한 등을 관리합니다.
+
+    환경변수:
+        RETRIEVAL_RRF_K: RRF k 파라미터 (기본값: 10)
+        RETRIEVAL_DEFAULT_TOP_K: 에이전트별 검색 수 (기본값: 10)
+        RETRIEVAL_HYDE_ENABLED: HyDE 활성화 (기본값: true)
+        RETRIEVAL_HYDE_MODEL: HyDE 가상 답변 생성 모델 (기본값: gpt-4o-mini)
+        RETRIEVAL_HYDE_MAX_TOKENS: HyDE 최대 토큰 수 (기본값: 200)
+        RETRIEVAL_ADAPTIVE_ENABLED: Adaptive RAG 활성화 (기본값: true)
+        RETRIEVAL_SIMPLE_SKIP_HYDE: SIMPLE 쿼리 HyDE 생략 (기본값: true)
+        RETRIEVAL_DISPLAY_LAW: 법률 노출 수 (기본값: 1)
+        RETRIEVAL_DISPLAY_CRITERIA: 기준 노출 수 (기본값: 2)
+        RETRIEVAL_DISPLAY_CASE: 사례 노출 수 (기본값: 3)
+        RETRIEVAL_DISPLAY_COUNSEL: 상담 노출 수 (기본값: 2)
+        RETRIEVAL_CACHE_OVERFLOW: 오버플로 캐시 활성화 (기본값: true)
+        RETRIEVAL_CACHE_TTL: 오버플로 캐시 TTL 초 (기본값: 1800)
+    """
+    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_")
+
+    # RRF 파라미터
+    rrf_k: int = Field(default=10, description="RRF k 파라미터 (낮을수록 상위 결과 차별화)")
+    default_top_k: int = Field(default=10, description="에이전트별 기본 검색 수")
+
+    # HyDE 설정
+    hyde_enabled: bool = Field(default=True, description="HyDE 활성화 여부")
+    hyde_model: str = Field(default="gpt-4o-mini", description="HyDE 가상 답변 생성 모델")
+    hyde_max_tokens: int = Field(default=200, description="HyDE 최대 토큰 수")
+
+    # Adaptive RAG 설정
+    adaptive_enabled: bool = Field(default=True, description="Adaptive RAG 활성화 여부")
+    simple_skip_hyde: bool = Field(default=True, description="SIMPLE 쿼리는 HyDE 생략")
+
+    # 도메인별 노출 제한
+    display_law: int = Field(default=1, description="법률 노출 수")
+    display_criteria: int = Field(default=2, description="기준 노출 수")
+    display_case: int = Field(default=3, description="사례 노출 수")
+    display_counsel: int = Field(default=2, description="상담 노출 수")
+
+    # 오버플로 캐시
+    cache_overflow: bool = Field(default=True, description="오버플로 캐시 활성화")
+    cache_ttl: int = Field(default=1800, description="오버플로 캐시 TTL (초)")
+
+
+# ============================================================
 # Redis 설정
 # ============================================================
 
@@ -596,6 +647,46 @@ class ChatbotFeaturesConfig(BaseSettings):
 
 
 # ============================================================
+# 응답 처리 방식 설정 (Progressive Disclosure)
+# ============================================================
+
+class ResponseConfig(BaseSettings):
+    """
+    응답 처리 방식 설정.
+
+    Progressive Disclosure, A/B 테스트 등 응답 생성 전략을 관리합니다.
+
+    환경변수:
+        RESPONSE_MODE: 응답 모드 (legacy | minimal | adaptive, 기본값: legacy)
+        SUMMARY_MAX_LENGTH: 요약 최대 길이 (기본값: 200)
+        FOLLOWUP_SIMILARITY_THRESHOLD: 후속 질문 매칭 임계값 (기본값: 0.8)
+        META_QUERY_USE_LLM: 메타 쿼리 LLM 사용 여부 (기본값: false)
+    """
+    model_config = SettingsConfigDict(env_prefix="")
+
+    response_mode: Literal["legacy", "minimal", "adaptive"] = Field(
+        default="legacy",
+        alias="RESPONSE_MODE",
+        description="응답 모드 (legacy | minimal | adaptive)"
+    )
+    summary_max_length: int = Field(
+        default=200,
+        alias="SUMMARY_MAX_LENGTH",
+        description="요약 최대 길이 (자)"
+    )
+    followup_similarity_threshold: float = Field(
+        default=0.8,
+        alias="FOLLOWUP_SIMILARITY_THRESHOLD",
+        description="후속 질문 매칭 임계값"
+    )
+    meta_query_use_llm: bool = Field(
+        default=False,
+        alias="META_QUERY_USE_LLM",
+        description="메타 쿼리 응답에 LLM 사용 여부 (adaptive 모드)"
+    )
+
+
+# ============================================================
 # 애플리케이션 전역 설정
 # ============================================================
 
@@ -654,6 +745,8 @@ class AppConfig(BaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     chatbot_features: ChatbotFeaturesConfig = Field(default_factory=ChatbotFeaturesConfig)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    response: ResponseConfig = Field(default_factory=ResponseConfig)
 
     def get_cors_origins_list(self) -> List[str]:
         """
@@ -674,6 +767,9 @@ def get_config() -> AppConfig:
     """
     애플리케이션 설정 싱글톤 인스턴스를 반환합니다.
 
+    프로덕션 환경(USE_AWS_SECRETS=true)에서는 AWS Secrets Manager에서
+    시크릿을 로드하여 os.environ에 주입한 후 설정을 생성합니다.
+
     Returns:
         AppConfig 인스턴스
 
@@ -684,6 +780,8 @@ def get_config() -> AppConfig:
         db_host = config.database.host
         similarity = config.agent.similarity_threshold
     """
+    from app.common.secrets import inject_aws_secrets
+    inject_aws_secrets()
     return AppConfig()
 
 
@@ -808,6 +906,8 @@ __all__ = [
     "AuthConfig",  # JWT & OAuth 설정
     "MemoryConfig",  # 대화 메모리 설정
     "ChatbotFeaturesConfig",  # 대화형 챗봇 기능 플래그
+    "RetrievalSettings",  # 검색 전략 설정
+    "ResponseConfig",  # 응답 처리 방식 설정
 
     # 설정 접근 함수
     "get_config",

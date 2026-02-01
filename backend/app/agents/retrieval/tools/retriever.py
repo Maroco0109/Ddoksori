@@ -1,5 +1,12 @@
-"""똑소리 프로젝트 - RAG 검색 시스템
+"""
+[LEGACY] RAGRetriever 클래스는 더 이상 사용되지 않습니다.
+대체: app.agents.retrieval.tools.unified_retriever.UnifiedRetriever
 
+SearchResult dataclass와 유틸리티 함수(_to_category_path 등)는
+UnifiedRetriever에서 계속 사용됩니다.
+
+---
+(원본) 똑소리 프로젝트 - RAG 검색 시스템
 작성일: 2026-01-05
 벡터 검색, 하이브리드 검색, 컨텍스트 확장 기능 제공
 """
@@ -75,6 +82,9 @@ class SearchResult:
     url: Optional[str] = None             # Original document URL
     decision_date: Optional[str] = None   # From metadata['decision_date']
     collected_at: Optional[str] = None    # Document collection timestamp
+
+    # RRF score (preserved separately from similarity for debugging)
+    rrf_score: Optional[float] = None
 
     metadata: Optional[Dict] = None
 

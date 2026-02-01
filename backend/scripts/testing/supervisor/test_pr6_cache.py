@@ -7,8 +7,23 @@ PR-6: Redis 캐싱 테스트
 import pytest
 import time
 import asyncio
+import os
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
+
+
+def _redis_available():
+    """Check if Redis is available"""
+    try:
+        import redis
+        r = redis.Redis(host=os.getenv('REDIS_HOST', 'redis'), port=int(os.getenv('REDIS_PORT', '6379')))
+        r.ping()
+        return True
+    except Exception:
+        return False
+
+
+skip_no_redis = pytest.mark.skipif(not _redis_available(), reason="Redis not available")
 
 
 class TestSupervisorCache:
@@ -29,6 +44,8 @@ class TestSupervisorCache:
         assert _normalize_query("안녕!") == "안녕"
         assert _normalize_query("환불   받고   싶어요") == "환불 받고 싶어요"
 
+    @pytest.mark.integration
+    @skip_no_redis
     def test_l2_query_analysis_cache(self):
         """L2 Query Analysis 캐시 테스트"""
         from app.supervisor.cache import QueryAnalysisCache
@@ -54,6 +71,8 @@ class TestSupervisorCache:
         assert cached['query_type'] == 'law_search'
         assert 'retriever_types' in cached
 
+    @pytest.mark.integration
+    @skip_no_redis
     def test_l1_supervisor_response_cache(self):
         """L1 Supervisor 응답 캐시 테스트"""
         from app.supervisor.cache import SupervisorResponseCache
@@ -77,6 +96,8 @@ class TestSupervisorCache:
         assert cached['final_answer'] == response['final_answer']
         assert cached['mode'] == 'NO_RETRIEVAL'
 
+    @pytest.mark.integration
+    @skip_no_redis
     def test_l1_session_isolation(self):
         """L1 캐시 세션 격리 테스트"""
         from app.supervisor.cache import SupervisorResponseCache
@@ -95,6 +116,8 @@ class TestSupervisorCache:
         cached = SupervisorResponseCache.get(query, session_a)
         assert cached is not None
 
+    @pytest.mark.integration
+    @skip_no_redis
     def test_cache_stats(self):
         """캐시 통계 테스트"""
         from app.supervisor.cache import (
@@ -212,6 +235,8 @@ class TestCachePerformance:
         return get_graph_for_chat_type("general")
 
     @pytest.mark.slow
+    @pytest.mark.integration
+    @skip_no_redis
     def test_cache_hit_under_one_second(self, graph):
         """
         테스트: 캐시 히트 시 응답 시간 <1초

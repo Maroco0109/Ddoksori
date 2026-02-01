@@ -27,11 +27,12 @@ from langchain_core.messages import AIMessage
 from langchain_core.callbacks.manager import adispatch_custom_event
 from langchain_core.runnables import RunnableConfig
 
-from ...supervisor.state import ChatState, ConversationPhase
+from ...supervisor.state import ChatState
 from ...domain import classify_domain, AGENCY_INFO
 from .cache import get_answer_cache
 from .fallback import AnswerGenerationFallback
 from ...common.config import get_config
+from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
@@ -100,20 +101,20 @@ DOMAIN_KOREAN_NAMES = {
     "construction": "건설/건축",
 }
 
-PHASE_CASE_OFFER_TEMPLATE = """
-관련 법령과 분쟁해결기준을 안내해 드렸습니다.
+# === Progressive Disclosure Phase Templates ===
 
+PHASE_CASE_SUMMARY_FOLLOWUP = """
 {main_content}
 
 ---
-**관련 분쟁조정 사례도 보여드릴까요?** 유사한 상황의 실제 조정 결과를 참고하시면 도움이 될 수 있습니다.
+**관련 법령과 분쟁해결기준도 상세히 알려드릴까요?** 해당 상황에 적용되는 법적 근거를 확인하실 수 있습니다.
 """.strip()
 
-PHASE_PROCEDURE_OFFER_TEMPLATE = """
+PHASE_LAW_DETAIL_FOLLOWUP = """
 {main_content}
 
 ---
-**분쟁 해결 절차(한국소비자원, 전자거래분쟁조정위원회 등)도 안내해 드릴까요?** 직접 분쟁조정을 신청하시는 방법을 알려드릴 수 있습니다.
+**분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해 드릴까요?** 직접 분쟁조정을 신청하시는 방법을 알려드릴 수 있습니다.
 """.strip()
 
 PHASE_PROCEDURE_TEMPLATE = """
@@ -122,7 +123,7 @@ PHASE_PROCEDURE_TEMPLATE = """
 ### 1. 한국소비자원 (KCA)
 - **대표전화**: 1372
 - **홈페이지**: https://www.kca.go.kr
-- **신청 방법**: 
+- **신청 방법**:
   1. 소비자상담센터(1372) 전화상담
   2. 홈페이지 온라인 상담/분쟁조정 신청
   3. 방문상담 (전국 소비자원 지부)
@@ -143,6 +144,52 @@ PHASE_PROCEDURE_TEMPLATE = """
 ---
 > 분쟁조정위원회의 조정안에 양측이 동의하면 재판상 화해와 같은 효력이 발생합니다.
 """.strip()
+
+PHASE_COMPLETED_TEMPLATE = """
+도움이 되셨기를 바랍니다. 추가로 궁금하신 소비자 분쟁 사항이 있으시면 언제든 말씀해 주세요!
+""".strip()
+
+# Legacy aliases (하위호환)
+PHASE_CASE_OFFER_TEMPLATE = PHASE_CASE_SUMMARY_FOLLOWUP
+PHASE_PROCEDURE_OFFER_TEMPLATE = PHASE_LAW_DETAIL_FOLLOWUP
+
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# === Progressive Disclosure 메타 쿼리 응답 템플릿 ===
+META_CONVERSATIONAL_TEMPLATE = """안녕하세요, 똑소리입니다! 소비자 분쟁 상담을 도와드립니다.
+
+다음과 같은 정보를 알려주시면 맞춤 상담을 해드릴 수 있어요:
+
+1. **구매한 품목/서비스**: 어떤 제품이나 서비스인가요?
+2. **구매 시기**: 언제 구매하셨나요?
+3. **문제 상황**: 어떤 문제가 발생했나요? (예: 환불 거부, 제품 불량, 배송 지연 등)
+4. **원하시는 해결**: 어떻게 해결되길 원하시나요? (예: 환불, 교환, 수리, 배상 등)
+
+> 예시: "쿠팡에서 산 노트북이 불량인데 환불을 거부당했어요"
+
+편하게 말씀해 주세요!""".strip()
+
+META_CONVERSATIONAL_ONBOARDING_TEMPLATE = """안녕하세요, 똑소리입니다!
+
+**{purchase_item}** 관련으로 상담을 원하시는군요. 좀 더 구체적인 상황을 알려주시면 정확한 도움을 드릴 수 있어요:
+
+1. **문제 상황**: 어떤 문제가 발생했나요?
+2. **현재 진행 상황**: 판매자와 이미 연락하셨나요?
+3. **원하시는 해결 방법**: 환불, 교환, 수리 중 무엇을 원하시나요?
+
+자세한 상황을 말씀해 주시면 관련 법령과 유사 사례를 바탕으로 해결 방법을 안내해 드리겠습니다.""".strip()
+
+# Progressive Disclosure 요약 응답 후속 질문 생성용
+PROGRESSIVE_FOLLOWUP_TEMPLATES = {
+    'laws': "관련 법령을 자세히 알려드릴까요?",
+    'criteria': "분쟁해결기준(배상/환불 기준)을 확인해보시겠어요?",
+    'cases': "비슷한 분쟁 조정 사례 {count}건도 확인해 보시겠어요?",
+    'procedure': "분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해드릴까요?",
+}
 
 
 def _get_llm_model() -> str:
@@ -498,14 +545,6 @@ async def generation_node(state: ChatState, config: RunnableConfig = None) -> Di
         'clarifying_questions': clarifying_questions,
     })
 
-    conversation_phase = state.get('conversation_phase', 'initial')
-    if conversation_phase == 'providing_law':
-        draft_answer = PHASE_CASE_OFFER_TEMPLATE.format(main_content=draft_answer)
-    elif conversation_phase == 'providing_case':
-        draft_answer = PHASE_PROCEDURE_OFFER_TEMPLATE.format(main_content=draft_answer)
-    elif conversation_phase == 'providing_procedure':
-        draft_answer = PHASE_PROCEDURE_TEMPLATE
-
     return {
         'draft_answer': draft_answer,
         'has_sufficient_evidence': has_evidence,
@@ -591,6 +630,471 @@ async def generation_node_streaming(state: ChatState) -> AsyncGenerator[Dict[str
 
 
 # ========================================
+# Progressive Disclosure 헬퍼 함수 (Phase C+E)
+# ========================================
+
+def _build_available_details(retrieval: Dict) -> Dict:
+    """
+    검색 결과에서 아직 제공하지 않은 상세 정보 메타데이터를 추출합니다.
+
+    Progressive Disclosure의 핵심: 사용자에게 어떤 정보가 더 있는지 알려주어
+    필요한 정보만 선택적으로 요청할 수 있게 합니다.
+
+    Args:
+        retrieval: RetrievalResult dict
+
+    Returns:
+        available_details dict with section counts and previews
+    """
+    details = {}
+
+    laws = retrieval.get('laws', [])
+    if laws:
+        preview_titles = [l.get('doc_title', '') for l in laws[:2]]
+        details['laws'] = {
+            'count': len(laws),
+            'preview': ', '.join(t for t in preview_titles if t) or '관련 법령',
+        }
+
+    criteria = retrieval.get('criteria', [])
+    if criteria:
+        preview_titles = [c.get('doc_title', '') for c in criteria[:2]]
+        details['criteria'] = {
+            'count': len(criteria),
+            'preview': ', '.join(t for t in preview_titles if t) or '분쟁해결기준',
+        }
+
+    cases = retrieval.get('disputes', []) + retrieval.get('counsels', [])
+    if cases:
+        details['cases'] = {
+            'count': len(cases),
+            'preview': f"유사 조정사례 {len(cases)}건",
+        }
+
+    return details
+
+
+def _build_progressive_summary(
+    draft_answer: str,
+    retrieval: Dict,
+    max_length: int = 200,
+) -> str:
+    """
+    전체 답변에서 핵심 요약만 추출합니다 (minimal 모드).
+
+    규칙 기반 추출:
+    1. draft_answer의 첫 문단 (또는 첫 200자)
+    2. 마크다운 헤딩(##) 제거, 핵심 문장만 유지
+
+    Args:
+        draft_answer: LLM이 생성한 전체 답변
+        retrieval: RetrievalResult (요약 보강용)
+        max_length: 요약 최대 길이
+
+    Returns:
+        요약된 답변 문자열
+    """
+    if not draft_answer:
+        return "관련 정보를 찾았습니다. 상세 내용을 확인해보시겠어요?"
+
+    # 마크다운 헤딩/구분선 제거
+    import re
+    lines = draft_answer.split('\n')
+    content_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # 헤딩, 구분선, 빈 줄 건너뛰기
+        if stripped.startswith('#') or stripped.startswith('---') or stripped.startswith('> 본 답변'):
+            continue
+        if stripped:
+            content_lines.append(stripped)
+
+    summary = ' '.join(content_lines)
+
+    # max_length로 자르되 문장 단위로
+    if len(summary) > max_length:
+        # 마지막 완성된 문장까지 자르기
+        truncated = summary[:max_length]
+        last_period = max(truncated.rfind('.'), truncated.rfind('다.'), truncated.rfind('요.'))
+        if last_period > max_length // 2:
+            summary = truncated[:last_period + 1]
+        else:
+            summary = truncated.rstrip() + '...'
+
+    return summary
+
+
+def _build_progressive_followups(retrieval: Dict, available_details: Dict) -> list:
+    """
+    available_details 기반으로 구체적인 후속 질문을 생성합니다.
+
+    Args:
+        retrieval: RetrievalResult
+        available_details: _build_available_details() 결과
+
+    Returns:
+        후속 질문 리스트 (최대 3개)
+    """
+    questions = []
+
+    if 'laws' in available_details or 'criteria' in available_details:
+        questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES['laws'])
+
+    if 'cases' in available_details:
+        count = available_details['cases']['count']
+        questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES['cases'].format(count=count))
+
+    questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES['procedure'])
+
+    return questions[:3]
+
+
+def _meta_conversational_response(state: Dict) -> Dict:
+    """
+    메타 대화 쿼리에 대한 가이드 응답을 생성합니다 (Phase E-2).
+
+    "뭘 물어봐야 할까?", "도와줘" 같은 메타 수준의 질문에 대해
+    RAG 검색 없이 가이드 응답을 생성합니다.
+
+    minimal 모드: 규칙 기반 템플릿
+    adaptive 모드: 온보딩 정보 참고한 맞춤 가이드 (현재는 규칙 기반)
+
+    Args:
+        state: ChatState
+
+    Returns:
+        generation 노드 결과 Dict
+    """
+    import time
+    from langchain_core.messages import AIMessage
+
+    start_time = time.time()
+    onboarding = state.get('onboarding') or {}
+    purchase_item = onboarding.get('purchase_item', '')
+
+    if purchase_item:
+        response = META_CONVERSATIONAL_ONBOARDING_TEMPLATE.format(
+            purchase_item=purchase_item,
+        )
+    else:
+        response = META_CONVERSATIONAL_TEMPLATE
+
+    return {
+        'draft_answer': response,
+        'final_answer': response,
+        'claim_evidence_map': [],
+        'cited_cases': [],
+        'has_sufficient_evidence': True,
+        'retrieval_confidence': 1.0,
+        'followup_questions': [],
+        'response_depth': 'full',
+        'available_details': None,
+        'generation_time_ms': (time.time() - start_time) * 1000,
+        'messages': [AIMessage(content=response)],
+        'generation_model_used': 'meta_conversational_template',
+    }
+
+
+def _filter_retrieval_for_detail(retrieval: Dict, detail_type: str) -> Dict:
+    """
+    전체 retrieval 결과에서 요청된 섹션만 필터링합니다.
+
+    Args:
+        retrieval: 전체 RetrievalResult
+        detail_type: 요청된 상세 유형 ('laws', 'cases', 'criteria', 'full')
+
+    Returns:
+        필터링된 retrieval dict
+    """
+    if detail_type == 'full':
+        return retrieval
+
+    filtered = {}
+
+    if detail_type == 'laws':
+        filtered['laws'] = retrieval.get('laws', [])
+        filtered['criteria'] = retrieval.get('criteria', [])
+    elif detail_type == 'criteria':
+        filtered['criteria'] = retrieval.get('criteria', [])
+    elif detail_type == 'cases':
+        filtered['disputes'] = retrieval.get('disputes', [])
+        filtered['counsels'] = retrieval.get('counsels', [])
+
+    # 원본의 agency 정보 보존
+    if 'agency' in retrieval:
+        filtered['agency'] = retrieval['agency']
+
+    return filtered
+
+
+def _followup_detail_response(state: Dict, config=None) -> Dict:
+    """
+    후속 질문에 대한 상세 응답을 생성합니다 (Phase D).
+
+    이전 턴의 검색 결과(_last_turn_context.retrieval)를 재활용하여
+    요청된 섹션(법령/사례/기준/절차)의 상세 정보만 제공합니다.
+
+    Args:
+        state: ChatState
+        config: RunnableConfig
+
+    Returns:
+        generation 노드 결과 Dict (response_depth='detail')
+    """
+    import time
+    from langchain_core.messages import AIMessage
+
+    start_time = time.time()
+
+    user_query = state.get('user_query', '')
+    last_turn_context = state.get('_last_turn_context') or {}
+    cached_retrieval = last_turn_context.get('retrieval') or {}
+    available_details = last_turn_context.get('available_details') or {}
+
+    # Detect which section the user is asking about
+    from ..query_analysis.detectors import detect_requested_detail_type
+    detail_type = detect_requested_detail_type(user_query, available_details)
+
+    logger.info(f"[Generation] FOLLOWUP_WITH_CONTEXT: detail_type={detail_type}")
+
+    # 절차 안내 요청
+    if detail_type == 'procedure':
+        response = PHASE_PROCEDURE_TEMPLATE
+        return {
+            'draft_answer': response,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': True,
+            'retrieval_confidence': 1.0,
+            'followup_questions': [],
+            'response_depth': 'detail',
+            'available_details': None,  # 절차 후에는 남은 상세 없음
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'messages': [AIMessage(content=response)],
+            'generation_model_used': 'procedure_template',
+        }
+
+    # 캐시된 retrieval이 없으면 fallback
+    if not cached_retrieval:
+        fallback_msg = "죄송합니다. 이전 검색 결과를 찾을 수 없습니다. 질문을 다시 입력해 주세요."
+        return {
+            'draft_answer': fallback_msg,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': False,
+            'retrieval_confidence': 0.0,
+            'followup_questions': [],
+            'response_depth': 'detail',
+            'available_details': None,
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'messages': [AIMessage(content=fallback_msg)],
+            'generation_model_used': 'followup_no_cache',
+        }
+
+    # 요청된 섹션만 포함하는 필터링된 retrieval 구성
+    filtered_retrieval = _filter_retrieval_for_detail(cached_retrieval, detail_type)
+
+    # LLM으로 상세 답변 생성
+    agency_info = cached_retrieval.get('agency', {
+        'agency': 'KCA',
+        'agency_info': {
+            'name': '한국소비자원',
+            'full_name': '한국소비자원 소비자분쟁조정위원회',
+            'description': '일반 소비자 분쟁 조정',
+            'url': 'https://www.kca.go.kr'
+        },
+    })
+
+    # Get onboarding for context
+    onboarding = state.get('onboarding') or {}
+
+    draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
+        query=user_query,
+        retrieval=filtered_retrieval,
+        agency_info=agency_info,
+        include_disclaimer=True,
+        onboarding=onboarding,
+    )
+
+    cited_cases = _extract_cited_cases(filtered_retrieval)
+    has_evidence = model_used not in ('rule_based', 'safe_fallback')
+
+    # 남은 상세 정보 계산 (이미 제공한 섹션 제외)
+    remaining_details = {k: v for k, v in available_details.items() if k != detail_type}
+    remaining_followups = _build_progressive_followups(cached_retrieval, remaining_details)
+
+    return {
+        'draft_answer': draft_answer,
+        'claim_evidence_map': claim_evidence_map,
+        'cited_cases': cited_cases,
+        'has_sufficient_evidence': has_evidence,
+        'retrieval_confidence': 0.8,  # 캐시 사용이므로 고정값
+        'followup_questions': remaining_followups,
+        'response_depth': 'detail',
+        'available_details': remaining_details if remaining_details else None,
+        'retrieval': filtered_retrieval,  # retrieval state도 업데이트
+        'generation_time_ms': (time.time() - start_time) * 1000,
+        'messages': [AIMessage(content=draft_answer)],
+        'generation_model_used': model_used,
+    }
+
+
+def _progressive_summary_response(state: Dict, config=None) -> Dict:
+    """
+    Progressive Disclosure 요약 응답을 생성합니다 (Phase C+E).
+
+    1. 기존 LLM 답변 생성 (전체)
+    2. 요약만 추출하여 사용자에게 제공
+    3. available_details로 상세 정보 안내
+    4. 후속 질문으로 상세 요청 유도
+
+    Args:
+        state: ChatState
+        config: RunnableConfig
+
+    Returns:
+        generation 노드 결과 Dict (response_depth='summary')
+    """
+    import time
+    from langchain_core.messages import AIMessage
+
+    start_time = time.time()
+
+    user_query = state.get('user_query', '')
+    query_analysis = state.get('query_analysis', {})
+    retrieval = state.get('retrieval', {})
+    retry_context = state.get('retry_context')
+
+    # 검색 결과 없음
+    if not retrieval:
+        no_result_msg = "죄송합니다. 관련 정보를 찾을 수 없습니다. 질문을 더 구체적으로 작성해 주시면 도움이 될 것 같습니다."
+        return {
+            'draft_answer': no_result_msg,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': False,
+            'retrieval_confidence': 0.0,
+            'response_depth': 'summary',
+            'available_details': None,
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'clarifying_questions': ["어떤 제품/서비스에 대한 분쟁인가요?", "어떤 문제가 발생했나요?"],
+            'messages': [AIMessage(content=no_result_msg)],
+        }
+
+    # Sufficiency Check
+    checker = RetrievalSufficiencyChecker()
+    suf_result = checker.evaluate(retrieval)
+    retrieval_confidence = suf_result.confidence
+
+    if suf_result.level == 'insufficient':
+        insufficient_msg = f"죄송합니다. 검색된 정보가 충분하지 않아 정확한 답변을 드리기 어렵습니다.\n\n{suf_result.reason}"
+        for i, q in enumerate(suf_result.clarifying_questions, 1):
+            insufficient_msg += f"\n{i}. {q}"
+        return {
+            'draft_answer': insufficient_msg,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': False,
+            'retrieval_confidence': retrieval_confidence,
+            'response_depth': 'summary',
+            'available_details': None,
+            'clarifying_questions': suf_result.clarifying_questions,
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'messages': [AIMessage(content=insufficient_msg)],
+            'generation_model_used': 'sufficiency_insufficient',
+        }
+
+    # LLM 답변 생성 (전체)
+    retry_supplement = None
+    if retry_context:
+        retry_supplement = _build_retry_prompt_supplement(retry_context)
+
+    agency_info = retrieval.get('agency', {
+        'agency': 'KCA',
+        'agency_info': {
+            'name': '한국소비자원',
+            'full_name': '한국소비자원 소비자분쟁조정위원회',
+            'description': '일반 소비자 분쟁 조정',
+            'url': 'https://www.kca.go.kr'
+        },
+    })
+
+    mode = state.get('mode', 'NEED_RAG')
+    include_disclaimer = (mode == 'NEED_RAG')
+
+    # Get onboarding for context
+    onboarding = state.get('onboarding') or {}
+
+    draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
+        query=user_query,
+        retrieval=retrieval,
+        agency_info=agency_info,
+        include_disclaimer=include_disclaimer,
+        retry_supplement=retry_supplement,
+        onboarding=onboarding,
+    )
+
+    # Progressive Disclosure: 요약 추출 + available_details
+    app_config = get_config()
+    summary_max_length = app_config.response.summary_max_length
+
+    summary_answer = _build_progressive_summary(draft_answer, retrieval, summary_max_length)
+    available_details = _build_available_details(retrieval)
+
+    # Customized follow-up questions based on onboarding
+    days = onboarding.get('days_since_purchase')
+    purchase_item = onboarding.get('purchase_item', '')
+
+    if days is not None:
+        custom_followups = []
+        if days <= 14:
+            custom_followups.append(f"청약철회 관련 법령을 자세히 알려드릴까요? (구매 후 {days}일 경과)")
+        else:
+            custom_followups.append(f"관련 법령을 자세히 알려드릴까요? (구매 후 {days}일 경과)")
+
+        if purchase_item:
+            custom_followups.append(f"'{purchase_item}' 관련 유사 분쟁 조정 사례도 확인해 보시겠어요?")
+        else:
+            custom_followups.append("유사 분쟁 조정 사례도 확인해 보시겠어요?")
+
+        custom_followups.append("조정신청 절차가 궁금하시면 안내해드릴까요?")
+        followup_questions = custom_followups[:3]
+    else:
+        followup_questions = _build_progressive_followups(retrieval, available_details)
+
+    cited_cases = _extract_cited_cases(retrieval)
+    has_evidence = model_used not in ('rule_based', 'safe_fallback')
+
+    # 캐시 저장 (전체 답변도 저장 - 후속 detail 요청 시 사용)
+    if not retry_context:
+        cache = get_answer_cache()
+        cache.set(user_query, query_analysis.get('query_type', 'dispute'), {
+            'answer': draft_answer,
+            'summary': summary_answer,
+            'claim_evidence_map': claim_evidence_map,
+            'cited_cases': cited_cases,
+            'has_evidence': has_evidence,
+            'retrieval_confidence': retrieval_confidence,
+            'available_details': available_details,
+        })
+
+    return {
+        'draft_answer': summary_answer,  # 요약만 제공
+        'claim_evidence_map': claim_evidence_map,
+        'cited_cases': cited_cases,
+        'has_sufficient_evidence': has_evidence,
+        'retrieval_confidence': retrieval_confidence,
+        'followup_questions': followup_questions,
+        'response_depth': 'summary',
+        'available_details': available_details,
+        'generation_time_ms': (time.time() - start_time) * 1000,
+        'messages': [AIMessage(content=summary_answer)],
+        'generation_model_used': model_used,
+        '_cache_hit': False,
+    }
+
+
+# ========================================
 # v2: CitedCase 생성 + retry_context 지원
 # ========================================
 
@@ -670,26 +1174,135 @@ def _build_retry_prompt_supplement(retry_context: Dict) -> str:
     return "\n".join(lines)
 
 
+def _build_phase_aware_law_detail(retrieval: Dict) -> str:
+    """
+    providing_law_detail phase용 법령/기준 상세 답변 생성.
+
+    캐시된 Retrieval 결과에서 laws/criteria 섹션을 추출하여
+    구조화된 법령 상세 정보를 생성합니다.
+    """
+    laws = retrieval.get('laws', [])
+    criteria = retrieval.get('criteria', [])
+
+    lines = []
+
+    if laws:
+        lines.append("## 관련 법령")
+        lines.append("")
+        for i, law in enumerate(laws[:5], 1):
+            title = law.get('doc_title') or law.get('title', '제목 없음')
+            content = (law.get('content') or '')[:300]
+            lines.append(f"### {i}. {title}")
+            if content:
+                lines.append(f"> {content}")
+            lines.append("")
+
+    if criteria:
+        lines.append("## 분쟁해결기준")
+        lines.append("")
+        for i, crit in enumerate(criteria[:5], 1):
+            title = crit.get('doc_title') or crit.get('title', '제목 없음')
+            content = (crit.get('content') or '')[:300]
+            lines.append(f"### {i}. {title}")
+            if content:
+                lines.append(f"> {content}")
+            lines.append("")
+
+    if not lines:
+        return "관련 법령 및 기준 정보를 찾을 수 없습니다."
+
+    return "\n".join(lines)
+
+
+def _generate_retrieval_based_followups(
+    retrieval: Dict,
+    query_analysis: Dict,
+) -> List[str]:
+    """
+    검색 결과 섹션 존재 여부에 기반한 후속질문 생성.
+
+    Phase 시스템 제거 후 단순화된 후속질문:
+    - 법령 결과가 있으면: "관련 법령도 알려드릴까요?"
+    - 유사 사례가 있으면: "비슷한 분쟁 조정 사례도 보시겠어요?"
+    - 절차 정보 관련: "분쟁 해결 절차도 안내해드릴까요?"
+    """
+    questions = []
+
+    if not retrieval:
+        return questions
+
+    laws = retrieval.get('laws', [])
+    criteria = retrieval.get('criteria', [])
+    disputes = retrieval.get('disputes', [])
+    counsels = retrieval.get('counsels', [])
+
+    # 법령 결과가 있으면
+    if laws or criteria:
+        questions.append("관련 법령과 분쟁해결기준도 상세히 알려드릴까요?")
+
+    # 유사 사례가 있으면
+    if disputes or counsels:
+        case_count = len(disputes) + len(counsels)
+        if case_count > 1:
+            questions.append(f"비슷한 분쟁 조정 사례 {case_count}건도 확인해 보시겠어요?")
+
+    # 절차 안내는 항상 제안
+    questions.append("분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해드릴까요?")
+
+    return questions[:3]  # 최대 3개
+
+
 async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     """
     [답변생성 노드 v2 진입점]
 
     v2 추가 기능:
-    - retry_context 처리: LegalReviewer 재생성 요청 시 위반사항 참고
+    - Sufficiency Check: 검색 결과 충분성 평가 (LLM 호출 전)
+        - insufficient: 안내 메시지 반환 (LLM 생략)
+        - partial/sufficient: LLM 답변 생성 진행
+    - retry_context 처리: LegalReviewer 재생성 요청 시 위반사항을 retry_supplement로 LLM에 전달
     - cited_cases 생성: 인용된 사례 정보 구조화
     - expanded_queries 활용: 검색 컨텍스트 참조
+    - followup_questions: 검색 결과 기반 후속질문 생성
+
+    Progressive Disclosure (Phase C+E):
+    - response_mode == "legacy": 기존 동작 (전체 정보)
+    - response_mode == "minimal"/"adaptive": 요약 먼저, 상세는 후속 대화에서
+    - mode == "META_CONVERSATIONAL": 가이드 응답 (RAG 미실행)
 
     Args:
         state: ChatState (v2 호환)
         config: RunnableConfig (스트리밍용)
 
     Returns:
-        Dict with draft_answer, claim_evidence_map, cited_cases, has_sufficient_evidence
+        Dict with draft_answer, claim_evidence_map, cited_cases, has_sufficient_evidence, retrieval_confidence
     """
     import time
     from langchain_core.messages import AIMessage
 
     start_time = time.time()
+
+    # === Phase E-1: response_mode 기반 분기 ===
+    app_config = get_config()
+    response_mode = app_config.response.response_mode
+    mode = state.get('mode', 'NEED_RAG')
+
+    # META_CONVERSATIONAL: 가이드 응답 (legacy 이외 모드에서만)
+    if mode == 'META_CONVERSATIONAL':
+        logger.info("[Generation] META_CONVERSATIONAL mode → guide response")
+        return _meta_conversational_response(state)
+
+    # Phase D: FOLLOWUP_WITH_CONTEXT — 이전 턴 캐시 결과로 상세 응답
+    if mode == 'FOLLOWUP_WITH_CONTEXT':
+        logger.info("[Generation] FOLLOWUP_WITH_CONTEXT mode → detail response")
+        return _followup_detail_response(state, config)
+
+    # Progressive Disclosure: minimal/adaptive 모드에서 NEED_RAG인 경우 요약 응답
+    if response_mode != 'legacy' and mode == 'NEED_RAG':
+        logger.info(f"[Generation] Progressive Disclosure mode={response_mode} → summary response")
+        return _progressive_summary_response(state, config)
+
+    # === Legacy 동작 (기존 코드 유지) ===
 
     user_query = state.get('user_query', '')
     query_analysis = state.get('query_analysis', {})
@@ -698,6 +1311,21 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
 
     query_type = query_analysis.get('query_type', 'dispute')
     expanded_queries = query_analysis.get('expanded_queries', [])
+
+    # followup query_type (후속 턴이지만 검색 결과 없는 경우)
+    if query_type == 'followup' and not retrieval:
+        fallback_msg = "추가 정보를 확인 중입니다. 잠시만 기다려주세요."
+        return {
+            'draft_answer': fallback_msg,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': False,
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'messages': [AIMessage(content=fallback_msg)],
+            'generation_model_used': 'followup_fallback',
+        }
+
+    # === 일반 분류 흐름 ===
 
     # 1. 일반 대화 처리
     if query_type == 'general':
@@ -719,6 +1347,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             retrieval=retrieval,
         )
         result['cited_cases'] = []
+        result['retrieval_confidence'] = 0.0  # 전문기관 안내는 검색 충분성 평가 비대상
         result['generation_time_ms'] = (time.time() - start_time) * 1000
         return result
 
@@ -727,6 +1356,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     if classification.is_restricted:
         result = _build_restricted_response(user_query, classification, retrieval or {})
         result['cited_cases'] = []
+        result['retrieval_confidence'] = 0.0  # 전문기관 안내는 검색 충분성 평가 비대상
         result['generation_time_ms'] = (time.time() - start_time) * 1000
         return result
 
@@ -738,6 +1368,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             'claim_evidence_map': [],
             'cited_cases': [],
             'has_sufficient_evidence': False,
+            'retrieval_confidence': 0.0,
             'generation_time_ms': (time.time() - start_time) * 1000,
             'clarifying_questions': [
                 "어떤 제품/서비스에 대한 분쟁인가요?",
@@ -747,7 +1378,41 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             'messages': [AIMessage(content=no_result_msg)],
         }
 
-    # 5. 캐시 확인 (retry가 아닌 경우에만)
+    # 5. Sufficiency Check (LLM 호출 전)
+    checker = RetrievalSufficiencyChecker()
+    suf_result = checker.evaluate(retrieval)
+
+    # Store sufficiency results in state
+    retrieval_confidence = suf_result.confidence
+    has_sufficient_evidence_initial = suf_result.is_sufficient
+
+    # 5-1. Insufficient 레벨: 안내 메시지 반환 (LLM 생략)
+    if suf_result.level == 'insufficient':
+        insufficient_msg = f"""죄송합니다. 검색된 정보가 충분하지 않아 정확한 답변을 드리기 어렵습니다.
+
+{suf_result.reason}
+
+다음 정보를 추가로 알려주시면 더 정확한 답변을 드릴 수 있습니다:"""
+
+        # Add clarifying questions
+        for i, q in enumerate(suf_result.clarifying_questions, 1):
+            insufficient_msg += f"\n{i}. {q}"
+
+        return {
+            'draft_answer': insufficient_msg,
+            'claim_evidence_map': [],
+            'cited_cases': [],
+            'has_sufficient_evidence': False,
+            'retrieval_confidence': retrieval_confidence,
+            'clarifying_questions': suf_result.clarifying_questions,
+            'generation_time_ms': (time.time() - start_time) * 1000,
+            'messages': [AIMessage(content=insufficient_msg)],
+            'generation_model_used': 'sufficiency_insufficient',
+        }
+
+    # 5-2. Partial or Sufficient: LLM 답변 생성 진행
+
+    # 6. 캐시 확인 (retry가 아닌 경우에만)
     if not retry_context:
         cache = get_answer_cache()
         cached = cache.get(user_query, query_type)
@@ -757,15 +1422,18 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
                 'claim_evidence_map': cached.get('claim_evidence_map', []),
                 'cited_cases': cached.get('cited_cases', []),
                 'has_sufficient_evidence': cached.get('has_evidence', True),
+                'retrieval_confidence': cached.get('retrieval_confidence', retrieval_confidence),
                 'generation_time_ms': (time.time() - start_time) * 1000,
                 'messages': [AIMessage(content=cached['answer'])],
                 '_cache_hit': True,
             }
 
-    # 6. v2: retry_context 처리
-    retry_supplement = _build_retry_prompt_supplement(retry_context)
+    # 7. v2: retry_context 처리
+    retry_supplement = None
+    if retry_context:
+        retry_supplement = _build_retry_prompt_supplement(retry_context)
 
-    # 7. LLM 답변 생성
+    # 8. LLM 답변 생성
     agency_info = retrieval.get('agency', {
         'agency': 'KCA',
         'agency_info': {
@@ -779,16 +1447,20 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     mode = state.get('mode', 'NEED_RAG')
     include_disclaimer = (mode == 'NEED_RAG')
 
-    # TODO: retry_supplement를 LLM 프롬프트에 전달하는 로직 필요
-    # 현재는 기존 fallback 체인 사용
+    # Get onboarding for context
+    onboarding = state.get('onboarding') or {}
+
+    # v2: retry_supplement 패스스루 (위반사항 참고)
     draft_answer, model_used, claim_evidence_map = AnswerGenerationFallback.generate_with_fallback(
         query=user_query,
         retrieval=retrieval,
         agency_info=agency_info,
         include_disclaimer=include_disclaimer,
+        retry_supplement=retry_supplement,
+        onboarding=onboarding,
     )
 
-    # 8. v2: CitedCase 추출
+    # 9. v2: CitedCase 추출
     cited_cases = _extract_cited_cases(retrieval)
 
     has_evidence = model_used not in ('rule_based', 'safe_fallback')
@@ -802,16 +1474,30 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             'claim_evidence_map': claim_evidence_map,
             'cited_cases': cited_cases,
             'has_evidence': has_evidence,
+            'retrieval_confidence': retrieval_confidence,
         })
+
+    # v2: 후속질문 생성 (Rule-based, 검색 결과 기반)
+    followup_questions = []
+    app_config = get_config()
+    if app_config.chatbot_features.enable_followup_questions and query_type == 'dispute':
+        followup_questions = _generate_retrieval_based_followups(retrieval, query_analysis)
+
+    is_followup = False
 
     return {
         'draft_answer': draft_answer,
         'claim_evidence_map': claim_evidence_map,
         'cited_cases': cited_cases,
         'has_sufficient_evidence': has_evidence,
+        'retrieval_confidence': retrieval_confidence,
+        'followup_questions': followup_questions,
+        'response_depth': 'full',
+        'available_details': None,
         'generation_time_ms': generation_time_ms,
         'messages': [AIMessage(content=draft_answer)],
         'generation_model_used': model_used,
+        'is_followup': is_followup,
         '_cache_hit': False,
     }
 

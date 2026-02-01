@@ -37,10 +37,10 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 
 from app.common.config import DatabaseConfig, get_config
-from app.common.logging.rag_logger import get_rag_logger
+import logging
 from app.auth.models import User
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 
 
 class UserDB:

@@ -31,7 +31,7 @@ class TestQueryTypeToRetrievers:
 
     def test_dispute_query_maps_to_all(self):
         """dispute 쿼리는 전체 retriever 사용"""
-        assert QUERY_TYPE_TO_RETRIEVERS["dispute"] == ["law", "criteria", "case"]
+        assert QUERY_TYPE_TO_RETRIEVERS["dispute"] == ["law", "criteria", "case", "counsel"]
 
     def test_general_query_maps_to_empty(self):
         """general 쿼리는 검색 불필요"""

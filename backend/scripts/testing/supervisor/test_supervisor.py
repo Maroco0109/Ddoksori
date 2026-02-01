@@ -82,7 +82,10 @@ class TestSupervisorNodeInit:
 
         # Phase 4: llm=None이면 config.models.supervisor에서 자동 초기화
         # API 키가 있으면 LLM이 생성됨, 없으면 None
-        assert len(supervisor.available_agents) == 4
+        # 최소 4개 핵심 에이전트 + 개별 retrieval agents 포함
+        assert len(supervisor.available_agents) >= 4
+        for agent in ["query_analyst", "retrieval_team", "answer_drafter", "legal_reviewer"]:
+            assert agent in supervisor.available_agents
 
 
 class TestSupervisorNoLLM:
@@ -98,7 +101,7 @@ class TestSupervisorNoLLM:
 
         assert decision["action"] == "call_agent"
         assert decision["target_agent"] == "query_analyst"
-        assert "Rule-based" in decision["reasoning"]
+        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
 
 
 class TestSupervisorRuleBasedOrder:
@@ -175,7 +178,7 @@ class TestSupervisorTimeoutFallback:
 
         assert decision["action"] == "call_agent"
         assert decision["target_agent"] == "query_analyst"
-        assert "Rule-based" in decision["reasoning"]
+        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
 
 
 class TestSupervisorErrorFallback:
@@ -190,7 +193,7 @@ class TestSupervisorErrorFallback:
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "call_agent"
-        assert "Rule-based" in decision["reasoning"]
+        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
 
 
 class TestSupervisorJSONParseFallback:
@@ -205,7 +208,7 @@ class TestSupervisorJSONParseFallback:
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "call_agent"
-        assert "Rule-based" in decision["reasoning"]
+        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
 
     def test_markdown_wrapped_json_parsed(self):
         """마크다운 코드 블록으로 감싼 JSON도 파싱 성공"""
@@ -213,6 +216,11 @@ class TestSupervisorJSONParseFallback:
         supervisor = SupervisorNode(llm=MockLLM(response=json_in_markdown))
         state = create_initial_state(user_query="테스트", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
+        # Fast Path 완료 상태: draft_answer 제공 + completed_tasks에 answer_drafter 포함
+        state["query_analysis"] = {"query_type": "general", "keywords": []}
+        state["mode"] = "NO_RETRIEVAL"
+        state["draft_answer"] = "테스트 답변입니다"
+        state["supervisor"]["completed_tasks"] = ["query_analyst", "answer_drafter"]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
 
@@ -240,38 +248,51 @@ class TestSupervisorLLMDecision:
     """LLM 기반 의사결정 테스트"""
 
     def test_llm_decision_call_agent(self):
-        """LLM이 call_agent 결정을 반환"""
+        """LLM이 call_agent 결정을 반환 (Full Pipeline 경로)"""
         response = '{"action": "call_agent", "target_agent": "retrieval_team", "reasoning": "검색 필요"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
         state = create_initial_state(user_query="환불 규정 알려줘", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
+        state["query_analysis"] = {"query_type": "dispute", "keywords": ["환불"]}
+        state["mode"] = "NEED_RAG"
+        state["supervisor"]["completed_tasks"] = ["query_analyst"]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
 
+        # Full Pipeline 경로에서는 LLM 응답 무시하고 retrieval_team 호출
         assert decision["action"] == "call_agent"
         assert decision["target_agent"] == "retrieval_team"
 
     def test_llm_decision_respond(self):
-        """LLM이 respond 결정을 반환"""
+        """LLM이 respond 결정을 반환 (NO_RETRIEVAL 경로)"""
         response = '{"action": "respond", "reasoning": "충분한 정보 수집 완료"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
         state = create_initial_state(user_query="테스트", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
+        state["query_analysis"] = {"query_type": "general", "keywords": []}
+        state["mode"] = "NO_RETRIEVAL"
+        state["draft_answer"] = "테스트 답변입니다"
+        state["supervisor"]["completed_tasks"] = ["query_analyst", "answer_drafter"]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "respond"
 
     def test_llm_decision_clarify(self):
-        """LLM이 clarify 결정을 반환"""
+        """LLM이 clarify 결정을 반환 (NO_RETRIEVAL 경로)"""
         response = '{"action": "clarify", "reasoning": "추가 정보 필요"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
         state = create_initial_state(user_query="환불", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
+        state["query_analysis"] = {"query_type": "general", "keywords": ["환불"]}
+        state["mode"] = "NO_RETRIEVAL"
+        state["draft_answer"] = "테스트 답변입니다"
+        state["supervisor"]["completed_tasks"] = ["query_analyst", "answer_drafter"]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
 
-        assert decision["action"] == "clarify"
+        # Fast Path는 완료 시 항상 "respond" 반환 (LLM의 clarify 무시)
+        assert decision["action"] == "respond"
 
 
 class TestSupervisorInputSanitization:

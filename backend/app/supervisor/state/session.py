@@ -20,6 +20,8 @@ class OnboardingInfo(TypedDict, total=False):
     - purchase_item: 구매 품목 (예: "헬스장 회원권")
     - purchase_amount: 구매 금액 (예: "500000")
     - dispute_details: 분쟁 상세 내용
+    - days_since_purchase: 구매 후 경과 일수 (자동 계산)
+    - product_category: 품목 카테고리 (전자제품, 의류 등)
 
     Example:
         >>> onboarding: OnboardingInfo = {
@@ -34,6 +36,8 @@ class OnboardingInfo(TypedDict, total=False):
     purchase_item: Optional[str]
     purchase_amount: Optional[str]
     dispute_details: Optional[str]
+    days_since_purchase: Optional[int]     # 구매 후 경과 일수 (자동 계산)
+    product_category: Optional[str]        # 품목 카테고리 (전자제품, 의류 등)
 
 
 # 대화 유형 타입 정의

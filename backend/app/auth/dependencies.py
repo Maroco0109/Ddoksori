@@ -28,11 +28,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.common.config import get_config
-from app.common.logging.rag_logger import get_rag_logger
+import logging
 from app.auth.models import User, TokenPayload
 from app.auth.user_db import UserDB
 
-logger = get_rag_logger()
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 

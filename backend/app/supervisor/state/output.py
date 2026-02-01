@@ -5,9 +5,13 @@
 사용자에게 반환되는 응답 데이터입니다.
 """
 
-from typing import List, Dict, Optional, Annotated
+from typing import List, Dict, Literal, Optional, Annotated
 from typing_extensions import TypedDict
 import operator
+
+
+# Progressive Disclosure 응답 깊이
+ResponseDepth = Literal["summary", "detail", "full"]
 
 
 class ClaimEvidenceMapping(TypedDict):
@@ -56,9 +60,12 @@ class OutputState(TypedDict, total=False):
             - True: 검색 결과가 질문에 적합
             - False: 근거 부족 (규칙 기반 폴백 사용됨)
 
-        clarifying_questions: 명확화 질문 목록 (Track 2)
-            - 정보 부족 시 사용자에게 되묻는 질문들
-            - 예: ["구매 날짜를 알려주시겠어요?"]
+        retrieval_confidence: 검색 결과 충분성 점수 (0.0~1.0)
+            - SufficiencyChecker가 계산한 confidence score
+            - 0.0: 검색 결과 없음
+            - < 0.3: 부족 (안내 메시지 반환)
+            - 0.3~0.6: 부분적 (주의 문구 포함)
+            - > 0.6: 충분 (정상 답변)
 
         followup_questions: 후속 질문 목록 (Track 2)
             - 현재 답변 기반 추가 질문 제안
@@ -74,17 +81,21 @@ class OutputState(TypedDict, total=False):
 
     Track 2 변경사항 (2026-01-28):
         - followup_questions 필드 추가
-        - clarifying_questions 의미 명확화
     """
     final_answer: Optional[str]
     sources: Annotated[List[Dict], operator.add]
     has_sufficient_evidence: bool
-    clarifying_questions: List[str]
+    retrieval_confidence: float
     followup_questions: List[str]
     claim_evidence_map: List[ClaimEvidenceMapping]
+
+    # Progressive Disclosure (Phase C)
+    response_depth: ResponseDepth
+    available_details: Optional[Dict]
 
 
 __all__ = [
     'ClaimEvidenceMapping',
+    'ResponseDepth',
     'OutputState',
 ]

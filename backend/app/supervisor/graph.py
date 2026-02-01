@@ -230,6 +230,10 @@ def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
     async 노드는 RunnableConfig 파라미터를 받아 스트리밍 모드를 감지할 수 있습니다.
     """
     if inspect.iscoroutinefunction(node_fn):
+        # 노드 함수가 config 파라미터를 받는지 래핑 시점에 한번만 확인
+        _sig = inspect.signature(node_fn)
+        _accepts_config = len(_sig.parameters) >= 2
+
         # Async node wrapper
         async def async_timed_wrapper(state: ChatState, config: RunnableConfig = None) -> Dict[str, Any]:
             start_time = time.time()
@@ -239,7 +243,7 @@ def _create_timed_node(node_fn: Callable, node_name: str) -> Callable:
             snapshot_config = NODE_SNAPSHOT_FIELDS.get(node_name, {'input': [], 'output': []})
             input_snapshot = _snapshot_state(dict(state), snapshot_config['input'])
 
-            result = await node_fn(state, config)
+            result = await (node_fn(state, config) if _accepts_config else node_fn(state))
 
             end_time = time.time()
             duration_ms = round((end_time - start_time) * 1000, 2)
