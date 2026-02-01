@@ -2,22 +2,16 @@
 BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 
 4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
-LLM: 2.4B (EXAONE), 역할: 쿼리 재작성
 """
 
 import os
+import time
 import logging
 from abc import abstractmethod
 from typing import Dict, Any, List, ClassVar, Optional
 
 from ..base import BaseAgent
-
 logger = logging.getLogger(__name__)
-
-REWRITE_ENABLED = os.getenv("QUERY_REWRITE_ENABLED", "true").lower() == "true"
-REWRITE_MODEL = os.getenv("QUERY_REWRITE_MODEL", "gpt-4o-mini")
-REWRITE_TIMEOUT_SEC = float(os.getenv("QUERY_REWRITE_TIMEOUT_SEC", "4.0"))
-REWRITE_MIN_CHARS = int(os.getenv("QUERY_REWRITE_MIN_CHARS", "5"))
 
 
 def _get_db_config() -> Dict[str, str]:
@@ -40,7 +34,7 @@ class BaseRetrievalAgent(BaseAgent):
     required_inputs: ClassVar[List[str]] = ["user_query"]
     provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
     
-    default_top_k: ClassVar[int] = 3
+    default_top_k: ClassVar[int] = 5
     
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
@@ -50,12 +44,38 @@ class BaseRetrievalAgent(BaseAgent):
         context = request.get("context", {})
         user_query = context.get("user_query", "")
         query_analysis = context.get("query_analysis", {})
+        params = request.get("params", {}) or {}
+
+        metadata_filter = params.get("metadata_filter") or {}
+        expanded_queries = params.get("expanded_queries") or query_analysis.get("expanded_queries") or []
+        agent_keywords = params.get("agent_keywords") or query_analysis.get("keywords") or []
+        ignore_threshold = bool(params.get("ignore_threshold", False))
+
+        self._last_expanded_queries = [
+            q for q in expanded_queries if isinstance(q, str) and q.strip()
+        ]
+        self._last_agent_keywords = [
+            k for k in agent_keywords if isinstance(k, str) and k.strip()
+        ]
+        self._ignore_threshold = ignore_threshold
+
+        self._last_filter_category = params.get("filter_category")
+        if not self._last_filter_category:
+            self._last_filter_category = self._normalize_categories(
+                metadata_filter.get("categories")
+            )
+        self._last_filter_dataset = params.get("filter_dataset") or metadata_filter.get(
+            "dataset_type"
+        )
+        self._last_query_analysis = query_analysis
         
         search_query = self._build_search_query(user_query, query_analysis)
-        top_k = request.get("params", {}).get("top_k", self.default_top_k)
+        top_k = params.get("top_k", self.default_top_k)
         
         try:
+            search_start = time.monotonic()
             results = await self._execute_search(search_query, top_k)
+            search_time_ms = (time.monotonic() - search_start) * 1000
             if self._should_rerank(results, search_query, top_k):
                 results = self._rerank_results(results, search_query)
             
@@ -64,9 +84,12 @@ class BaseRetrievalAgent(BaseAgent):
                     status="failure",
                     result={
                         "results": [],
+                        "documents": [],
                         "sources": [],
                         "final_query": search_query,
                         "rewritten_query": self._last_rewritten_query,
+                        "search_time_ms": search_time_ms,
+                        "error": "no_results",
                     },
                     message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
                 )
@@ -81,11 +104,14 @@ class BaseRetrievalAgent(BaseAgent):
                 status="success",
                 result={
                     "results": formatted_results,
+                    "documents": formatted_results,
                     "sources": sources,
                     "max_similarity": max_sim,
                     "avg_similarity": avg_sim,
                     "final_query": search_query,
                     "rewritten_query": self._last_rewritten_query,
+                    "search_time_ms": search_time_ms,
+                    "error": None,
                 },
                 message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
             )
@@ -98,63 +124,45 @@ class BaseRetrievalAgent(BaseAgent):
             )
     
     def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
-        # query_analysis is intentionally unused; rewrite happens in this base agent.
+        # query_analysis is handled upstream; prefer expanded queries when provided.
+        candidate = None
+        expanded_queries = getattr(self, "_last_expanded_queries", None)
+        if not expanded_queries:
+            expanded_queries = query_analysis.get("expanded_queries") or []
+        for q in expanded_queries:
+            if isinstance(q, str) and q.strip():
+                candidate = q.strip()
+                break
+
+        if candidate:
+            self._last_rewritten_query = candidate
+            self._last_final_query = candidate
+            return candidate
+
         self._last_rewritten_query = None
         self._last_final_query = user_query
-
-        if not user_query:
-            return user_query
-
-        if len(user_query.strip()) < REWRITE_MIN_CHARS:
-            return user_query
-
-        if REWRITE_ENABLED:
-            rewritten = self._rewrite_query(user_query)
-            if rewritten and rewritten != user_query:
-                self._last_rewritten_query = rewritten
-                self._last_final_query = rewritten
-                return rewritten
-
         return user_query
 
-    def _rewrite_query(self, query: str) -> Optional[str]:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+    @staticmethod
+    def _normalize_categories(categories: Optional[List[str]]) -> Optional[str]:
+        if not categories:
             return None
-
-        try:
-            from openai import OpenAI
-        except ImportError:
-            logger.warning("openai package is not available; skipping rewrite.")
+        normalized = [c for c in categories if isinstance(c, str)]
+        if not normalized:
             return None
-
-        client = OpenAI(api_key=api_key, timeout=REWRITE_TIMEOUT_SEC)
-        system_prompt = (
-            "너는 검색(Retrieval: BM25+벡터 하이브리드)을 위해 사용자 질문을 '검색용 쿼리'로 재작성한다.\n"
-            "규칙:\n"
-            "1) 의도는 그대로 유지하고, 짧고 검색 친화적으로 만든다.\n"
-            "2) 설명/부연/따옴표/불릿/포맷 없이 '한 줄 텍스트'만 출력한다.\n"
-            "3) 고유명사(기관/제품/서비스명), 숫자, 날짜, 사건번호는 절대 변경하지 않는다.\n"
-            "4) 이미 명확하면 원문을 그대로 반환한다.\n"
-            "5) 입력 언어를 유지한다(한국어면 한국어).\n"
-            "출력: 재작성된 쿼리 1줄만."
-        )
-        try:
-            response = client.chat.completions.create(
-                model=REWRITE_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": query},
-                ],
-                temperature=0.2,
-            )
-        except Exception as exc:
-            logger.warning("Query rewrite failed: %s", exc)
+        normalized_set = set(normalized)
+        if "상담" in normalized_set and ("조정" in normalized_set or "해결" in normalized_set):
             return None
-
-        rewritten = response.choices[0].message.content if response.choices else None
-        if rewritten:
-            return rewritten.strip()
+        if "상담" in normalized_set:
+            return "상담"
+        if "조정" in normalized_set and "해결" in normalized_set:
+            return "조정+해결"
+        if "조정" in normalized_set:
+            return "조정"
+        if "해결" in normalized_set:
+            return "해결"
+        if normalized_set.intersection({"조정+해결", "조정_해결", "통합"}):
+            return "조정+해결"
         return None
 
     def _should_rerank(self, results: List[Any], query: str, top_k: int) -> bool:

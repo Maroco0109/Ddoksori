@@ -47,13 +47,11 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
     from ..agents.retrieval.law_agent import law_retrieval_agent
     from ..agents.retrieval.criteria_agent import criteria_retrieval_agent
     from ..agents.retrieval.case_agent import case_retrieval_agent
-    from ..agents.retrieval.counsel_agent import counsel_retrieval_agent
 
     agent_map = {
         'law': law_retrieval_agent,
         'criteria': criteria_retrieval_agent,
         'case': case_retrieval_agent,
-        'counsel': counsel_retrieval_agent,
     }
 
     agent = agent_map.get(agent_type)
@@ -64,13 +62,38 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
 
         user_query = state.get('user_query', '')
         query_analysis = state.get('query_analysis', {})
+        expanded_queries = (
+            state.get('expanded_queries')
+            or query_analysis.get('expanded_queries')
+            or query_analysis.get('search_queries')
+            or []
+        )
+        agent_keywords = query_analysis.get('keywords', [])
+
+        metadata_filter: Dict[str, Any] = {}
+        if agent_type == 'law':
+            metadata_filter = {
+                'dataset_type': 'law_guide',
+                'document_types': ['법률', '시행령'],
+            }
+        elif agent_type == 'criteria':
+            metadata_filter = {
+                'dataset_type': 'law_guide',
+                'document_types': ['행정규칙', '별표'],
+            }
 
         request = {
             'context': {
                 'user_query': user_query,
                 'query_analysis': query_analysis,
             },
-            'params': {'top_k': 3},
+            'params': {
+                'top_k': 5,
+                'expanded_queries': expanded_queries,
+                'agent_keywords': agent_keywords,
+                'metadata_filter': metadata_filter,
+                'ignore_threshold': False,
+            },
         }
 
         try:
@@ -80,7 +103,7 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
             # IndividualRetrievalResult 형식으로 변환
             individual_result = {
                 'source': agent_type,
-                'documents': result.get('result', {}).get('results', []),
+                'documents': result.get('result', {}).get('documents', []),
                 'max_similarity': result.get('result', {}).get('max_similarity', 0.0),
                 'avg_similarity': result.get('result', {}).get('avg_similarity', 0.0),
                 'search_time_ms': search_time_ms,
@@ -138,15 +161,26 @@ def _route_mas_supervisor(state: ChatState):
 
     logger.info(f"[MAS Router] next_agent={next_agent}")
 
-    # retrieval_team → Fan-out (4개 Agent 병렬)
+    # retrieval_team → Fan-out (3개 Agent 병렬)
     if next_agent == 'retrieval_team':
-        logger.info("[MAS Router] Fan-out to 4 retrieval agents")
-        return [
-            Send('retrieval_law', state),
-            Send('retrieval_criteria', state),
-            Send('retrieval_case', state),
-            Send('retrieval_counsel', state),
-        ]
+        retriever_types = (
+            state.get('query_analysis', {}).get('retriever_types')
+            or state.get('retriever_types')
+            or ['law', 'criteria', 'case']
+        )
+        allowed = [r for r in retriever_types if r in ('law', 'criteria', 'case')]
+        if not allowed:
+            allowed = ['law', 'criteria', 'case']
+
+        logger.info(f"[MAS Router] Fan-out to retrieval agents: {allowed}")
+        sends = []
+        if 'law' in allowed:
+            sends.append(Send('retrieval_law', state))
+        if 'criteria' in allowed:
+            sends.append(Send('retrieval_criteria', state))
+        if 'case' in allowed:
+            sends.append(Send('retrieval_case', state))
+        return sends
 
     # 라우팅 맵
     routing_map = {
@@ -210,8 +244,8 @@ def create_mas_supervisor_graph() -> StateGraph:
     graph.add_node('review', _create_timed_node(review_node_wrapper, 'review'))
     graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
 
-    # 4. Retrieval Agents (4개 병렬)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+    # 4. Retrieval Agents (3개 병렬)
+    for agent_type in ['law', 'criteria', 'case']:
         node_fn = _create_retrieval_agent_node(agent_type)
         graph.add_node(f'retrieval_{agent_type}', node_fn)
 
@@ -240,7 +274,6 @@ def create_mas_supervisor_graph() -> StateGraph:
             'retrieval_law': 'retrieval_law',
             'retrieval_criteria': 'retrieval_criteria',
             'retrieval_case': 'retrieval_case',
-            'retrieval_counsel': 'retrieval_counsel',
             'generation': 'generation',
             'review': 'review',
             'output_guardrail': 'output_guardrail',
@@ -248,7 +281,7 @@ def create_mas_supervisor_graph() -> StateGraph:
     )
 
     # 각 Retrieval Agent → retrieval_merge (Fan-in)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+    for agent_type in ['law', 'criteria', 'case']:
         graph.add_edge(f'retrieval_{agent_type}', 'retrieval_merge')
 
     # retrieval_merge → supervisor (결과 보고)
