@@ -71,14 +71,18 @@ docs/plans/manus
 backend/data/counsel/
 backend/data/criteria/
 backend/data/dispute/
-backend/data/law/raw
+backend/data/law
 backend/data/evaluation
 backend/data/golden_set
 backend/app/database
 
+# Test
+frontend/test-results
+frontend/e2e
+frontend/playwright-report
+frontend/vitest.config.ts
 
 # Agents
-Agents
 .agent
 .claude
 .sisyphus

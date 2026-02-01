@@ -135,7 +135,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
     agent_name: ClassVar[str] = "retrieval_law"
     agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
 
-    async def _execute_search(self, query: str, top_k: int) -> List[LawSearchResult]:
+    async def _execute_search(self, query: str, top_k: int) -> List[SimilarChunkResult]:
         retriever = LawRetriever(db_config, embed_url)
         return await asyncio.to_thread(retriever.search_two_stage, query, top_k)
 ```
