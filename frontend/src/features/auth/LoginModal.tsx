@@ -34,7 +34,7 @@ export default function LoginModal() {
   // OAuth 로그인 핸들러
   const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
     const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-    window.location.href = `${backendUrl}/api/auth/${provider}/login`;
+    window.location.href = `${backendUrl}/auth/${provider}/login`;
   };
 
   return (

@@ -8,7 +8,7 @@ export function AuthCallback() {
   const { setUser, setToken } = useAuthStore();
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const token = searchParams.get('access_token');
     const error = searchParams.get('error');
 
     if (error) {
