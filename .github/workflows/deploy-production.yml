@@ -98,8 +98,7 @@ jobs:
           curl -f http://${{ env.EC2_HOST }}:8000/health || exit 1
 
       - name: Discord Notification - Success
-        if: success()
-        continue-on-error: true
+        if: success() && secrets.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -115,8 +114,7 @@ jobs:
             Production deployment completed successfully!
 
       - name: Discord Notification - Failure
-        if: failure()
-        continue-on-error: true
+        if: failure() && secrets.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -174,7 +172,7 @@ jobs:
             docker compose -f docker-compose.prod.yml ps
 
       - name: Discord Notification - Rollback
-        continue-on-error: true
+        if: secrets.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
