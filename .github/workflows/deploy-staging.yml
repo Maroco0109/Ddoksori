@@ -76,6 +76,7 @@ jobs:
 
       - name: Discord Notification - Success
         if: success()
+        continue-on-error: true
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -89,6 +90,7 @@ jobs:
 
       - name: Discord Notification - Failure
         if: failure()
+        continue-on-error: true
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
