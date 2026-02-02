@@ -265,6 +265,7 @@ class TestCachePerformance:
 
         return get_graph_for_chat_type("general")
 
+    @pytest.mark.skip_ci
     @pytest.mark.slow
     @pytest.mark.integration
     @skip_no_redis

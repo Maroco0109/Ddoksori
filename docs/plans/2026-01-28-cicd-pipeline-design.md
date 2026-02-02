@@ -1316,17 +1316,17 @@ GitHub Repository → Settings → Secrets and variables → Actions
 
 | Secret Name | 사용 워크플로우 | Description |
 |-------------|-----------------|-------------|
-| `AWS_ROLE_ARN` | build, deploy-staging, deploy-production | AWS OIDC Role ARN (ECR/EC2 접근) |
+| `AWS_ROLE_ARN` | build, deploy-staging, deploy-production, db-backup | AWS OIDC Role ARN (ECR/EC2/S3 접근) |
 | `EC2_SSH_KEY` | deploy-staging, deploy-production | EC2 SSH 개인키 |
 | `OPENAI_API_KEY` | test | LLM 테스트용 API 키 (main 브랜치 전체 테스트) |
 | `DISCORD_WEBHOOK` | deploy-staging, deploy-production | Discord 알림 웹훅 URL |
 
 ### DB 백업용
 
+> **Note:** AWS 인증은 OIDC (`AWS_ROLE_ARN`)로 통일됨. 정적 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`는 더 이상 사용하지 않음.
+
 | Secret Name | 사용 워크플로우 | Description |
 |-------------|-----------------|-------------|
-| `AWS_ACCESS_KEY_ID` | db-backup | S3 접근용 AWS Access Key |
-| `AWS_SECRET_ACCESS_KEY` | db-backup | S3 접근용 AWS Secret Key |
 | `DB_HOST` | db-backup | RDS 호스트 주소 |
 | `DB_USER` | db-backup | RDS 사용자명 |
 | `DB_NAME` | db-backup | RDS 데이터베이스명 |
