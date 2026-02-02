@@ -10,6 +10,9 @@ from typing import List
 
 import pytest
 
+# CI 환경에서 skip (RDS 직접 연결 필요)
+pytestmark = pytest.mark.skip_ci
+
 from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
 from app.agents.retrieval.law_agent import LawRetrievalAgent
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever

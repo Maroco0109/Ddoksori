@@ -24,8 +24,12 @@ class TestAnswerCacheInit:
 
     def test_init_enabled_without_redis_disables_cache(self):
         with patch.dict(os.environ, {"ENABLE_ANSWER_CACHE": "true"}):
-            cache = AnswerCache()
-            assert cache.enabled is False
+            with patch("redis.Redis") as mock_redis_cls:
+                mock_redis_cls.return_value.ping.side_effect = ConnectionError(
+                    "mock: Redis unavailable"
+                )
+                cache = AnswerCache()
+                assert cache.enabled is False
 
 
 class TestCacheKey:

@@ -37,10 +37,16 @@ class TestSupervisorCache:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """각 테스트 전 캐시 초기화"""
-        from app.supervisor.cache import clear_all_supervisor_caches
+        """각 테스트 전 캐시 초기화 (ENABLE_ANSWER_CACHE=true + Redis 클라이언트 리셋)"""
+        from app.common.cache.base import reset_redis_client
 
-        clear_all_supervisor_caches()
+        reset_redis_client()
+        with patch.dict(os.environ, {"ENABLE_ANSWER_CACHE": "true"}):
+            from app.supervisor.cache import clear_all_supervisor_caches
+
+            clear_all_supervisor_caches()
+            yield
+        reset_redis_client()
 
     def test_query_normalization(self):
         """쿼리 정규화 테스트"""

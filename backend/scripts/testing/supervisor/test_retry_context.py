@@ -10,6 +10,7 @@ Retry Context 단위 테스트 (Phase 7: LegalReviewer 재생성 지원)
 - backend/app/agents/answer_generation/tools/generator.py의 generate_structured_answer()
 """
 
+import os
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -306,6 +307,7 @@ class TestFallbackRetrySupplementPropagation:
 class TestGeneratorAppendRetrySupplementToPrompt:
     """RAGGenerator.generate_structured_answer()의 retry_supplement 프롬프트 추가 테스트"""
 
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-for-mock"})
     @patch("app.agents.answer_generation.tools.generator.OpenAI")
     def test_generator_appends_retry_supplement_to_system_prompt(
         self, mock_openai_class
@@ -349,6 +351,7 @@ class TestGeneratorAppendRetrySupplementToPrompt:
         assert "재생성 지침" in system_message["content"]
         assert "이전 답변 수정 필요" in system_message["content"]
 
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-for-mock"})
     @patch("app.agents.answer_generation.tools.generator.OpenAI")
     def test_generator_without_retry_supplement(self, mock_openai_class):
         """retry_supplement=None일 때 시스템 프롬프트에 추가되지 않음"""
