@@ -71,23 +71,25 @@ docs/plans/manus
 backend/data/counsel/
 backend/data/criteria/
 backend/data/dispute/
-backend/data/law/raw
+backend/data/law
 backend/data/evaluation
 backend/data/golden_set
+backend/app/database
 
-
-# Backup Data
-backup.sql
-backup_v2.sql
-backup_v3.sql
-
+# Test
+frontend/test-results
+frontend/e2e
+frontend/playwright-report
+frontend/vitest.config.ts
+backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
 
 # Agents
-Agents
 .agent
 .claude
 .sisyphus
+.omc
 .cursorrules
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
+AUDIT_REPORT.md

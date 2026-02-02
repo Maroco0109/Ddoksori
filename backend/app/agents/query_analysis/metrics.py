@@ -10,12 +10,13 @@
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Set, Optional
+from typing import Dict, List, Optional, Set
 
 
 @dataclass
 class QueryAnalysisEvalResult:
     """단일 질의분석 평가 결과"""
+
     item_id: str
     query: str
     category: str
@@ -42,21 +43,21 @@ class QueryAnalysisEvalResult:
 
     def to_dict(self) -> Dict:
         return {
-            'id': self.item_id,
-            'query': self.query,
-            'category': self.category,
-            'query_type_correct': self.query_type_correct,
-            'predicted_query_type': self.predicted_query_type,
-            'expected_query_type': self.expected_query_type,
-            'keyword_precision': self.keyword_precision,
-            'keyword_recall': self.keyword_recall,
-            'keyword_f1': self.keyword_f1,
-            'agency_hint_correct': self.agency_hint_correct,
-            'predicted_agency_hint': self.predicted_agency_hint,
-            'expected_agency_hint': self.expected_agency_hint,
-            'missing_field_precision': self.missing_field_precision,
-            'missing_field_recall': self.missing_field_recall,
-            'missing_field_f1': self.missing_field_f1,
+            "id": self.item_id,
+            "query": self.query,
+            "category": self.category,
+            "query_type_correct": self.query_type_correct,
+            "predicted_query_type": self.predicted_query_type,
+            "expected_query_type": self.expected_query_type,
+            "keyword_precision": self.keyword_precision,
+            "keyword_recall": self.keyword_recall,
+            "keyword_f1": self.keyword_f1,
+            "agency_hint_correct": self.agency_hint_correct,
+            "predicted_agency_hint": self.predicted_agency_hint,
+            "expected_agency_hint": self.expected_agency_hint,
+            "missing_field_precision": self.missing_field_precision,
+            "missing_field_recall": self.missing_field_recall,
+            "missing_field_f1": self.missing_field_f1,
         }
 
 
@@ -87,7 +88,7 @@ class QueryAnalysisMetrics:
 
     Usage:
         metrics = QueryAnalysisMetrics()
-        
+
         result = metrics.evaluate_item(
             item_id="qa_001",
             query="소비자보호법 제17조 환불 규정",
@@ -115,7 +116,7 @@ class QueryAnalysisMetrics:
         predicted_agency_hint: Optional[str],
         expected_agency_hint: Optional[str],
         predicted_missing_fields: List[str],
-        expected_missing_fields: List[str]
+        expected_missing_fields: List[str],
     ) -> QueryAnalysisEvalResult:
         """단일 항목 평가"""
 
@@ -158,7 +159,9 @@ class QueryAnalysisMetrics:
         )
 
 
-def aggregate_query_analysis_results(results: List[QueryAnalysisEvalResult]) -> Dict[str, float]:
+def aggregate_query_analysis_results(
+    results: List[QueryAnalysisEvalResult],
+) -> Dict[str, float]:
     """
     여러 평가 결과를 집계하여 평균 메트릭 계산
 
@@ -188,11 +191,11 @@ def aggregate_query_analysis_results(results: List[QueryAnalysisEvalResult]) -> 
     missing_field_f1_sum = sum(r.missing_field_f1 for r in results)
 
     return {
-        'query_type_accuracy': round(query_type_correct_count / n, 4),
-        'keyword_precision_mean': round(keyword_precision_sum / n, 4),
-        'keyword_recall_mean': round(keyword_recall_sum / n, 4),
-        'keyword_f1_mean': round(keyword_f1_sum / n, 4),
-        'agency_hint_accuracy': round(agency_hint_correct_count / n, 4),
-        'missing_field_f1_mean': round(missing_field_f1_sum / n, 4),
-        'sample_count': n,
+        "query_type_accuracy": round(query_type_correct_count / n, 4),
+        "keyword_precision_mean": round(keyword_precision_sum / n, 4),
+        "keyword_recall_mean": round(keyword_recall_sum / n, 4),
+        "keyword_f1_mean": round(keyword_f1_sum / n, 4),
+        "agency_hint_accuracy": round(agency_hint_correct_count / n, 4),
+        "missing_field_f1_mean": round(missing_field_f1_sum / n, 4),
+        "sample_count": n,
     }

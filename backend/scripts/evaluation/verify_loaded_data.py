@@ -4,8 +4,10 @@
 documents/chunks/law_units 테이블에 로드된 데이터를 검증합니다.
 argparse 지원: --law, --criteria, --dispute, --counsel, --all
 """
-import os
+
 import argparse
+import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,24 +18,24 @@ import psycopg
 def conninfo_from_env() -> str:
     """환경 변수에서 PostgreSQL 연결 정보 생성"""
     return (
-        f"host={os.environ.get('PGHOST','localhost')} "
-        f"port={os.environ.get('PGPORT','5432')} "
-        f"dbname={os.environ.get('PGDATABASE','ddoksori')} "
-        f"user={os.environ.get('PGUSER','postgres')} "
-        f"password={os.environ.get('PGPASSWORD','postgres')}"
+        f"host={os.environ.get('PGHOST', 'localhost')} "
+        f"port={os.environ.get('PGPORT', '5432')} "
+        f"dbname={os.environ.get('PGDATABASE', 'ddoksori')} "
+        f"user={os.environ.get('PGUSER', 'postgres')} "
+        f"password={os.environ.get('PGPASSWORD', 'postgres')}"
     )
 
 
 def verify_documents(conn: psycopg.Connection):
     """documents 테이블 검증"""
     print("\n=== Documents 테이블 검증 ===")
-    
+
     with conn.cursor() as cur:
         # 전체 문서 수
         cur.execute("SELECT COUNT(*) FROM documents")
         total = cur.fetchone()[0]
         print(f"전체 문서 수: {total}")
-        
+
         # doc_type별 통계
         cur.execute("""
             SELECT doc_type, COUNT(*) as count
@@ -44,7 +46,7 @@ def verify_documents(conn: psycopg.Connection):
         print("\ndoc_type별 통계:")
         for row in cur.fetchall():
             print(f"  - {row[0]}: {row[1]}개")
-        
+
         # source_org별 통계
         cur.execute("""
             SELECT source_org, COUNT(*) as count
@@ -55,7 +57,7 @@ def verify_documents(conn: psycopg.Connection):
         print("\nsource_org별 통계:")
         for row in cur.fetchall():
             print(f"  - {row[0]}: {row[1]}개")
-        
+
         # 샘플 문서
         cur.execute("""
             SELECT doc_id, doc_type, title, source_org, category_path
@@ -72,13 +74,13 @@ def verify_documents(conn: psycopg.Connection):
 def verify_chunks(conn: psycopg.Connection):
     """chunks 테이블 검증"""
     print("\n=== Chunks 테이블 검증 ===")
-    
+
     with conn.cursor() as cur:
         # 전체 청크 수
         cur.execute("SELECT COUNT(*) FROM chunks")
         total = cur.fetchone()[0]
         print(f"전체 청크 수: {total}")
-        
+
         # doc_type별 청크 수
         cur.execute("""
             SELECT d.doc_type, COUNT(*) as count
@@ -90,7 +92,7 @@ def verify_chunks(conn: psycopg.Connection):
         print("\ndoc_type별 청크 수:")
         for row in cur.fetchall():
             print(f"  - {row[0]}: {row[1]}개")
-        
+
         # chunk_type별 통계
         cur.execute("""
             SELECT chunk_type, COUNT(*) as count
@@ -103,7 +105,7 @@ def verify_chunks(conn: psycopg.Connection):
         print("\nchunk_type별 통계 (상위 10개):")
         for row in cur.fetchall():
             print(f"  - {row[0]}: {row[1]}개")
-        
+
         # 샘플 청크
         cur.execute("""
             SELECT c.chunk_id, c.doc_id, c.chunk_type, c.chunk_index, c.chunk_total,
@@ -115,13 +117,15 @@ def verify_chunks(conn: psycopg.Connection):
         """)
         print("\n샘플 청크 (최근 5개):")
         for row in cur.fetchall():
-            print(f"  - {row[0]}: {row[2]} (index={row[3]}/{row[4]-1}, len={row[5]}) - {row[6][:30]}...")
+            print(
+                f"  - {row[0]}: {row[2]} (index={row[3]}/{row[4] - 1}, len={row[5]}) - {row[6][:30]}..."
+            )
 
 
 def verify_data_integrity(conn: psycopg.Connection):
     """데이터 무결성 검증"""
     print("\n=== 데이터 무결성 검증 ===")
-    
+
     with conn.cursor() as cur:
         # 1. chunk_total 일관성 검증
         cur.execute("""
@@ -137,7 +141,7 @@ def verify_data_integrity(conn: psycopg.Connection):
                 print(f"    - {row[0]}: chunk_total={row[1]}, 실제={row[2]}")
         else:
             print("✓ chunk_total 일관성 확인")
-        
+
         # 2. 외래키 관계 검증
         cur.execute("""
             SELECT COUNT(*) 
@@ -150,7 +154,7 @@ def verify_data_integrity(conn: psycopg.Connection):
             print(f"⚠️  고아 청크 {orphan_chunks}개 발견")
         else:
             print("✓ 외래키 관계 확인")
-        
+
         # 3. chunk_index 범위 검증
         cur.execute("""
             SELECT COUNT(*) 
@@ -162,7 +166,7 @@ def verify_data_integrity(conn: psycopg.Connection):
             print(f"⚠️  잘못된 chunk_index {invalid_index}개 발견")
         else:
             print("✓ chunk_index 범위 확인")
-        
+
         # 4. 중복 chunk_id 검증
         cur.execute("""
             SELECT chunk_id, COUNT(*) as count
@@ -344,7 +348,9 @@ def verify_law_2stage_search(conn: psycopg.Connection):
         """)
         wrong_stage2 = cur.fetchone()[0]
         if wrong_stage2 > 0:
-            print(f"⚠️  paragraph/item/subitem인데 stage2가 아닌 indexable 노드 {wrong_stage2}개")
+            print(
+                f"⚠️  paragraph/item/subitem인데 stage2가 아닌 indexable 노드 {wrong_stage2}개"
+            )
         else:
             print("✓ stage2 (paragraph/item/subitem-level) 설정 확인")
 
@@ -385,7 +391,9 @@ def verify_law_rag_integration(conn: psycopg.Connection):
         if law_chunks == indexable_nodes:
             print("✓ law_units (indexable) 개수와 chunks 개수 일치")
         else:
-            print(f"⚠️  law_units (indexable) {indexable_nodes}개 vs chunks {law_chunks}개 불일치")
+            print(
+                f"⚠️  law_units (indexable) {indexable_nodes}개 vs chunks {law_chunks}개 불일치"
+            )
 
         # 4. chunk_relations에 법령 계층 관계 존재 확인
         cur.execute("""
@@ -448,14 +456,14 @@ Examples:
   python verify_loaded_data.py --law          # 법령 데이터만 검증
   python verify_loaded_data.py --dispute --counsel  # 분쟁/상담 사례 검증
   python verify_loaded_data.py --all          # 모든 데이터 검증
-        """
+        """,
     )
 
-    parser.add_argument('--law', action='store_true', help='법령 데이터 검증')
-    parser.add_argument('--criteria', action='store_true', help='분쟁조정기준 검증')
-    parser.add_argument('--dispute', action='store_true', help='분쟁조정사례 검증')
-    parser.add_argument('--counsel', action='store_true', help='상담사례 검증')
-    parser.add_argument('--all', action='store_true', help='모든 데이터 검증')
+    parser.add_argument("--law", action="store_true", help="법령 데이터 검증")
+    parser.add_argument("--criteria", action="store_true", help="분쟁조정기준 검증")
+    parser.add_argument("--dispute", action="store_true", help="분쟁조정사례 검증")
+    parser.add_argument("--counsel", action="store_true", help="상담사례 검증")
+    parser.add_argument("--all", action="store_true", help="모든 데이터 검증")
 
     args = parser.parse_args()
 
@@ -508,11 +516,12 @@ Examples:
     except Exception as e:
         print(f"\n❌ 오류 발생: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())

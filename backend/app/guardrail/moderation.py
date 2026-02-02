@@ -3,20 +3,20 @@ OpenAI Moderation Guardrail
 Sprint 1: 입력/출력 유해성 검사
 """
 
-import os
 import logging
-from typing import Dict, Optional, Any
-from typing_extensions import TypedDict
+import os
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from typing_extensions import TypedDict
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-MODERATION_ENABLED = os.getenv('MODERATION_ENABLED', 'true').lower() == 'true'
-MODERATION_MODEL = os.getenv('MODERATION_MODEL', 'omni-moderation-latest')
+MODERATION_ENABLED = os.getenv("MODERATION_ENABLED", "true").lower() == "true"
+MODERATION_MODEL = os.getenv("MODERATION_MODEL", "omni-moderation-latest")
 
 _client: Optional[OpenAI] = None
 
@@ -24,7 +24,7 @@ _client: Optional[OpenAI] = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
         _client = OpenAI(api_key=api_key)
@@ -50,17 +50,17 @@ FALLBACK_MESSAGE_OUTPUT = (
 )
 
 BLOCKED_CATEGORIES = [
-    'harassment',
-    'harassment/threatening',
-    'hate',
-    'hate/threatening',
-    'self-harm',
-    'self-harm/intent',
-    'self-harm/instructions',
-    'sexual',
-    'sexual/minors',
-    'violence',
-    'violence/graphic',
+    "harassment",
+    "harassment/threatening",
+    "hate",
+    "hate/threatening",
+    "self-harm",
+    "self-harm/intent",
+    "self-harm/instructions",
+    "sexual",
+    "sexual/minors",
+    "violence",
+    "violence/graphic",
 ]
 
 
@@ -71,37 +71,38 @@ def _check_moderation(text: str, is_input: bool = True) -> ModerationResult:
             categories={},
             category_scores={},
             blocked=False,
-            fallback_message=None
+            fallback_message=None,
         )
 
     try:
         client = _get_client()
-        response = client.moderations.create(
-            model=MODERATION_MODEL,
-            input=text
-        )
+        response = client.moderations.create(model=MODERATION_MODEL, input=text)
 
         result = response.results[0]
-        
+
         categories = {}
         category_scores = {}
-        
-        if hasattr(result, 'categories') and result.categories:
+
+        if hasattr(result, "categories") and result.categories:
             for cat in BLOCKED_CATEGORIES:
-                cat_key = cat.replace('/', '_')
+                cat_key = cat.replace("/", "_")
                 categories[cat] = getattr(result.categories, cat_key, False)
-        
-        if hasattr(result, 'category_scores') and result.category_scores:
+
+        if hasattr(result, "category_scores") and result.category_scores:
             for cat in BLOCKED_CATEGORIES:
-                cat_key = cat.replace('/', '_')
+                cat_key = cat.replace("/", "_")
                 category_scores[cat] = getattr(result.category_scores, cat_key, 0.0)
 
         flagged = result.flagged
-        blocked = flagged and any(categories.get(cat, False) for cat in BLOCKED_CATEGORIES)
-        
+        blocked = flagged and any(
+            categories.get(cat, False) for cat in BLOCKED_CATEGORIES
+        )
+
         fallback_message = None
         if blocked:
-            fallback_message = FALLBACK_MESSAGE_INPUT if is_input else FALLBACK_MESSAGE_OUTPUT
+            fallback_message = (
+                FALLBACK_MESSAGE_INPUT if is_input else FALLBACK_MESSAGE_OUTPUT
+            )
             logger.warning(
                 f"[Moderation] Content blocked - is_input={is_input}, "
                 f"flagged_categories={[c for c, v in categories.items() if v]}"
@@ -112,7 +113,7 @@ def _check_moderation(text: str, is_input: bool = True) -> ModerationResult:
             categories=categories,
             category_scores=category_scores,
             blocked=blocked,
-            fallback_message=fallback_message
+            fallback_message=fallback_message,
         )
 
     except Exception as e:
@@ -122,7 +123,7 @@ def _check_moderation(text: str, is_input: bool = True) -> ModerationResult:
             categories={},
             category_scores={},
             blocked=False,
-            fallback_message=None
+            fallback_message=None,
         )
 
 

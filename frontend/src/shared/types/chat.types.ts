@@ -3,6 +3,18 @@
  * Backend API contract interfaces for FastAPI /chat endpoint
  */
 
+// Core Chat Types
+export type ChatType = 'dispute' | 'general';
+
+export interface DisputeForm {
+  purchaseDate: string;
+  purchasePlace: string;
+  platform: string;
+  purchaseItem: string;
+  purchaseAmount: string;
+  disputeDetail: string;
+}
+
 // ============================================================================
 // Backend API Request/Response Types
 // ============================================================================
@@ -65,6 +77,7 @@ export interface ChatAPIResponse {
   sources: SourceMetadata[];
   has_sufficient_evidence: boolean;
   clarifying_questions: string[];
+  followup_questions?: string[];
   is_restricted?: boolean;
   agency_code?: string;
   agency_info?: AgencyInfo;
@@ -101,6 +114,7 @@ export interface MessageWithCitations extends Message {
   citations?: Citation[];
   hasSafetyWarning?: boolean;
   clarifyingQuestions?: string[];
+  followupQuestions?: string[];
   isRestricted?: boolean;
   agencyCode?: string;
   agencyInfo?: AgencyInfo;
@@ -118,8 +132,11 @@ export interface ChatSession {
   type: 'dispute' | 'general';
   title: string;
   messages: MessageWithCitations[];
-  createdAt: Date;
-  lastMessageAt: Date;
+  createdAt: Date | number;
+  lastMessageAt?: Date;
+  // Legacy compatibility (from chat.ts)
+  expiresAt?: number | null;
+  lastUpdated?: number;
 }
 
 /**
@@ -160,6 +177,51 @@ export interface SSESourceInfo {
   title: string;
   source_org?: string;
   similarity: number;
+  content?: string;
+  // dispute-specific
+  case_uid?: string;
+  product_name?: string;
+  // law-specific
+  law_name?: string;
+  article?: string;
+}
+
+// Restricted domain agency recommendation from backend
+export interface AgencyRecommendation {
+  agency: string;                              // domain code: "finance", "medical" 등
+  agency_info: {
+    name: string;                              // 기관명: "금융분쟁조정위원회"
+    organization: string;                      // 소속: "금융감독원"
+    url: string;
+    phone: string;
+  };
+  dispute_type: string;
+  reason: string;
+  confidence: number;
+  is_restricted: boolean;
+  full_name?: string;
+  description?: string;
+  url?: string;
+  agency_code?: string;
+  restriction_reason?: string;
+}
+
+export interface SimilarCases {
+  disputes: Array<{ doc_title?: string; source_org?: string; similarity: number }>;
+  counsels: Array<{ doc_title?: string; source_org?: string; similarity: number }>;
+}
+
+export interface LawReference {
+  law_name?: string;
+  article?: string;
+  full_path?: string;
+  similarity: number;
+}
+
+export interface CriteriaReference {
+  title?: string;
+  category?: string;
+  similarity: number;
 }
 
 /**
@@ -169,8 +231,13 @@ export interface SSECompleteData {
   session_id: string;
   answer: string;
   sources: SSESourceInfo[];
-  awaiting_user_choice: boolean;
   clarifying_questions: string[];
+  followup_questions?: string[];
+  has_sufficient_evidence?: boolean;
+  domain?: AgencyRecommendation;
+  similar_cases?: SimilarCases;
+  related_laws?: LawReference[];
+  related_criteria?: CriteriaReference[];
 }
 
 /**
@@ -181,10 +248,28 @@ export interface SSEErrorData {
 }
 
 /**
+ * SSE Token Event - Individual token from LLM streaming
+ */
+export interface SSETokenData {
+  content: string;  // 개별 토큰
+  model: string;    // 현재 사용중인 모델
+}
+
+/**
+ * SSE Fallback Event - Model switching notification
+ */
+export interface SSEFallbackData {
+  model: string;    // 전환할 모델
+  message: string;  // 알림 메시지
+}
+
+/**
  * SSE Event Union Type
  */
 export type SSEEvent =
   | { type: 'status'; data: SSEStatusData }
+  | { type: 'token'; data: SSETokenData }
+  | { type: 'fallback'; data: SSEFallbackData }
   | { type: 'complete'; data: SSECompleteData }
   | { type: 'error'; data: SSEErrorData };
 

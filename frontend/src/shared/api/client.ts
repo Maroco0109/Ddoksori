@@ -1,7 +1,28 @@
 // API Client configuration
 // Connected to FastAPI backend at port 8000
 
+import { useAuthStore } from '@/features/auth/auth.store';
+import { useAdminStore } from '@/features/admin/admin.store';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  // Admin token takes priority for /api/admin endpoints
+  const adminToken = useAdminStore.getState().adminToken;
+  if (adminToken) {
+    headers['Authorization'] = `Bearer ${adminToken}`;
+    return headers;
+  }
+
+  const userToken = useAuthStore.getState().token;
+  if (userToken) {
+    headers['Authorization'] = `Bearer ${userToken}`;
+  }
+
+  return headers;
+}
 
 export const apiClient = {
   get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
@@ -16,9 +37,7 @@ export const apiClient = {
 
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -29,32 +48,23 @@ export const apiClient = {
   },
 
   post: async <T>(endpoint: string, data?: any): Promise<T> => {
-    console.log('[API Client] POST', endpoint, data);
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: data ? JSON.stringify(data) : undefined,
     });
-
-    console.log('[API Client] Response status:', response.status);
 
     if (!response.ok) {
       throw new Error(`API Error: ${response.statusText}`);
     }
 
-    const json = await response.json();
-    console.log('[API Client] Response data:', json);
-    return json;
+    return response.json();
   },
 
   put: async <T>(endpoint: string, data?: any): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: data ? JSON.stringify(data) : undefined,
     });
 
@@ -68,9 +78,7 @@ export const apiClient = {
   delete: async <T>(endpoint: string): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {

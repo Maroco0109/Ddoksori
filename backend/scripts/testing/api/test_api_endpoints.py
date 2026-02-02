@@ -17,14 +17,17 @@ Usage:
     @pytest.mark.integration - API 서버 연결 필요
     @pytest.mark.api - API 엔드포인트 테스트
 """
-import pytest
-import time
+
 import os
+import time
+
+import pytest
 
 # 전체 모듈에 마커 적용
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.api,
+    pytest.mark.skip_ci,
 ]
 
 
@@ -121,11 +124,7 @@ class TestSearchEndpoint:
     def test_search_chunk_type_filter(self, api_client):
         """/search filters by chunk_type"""
         # Test with chunk_types parameter
-        payload = {
-            "query": "환불",
-            "top_k": 5,
-            "chunk_types": ["facts", "problem"]
-        }
+        payload = {"query": "환불", "top_k": 5, "chunk_types": ["facts", "problem"]}
         resp = api_client.post("/search", json=payload)
         assert resp.status_code == 200
         # Response should not error even if filter doesn't match anything
@@ -133,11 +132,7 @@ class TestSearchEndpoint:
     def test_search_agency_filter(self, api_client):
         """/search filters by source_org (agencies)"""
         # Test with agencies parameter
-        payload = {
-            "query": "분쟁조정",
-            "top_k": 5,
-            "agencies": ["KCA", "ECMC"]
-        }
+        payload = {"query": "분쟁조정", "top_k": 5, "agencies": ["KCA", "ECMC"]}
         resp = api_client.post("/search", json=payload)
         assert resp.status_code == 200
 
@@ -169,8 +164,14 @@ class TestSearchEndpoint:
         if data["results_count"] > 0:
             result = data["results"][0]
             expected_fields = [
-                "chunk_id", "doc_id", "chunk_type", "content",
-                "doc_title", "doc_type", "category_path", "similarity"
+                "chunk_id",
+                "doc_id",
+                "chunk_type",
+                "content",
+                "doc_title",
+                "doc_type",
+                "category_path",
+                "similarity",
             ]
             for field in expected_fields:
                 assert field in result, f"Missing field: {field}"
@@ -187,8 +188,7 @@ class TestChatEndpoint:
     """Tests for /chat endpoint"""
 
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required for LLM tests"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required for LLM tests"
     )
     def test_chat_basic_query(self, api_client):
         """/chat generates answer with sources"""
@@ -204,8 +204,7 @@ class TestChatEndpoint:
         assert isinstance(data["sources"], list)
 
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required"
     )
     def test_chat_includes_disclaimer(self, api_client):
         """/chat includes legal disclaimer"""
@@ -220,8 +219,7 @@ class TestChatEndpoint:
         # Note: Some generators may not include disclaimer, so this is informational
 
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required"
     )
     def test_chat_sources_valid(self, api_client):
         """/chat sources reference actual chunks"""
@@ -236,8 +234,7 @@ class TestChatEndpoint:
             assert "chunk_id" in source or "doc_id" in source
 
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required"
     )
     def test_chat_korean_text_preserved(self, api_client):
         """/chat preserves Korean text in input/output"""
@@ -248,14 +245,13 @@ class TestChatEndpoint:
         answer = resp.json()["answer"]
 
         # Answer should be in Korean (contains Korean characters)
-        korean_chars = sum(1 for char in answer if '\uAC00' <= char <= '\uD7A3')
+        korean_chars = sum(1 for char in answer if "\uac00" <= char <= "\ud7a3")
         assert korean_chars > 0, "Answer should contain Korean text"
 
     @pytest.mark.slow
     @pytest.mark.timeout(300)  # 5분 타임아웃 (5개 요청 × 60초)
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required"
     )
     def test_chat_performance_p95(self, api_client):
         """/chat responds within 60s (p95 latency) - LLM response time included"""
@@ -270,10 +266,7 @@ class TestChatEndpoint:
             for query in queries:
                 start = time.time()
                 try:
-                    resp = client.post(
-                        "/chat",
-                        json={"message": query, "top_k": 3}
-                    )
+                    resp = client.post("/chat", json={"message": query, "top_k": 3})
                     if resp.status_code == 200:
                         times.append(time.time() - start)
                 except Exception:
@@ -297,13 +290,14 @@ class TestChatEndpoint:
         assert resp.status_code in [500, 503, 400]
 
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY required"
+        not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY required"
     )
     def test_chat_stream_endpoint(self, api_client):
         """/chat/stream returns streaming response"""
         payload = {"message": "환불 조건은?", "top_k": 3}
-        with api_client.stream("POST", "/chat/stream", json=payload, timeout=10) as resp:
+        with api_client.stream(
+            "POST", "/chat/stream", json=payload, timeout=10
+        ) as resp:
             assert resp.status_code == 200
             # PR-T4: /chat/stream returns text/event-stream, not text/plain
             assert "text/event-stream" in resp.headers.get("content-type", "")
@@ -322,7 +316,7 @@ class TestChatEndpoint:
         payload = {
             "message": "환불은?",
             "top_k": 3,
-            "chunk_types": ["facts", "solution"]
+            "chunk_types": ["facts", "solution"],
         }
 
         # Should not error even if API key missing (will error on LLM call, not parameter validation)

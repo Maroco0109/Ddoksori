@@ -14,7 +14,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -26,7 +26,7 @@ from rag.evaluation import (
 
 def load_golden_set(path: str) -> List[Dict]:
     dataset = []
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 dataset.append(json.loads(line))
@@ -38,8 +38,8 @@ def print_progress(current: int, total: int, verbose: bool = False):
     if not verbose:
         bar_len = 30
         filled = int(bar_len * current / total)
-        bar = '=' * filled + '-' * (bar_len - filled)
-        print(f"\r[{bar}] {pct:.1f}%", end='', flush=True)
+        bar = "=" * filled + "-" * (bar_len - filled)
+        print(f"\r[{bar}] {pct:.1f}%", end="", flush=True)
 
 
 def print_summary(summary: Dict, elapsed_sec: float):
@@ -54,16 +54,16 @@ def print_summary(summary: Dict, elapsed_sec: float):
     print("-" * 60)
 
     targets = {
-        'violation_detection_precision': (0.85, '>='),
-        'violation_detection_recall': (0.90, '>='),
-        'false_positive_rate': (0.10, '<='),
-        'binary_accuracy': (0.85, '>='),
+        "violation_detection_precision": (0.85, ">="),
+        "violation_detection_recall": (0.90, ">="),
+        "false_positive_rate": (0.10, "<="),
+        "binary_accuracy": (0.85, ">="),
     }
 
     for metric, (target, op) in targets.items():
         if metric in summary:
             score = summary[metric]
-            if op == '>=':
+            if op == ">=":
                 status = "OK" if score >= target else "FAIL"
             else:
                 status = "OK" if score <= target else "FAIL"
@@ -73,24 +73,25 @@ def print_summary(summary: Dict, elapsed_sec: float):
 
 
 def save_results(output_path: str, summary: Dict, detailed_results: List[Dict]):
-    output_data = {
-        'summary': summary,
-        'detailed_results': detailed_results
-    }
+    output_data = {"summary": summary, "detailed_results": detailed_results}
 
-    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     print(f"\nResults saved to: {output_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Review Agent 평가')
-    parser.add_argument('--golden-set', required=True, help='Golden Set 파일 경로 (JSONL)')
-    parser.add_argument('--output', default='results/review_eval.json', help='결과 저장 경로')
-    parser.add_argument('--verbose', action='store_true', help='상세 로그 출력')
+    parser = argparse.ArgumentParser(description="Review Agent 평가")
+    parser.add_argument(
+        "--golden-set", required=True, help="Golden Set 파일 경로 (JSONL)"
+    )
+    parser.add_argument(
+        "--output", default="results/review_eval.json", help="결과 저장 경로"
+    )
+    parser.add_argument("--verbose", action="store_true", help="상세 로그 출력")
 
     args = parser.parse_args()
 
@@ -112,36 +113,45 @@ def main():
 
         try:
             result = metrics.evaluate_item(
-                item_id=item['id'],
-                answer_text=item['answer_text'],
-                expected_violations=item.get('expected_violations', []),
-                expected_is_violation=item.get('is_violation', False),
+                item_id=item["id"],
+                answer_text=item["answer_text"],
+                expected_violations=item.get("expected_violations", []),
+                expected_is_violation=item.get("is_violation", False),
             )
 
             results.append(result)
 
             if args.verbose:
-                status = "OK" if result.is_violation_predicted == result.is_violation_expected else "FAIL"
-                print(f"\n  [{item['id']}] Binary: {status}, "
-                      f"Precision: {result.precision:.3f}, "
-                      f"Recall: {result.recall:.3f}")
+                status = (
+                    "OK"
+                    if result.is_violation_predicted == result.is_violation_expected
+                    else "FAIL"
+                )
+                print(
+                    f"\n  [{item['id']}] Binary: {status}, "
+                    f"Precision: {result.precision:.3f}, "
+                    f"Recall: {result.recall:.3f}"
+                )
 
         except Exception as e:
             print(f"\n  Error evaluating {item['id']}: {e}")
             if args.verbose:
                 import traceback
+
                 traceback.print_exc()
 
     print()
 
     total_time = time.time() - start_time
     summary = aggregate_review_results(results)
-    summary.update({
-        'run_id': f"review_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        'timestamp': datetime.now().isoformat(),
-        'golden_set': args.golden_set,
-        'total_time_seconds': round(total_time, 2),
-    })
+    summary.update(
+        {
+            "run_id": f"review_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "timestamp": datetime.now().isoformat(),
+            "golden_set": args.golden_set,
+            "total_time_seconds": round(total_time, 2),
+        }
+    )
 
     print_summary(summary, total_time)
 

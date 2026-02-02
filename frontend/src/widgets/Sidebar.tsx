@@ -11,6 +11,7 @@ import {
   ChevronRight,
   RefreshCw,
   Trash2,
+  User,
 } from 'lucide-react';
 import { ROUTES } from '@/shared/config/routes';
 import { formatDateTime } from '@/shared/lib/date';
@@ -25,6 +26,7 @@ const navItems = [
   { to: ROUTES.PROCEDURE, label: '조정신청 절차', icon: ClipboardList },
   { to: ROUTES.CHAT, label: 'AI 상담', icon: MessageCircle },
   { to: ROUTES.BOARD, label: '자유게시판', icon: LayoutList },
+  { to: ROUTES.MYPAGE, label: '마이페이지', icon: User, authRequired: true },
 ];
 
 export default function Sidebar() {
@@ -84,7 +86,7 @@ export default function Sidebar() {
     }
   };
 
-  const handleNavClick = (to: string) => {
+  const handleNavClick = (_to: string) => {
     // 모바일에서 메뉴 클릭 시 사이드바 닫기
     if (window.innerWidth < 1024) {
       setIsSidebarOpen(false);
@@ -109,6 +111,11 @@ export default function Sidebar() {
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navItems.map((item) => {
           const isChatItem = item.to === ROUTES.CHAT;
+
+          // authRequired가 true인 메뉴는 로그인 시에만 표시
+          if (item.authRequired && !isAuthenticated) {
+            return null;
+          }
 
           return (
             <div key={item.to} className="space-y-2">
@@ -263,8 +270,20 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="mt-auto px-6 py-4 text-[11px] text-white/50">
-        © ㈜오작교
+      <div className="mt-auto">
+        {!isAuthenticated && (
+          <div className="px-4 pb-4">
+            <button
+              onClick={() => useUIStore.getState().setIsAuthModalOpen(true)}
+              className="w-full bg-ivory text-dark-navy px-4 py-3 rounded-full text-sm font-bold hover:opacity-90 transition-all shadow-lg"
+            >
+              1초 만에 시작하기
+            </button>
+          </div>
+        )}
+        <div className="px-6 py-4 text-[11px] text-white/50">
+          © ㈜오작교
+        </div>
       </div>
     </>
   );

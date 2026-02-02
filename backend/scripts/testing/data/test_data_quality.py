@@ -12,6 +12,7 @@ Usage:
     @pytest.mark.needs_db - DB 연결 필요
     @pytest.mark.needs_data - 시드 데이터 필요
 """
+
 import pytest
 
 # 전체 모듈에 마커 적용
@@ -19,6 +20,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.needs_db,
     pytest.mark.needs_data,
+    pytest.mark.skip_ci,  # Requires local DB with seed data not available in CI
 ]
 
 
@@ -49,8 +51,9 @@ class TestDataIntegrity:
             inconsistent = cur.fetchall()
             # Allow up to 10 documents with minor inconsistencies (due to data migration)
             # This is acceptable as long as chunk_index < chunk_total constraint is maintained
-            assert len(inconsistent) <= 10, \
+            assert len(inconsistent) <= 10, (
                 f"Found {len(inconsistent)} documents with inconsistent chunk_total (allowed: 10)"
+            )
 
     def test_chunk_index_ranges_valid(self, db_connection):
         """chunk_index is within valid range [0, chunk_total)"""
@@ -61,8 +64,9 @@ class TestDataIntegrity:
                 WHERE c.chunk_index >= c.chunk_total OR c.chunk_index < 0
             """)
             invalid_count = cur.fetchone()[0]
-            assert invalid_count == 0, \
+            assert invalid_count == 0, (
                 f"Found {invalid_count} chunks with invalid chunk_index"
+            )
 
 
 class TestDocumentStructure:
@@ -82,8 +86,9 @@ class TestDocumentStructure:
             if len(chunk_types) > 0:
                 expected = {"problem", "solution", "full"}
                 # At least one should exist
-                assert len(expected.intersection(chunk_types)) > 0, \
+                assert len(expected.intersection(chunk_types)) > 0, (
                     f"Expected chunk types {expected}, found {chunk_types}"
+                )
 
     def test_dispute_cases_have_expected_chunk_types(self, db_connection):
         """Dispute cases have facts/claims/mediation_outcome chunk_types"""
@@ -97,10 +102,17 @@ class TestDocumentStructure:
             chunk_types = {row[0] for row in cur.fetchall()}
 
             if len(chunk_types) > 0:
-                expected = {"facts", "claims", "mediation_outcome", "judgment", "decision"}
+                expected = {
+                    "facts",
+                    "claims",
+                    "mediation_outcome",
+                    "judgment",
+                    "decision",
+                }
                 # At least one should exist
-                assert len(expected.intersection(chunk_types)) > 0, \
+                assert len(expected.intersection(chunk_types)) > 0, (
                     f"Expected chunk types {expected}, found {chunk_types}"
+                )
 
 
 class TestSearchQuality:
@@ -148,8 +160,9 @@ class TestSearchQuality:
             print(f"\n📊 Materialized View: {count} chunks indexed")
 
             # PR-T1: With fixture, we should have at least the seeded data (12 chunks minimum)
-            assert count >= 12, \
+            assert count >= 12, (
                 f"MV should contain at least 12 seed chunks, found {count}. Fixture may have failed."
+            )
 
 
 class TestSeedDataValidation:
@@ -160,10 +173,11 @@ class TestSeedDataValidation:
         with db_connection.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM documents WHERE doc_id LIKE 'test_doc_%'")
             seed_count = cur.fetchone()[0]
-            
+
             # Fixture creates 6 seed documents
-            assert seed_count >= 6, \
+            assert seed_count >= 6, (
                 f"Expected at least 6 seed documents, found {seed_count}"
+            )
 
     def test_seed_documents_types(self, db_connection):
         """Seed documents cover all required types"""
@@ -175,21 +189,23 @@ class TestSeedDataValidation:
                 ORDER BY doc_type
             """)
             doc_types = {row[0] for row in cur.fetchall()}
-            
+
             # Fixture should create: counsel_case, mediation_case, law
-            required_types = {'counsel_case', 'mediation_case', 'law'}
-            assert required_types.issubset(doc_types), \
+            required_types = {"counsel_case", "mediation_case", "law"}
+            assert required_types.issubset(doc_types), (
                 f"Seed data missing required doc types. Expected {required_types}, found {doc_types}"
+            )
 
     def test_seed_chunks_exist(self, db_connection):
         """Seed chunks are created with proper structure"""
         with db_connection.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM chunks WHERE doc_id LIKE 'test_doc_%'")
             chunk_count = cur.fetchone()[0]
-            
+
             # Fixture creates 12 chunks (6 docs × 2 chunks each)
-            assert chunk_count >= 12, \
+            assert chunk_count >= 12, (
                 f"Expected at least 12 seed chunks, found {chunk_count}"
+            )
 
     def test_seed_chunks_have_embeddings(self, db_connection):
         """All seed chunks have non-NULL embeddings"""
@@ -200,23 +216,27 @@ class TestSeedDataValidation:
                 WHERE doc_id LIKE 'test_doc_%' AND embedding IS NULL
             """)
             null_count = cur.fetchone()[0]
-            
+
             # All seed chunks must have embeddings (required for MV inclusion)
-            assert null_count == 0, \
+            assert null_count == 0, (
                 f"Found {null_count} seed chunks with NULL embeddings (should be 0)"
+            )
 
     def test_seed_chunks_in_mv(self, db_connection):
         """All seed chunks appear in mv_searchable_chunks"""
         with db_connection.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM chunks WHERE doc_id LIKE 'test_doc_%'")
             chunk_count = cur.fetchone()[0]
-            
-            cur.execute("SELECT COUNT(*) FROM mv_searchable_chunks WHERE doc_id LIKE 'test_doc_%'")
+
+            cur.execute(
+                "SELECT COUNT(*) FROM mv_searchable_chunks WHERE doc_id LIKE 'test_doc_%'"
+            )
             mv_count = cur.fetchone()[0]
-            
+
             # All seed chunks should be in MV (embedding NOT NULL + drop = FALSE)
-            assert mv_count == chunk_count, \
+            assert mv_count == chunk_count, (
                 f"Seed chunks mismatch: {chunk_count} chunks but only {mv_count} in MV"
+            )
 
     def test_seed_chunks_searchable(self, db_connection):
         """Seed chunks are FTS-searchable"""
@@ -230,7 +250,8 @@ class TestSeedDataValidation:
                 LIMIT 3
             """)
             results = cur.fetchall()
-            
+
             # Should find at least one seed chunk with "환불" keyword
-            assert len(results) > 0, \
+            assert len(results) > 0, (
                 "FTS search for '환불' returned no seed chunks. MV may not be refreshed properly."
+            )

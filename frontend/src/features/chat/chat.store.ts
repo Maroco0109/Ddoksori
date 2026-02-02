@@ -125,12 +125,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       type,
       title,
       createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
+      lastMessageAt: new Date(),
       expiresAt:
         sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
       lastUpdated: now,
       messages: messages.map((msg) => ({
         ...msg,
-        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp,
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
       })),
     };
 

@@ -12,7 +12,7 @@ interface PostDetailProps {
 }
 
 export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetailProps) {
-  const currentUser = '현재사용자**'; // 현재 로그인한 사용자
+  const currentUser = '현재사용자'; // 현재 로그인한 사용자
   const isAuthor = post.author === currentUser;
 
   // 작성자 표시 함수 (탈퇴한 사용자 처리)
@@ -26,7 +26,7 @@ export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetai
   const [comments, setComments] = useState<Comment[]>([
     {
       id: 1,
-      author: '박**',
+      author: '정보공유왕',
       content: '정말 유용한 정보네요! 저도 비슷한 경험이 있어서 공감됩니다.',
       date: '2025.12.21',
       likes: 5,
@@ -44,7 +44,7 @@ export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetai
     },
     {
       id: 2,
-      author: '정**',
+      author: '궁금한사람',
       content: '혹시 변호사 선임은 하셨나요?',
       date: '2025.12.21',
       likes: 3,
@@ -74,7 +74,7 @@ export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetai
 
     const comment = {
       id: Date.now(),
-      author: '현재사용자**',
+      author: '현재사용자',
       content: newComment,
       date: new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1),
       likes: 0,
@@ -91,7 +91,7 @@ export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetai
 
     const reply = {
       id: Date.now(),
-      author: '현재사용자**',
+      author: '현재사용자',
       content: replyContent,
       date: new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1),
       likes: 0,
@@ -378,12 +378,7 @@ export default function PostDetail({ post, onBack, onEdit, onDelete }: PostDetai
           {comments.map(comment => (
             <div key={comment.id} className="border-b border-gray-100 pb-4 last:border-0">
               {/* Main Comment */}
-              <div className="flex gap-3">
-                <div className="w-10 h-10 bg-lavender/30 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-deep-teal">
-                    {comment.author.charAt(0)}
-                  </span>
-                </div>
+              <div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-800">{getAuthorDisplayName(comment.author, comment.isDeleted)}</span>

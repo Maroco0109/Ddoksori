@@ -3,8 +3,6 @@
  * Displays amber warning box with clarifying questions when evidence is insufficient
  */
 
-import React from 'react';
-
 interface SafetyWarningProps {
   questions: string[];
 }

@@ -15,12 +15,12 @@
 
 import argparse
 import json
-import uuid
 import sys
+import uuid
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
-from dataclasses import asdict
+from typing import Any, Dict, List
 
 # 상대 임포트 지원
 sys.path.insert(0, str(Path(__file__).parent))
@@ -60,7 +60,7 @@ class ChatCLI:
                 if not user_input:
                     continue
 
-                if user_input.startswith('/'):
+                if user_input.startswith("/"):
                     if not self._handle_command(user_input):
                         break
                     continue
@@ -102,7 +102,7 @@ class ChatCLI:
             "message": message,
             "session_id": self.session_id,
             "chat_type": self.chat_type,
-            "debug": True
+            "debug": True,
         }
 
         print("\n처리 중...")
@@ -112,7 +112,7 @@ class ChatCLI:
                 message=message,
                 session_id=self.session_id,
                 chat_type=self.chat_type,
-                debug=True
+                debug=True,
             )
 
             # 응답을 딕셔너리로 변환
@@ -130,18 +130,20 @@ class ChatCLI:
                 "related_criteria": response.related_criteria,
                 "node_timings": response.node_timings,
                 "request_id": response.request_id,
-                "total_time_ms": response.total_time_ms
+                "total_time_ms": response.total_time_ms,
             }
 
             # 세션 ID 업데이트 (첫 요청 시)
             self.session_id = response.session_id
 
             # 히스토리 저장
-            self.history.append({
-                "timestamp": datetime.now().isoformat(),
-                "request": request,
-                "response": response_dict
-            })
+            self.history.append(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "request": request,
+                    "response": response_dict,
+                }
+            )
 
             # 출력
             output = self.formatter.format_response(response_dict, request)
@@ -164,35 +166,39 @@ class ChatCLI:
         """
         cmd = command.lower().strip()
 
-        if cmd in ['/quit', '/exit', '/q']:
+        if cmd in ["/quit", "/exit", "/q"]:
             print("종료합니다.")
             return False
 
-        elif cmd == '/new':
+        elif cmd == "/new":
             self.session_id = str(uuid.uuid4())
             self.history = []
             print(f"[새 세션] 세션 ID: {self.session_id}")
 
-        elif cmd == '/session':
+        elif cmd == "/session":
             print(f"[세션 정보]")
             print(f"  세션 ID: {self.session_id}")
             print(f"  상담 유형: {self.chat_type}")
             print(f"  대화 수: {len(self.history)}")
 
-        elif cmd == '/history':
+        elif cmd == "/history":
             if not self.history:
                 print("[히스토리] 대화 기록이 없습니다.")
             else:
                 print("[히스토리]")
                 for i, h in enumerate(self.history, 1):
-                    msg = h['request']['message']
-                    ts = h['timestamp'][:19]
-                    answer_preview = h['response']['answer'][:50] + "..." if len(h['response']['answer']) > 50 else h['response']['answer']
+                    msg = h["request"]["message"]
+                    ts = h["timestamp"][:19]
+                    answer_preview = (
+                        h["response"]["answer"][:50] + "..."
+                        if len(h["response"]["answer"]) > 50
+                        else h["response"]["answer"]
+                    )
                     print(f"  [{i}] {ts}")
                     print(f"      Q: {msg}")
                     print(f"      A: {answer_preview}")
 
-        elif cmd == '/help':
+        elif cmd == "/help":
             print("[명령어]")
             print("  /new      - 새 세션 시작")
             print("  /session  - 현재 세션 정보")
@@ -224,11 +230,11 @@ class ChatCLI:
             "cli_metadata": {
                 "version": "1.0.0",
                 "chat_type": self.chat_type,
-                "verbose": self.verbose
-            }
+                "verbose": self.verbose,
+            },
         }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(log_entry, f, ensure_ascii=False, indent=2)
 
         print(f"[로그 저장] {filepath}")
@@ -236,7 +242,7 @@ class ChatCLI:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='똑소리 Chat CLI 테스트 도구',
+        description="똑소리 Chat CLI 테스트 도구",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 예시:
@@ -244,48 +250,33 @@ def main():
   python chat_cli.py -m "노트북 환불 방법"     # 단일 질문
   python chat_cli.py -t dispute                # 분쟁 상담 모드
   python chat_cli.py --session-id abc123       # 기존 세션 이어서
-        """
+        """,
     )
 
     parser.add_argument(
-        '--server-url', '-s',
-        default='http://localhost:8000',
-        help='백엔드 서버 URL (기본: http://localhost:8000)'
+        "--server-url",
+        "-s",
+        default="http://localhost:8000",
+        help="백엔드 서버 URL (기본: http://localhost:8000)",
     )
     parser.add_argument(
-        '--chat-type', '-t',
-        choices=['dispute', 'general'],
-        default='general',
-        help='상담 유형 (기본: general)'
+        "--chat-type",
+        "-t",
+        choices=["dispute", "general"],
+        default="general",
+        help="상담 유형 (기본: general)",
     )
     parser.add_argument(
-        '--message', '-m',
-        help='단일 질문 메시지 (대화형 모드 대신 사용)'
+        "--message", "-m", help="단일 질문 메시지 (대화형 모드 대신 사용)"
     )
+    parser.add_argument("--session-id", help="기존 세션 ID (멀티턴 대화용)")
     parser.add_argument(
-        '--session-id',
-        help='기존 세션 ID (멀티턴 대화용)'
+        "--log-dir", default="logs/cli", help="로그 저장 디렉토리 (기본: logs/cli)"
     )
+    parser.add_argument("--no-save", action="store_true", help="로그 저장 안 함")
+    parser.add_argument("--verbose", "-v", action="store_true", help="상세 출력 모드")
     parser.add_argument(
-        '--log-dir',
-        default='logs/cli',
-        help='로그 저장 디렉토리 (기본: logs/cli)'
-    )
-    parser.add_argument(
-        '--no-save',
-        action='store_true',
-        help='로그 저장 안 함'
-    )
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='상세 출력 모드'
-    )
-    parser.add_argument(
-        '--timeout',
-        type=int,
-        default=120,
-        help='요청 타임아웃 초 (기본: 120)'
+        "--timeout", type=int, default=120, help="요청 타임아웃 초 (기본: 120)"
     )
 
     args = parser.parse_args()
@@ -298,5 +289,5 @@ def main():
         cli.run_interactive()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

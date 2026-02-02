@@ -1,15 +1,29 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
-import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
+import type { AgencyInfo, ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations, SSESourceInfo, SourceMetadata } from '@/shared/types';
 import { Send } from 'lucide-react';
 import { useChatStore } from '@/features/chat/chat.store';
-import { useChatMutation } from './hooks/useChatMutation';
+import { useAuthStore } from '@/features/auth/auth.store';
 import { useStreamingChat } from './hooks/useStreamingChat';
 import { extractCitations } from '@/shared/lib/citation';
 import { simulateStreaming } from '@/shared/lib/streaming';
 import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
 import { StatusIndicator } from './components/StatusIndicator';
+
+/** Map SSESourceInfo[] to SourceMetadata[] for citation extraction */
+const mapSources = (sources: SSESourceInfo[]): SourceMetadata[] =>
+  sources.map((s) => ({
+    doc_id: '',
+    chunk_id: '',
+    chunk_type: s.type,
+    source_org: s.source_org || '',
+    url: null,
+    decision_date: null,
+    collected_at: null,
+    doc_title: s.title,
+    similarity: s.similarity,
+  }));
 
 interface ChatPageProps {
   currentSessionId?: string | null;
@@ -18,6 +32,7 @@ interface ChatPageProps {
 
 export default function ChatPage({ currentSessionId = null, onSessionCreate }: ChatPageProps) {
   const storeSessionId = useChatStore((state) => state.currentSessionId);
+  const storeActiveChatType = useChatStore((state) => state.activeChatType);
   const setStoreSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setStoreChatType = useChatStore((state) => state.setActiveChatType);
   const setChatSessions = useChatStore((state) => state.setChatSessions);
@@ -28,12 +43,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   // 현재 세션 ID
   const [sessionId, setSessionId] = useState<string | null>(resolvedSessionId);
 
-  // React Query mutation for API calls (fallback)
-  const chatMutation = useChatMutation();
+  const messageIdCounterRef = useRef(1); // 초기 AI 인사 메시지 id=1
+  const prevSessionIdRef = useRef<string | null>(resolvedSessionId);
 
   // PR-7: SSE Streaming hook for real-time agent status
-  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat();
-  const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream, cancelStream: cancelDisputeStream } = useStreamingChat({
+    onFallback: (_model: string, message: string) => {
+      setFallbackNotice(message);
+      setTimeout(() => setFallbackNotice(null), 3000);
+    },
+  });
+  const { streamingState: generalStreamingState, startStream: startGeneralStream, cancelStream: cancelGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
   const [disputeMessages, setDisputeMessages] = useState<MessageWithCitations[]>([
@@ -45,7 +65,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   ]);
   const [disputeInputValue, setDisputeInputValue] = useState('');
-  const [isDisputeLoading, setIsDisputeLoading] = useState(false);
   const [isFormSubmitted, setIsFormSubmitted] = useState(false);
 
   // 일반 상담 state
@@ -58,7 +77,20 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   ]);
   const [generalInputValue, setGeneralInputValue] = useState('');
-  const [isGeneralLoading, setIsGeneralLoading] = useState(false);
+  // Phase 4: messageIdCounterRef를 현재 메시지의 최대 ID와 동기화
+  // 세션 복원, HMR 등으로 메시지 배열이 변경되면 counter가 자동 동기화되어 ID 충돌 방지
+  useEffect(() => {
+    const maxDisputeId = disputeMessages.length > 0
+      ? Math.max(...disputeMessages.map(m => m.id))
+      : 0;
+    const maxGeneralId = generalMessages.length > 0
+      ? Math.max(...generalMessages.map(m => m.id))
+      : 0;
+    const maxId = Math.max(maxDisputeId, maxGeneralId);
+    if (maxId > messageIdCounterRef.current) {
+      messageIdCounterRef.current = maxId;
+    }
+  }, [disputeMessages, generalMessages]);
 
   // 분쟁 상담 폼 state
   const [disputeForm, setDisputeForm] = useState<DisputeForm>({
@@ -73,8 +105,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   // 활성 상담 타입 (null, 'dispute', 'general')
   const [activeChatType, setActiveChatType] = useState<ChatType | null>(null);
 
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+
   // 로그인 여부 확인
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
 
   // 컴포넌트 마운트 시 스크롤 최상단으로 이동 (한 번만 실행)
   useEffect(() => {
@@ -89,87 +123,130 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setTimeout(scrollToTop, 100);
   }, []); // 빈 의존성 배열 - 마운트 시 한 번만 실행
 
-  // 세션 불러오기
+  // 세션 불러오기 및 스트림 취소
   useEffect(() => {
-    if (resolvedSessionId) {
-      setSessionId(resolvedSessionId);
+    const prevSessionId = prevSessionIdRef.current;
+    prevSessionIdRef.current = resolvedSessionId;
+    const sessionChanged = prevSessionId !== resolvedSessionId;
 
-      if (storeSessionId !== resolvedSessionId) {
+    // 핵심: 세션 "전환"만 스트림 취소 (null→값 = 생성, 값→다른값 = 전환)
+    // 세션 생성(null→newId)은 스트리밍 시작과 동시에 발생하므로 취소하면 안 됨
+    const isSessionSwitch = sessionChanged && prevSessionId !== null;
+
+    if (resolvedSessionId) {
+      if (isSessionSwitch) {
+        // 다른 세션으로 전환할 때만 진행 중인 스트림 취소
+        cancelDisputeStream();
+        cancelGeneralStream();
+      }
+
+      if (sessionChanged) {
+        setSessionId(resolvedSessionId);
+      }
+
+      // storeSessionId는 deps에서 제거 → getState()로 직접 접근
+      const currentStoreSessionId = useChatStore.getState().currentSessionId;
+      if (currentStoreSessionId !== resolvedSessionId) {
         setStoreSessionId(resolvedSessionId);
       }
 
-      const storage = isLoggedIn ? localStorage : sessionStorage;
-      const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
+      if (isSessionSwitch) {
+        // 기존 세션에서 다른 세션으로 전환 시 복원
+        const storage = isLoggedIn ? localStorage : sessionStorage;
+        const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
 
-      try {
-        const sessions = JSON.parse(storage.getItem(storageKey) || '[]');
-        const session = sessions.find(s => s.id === resolvedSessionId);
+        try {
+          const sessions = JSON.parse(storage.getItem(storageKey) || '[]');
+          const session = sessions.find((s: ChatSession) => s.id === resolvedSessionId);
 
-        if (session) {
-          const restoredMessages = session.messages.map(msg => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }));
+          if (session) {
+            const restoredMessages = session.messages.map((msg: MessageWithCitations) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }));
 
-          if (session.type === 'dispute') {
-            setDisputeMessages(restoredMessages);
-            setActiveChatType('dispute');
-            setIsFormSubmitted(true);
-            setStoreChatType('dispute');
-            // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-            setTimeout(() => {
-              disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-          } else {
-            setGeneralMessages(restoredMessages);
-            setActiveChatType('general');
-            setStoreChatType('general');
-            // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-            setTimeout(() => {
-              generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
+            const chatType = storeActiveChatType || session.type;
+            if (chatType === 'dispute') {
+              setDisputeMessages(restoredMessages);
+              setActiveChatType('dispute');
+              setIsFormSubmitted(true);
+              setStoreChatType('dispute');
+              setTimeout(() => {
+                disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 200);
+            } else {
+              setGeneralMessages(restoredMessages);
+              setActiveChatType('general');
+              setStoreChatType('general');
+              setTimeout(() => {
+                generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 200);
+            }
+          } else if (storeActiveChatType) {
+            setActiveChatType(storeActiveChatType);
+            if (storeActiveChatType === 'dispute') {
+              setIsFormSubmitted(false);
+            }
           }
+        } catch (e) {
+          console.error('Failed to load session:', e);
         }
-      } catch (e) {
-        console.error('Failed to load session:', e);
       }
     } else {
-      setSessionId(null);
-      setActiveChatType(null);
-      setIsFormSubmitted(false);
-      setStoreSessionId(null);
-      setStoreChatType(null);
-      setBackendSessionId(null);
-      setDisputeFormData(null);
-      setDisputeMessages([
-        {
-          id: 1,
-          type: 'ai',
-          content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
-          timestamp: new Date()
-        }
-      ]);
-      setGeneralMessages([
-        {
-          id: 1,
-          type: 'ai',
-          content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
-          timestamp: new Date()
-        }
-      ]);
-      setDisputeForm({
-        purchaseDate: '',
-        purchasePlace: '',
-        platform: '',
-        purchaseItem: '',
-        purchaseAmount: '',
-        disputeDetail: ''
-      });
+      if (isSessionSwitch) {
+        // 세션 전환으로 null이 된 경우에만 스트림 취소
+        cancelDisputeStream();
+        cancelGeneralStream();
+      }
+      if (sessionChanged) {
+        // 세션 초기화
+        setSessionId(null);
+        setActiveChatType(null);
+        setIsFormSubmitted(false);
+        setStoreSessionId(null);
+        setStoreChatType(null);
+        setBackendSessionId(null);
+        setDisputeFormData(null);
+        setDisputeMessages([
+          {
+            id: 1,
+            type: 'ai',
+            content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+            timestamp: new Date()
+          }
+        ]);
+        setGeneralMessages([
+          {
+            id: 1,
+            type: 'ai',
+            content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+            timestamp: new Date()
+          }
+        ]);
+        setDisputeForm({
+          purchaseDate: '',
+          purchasePlace: '',
+          platform: '',
+          purchaseItem: '',
+          purchaseAmount: '',
+          disputeDetail: ''
+        });
+      }
     }
-  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, storeSessionId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, cancelDisputeStream, cancelGeneralStream, setBackendSessionId, setDisputeFormData, storeActiveChatType]);
+
+  // Cancel streams on unmount only
+  useEffect(() => {
+    return () => {
+      cancelDisputeStream();
+      cancelGeneralStream();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 채팅 세션 저장 함수
-  const saveChatSession = (type: ChatType, messages: Message[]) => {
+  const saveChatSession = (type: ChatType, messages: MessageWithCitations[]) => {
     const storage = isLoggedIn ? localStorage : sessionStorage;
     const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
 
@@ -194,17 +271,18 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     // 비로그인 사용자는 1일(86400000ms) 만료 시간 설정
     const expiresAt = !isLoggedIn ? now + 86400000 : null;
 
-    const sessionData = {
+    const sessionData: ChatSession = {
       id: newSessionId,
       type,
       title,
       createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
+      lastMessageAt: new Date(),
       expiresAt: sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
       lastUpdated: now,
       messages: messages.map(msg => ({
         ...msg,
-        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp
-      }))
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : (msg.timestamp as unknown as number)
+      })) as unknown as MessageWithCitations[],
     };
 
     if (sessionIndex >= 0) {
@@ -262,6 +340,15 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       return;
     }
 
+    // 세션 ID를 스트림 시작 전에 확정 (saveChatSession에서 뒤늦게 생성하면 useEffect 트리거)
+    if (!sessionId) {
+      const newId = Date.now().toString();
+      setSessionId(newId);
+      setStoreSessionId(newId);
+      setStoreChatType('dispute');
+      if (onSessionCreate) onSessionCreate(newId);
+    }
+
     const formDataForBackend: DisputeFormData = {
       purchaseDate: disputeForm.purchaseDate,
       purchasePlace: disputeForm.purchasePlace,
@@ -274,32 +361,23 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
     // 폼 데이터를 메시지로 변환
     const platformInfo = disputeForm.platform ? `\n플랫폼: ${disputeForm.platform}` : '';
-    const formMessage: MessageWithCitations = {
-      id: disputeMessages.length + 1,
-      type: 'user' as const,
-      content: `[분쟁 정보]\n구매일자: ${disputeForm.purchaseDate}\n구매처: ${disputeForm.purchasePlace}${platformInfo}\n구매품목: ${disputeForm.purchaseItem}\n구매금액: ${disputeForm.purchaseAmount}원\n분쟁 상세: ${disputeForm.disputeDetail}`,
-      timestamp: new Date()
-    };
+    const formContent = `[분쟁 정보]\n구매일자: ${disputeForm.purchaseDate}\n구매처: ${disputeForm.purchasePlace}${platformInfo}\n구매품목: ${disputeForm.purchaseItem}\n구매금액: ${disputeForm.purchaseAmount}원\n분쟁 상세: ${disputeForm.disputeDetail}`;
 
-    setDisputeMessages([...disputeMessages, formMessage]);
+    const userMsgId = ++messageIdCounterRef.current;
+    const aiPlaceholderId = ++messageIdCounterRef.current;
+
+    setDisputeMessages((prev) => [
+      ...prev,
+      { id: userMsgId, type: 'user' as const, content: formContent, timestamp: new Date() },
+      { id: aiPlaceholderId, type: 'ai' as const, content: '', timestamp: new Date() },
+    ]);
     setIsFormSubmitted(true);
     setStoreChatType('dispute');
     setActiveChatType('dispute');
-    setIsDisputeLoading(true);
-
-    // Create placeholder AI message for streaming
-    const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      const response = await chatMutation.mutateAsync({
-        message: formMessage.content,
+      const response = await startDisputeStream({
+        message: formContent,
         chat_type: 'dispute',
         top_k: 5,
         onboarding: {
@@ -312,58 +390,62 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         },
       });
 
-      let streamedText = '';
-      await simulateStreaming(response.answer, (chunk) => {
-        streamedText += chunk;
+      if (response) {
+        if (response.session_id) {
+          setBackendSessionId(response.session_id);
+        }
+
+        const citations = extractCitations(response.answer, mapSources(response.sources));
+
+        // simulateStreaming으로 텍스트 출력 (일반 채팅과 동일 패턴)
+        let streamedText = '';
+        await simulateStreaming(response.answer, (chunk) => {
+          streamedText += chunk;
+          setDisputeMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiPlaceholderId ? { ...msg, content: streamedText } : msg
+            )
+          );
+        });
+
+        // 최종 메시지 업데이트 (citations + dispute 전용 metadata)
         setDisputeMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
+            msg.id === aiPlaceholderId
+              ? {
+                  ...msg,
+                  content: response.answer,
+                  citations,
+                  followupQuestions: response.followup_questions,
+                  hasSafetyWarning: !response.has_sufficient_evidence
+                    && Array.isArray(response.clarifying_questions)
+                    && response.clarifying_questions.length > 0,
+                  clarifyingQuestions: response.clarifying_questions,
+                  isRestricted: response.domain?.is_restricted,
+                  agencyCode: response.domain?.agency_code,
+                  agencyInfo: response.domain as unknown as AgencyInfo,
+                }
+              : msg
           )
         );
-      });
-
-      const citations = extractCitations(response.answer, response.sources);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? { 
-                ...msg, 
-                content: response.answer, 
-                citations,
-                isRestricted: response.is_restricted,
-                agencyCode: response.agency_code,
-                agencyInfo: response.agency_info,
-              }
-            : msg
-        )
-      );
-
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
-        const warningMessage: MessageWithCitations = {
-          id: aiMessageId + 1,
-          type: 'ai' as const,
-          content: '',
-          timestamp: new Date(),
-          hasSafetyWarning: true,
-          clarifyingQuestions: response.clarifying_questions,
-        };
-        setDisputeMessages((prev) => [...prev, warningMessage]);
+      } else {
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiPlaceholderId
+              ? { ...msg, content: '죄송합니다. 서버 응답 시간이 초과되었습니다. 다시 시도해주세요.' }
+              : msg
+          )
+        );
       }
     } catch (error) {
       console.error('Chat API error:', error);
       setDisputeMessages((prev) =>
         prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
+          msg.id === aiPlaceholderId
+            ? { ...msg, content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' }
             : msg
         )
       );
-    } finally {
-      setIsDisputeLoading(false);
     }
   };
 
@@ -371,70 +453,87 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleDisputeSend = async () => {
     if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
 
-    const newMessage: MessageWithCitations = {
-      id: disputeMessages.length + 1,
-      type: 'user' as const,
-      content: disputeInputValue,
-      timestamp: new Date()
-    };
+    // 세션 ID를 스트림 시작 전에 확정
+    if (!sessionId) {
+      const newId = Date.now().toString();
+      setSessionId(newId);
+      setStoreSessionId(newId);
+      setStoreChatType('dispute');
+      if (onSessionCreate) onSessionCreate(newId);
+    }
 
-    setDisputeMessages([...disputeMessages, newMessage]);
+    const messageContent = disputeInputValue;
     setDisputeInputValue('');
 
-    // Create placeholder AI message
-    const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
+    const userMsgId = ++messageIdCounterRef.current;
+    const aiPlaceholderId = ++messageIdCounterRef.current;
+
+    setDisputeMessages((prev) => [
+      ...prev,
+      { id: userMsgId, type: 'user' as const, content: messageContent, timestamp: new Date() },
+      { id: aiPlaceholderId, type: 'ai' as const, content: '', timestamp: new Date() },
+    ]);
 
     try {
-      // PR-7: Use SSE streaming API for real-time progress
       const response = await startDisputeStream({
-        message: newMessage.content,
+        message: messageContent,
         chat_type: 'dispute',
         top_k: 5,
       });
 
       if (response) {
-        const citations = extractCitations(response.answer, response.sources);
+        if (response.session_id) {
+          setBackendSessionId(response.session_id);
+        }
+
+        const citations = extractCitations(response.answer, mapSources(response.sources));
+
+        // simulateStreaming으로 텍스트 출력 (일반 채팅과 동일 패턴)
+        let streamedText = '';
+        await simulateStreaming(response.answer, (chunk) => {
+          streamedText += chunk;
+          setDisputeMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiPlaceholderId ? { ...msg, content: streamedText } : msg
+            )
+          );
+        });
+
+        // 최종 메시지 업데이트 (citations + dispute 전용 metadata)
         setDisputeMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId
+            msg.id === aiPlaceholderId
               ? {
                   ...msg,
                   content: response.answer,
                   citations,
+                  followupQuestions: response.followup_questions,
+                  hasSafetyWarning: !response.has_sufficient_evidence
+                    && Array.isArray(response.clarifying_questions)
+                    && response.clarifying_questions.length > 0,
+                  clarifyingQuestions: response.clarifying_questions,
+                  isRestricted: response.domain?.is_restricted,
+                  agencyCode: response.domain?.agency_code,
+                  agencyInfo: response.domain as unknown as AgencyInfo,
                 }
               : msg
           )
         );
-
-        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
-          const warningMessage: MessageWithCitations = {
-            id: aiMessageId + 1,
-            type: 'ai' as const,
-            content: '',
-            timestamp: new Date(),
-            hasSafetyWarning: true,
-            clarifyingQuestions: response.clarifying_questions,
-          };
-          setDisputeMessages((prev) => [...prev, warningMessage]);
-        }
+      } else {
+        setDisputeMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiPlaceholderId
+              ? { ...msg, content: '죄송합니다. 서버 응답 시간이 초과되었습니다. 다시 시도해주세요.' }
+              : msg
+          )
+        );
       }
     } catch (error) {
       console.error('Chat API error:', error);
       setDisputeMessages((prev) =>
         prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
+          msg.id === aiPlaceholderId
+            ? { ...msg, content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' }
             : msg
         )
       );
@@ -445,53 +544,70 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleGeneralSend = async () => {
     if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
-    const newMessage: MessageWithCitations = {
-      id: generalMessages.length + 1,
-      type: 'user' as const,
-      content: generalInputValue,
-      timestamp: new Date()
-    };
+    // 세션 ID를 스트림 시작 전에 확정
+    if (!sessionId) {
+      const newId = Date.now().toString();
+      setSessionId(newId);
+      setStoreSessionId(newId);
+      setStoreChatType('general');
+      if (onSessionCreate) onSessionCreate(newId);
+    }
 
-    setGeneralMessages([...generalMessages, newMessage]);
+    const messageContent = generalInputValue;
     setGeneralInputValue('');
     setActiveChatType('general');
     setStoreChatType('general');
 
-    // Create placeholder AI message
-    const aiMessageId = generalMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setGeneralMessages((prev) => [...prev, placeholderAI]);
+    // ID를 동기적으로 생성하여 stale closure 방지
+    const userMsgId = ++messageIdCounterRef.current;
+    const aiPlaceholderId = ++messageIdCounterRef.current;
+
+    setGeneralMessages((prev) => [
+      ...prev,
+      { id: userMsgId, type: 'user' as const, content: messageContent, timestamp: new Date() },
+      { id: aiPlaceholderId, type: 'ai' as const, content: '', timestamp: new Date() },
+    ]);
 
     try {
       // PR-7: Use SSE streaming API for real-time progress
       const response = await startGeneralStream({
-        message: newMessage.content,
+        message: messageContent,
         chat_type: 'general',
         top_k: 5,
       });
 
       if (response) {
-        const citations = extractCitations(response.answer, response.sources);
+        const citations = extractCitations(response.answer, mapSources(response.sources));
+
+        // Word-by-word streaming 애니메이션
+        let streamedText = '';
+        await simulateStreaming(response.answer, (chunk) => {
+          streamedText += chunk;
+          setGeneralMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiPlaceholderId ? { ...msg, content: streamedText } : msg
+            )
+          );
+        });
+
+        // 최종 메시지 업데이트 (citations 및 metadata 포함)
         setGeneralMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId
+            msg.id === aiPlaceholderId
               ? {
                   ...msg,
                   content: response.answer,
                   citations,
+                  followupQuestions: response.followup_questions,
                 }
               : msg
           )
         );
 
-        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
+        if (response.clarifying_questions && response.clarifying_questions.length > 0) {
+          const warningMsgId = ++messageIdCounterRef.current;
           const warningMessage: MessageWithCitations = {
-            id: aiMessageId + 1,
+            id: warningMsgId,
             type: 'ai' as const,
             content: '',
             timestamp: new Date(),
@@ -505,7 +621,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       console.error('Chat API error:', error);
       setGeneralMessages((prev) =>
         prev.map((msg) =>
-          msg.id === aiMessageId
+          msg.id === aiPlaceholderId
             ? {
                 ...msg,
                 content:
@@ -545,6 +661,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     <div className="chat-page flex flex-col h-full">
       {/* 페이지 최상단 참조 */}
       <div ref={pageTopRef} />
+
+      {/* Fallback notification (토큰 스트리밍) */}
+      {fallbackNotice && (
+        <div className="fixed top-4 right-4 bg-amber-100 px-4 py-2 rounded-lg shadow-lg z-50">
+          <p className="text-sm text-amber-800">{fallbackNotice}</p>
+        </div>
+      )}
+
       {/* Custom scrollbar styles */}
       <style>{`
         .chat-scrollbar::-webkit-scrollbar {
@@ -680,7 +804,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                     value={disputeForm.disputeDetail}
                     onChange={handleFormChange}
                     placeholder="분쟁 상황을 자세히 설명해주세요"
-                    rows="4"
+                    rows={4}
                     className="w-full px-4 py-3 border-2 border-ivory rounded-lg outline-none focus:border-deep-teal transition-all resize-none"
                     required
                   />
@@ -701,16 +825,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                 className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto chat-scrollbar"
                 style={{ scrollbarColor: '#0d9488 #f0f0f0', scrollbarWidth: 'thin' }}
               >
-                {disputeMessages.map((msg) =>
-                  msg.hasSafetyWarning ? (
-                    <SafetyWarning
-                      key={msg.id}
-                      questions={msg.clarifyingQuestions || []}
+                {disputeMessages.map((msg) => (
+                  <Fragment key={msg.id}>
+                    <MessageBubble
+                      message={msg}
+                      chatType="dispute"
                     />
-                  ) : (
-                    <MessageBubble key={msg.id} message={msg} chatType="dispute" />
-                  )
-                )}
+                    {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
+                      <SafetyWarning
+                        questions={msg.clarifyingQuestions}
+                      />
+                    )}
+                  </Fragment>
+                ))}
                 {/* PR-7: StatusIndicator for real-time agent progress */}
                 {disputeStreamingState.isStreaming && (
                   <div className="flex items-start mb-4 md:mb-6">
@@ -759,16 +886,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto chat-scrollbar"
             style={{ scrollbarColor: '#0d9488 #f0f0f0', scrollbarWidth: 'thin' }}
           >
-            {generalMessages.map((msg) =>
-              msg.hasSafetyWarning ? (
-                <SafetyWarning
-                  key={msg.id}
-                  questions={msg.clarifyingQuestions || []}
+            {generalMessages.map((msg) => (
+              <Fragment key={msg.id}>
+                <MessageBubble
+                  message={msg}
+                  chatType="general"
                 />
-              ) : (
-                <MessageBubble key={msg.id} message={msg} chatType="general" />
-              )
-            )}
+                {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
+                  <SafetyWarning
+                    questions={msg.clarifyingQuestions}
+                  />
+                )}
+              </Fragment>
+            ))}
             {/* PR-7: StatusIndicator for real-time agent progress */}
             {generalStreamingState.isStreaming && (
               <div className="flex items-start mb-4 md:mb-6">

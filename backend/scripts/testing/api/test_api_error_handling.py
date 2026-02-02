@@ -11,12 +11,14 @@ Usage:
     @pytest.mark.integration - API 서버 연결 필요
     @pytest.mark.api - API 엔드포인트 테스트
 """
+
 import pytest
 
 # 전체 모듈에 마커 적용
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.api,
+    pytest.mark.skip_ci,
 ]
 
 
@@ -45,7 +47,7 @@ class TestInputValidation:
         resp = api_client.post(
             "/search",
             headers={"Content-Type": "application/json"},
-            content="not valid json"
+            content="not valid json",
         )
         assert resp.status_code == 422
 
@@ -62,8 +64,7 @@ class TestCORS:
     def test_cors_headers_present(self, api_client):
         """API returns CORS headers for allowed origins"""
         resp = api_client.options(
-            "/search",
-            headers={"Origin": "http://localhost:5173"}
+            "/search", headers={"Origin": "http://localhost:5173"}
         )
         # Check for CORS headers (case-insensitive)
         headers_lower = {k.lower(): v for k, v in resp.headers.items()}
@@ -74,7 +75,7 @@ class TestCORS:
         resp = api_client.post(
             "/search",
             json={"query": "test", "top_k": 5},
-            headers={"Origin": "http://localhost:5173"}
+            headers={"Origin": "http://localhost:5173"},
         )
         # Should not be blocked by CORS
         assert resp.status_code in [200, 404, 500]  # Not 403 (Forbidden)
@@ -86,8 +87,8 @@ class TestCORS:
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "Content-Type"
-            }
+                "Access-Control-Request-Headers": "Content-Type",
+            },
         )
         # Should return 200 or 204 for OPTIONS
         assert resp.status_code in [200, 204]

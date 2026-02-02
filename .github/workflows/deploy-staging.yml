@@ -1,0 +1,102 @@
+name: Deploy to Staging
+
+on:
+  workflow_run:
+    workflows: ["Build and Push"]
+    types: [completed]
+    branches: [main]
+
+env:
+  AWS_REGION: ap-northeast-2
+  EC2_HOST: staging.ddoksori.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get ECR Login
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy to Staging
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/ddoksori
+
+            # ECR Login
+            aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
+
+            # Pull latest images
+            export ECR_REGISTRY=${{ steps.ecr-login.outputs.registry }}
+            docker compose -f docker-compose.prod.yml pull
+
+            # Deploy with zero-downtime
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Cleanup old images
+            docker image prune -f
+
+            # Show status
+            docker compose -f docker-compose.prod.yml ps
+
+      - name: Health Check
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+
+          # Backend health check
+          for i in {1..5}; do
+            if curl -sf http://${{ env.EC2_HOST }}:8000/health; then
+              echo "Backend is healthy!"
+              break
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+
+          # Final verification
+          curl -f http://${{ env.EC2_HOST }}:8000/health || exit 1
+
+      - name: Discord Notification - Success
+        if: success()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "Staging Deployment"
+          description: |
+            **Status**: Success
+            **Commit**: `${{ github.event.workflow_run.head_sha }}`
+            **Branch**: main
+            **URL**: http://${{ env.EC2_HOST }}
+
+      - name: Discord Notification - Failure
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "Staging Deployment"
+          description: |
+            **Status**: Failed
+            **Commit**: `${{ github.event.workflow_run.head_sha }}`
+            **Branch**: main
+
+            Check GitHub Actions for details.

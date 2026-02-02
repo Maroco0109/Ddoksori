@@ -1,0 +1,10 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+exclude = ["_archive"]
+
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.format]
+# Black-compatible defaults

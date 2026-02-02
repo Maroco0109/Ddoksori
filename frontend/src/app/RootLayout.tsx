@@ -10,7 +10,6 @@ import LoginModal from '@/features/auth/LoginModal';
 export default function RootLayout() {
   const location = useLocation();
   const isAuthModalOpen = useUIStore((state) => state.isAuthModalOpen);
-  const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
 
   const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
@@ -59,32 +58,43 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
+  const isHomePage = location.pathname === '/';
+
   return (
-    <div className="flex min-h-screen">
+    <div
+      className="flex min-h-screen"
+      style={{ backgroundColor: isHomePage ? '#fbeae9' : '#FAF0E6' }}
+    >
       <ScrollRestoration />
       <Sidebar />
 
-      <main className="lg:ml-64 flex-1 p-4 sm:p-6 md:p-8 lg:p-12 w-full">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-4 sm:mb-6">
-            {/* Mobile Hamburger Menu Button */}
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="메뉴 열기"
-            >
-              <Menu size={24} className="text-dark-navy" />
-            </button>
-
-            <div className="flex-1 flex justify-end">
+      <main className={`lg:ml-64 flex-1 w-full ${isHomePage ? '' : 'p-4 sm:p-6 md:p-8 lg:p-12'}`}>
+        <div className={isHomePage ? '' : 'max-w-7xl mx-auto'}>
+          {!isHomePage && (
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              {/* Mobile Hamburger Menu Button */}
               <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="bg-dark-navy text-white px-6 sm:px-7 md:px-8 py-2 sm:py-2.5 md:py-3 rounded-full text-xs sm:text-sm md:text-base font-semibold hover:bg-mint-green transition-all"
+                onClick={toggleSidebar}
+                className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="메뉴 열기"
               >
-                1초 만에 시작하기
+                <Menu size={24} className="text-dark-navy" />
               </button>
             </div>
-          </div>
+          )}
+
+          {isHomePage && (
+            <div className="absolute top-0 left-0 right-0 z-50 px-4 sm:px-6 md:px-8 lg:px-12 pt-4 sm:pt-6 md:pt-8 lg:pt-12">
+              {/* Mobile Hamburger Menu Button */}
+              <button
+                onClick={toggleSidebar}
+                className="lg:hidden p-2 hover:bg-white/80 backdrop-blur-sm rounded-lg transition-colors"
+                aria-label="메뉴 열기"
+              >
+                <Menu size={24} className="text-dark-navy" />
+              </button>
+            </div>
+          )}
 
           <Outlet />
         </div>

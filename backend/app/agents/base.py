@@ -34,10 +34,10 @@ Phase: MAS Supervisor Architecture - Phase 2
 
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, ClassVar
+from typing import Any, ClassVar, Dict, List, Optional
 
-from ..orchestrator.state import ChatState
-from ..orchestrator.state.supervisor import AgentMessage, SupervisorState
+from ..supervisor.state import ChatState
+from ..supervisor.state.supervisor import AgentMessage, SupervisorState
 
 
 class BaseAgent(ABC):
@@ -205,7 +205,7 @@ class BaseAgent(ABC):
             ...     return self.report_to_supervisor("failure", None, error)
         """
         context = request.get("context", {})
-        
+
         missing_fields = []
         for field in self.required_inputs:
             if field not in context or context[field] is None:
@@ -233,7 +233,7 @@ class BaseAgent(ABC):
 
         async def node_function(state: ChatState) -> Dict[str, Any]:
             supervisor_state = state.get("supervisor", {})
-            
+
             request = {
                 "task": f"process_{agent.agent_name}",
                 "params": {},

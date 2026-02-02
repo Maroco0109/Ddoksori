@@ -3,7 +3,6 @@
  * Real-time progress display for SSE streaming
  */
 
-import React from 'react';
 import type { StreamingState } from '@/shared/types';
 
 interface StatusIndicatorProps {

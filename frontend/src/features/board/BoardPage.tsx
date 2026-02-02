@@ -1,12 +1,18 @@
-import { useState } from 'react';
-import { Search, ThumbsUp, Calendar, Eye, MessageSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Search, ThumbsUp, Calendar, Eye, MessageSquare, Lock } from 'lucide-react';
 import { CATEGORY_DISPLAY_MAP, CATEGORY_LABELS, POST_CATEGORIES } from '@/shared/config/categories';
+import { useAuthStore } from '@/features/auth/auth.store';
+import { useUIStore } from '@/store/ui.store';
 import type { BoardCategoryId, BoardPost, BoardPostForm, BoardSearchType } from './board.types';
 import WritePost from './components/WritePost';
 import PostDetail from './components/PostDetail';
 import EditPost from './components/EditPost';
 
 export default function BoardPage() {
+  const location = useLocation();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
   const [activeTab, setActiveTab] = useState<BoardCategoryId>('all');
   const [currentView, setCurrentView] = useState<'list' | 'write' | 'detail' | 'edit'>('list'); // 'list', 'write', 'detail', 'edit'
   const [selectedPost, setSelectedPost] = useState<BoardPost | null>(null);
@@ -40,7 +46,7 @@ export default function BoardPage() {
       id: 1,
       category: '분쟁해결사례/공유',
       title: '당근마켓 사기 피해 복구 성공했습니다',
-      author: '김**',
+      author: '당근러버',
       date: '2025.12.20',
       views: 234,
       likes: 45,
@@ -51,7 +57,7 @@ export default function BoardPage() {
       id: 2,
       category: '분쟁해결사례/공유',
       title: '쿠팡 배송 파손 제품, 이렇게 해결했어요',
-      author: '이**',
+      author: 'happybuyer',
       date: '2025.12.19',
       views: 189,
       likes: 32,
@@ -62,7 +68,7 @@ export default function BoardPage() {
       id: 3,
       category: '소비자/꿀팁/노하우',
       title: '소비자분쟁 조정 신청할 때 꼭 알아야 할 3가지',
-      author: '박**',
+      author: '소비자지킴이',
       date: '2025.12.18',
       views: 456,
       likes: 78,
@@ -73,7 +79,7 @@ export default function BoardPage() {
       id: 4,
       category: '무엇이든/물어보세요',
       title: '환불 절차가 궁금합니다',
-      author: '최**',
+      author: 'newbie2025',
       date: '2025.12.17',
       views: 567,
       likes: 89,
@@ -84,7 +90,7 @@ export default function BoardPage() {
       id: 5,
       category: '분쟁해결사례/공유',
       title: '11번가 미배송 건 환불 성공 후기',
-      author: '정**',
+      author: '쇼핑왕123',
       date: '2025.12.16',
       views: 342,
       likes: 56,
@@ -95,7 +101,7 @@ export default function BoardPage() {
       id: 6,
       category: '소비자/꿀팁/노하우',
       title: '전자제품 AS 받을 때 꼭 챙겨야 할 것들',
-      author: '한**',
+      author: 'Tech마스터',
       date: '2025.12.15',
       views: 523,
       likes: 92,
@@ -106,7 +112,7 @@ export default function BoardPage() {
       id: 7,
       category: '무엇이든/물어보세요',
       title: '중고거래 사기 당했는데 어떻게 해야 할까요?',
-      author: '오**',
+      author: '중고나라유저',
       date: '2025.12.14',
       views: 678,
       likes: 45,
@@ -117,7 +123,7 @@ export default function BoardPage() {
       id: 8,
       category: '분쟁해결사례/공유',
       title: '통신사 위약금 분쟁 해결 과정 공유',
-      author: '강**',
+      author: '통신전문가_K',
       date: '2025.12.13',
       views: 412,
       likes: 67,
@@ -128,7 +134,7 @@ export default function BoardPage() {
       id: 9,
       category: '소비자/꿀팁/노하우',
       title: '온라인 쇼핑 환불 거부 대처법',
-      author: '윤**',
+      author: '법률이야기',
       date: '2025.12.12',
       views: 789,
       likes: 134,
@@ -139,7 +145,7 @@ export default function BoardPage() {
       id: 10,
       category: '무엇이든/물어보세요',
       title: '택배 분실 시 보상 받는 방법 알려주세요',
-      author: '임**',
+      author: 'help_me!',
       date: '2025.12.11',
       views: 445,
       likes: 38,
@@ -150,7 +156,7 @@ export default function BoardPage() {
       id: 11,
       category: '분쟁해결사례/공유',
       title: '호텔 예약 취소 수수료 환불 받았어요',
-      author: '서**',
+      author: '여행러버88',
       date: '2025.12.10',
       views: 356,
       likes: 48,
@@ -161,7 +167,7 @@ export default function BoardPage() {
       id: 12,
       category: '소비자/꿀팁/노하우',
       title: '항공권 환불 최대한 받아내는 꿀팁',
-      author: '신**',
+      author: 'SkyTraveler',
       date: '2025.12.09',
       views: 891,
       likes: 156,
@@ -172,7 +178,7 @@ export default function BoardPage() {
       id: 13,
       category: '무엇이든/물어보세요',
       title: '헬스장 환불 문제 어떻게 해결하나요?',
-      author: '권**',
+      author: '헬스초보자',
       date: '2025.12.08',
       views: 623,
       likes: 71,
@@ -183,7 +189,7 @@ export default function BoardPage() {
       id: 14,
       category: '분쟁해결사례/공유',
       title: '자동차 중고거래 하자 분쟁 해결 후기',
-      author: '송**',
+      author: '카매니저@',
       date: '2025.12.07',
       views: 534,
       likes: 82,
@@ -194,7 +200,7 @@ export default function BoardPage() {
       id: 15,
       category: '소비자/꿀팁/노하우',
       title: '신용카드 부정사용 피해 예방법',
-      author: '유**',
+      author: '금융지킴이',
       date: '2025.12.06',
       views: 712,
       likes: 98,
@@ -205,7 +211,7 @@ export default function BoardPage() {
       id: 16,
       category: '무엇이든/물어보세요',
       title: '배달앱 환불 거부 정당한가요?',
-      author: '조**',
+      author: '배고픈사람',
       date: '2025.12.05',
       views: 489,
       likes: 54,
@@ -216,7 +222,7 @@ export default function BoardPage() {
       id: 17,
       category: '분쟁해결사례/공유',
       title: '가구 배송 파손 보상 받은 경험',
-      author: '장**',
+      author: 'interior_lover',
       date: '2025.12.04',
       views: 398,
       likes: 61,
@@ -227,7 +233,7 @@ export default function BoardPage() {
       id: 18,
       category: '소비자/꿀팁/노하우',
       title: '인터넷 쇼핑 피해 예방 체크리스트',
-      author: '최**',
+      author: '쇼핑달인',
       date: '2025.12.03',
       views: 645,
       likes: 107,
@@ -238,7 +244,7 @@ export default function BoardPage() {
       id: 19,
       category: '무엇이든/물어보세요',
       title: '렌탈 중도 해지 위약금이 너무 비싼데요',
-      author: '안**',
+      author: '정수기고민중',
       date: '2025.12.02',
       views: 556,
       likes: 69,
@@ -249,7 +255,7 @@ export default function BoardPage() {
       id: 20,
       category: '분쟁해결사례/공유',
       title: '학원비 환불 100% 받아낸 방법',
-      author: '황**',
+      author: '학부모연대',
       date: '2025.12.01',
       views: 723,
       likes: 128,
@@ -260,7 +266,7 @@ export default function BoardPage() {
       id: 21,
       category: '소비자/꿀팁/노하우',
       title: 'SNS 쇼핑몰 사기 피하는 법',
-      author: '배**',
+      author: 'sns탐정',
       date: '2025.11.30',
       views: 834,
       likes: 142,
@@ -271,7 +277,7 @@ export default function BoardPage() {
       id: 22,
       category: '무엇이든/물어보세요',
       title: '의료비 과다청구 신고 어떻게 하나요?',
-      author: '노**',
+      author: '환자의권리',
       date: '2025.11.29',
       views: 467,
       likes: 53,
@@ -282,7 +288,7 @@ export default function BoardPage() {
       id: 23,
       category: '분쟁해결사례/공유',
       title: '보험금 지급 거부 이의신청 성공',
-      author: '문**',
+      author: '보험전문가',
       date: '2025.11.28',
       views: 592,
       likes: 87,
@@ -293,7 +299,7 @@ export default function BoardPage() {
       id: 24,
       category: '소비자/꿀팁/노하우',
       title: '청약철회 기간과 행사 방법 정리',
-      author: '양**',
+      author: 'Legal_info',
       date: '2025.11.27',
       views: 678,
       likes: 115,
@@ -304,7 +310,7 @@ export default function BoardPage() {
       id: 25,
       category: '무엇이든/물어보세요',
       title: '중고차 보증 기간 내 고장, 어디에 요청하나요?',
-      author: '전**',
+      author: '자동차초보',
       date: '2025.11.26',
       views: 523,
       likes: 64,
@@ -315,7 +321,7 @@ export default function BoardPage() {
       id: 26,
       category: '분쟁해결사례/공유',
       title: '항공사 수하물 분실 보상 받은 후기',
-      author: '민**',
+      author: 'WorldTraveler',
       date: '2025.11.25',
       views: 445,
       likes: 72,
@@ -326,7 +332,7 @@ export default function BoardPage() {
       id: 27,
       category: '소비자/꿀팁/노하우',
       title: '명품 온라인 구매 시 주의사항',
-      author: '차**',
+      author: '럭셔리쇼퍼',
       date: '2025.11.24',
       views: 756,
       likes: 103,
@@ -337,7 +343,7 @@ export default function BoardPage() {
       id: 28,
       category: '무엇이든/물어보세요',
       title: '세탁소 옷 분실, 배상 받을 수 있나요?',
-      author: '주**',
+      author: '옷관리왕',
       date: '2025.11.23',
       views: 389,
       likes: 47,
@@ -348,7 +354,7 @@ export default function BoardPage() {
       id: 29,
       category: '분쟁해결사례/공유',
       title: '부동산 중개 수수료 분쟁 해결',
-      author: '하**',
+      author: '집구하기',
       date: '2025.11.22',
       views: 612,
       likes: 94,
@@ -359,7 +365,7 @@ export default function BoardPage() {
       id: 30,
       category: '소비자/꿀팁/노하우',
       title: '구독 서비스 자동결제 해지하는 방법',
-      author: '고**',
+      author: 'OTT마스터',
       date: '2025.11.21',
       views: 891,
       likes: 167,
@@ -367,6 +373,20 @@ export default function BoardPage() {
       preview: 'OTT, 음악 스트리밍 등 구독 서비스 자동결제 관리 꿀팁...'
     }
   ]);
+
+  // 마이페이지에서 게시글 클릭 시 해당 게시글 상세보기로 이동
+  useEffect(() => {
+    const state = location.state as { postId?: number; viewType?: string } | null;
+    if (state?.postId && state?.viewType === 'detail') {
+      const post = posts.find((p) => p.id === state.postId);
+      if (post) {
+        setSelectedPost(post);
+        setCurrentView('detail');
+        // state 초기화 (뒤로가기 시 다시 상세보기로 가지 않도록)
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, posts]);
 
   const getCategoryDisplayName = (categoryId: BoardCategoryId) => {
     if (categoryId === 'all') {
@@ -376,11 +396,21 @@ export default function BoardPage() {
   };
 
   const handleWritePost = (formData: BoardPostForm) => {
+    // 서브 카테고리가 있는 경우 카테고리 이름에 추가
+    let categoryDisplay = getCategoryDisplayName(formData.category);
+    if (formData.subCategory) {
+      const subCategoryNames: Record<string, string> = {
+        'before-mediation': '조정 이전 단계에서 해결',
+        'through-mediation': '조정을 통한 해결'
+      };
+      categoryDisplay += ` - ${subCategoryNames[formData.subCategory] || formData.subCategory}`;
+    }
+
     const newPost = {
       id: Date.now(),
-      category: getCategoryDisplayName(formData.category),
+      category: categoryDisplay,
       title: formData.title,
-      author: '현재사용자**',
+      author: '현재사용자',
       date: new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1),
       views: 0,
       likes: 0,
@@ -409,9 +439,19 @@ export default function BoardPage() {
   const handleUpdatePost = (postId: number, formData: BoardPostForm) => {
     const updatedPosts = posts.map(post => {
       if (post.id === postId) {
+        // 서브 카테고리가 있는 경우 카테고리 이름에 추가
+        let categoryDisplay = getCategoryDisplayName(formData.category);
+        if (formData.subCategory) {
+          const subCategoryNames: Record<string, string> = {
+            'before-mediation': '조정 이전 단계에서 해결',
+            'through-mediation': '조정을 통한 해결'
+          };
+          categoryDisplay += ` - ${subCategoryNames[formData.subCategory] || formData.subCategory}`;
+        }
+
         const updatedPost = {
           ...post,
-          category: getCategoryDisplayName(formData.category),
+          category: categoryDisplay,
           title: formData.title,
           preview: formData.content.substring(0, 50) + (formData.content.length > 50 ? '...' : ''),
           editedDate: new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1)
@@ -556,6 +596,36 @@ export default function BoardPage() {
     );
   }
 
+  // 로그인하지 않은 경우 안내 메시지 표시
+  if (!isAuthenticated) {
+    return (
+      <div className="board-page">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold mb-3 md:mb-4 text-dark-navy">자유게시판</h1>
+          <p className="text-sm sm:text-base text-gray-purple">소비자 분쟁 경험을 공유하고 서로 도와요</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
+          <div className="flex flex-col items-center gap-6">
+            <div className="w-20 h-20 bg-lavender/30 rounded-full flex items-center justify-center">
+              <Lock size={40} className="text-deep-teal" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-dark-navy mb-3">로그인이 필요합니다</h2>
+              <p className="text-gray-purple mb-6">자유게시판은 로그인을 한 회원만 이용할 수 있습니다.</p>
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="inline-flex items-center gap-2 bg-deep-teal text-white px-8 py-3 rounded-full font-semibold hover:bg-mint-green transition-all"
+              >
+                로그인하러 가기
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="board-page">
       {/* Board Header */}
@@ -572,7 +642,7 @@ export default function BoardPage() {
             className={`px-4 sm:px-5 md:px-6 py-2 md:py-3 rounded-full text-sm md:text-base font-medium transition-all ${
               activeTab === cat.id
                 ? 'bg-deep-teal text-white'
-                : 'bg-white border-2 border-ivory text-gray-purple hover:border-lavender'
+                : 'bg-white border-2 border-ivory text-gray-purple hover:border-deep-teal'
             }`}
             onClick={() => handleTabChange(cat.id)}
           >
@@ -596,7 +666,7 @@ export default function BoardPage() {
         <Search size={18} className="text-gray-purple sm:w-5 sm:h-5" />
         <select
           value={searchType}
-          onChange={(e) => setSearchType(e.target.value)}
+          onChange={(e) => setSearchType(e.target.value as BoardSearchType)}
           className="px-3 py-1.5 border-2 border-ivory rounded-lg text-sm font-medium text-gray-700 hover:border-lavender focus:outline-none focus:border-deep-teal transition-colors cursor-pointer"
         >
           <option value="title">제목</option>
@@ -687,10 +757,10 @@ export default function BoardPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 w-32">카테고리</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">제목</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 w-28">날짜</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 w-24">작성자</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 w-20">조회</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 w-20">댓글</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 w-20">좋아요</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 w-36">닉네임</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 w-16">조회</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 w-16">댓글</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-600 w-16">좋아요</th>
               </tr>
             </thead>
             <tbody>
@@ -724,23 +794,25 @@ export default function BoardPage() {
                       <span>{post.date}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs font-medium text-gray-700">
-                    {getAuthorDisplayName(post.author, post.isDeleted)}
+                  <td className="px-4 py-3 text-xs font-medium text-gray-700 max-w-36">
+                    <div className="line-clamp-2">
+                      {getAuthorDisplayName(post.author, post.isDeleted)}
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-1 text-xs text-gray-600">
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-center gap-0.5 text-xs text-gray-600">
                       <Eye size={12} />
                       <span>{post.views}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-1 text-xs text-gray-600">
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-center gap-0.5 text-xs text-gray-600">
                       <MessageSquare size={12} />
                       <span>{post.comments}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-1 text-xs text-gray-600">
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-center gap-0.5 text-xs text-gray-600">
                       <ThumbsUp size={12} />
                       <span>{post.likes}</span>
                     </div>

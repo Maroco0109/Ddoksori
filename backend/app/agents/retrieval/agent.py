@@ -32,7 +32,7 @@ Phase 7에서 MAS Supervisor의 4개 전문 Retrieval Agent로 대체됨:
 
 import logging
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from ...orchestrator.state import (
     ChatState,
@@ -46,42 +46,42 @@ logger = logging.getLogger(__name__)
 def _get_db_config() -> Dict[str, str]:
     """데이터베이스 연결 설정 반환"""
     return {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'dbname': os.getenv('DB_NAME', 'ddoksori'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'postgres'),
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": os.getenv("DB_PORT", "5432"),
+        "dbname": os.getenv("DB_NAME", "ddoksori"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "postgres"),
     }
 
 
 def _get_embed_api_url() -> str:
-    return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
+    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
-RETRIEVER_TYPE_STRUCTURED = 'structured'
-RETRIEVER_TYPE_HYBRID = 'hybrid'
-RETRIEVER_TYPE_LAW = 'law'
-RETRIEVER_TYPE_CRITERIA = 'criteria'
-RETRIEVER_TYPE_DISPUTE = 'dispute'
-RETRIEVER_TYPE_COUNSEL = 'counsel'
-RETRIEVER_TYPE_RDB = 'rdb'
+RETRIEVER_TYPE_STRUCTURED = "structured"
+RETRIEVER_TYPE_HYBRID = "hybrid"
+RETRIEVER_TYPE_LAW = "law"
+RETRIEVER_TYPE_CRITERIA = "criteria"
+RETRIEVER_TYPE_DISPUTE = "dispute"
+RETRIEVER_TYPE_COUNSEL = "counsel"
+RETRIEVER_TYPE_RDB = "rdb"
 
 
 def _build_search_query(state: ChatState) -> str:
-    user_query = state.get('user_query', '')
-    onboarding = state.get('onboarding')
-    
+    user_query = state.get("user_query", "")
+    onboarding = state.get("onboarding")
+
     query_parts = [user_query]
-    
+
     if onboarding:
         onboarding_dict = dict(onboarding)
-        purchase_item = onboarding_dict.get('purchase_item')
-        dispute_details = onboarding_dict.get('dispute_details')
+        purchase_item = onboarding_dict.get("purchase_item")
+        dispute_details = onboarding_dict.get("dispute_details")
         if purchase_item:
             query_parts.append(f"품목: {purchase_item}")
         if dispute_details:
             query_parts.append(f"상황: {dispute_details}")
-    
+
     return " ".join(query_parts)
 
 
@@ -90,31 +90,31 @@ def _build_search_query_from_plan(
     search_plan: Optional[Dict[str, Any]],
 ) -> str:
     if search_plan:
-        query = search_plan.get('query')
+        query = search_plan.get("query")
         if query:
             return query
     return _build_search_query(state)
 
 
 def _convert_to_retrieval_result(raw_result: Dict[str, Any]) -> RetrievalResult:
-    disputes = raw_result.get('disputes', [])
-    counsels = raw_result.get('counsels', [])
-    
+    disputes = raw_result.get("disputes", [])
+    counsels = raw_result.get("counsels", [])
+
     all_similarities = []
     for d in disputes:
-        all_similarities.append(d.get('similarity', 0))
+        all_similarities.append(d.get("similarity", 0))
     for c in counsels:
-        all_similarities.append(c.get('similarity', 0))
-    
+        all_similarities.append(c.get("similarity", 0))
+
     max_sim = max(all_similarities) if all_similarities else 0.0
     avg_sim = sum(all_similarities) / len(all_similarities) if all_similarities else 0.0
-    
+
     return RetrievalResult(
-        agency=raw_result.get('agency', {}),
+        agency=raw_result.get("agency", {}),
         disputes=disputes,
         counsels=counsels,
-        laws=raw_result.get('laws', []),
-        criteria=raw_result.get('criteria', []),
+        laws=raw_result.get("laws", []),
+        criteria=raw_result.get("criteria", []),
         max_similarity=max_sim,
         avg_similarity=avg_sim,
     )
@@ -122,67 +122,76 @@ def _convert_to_retrieval_result(raw_result: Dict[str, Any]) -> RetrievalResult:
 
 def _build_sources_from_retrieval(retrieval: RetrievalResult) -> List[Dict]:
     sources: List[Dict] = []
-    
+
     # 분쟁조정사례
-    for i, dispute in enumerate(retrieval.get('disputes', [])):
-        sources.append({
-            'type': 'dispute',
-            'index': i + 1,
-            'doc_id': dispute.get('doc_id', ''),
-            'title': dispute.get('doc_title', ''),
-            'source_org': dispute.get('source_org', ''),
-            'similarity': dispute.get('similarity', 0),
-            'url': dispute.get('url', ''),
-        })
-    
+    for i, dispute in enumerate(retrieval.get("disputes", [])):
+        sources.append(
+            {
+                "type": "dispute",
+                "index": i + 1,
+                "doc_id": dispute.get("doc_id", ""),
+                "title": dispute.get("doc_title", ""),
+                "source_org": dispute.get("source_org", ""),
+                "similarity": dispute.get("similarity", 0),
+                "url": dispute.get("url", ""),
+            }
+        )
+
     # 상담사례
-    for i, counsel in enumerate(retrieval.get('counsels', [])):
-        sources.append({
-            'type': 'counsel',
-            'index': i + 1,
-            'doc_id': counsel.get('doc_id', ''),
-            'title': counsel.get('doc_title', ''),
-            'source_org': counsel.get('source_org', ''),
-            'similarity': counsel.get('similarity', 0),
-            'url': counsel.get('url', ''),
-        })
-    
+    for i, counsel in enumerate(retrieval.get("counsels", [])):
+        sources.append(
+            {
+                "type": "counsel",
+                "index": i + 1,
+                "doc_id": counsel.get("doc_id", ""),
+                "title": counsel.get("doc_title", ""),
+                "source_org": counsel.get("source_org", ""),
+                "similarity": counsel.get("similarity", 0),
+                "url": counsel.get("url", ""),
+            }
+        )
+
     # 법령
-    for i, law in enumerate(retrieval.get('laws', [])):
-        sources.append({
-            'type': 'law',
-            'index': i + 1,
-            'unit_id': law.get('unit_id', ''),
-            'law_name': law.get('law_name', ''),
-            'full_path': law.get('full_path', ''),
-            'similarity': law.get('similarity', 0),
-        })
-    
+    for i, law in enumerate(retrieval.get("laws", [])):
+        sources.append(
+            {
+                "type": "law",
+                "index": i + 1,
+                "chunk_id": law.get("chunk_id", ""),
+                "law_name": law.get("law_name", ""),
+                "hierarchy_path": law.get("hierarchy_path", ""),
+                "similarity": law.get("similarity", 0),
+            }
+        )
+
     # 기준
-    for i, crit in enumerate(retrieval.get('criteria', [])):
-        sources.append({
-            'type': 'criteria',
-            'index': i + 1,
-            'unit_id': crit.get('unit_id', ''),
-            'source_label': crit.get('source_label', ''),
-            'category': crit.get('category', ''),
-            'item': crit.get('item', ''),
-            'similarity': crit.get('similarity', 0),
-        })
-    
+    for i, crit in enumerate(retrieval.get("criteria", [])):
+        sources.append(
+            {
+                "type": "criteria",
+                "index": i + 1,
+                "chunk_id": crit.get("chunk_id", ""),
+                "source_label": (crit.get("metadata") or {}).get("source_label", ""),
+                "category": crit.get("category", ""),
+                "item": (crit.get("metadata") or {}).get("item", ""),
+                "hierarchy_path": crit.get("hierarchy_path", ""),
+                "similarity": crit.get("similarity", 0),
+            }
+        )
+
     return sources
 
 
 def retrieval_node(state: ChatState) -> Dict:
     """
     [정보검색 노드 (Legacy)]
-    
+
     기본적인 StructuredRetriever를 사용하여 4개 섹션(분쟁/상담/법령/기준)을 모두 검색합니다.
     검색 계획(Search Plan) 없이 고정된 Top-K(3)로 검색합니다.
-    
+
     Args:
         state: 현재 ChatState
-        
+
     Returns:
         부분 상태 업데이트 dict:
         {
@@ -190,35 +199,35 @@ def retrieval_node(state: ChatState) -> Dict:
             'sources': List[Dict]  # operator.add로 누적됨
         }
     """
-    query_analysis = state.get('query_analysis')
-    if query_analysis and query_analysis.get('query_type') == 'general':
+    query_analysis = state.get("query_analysis")
+    if query_analysis and query_analysis.get("query_type") == "general":
         empty_retrieval: RetrievalResult = {
-            'agency': {},
-            'disputes': [],
-            'counsels': [],
-            'laws': [],
-            'criteria': [],
-            'max_similarity': 0.0,
-            'avg_similarity': 0.0,
+            "agency": {},
+            "disputes": [],
+            "counsels": [],
+            "laws": [],
+            "criteria": [],
+            "max_similarity": 0.0,
+            "avg_similarity": 0.0,
         }
         return {
-            'retrieval': empty_retrieval,
-            'sources': [],
+            "retrieval": empty_retrieval,
+            "sources": [],
         }
-    
+
     # 검색 쿼리 구성
     search_query = _build_search_query(state)
-    
+
     try:
         # StructuredRetriever import (지연 import로 순환 참조 방지)
         from .tools.specialized_retrievers import StructuredRetriever
-        
+
         db_config = _get_db_config()
         embed_api_url = _get_embed_api_url()
-        
+
         retriever = StructuredRetriever(db_config, embed_api_url)
         retriever.connect()
-        
+
         try:
             # 4섹션 검색 수행
             raw_result = retriever.search_all_sections(
@@ -230,30 +239,30 @@ def retrieval_node(state: ChatState) -> Dict:
             )
         finally:
             retriever.close()
-        
+
         # 결과 변환
         retrieval_result = _convert_to_retrieval_result(raw_result)
         sources = _build_sources_from_retrieval(retrieval_result)
-        
+
         return {
-            'retrieval': retrieval_result,
-            'sources': sources,
+            "retrieval": retrieval_result,
+            "sources": sources,
         }
-        
+
     except Exception as e:
         logger.error(f"[retrieval_node] Error: {e}")
         empty_retrieval: RetrievalResult = {
-            'agency': {},
-            'disputes': [],
-            'counsels': [],
-            'laws': [],
-            'criteria': [],
-            'max_similarity': 0.0,
-            'avg_similarity': 0.0,
+            "agency": {},
+            "disputes": [],
+            "counsels": [],
+            "laws": [],
+            "criteria": [],
+            "max_similarity": 0.0,
+            "avg_similarity": 0.0,
         }
         return {
-            'retrieval': empty_retrieval,
-            'sources': [],
+            "retrieval": empty_retrieval,
+            "sources": [],
         }
 
 
@@ -279,29 +288,29 @@ def _execute_retrieval_by_type(
 ) -> Dict[str, Any]:
     """
     지정된 리트리버 타입에 따라 검색을 실행합니다.
-    
+
     - structured: 기본 4-섹션 검색
     - hybrid: 벡터 + 키워드 검색 (RRF Fusion)
     - law/criteria/dispute/counsel: 특정 도메인 전용 검색
     - rdb: SQL 쿼리 기반 정형 데이터 검색
     """
-    from .tools.specialized_retrievers import (
-        StructuredRetriever,
-        LawRetriever,
-        CriteriaRetriever,
-        CaseRetriever,
-        AgencyClassifier,
-    )
     from .tools.hybrid_retriever import HybridRetriever
-    
+    from .tools.specialized_retrievers import (
+        AgencyClassifier,
+        CaseRetriever,
+        CriteriaRetriever,
+        LawRetriever,
+        StructuredRetriever,
+    )
+
     result: Dict[str, Any] = {
-        'agency': {},
-        'disputes': [],
-        'counsels': [],
-        'laws': [],
-        'criteria': [],
+        "agency": {},
+        "disputes": [],
+        "counsels": [],
+        "laws": [],
+        "criteria": [],
     }
-    
+
     if retriever_type == RETRIEVER_TYPE_STRUCTURED:
         retriever = StructuredRetriever(db_config, embed_api_url)
         retriever.connect()
@@ -316,7 +325,7 @@ def _execute_retrieval_by_type(
             result.update(raw)
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_HYBRID:
         retriever = HybridRetriever(db_config, embed_api_url)
         retriever.connect()
@@ -326,152 +335,170 @@ def _execute_retrieval_by_type(
             counsels = []
             for r in search_results:
                 item = {
-                    'chunk_id': r.chunk_id,
-                    'doc_id': r.doc_id,
-                    'content': r.content,
-                    'doc_title': r.doc_title,
-                    'source_org': r.source_org,
-                    'similarity': r.similarity,
+                    "chunk_id": r.chunk_id,
+                    "doc_id": r.doc_id,
+                    "content": r.content,
+                    "doc_title": r.doc_title,
+                    "source_org": r.source_org,
+                    "similarity": r.similarity,
                 }
-                if r.doc_type == 'mediation_case':
+                if r.doc_type == "mediation_case":
                     disputes.append(item)
-                elif r.doc_type == 'counsel_case':
+                elif r.doc_type == "counsel_case":
                     counsels.append(item)
-            result['disputes'] = disputes
-            result['counsels'] = counsels
+            result["disputes"] = disputes
+            result["counsels"] = counsels
             classifier = AgencyClassifier()
-            result['agency'] = classifier.classify(query)
+            result["agency"] = classifier.classify(query)
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_LAW:
         retriever = LawRetriever(db_config, embed_api_url)
         retriever.connect()
         try:
             law_results = retriever.search_two_stage(query, top_k)
-            result['laws'] = [
+            result["laws"] = [
                 {
-                    'unit_id': r.unit_id,
-                    'law_name': r.law_name,
-                    'full_path': r.full_path,
-                    'text': r.text,
-                    'similarity': r.similarity,
+                    "chunk_id": r.chunk_id,
+                    "dataset_type": r.dataset_type,
+                    "text": r.text,
+                    "similarity": r.similarity,
+                    "law_name": r.law_name,
+                    "chunk_type": r.chunk_type,
+                    "category": r.category,
+                    "source_url": r.source_url,
+                    "source_file": r.source_file,
+                    "printed_page": r.printed_page,
+                    "source_year": r.source_year,
+                    "hierarchy_path": (r.metadata or {}).get("hierarchy_path"),
+                    "metadata": r.metadata,
                 }
                 for r in law_results
             ]
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_CRITERIA:
         retriever = CriteriaRetriever(db_config, embed_api_url)
         retriever.connect()
         try:
             criteria_results = retriever.search_two_stage(query, top_k)
-            result['criteria'] = [
+            result["criteria"] = [
                 {
-                    'unit_id': r.unit_id,
-                    'source_label': r.source_label,
-                    'category': r.category,
-                    'item': r.item,
-                    'unit_text': r.unit_text,
-                    'similarity': r.similarity,
+                    "chunk_id": r.chunk_id,
+                    "dataset_type": r.dataset_type,
+                    "text": r.text,
+                    "similarity": r.similarity,
+                    "law_name": r.law_name,
+                    "chunk_type": r.chunk_type,
+                    "category": r.category,
+                    "source_url": r.source_url,
+                    "source_file": r.source_file,
+                    "printed_page": r.printed_page,
+                    "source_year": r.source_year,
+                    "metadata": r.metadata,
                 }
                 for r in criteria_results
             ]
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_DISPUTE:
         retriever = CaseRetriever(db_config, embed_api_url)
         retriever.connect()
         try:
-            result['disputes'] = retriever.search_disputes(query, top_k)
+            result["disputes"] = retriever.search_disputes(query, top_k)
             classifier = AgencyClassifier()
-            result['agency'] = classifier.classify(query)
+            result["agency"] = classifier.classify(query)
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_COUNSEL:
         retriever = CaseRetriever(db_config, embed_api_url)
         retriever.connect()
         try:
-            result['counsels'] = retriever.search_counsels(query, top_k)
+            result["counsels"] = retriever.search_counsels(query, top_k)
         finally:
             retriever.close()
-    
+
     elif retriever_type == RETRIEVER_TYPE_RDB:
         from .tools.rdb_retriever import RDBRetriever
-        
+
         retriever = RDBRetriever(db_config)
         retriever.connect()
         try:
             sql_params = filters or {}
             rdb_results = retriever.search_from_params(sql_params, top_k=top_k)
-            
-            for crit in rdb_results.get('criteria', []):
-                result['criteria'].append({
-                    'unit_id': crit.unit_id,
-                    'source_label': crit.source_label,
-                    'category': crit.category,
-                    'item': crit.item,
-                    'unit_text': crit.unit_text,
-                    'similarity': 1.0,
-                })
-            
-            for law in rdb_results.get('laws', []):
-                result['laws'].append({
-                    'unit_id': law.doc_id,
-                    'law_name': law.law_name,
-                    'full_path': law.path,
-                    'text': law.text,
-                    'similarity': 1.0,
-                })
+
+            for crit in rdb_results.get("criteria", []):
+                result["criteria"].append(
+                    {
+                        "unit_id": crit.unit_id,
+                        "source_label": crit.source_label,
+                        "category": crit.category,
+                        "item": crit.item,
+                        "unit_text": crit.unit_text,
+                        "similarity": 1.0,
+                    }
+                )
+
+            for law in rdb_results.get("laws", []):
+                result["laws"].append(
+                    {
+                        "unit_id": law.doc_id,
+                        "law_name": law.law_name,
+                        "full_path": law.path,
+                        "text": law.text,
+                        "similarity": 1.0,
+                    }
+                )
         finally:
             retriever.close()
-    
+
     return result
 
 
 def _merge_retrieval_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     merged: Dict[str, Any] = {
-        'agency': {},
-        'disputes': [],
-        'counsels': [],
-        'laws': [],
-        'criteria': [],
+        "agency": {},
+        "disputes": [],
+        "counsels": [],
+        "laws": [],
+        "criteria": [],
     }
-    
+
     seen_disputes = set()
     seen_counsels = set()
     seen_laws = set()
     seen_criteria = set()
-    
+
     for r in results:
-        if r.get('agency') and not merged['agency']:
-            merged['agency'] = r['agency']
-        
-        for d in r.get('disputes', []):
-            key = d.get('chunk_id') or d.get('doc_id')
+        if r.get("agency") and not merged["agency"]:
+            merged["agency"] = r["agency"]
+
+        for d in r.get("disputes", []):
+            key = d.get("chunk_id") or d.get("doc_id")
             if key and key not in seen_disputes:
                 seen_disputes.add(key)
-                merged['disputes'].append(d)
-        
-        for c in r.get('counsels', []):
-            key = c.get('chunk_id') or c.get('doc_id')
+                merged["disputes"].append(d)
+
+        for c in r.get("counsels", []):
+            key = c.get("chunk_id") or c.get("doc_id")
             if key and key not in seen_counsels:
                 seen_counsels.add(key)
-                merged['counsels'].append(c)
-        
-        for law in r.get('laws', []):
-            key = law.get('unit_id')
+                merged["counsels"].append(c)
+
+        for law in r.get("laws", []):
+            key = law.get("chunk_id")
             if key and key not in seen_laws:
                 seen_laws.add(key)
-                merged['laws'].append(law)
-        
-        for crit in r.get('criteria', []):
-            key = crit.get('unit_id')
+                merged["laws"].append(law)
+
+        for crit in r.get("criteria", []):
+            key = crit.get("chunk_id")
             if key and key not in seen_criteria:
                 seen_criteria.add(key)
-                merged['criteria'].append(crit)
-    
+                merged["criteria"].append(crit)
+
     return merged

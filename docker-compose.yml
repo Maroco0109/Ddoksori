@@ -1,27 +1,5 @@
-version: '3.8'
-
 services:
-  # PostgreSQL 데이터베이스 with pgvector
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: ddoksori_db
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-ddoksori}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
-      - ./backend/database/schema_v2_final.sql:/docker-entrypoint-initdb.d/02_schema_v2_final.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # CloudBeaver (Web-based Database Manager)
+  # CloudBeaver (Web-based Database Manager for RDS)
   cloudbeaver:
     image: dbeaver/cloudbeaver:latest
     container_name: ddoksori_cloudbeaver
@@ -29,10 +7,8 @@ services:
       - "8978:8978"
     volumes:
       - cloudbeaver_data:/opt/cloudbeaver/workspace
-    depends_on:
-      - db
 
-  # FastAPI 백엔드
+  # FastAPI backend
   backend:
     build:
       context: ./backend
@@ -43,16 +19,15 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
+      - REDIS_HOST=redis
     depends_on:
-      db:
+      redis:
         condition: service_healthy
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # React 프론트엔드
+  # React frontend
   frontend:
     build:
       context: ./frontend
@@ -64,32 +39,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://localhost:8000
     command: npm run dev -- --host
 
-  # BGE-M3 임베딩 서버 (Dense + Sparse)
-  # PR-T5: Added profiles to exclude from default 'docker compose up'
-  # Use: docker compose --profile bge-m3 up -d (to include BGE-M3)
-  bge_m3_embedding:
-    profiles: ["bge-m3"]
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.bge_m3
-    container_name: ddoksori_bge_m3
-    ports:
-      - "8003:8003"
-    environment:
-      - BGE_M3_PORT=8003
-    volumes:
-      - bge_m3_model_cache:/root/.cache/huggingface
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
-      interval: 30s
-      timeout: 10s
-      start_period: 120s
-      retries: 3
-
-  # Redis (S2-PR3: Answer Caching)
+  # Redis (Answer Caching)
   redis:
     image: redis:7-alpine
     container_name: ddoksori_redis
@@ -104,42 +57,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # Prometheus (S3-PR5: Monitoring)
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: ddoksori_prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./backend/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./backend/monitoring/rules:/etc/prometheus/rules
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    depends_on:
-      - backend
-
-  # Grafana (S3-PR5: Monitoring)
-  grafana:
-    image: grafana/grafana:latest
-    container_name: ddoksori_grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./backend/monitoring/grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
-
 volumes:
-  postgres_data:
   cloudbeaver_data:
-  bge_m3_model_cache:
   redis_data:
-  prometheus_data:
-  grafana_data:
