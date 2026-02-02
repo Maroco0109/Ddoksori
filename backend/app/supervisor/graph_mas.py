@@ -157,14 +157,14 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
         start_time = time.time()
 
         # v2: query_analysis에서 expanded_queries 사용
-        query_analysis = state.get('query_analysis', {})
-        expanded_queries = query_analysis.get('expanded_queries', [])
-        user_query = state.get('user_query', '')
+        query_analysis = state.get('query_analysis') or {}
+        expanded_queries = query_analysis.get('expanded_queries') or []
+        user_query = state.get('user_query') or ''
 
         # v2: supervisor에서 전달받은 agent_keywords 사용
-        supervisor_state = state.get('supervisor', {})
-        agent_keywords = supervisor_state.get('agent_keywords', {})
-        keywords = agent_keywords.get(agent_type, query_analysis.get('keywords', []))
+        supervisor_state = state.get('supervisor') or {}
+        agent_keywords = supervisor_state.get('agent_keywords') or {}
+        keywords = agent_keywords.get(agent_type) or query_analysis.get('keywords') or []
 
         # 메타데이터 필터 설정 (agent_type에 따라)
         metadata_filter = {}
@@ -183,17 +183,19 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 'categories': ['조정', '해결', '상담'],
             }
 
+        retrieval_task_input = {
+            'expanded_queries': expanded_queries,
+            'agent_keywords': keywords,
+            'metadata_filter': metadata_filter,
+            'top_k': 10,
+            'ignore_threshold': agent_type in ('law', 'criteria'),
+        }
+
         request = {
             'context': {
                 'user_query': user_query,
                 'query_analysis': query_analysis,
-                'expanded_queries': expanded_queries,
-                'agent_keywords': keywords,
-            },
-            'params': {
-                'top_k': 5,
-                'metadata_filter': metadata_filter,
-                'ignore_threshold': agent_type in ('law', 'criteria'),
+                'retrieval_task_input': retrieval_task_input,
             },
         }
 

@@ -390,7 +390,9 @@ class RAGGenerator:
         criteria: List[Dict],
         include_disclaimer: bool = True,
         retry_supplement: Optional[str] = None,
-        onboarding: Optional[Dict] = None
+        onboarding: Optional[Dict] = None,
+        system_prompt: Optional[str] = None,
+        user_prompt: Optional[str] = None
     ) -> Dict:
         """
         4개 섹션을 포함한 구조화된 응답 생성
@@ -454,12 +456,16 @@ class RAGGenerator:
             return result
 
         # LLM 프롬프트 생성
-        system_prompt = self._get_structured_system_prompt(include_disclaimer=include_disclaimer)
+        if system_prompt is None:
+            # 외부 프롬프트가 없으면 기존 방식 사용 (하위 호환)
+            system_prompt = self._get_structured_system_prompt(include_disclaimer=include_disclaimer)
         if retry_supplement:
             system_prompt += f"\n\n## 재생성 지침\n{retry_supplement}"
-        user_prompt = self._build_structured_prompt(
-            query, agency_info, disputes, counsels, laws, criteria, onboarding
-        )
+        if user_prompt is None:
+            # 외부 프롬프트가 없으면 기존 방식 사용 (하위 호환)
+            user_prompt = self._build_structured_prompt(
+                query, agency_info, disputes, counsels, laws, criteria, onboarding
+            )
 
         # LLM 호출 with timing
         start_time = time.time()

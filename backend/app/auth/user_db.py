@@ -83,7 +83,7 @@ class UserDB:
         user_id를 생성합니다.
 
         Args:
-            provider: OAuth 제공자 (google, kakao, naver)
+            provider: OAuth 제공자 (google, naver)
             provider_user_id: 제공자에서의 사용자 ID
 
         Returns:
@@ -105,7 +105,7 @@ class UserDB:
         기존 사용자가 있으면 정보를 갱신하고, 없으면 새로 생성합니다.
 
         Args:
-            provider: OAuth 제공자 (google, kakao, naver)
+            provider: OAuth 제공자 (google, naver)
             provider_user_id: 제공자에서의 사용자 ID
             email: 이메일 주소
             name: 사용자 이름
@@ -118,7 +118,7 @@ class UserDB:
             ValueError: 잘못된 provider
             psycopg2.Error: DB 오류
         """
-        if provider not in ("google", "kakao", "naver"):
+        if provider not in ("google", "naver"):
             raise ValueError(f"Invalid provider: {provider}")
 
         user_id = self._make_user_id(provider, provider_user_id)
@@ -216,7 +216,7 @@ class UserDB:
         OAuth 제공자와 제공자 사용자 ID로 사용자를 조회합니다.
 
         Args:
-            provider: OAuth 제공자 (google, kakao, naver)
+            provider: OAuth 제공자 (google, naver)
             provider_user_id: 제공자에서의 사용자 ID
 
         Returns:
@@ -268,3 +268,48 @@ class UserDB:
                 conn.close()
 
         await asyncio.to_thread(_update)
+
+    async def delete_user(self, user_id: str) -> None:
+        """
+        사용자와 관련 데이터를 삭제합니다 (트랜잭션).
+
+        Args:
+            user_id: 사용자 ID
+
+        Raises:
+            psycopg2.Error: DB 오류
+        """
+        def _delete():
+            conn = self._get_connection()
+            try:
+                with conn.cursor() as cur:
+                    # 1. OAuth 세션 삭제
+                    cur.execute("DELETE FROM oauth_sessions WHERE user_id = %s", (user_id,))
+                    # 2. 대화 요약 삭제 (conversation_summaries → conversations FK)
+                    cur.execute("""
+                        DELETE FROM conversation_summaries
+                        WHERE conversation_id IN (
+                            SELECT conversation_id FROM conversations WHERE user_id = %s
+                        )
+                    """, (user_id,))
+                    # 3. 대화 턴 삭제
+                    cur.execute("""
+                        DELETE FROM conversation_turns
+                        WHERE conversation_id IN (
+                            SELECT conversation_id FROM conversations WHERE user_id = %s
+                        )
+                    """, (user_id,))
+                    # 4. 대화 삭제
+                    cur.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
+                    # 5. 사용자 삭제
+                    cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+                conn.commit()
+                logger.info(f"[UserDB] 사용자 삭제 완료: user_id={user_id}")
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"[UserDB] 사용자 삭제 실패: {e}")
+                raise
+            finally:
+                conn.close()
+
+        await asyncio.to_thread(_delete)

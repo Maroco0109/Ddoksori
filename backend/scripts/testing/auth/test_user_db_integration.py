@@ -76,10 +76,10 @@ async def test_get_user_by_id_integration(user_db, check_db_available):
 
     # 사용자 생성
     user = await user_db.upsert_user(
-        provider="kakao",
+        provider="naver",
         provider_user_id=provider_user_id,
         email=f"{provider_user_id}@test.com",
-        name="Kakao User"
+        name="Naver User"
     )
 
     # ID로 조회

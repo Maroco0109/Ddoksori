@@ -1,81 +1,153 @@
-"""LawRetrievalAgent - 법령 검색 전용 에이전트
+"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
 
-통합 RRF 검색 사용 (Phase 8): SQL search_hybrid_rrf() → dataset_filter='law_guide'
-[LEGACY] 기존 계층적 검색 (항/호 → 조_전체) 로직은 제거됨
-"""
+import asyncio
+import logging
+import os
+import re
+from typing import Dict, Any, List, ClassVar, TypedDict
 
-from typing import Dict, Any, List, ClassVar, Optional
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .tools.specialized_retrievers import LawRetriever
+from .tools.rds_internal_retriever import SimilarChunkResult
 
-from .base_retrieval_agent import BaseRetrievalAgent
-from .tools.retriever import SearchResult
+
+logger = logging.getLogger(__name__)
+
+
+class LawDocument(TypedDict):
+    chunk_id: str
+    content: str
+    metadata: Dict[str, Any]
+    similarity: float
 
 
 class LawRetrievalAgent(BaseRetrievalAgent):
     """법령(소비자보호법, 전자상거래법 등) 검색 에이전트"""
-
+    
     agent_name: ClassVar[str] = "retrieval_law"
     agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
-    domain_key: ClassVar[str] = "law"
 
-    def _get_search_filters(
+
+    async def _execute_search(
         self,
-        metadata_filter: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """법령 도메인 필터: dataset_filter='law_guide'"""
-        filters: Dict[str, Any] = {"dataset_filter": "law_guide"}
+        query: str,
+        top_k: int,
+        task_input: Dict[str, Any] | None = None,
+    ) -> List[SimilarChunkResult]:
+        expanded_queries: List[str] = []
+        if task_input:
+            expanded_queries = task_input.get("expanded_queries") or []
+        if not expanded_queries:
+            expanded_queries = [query]
 
-        if metadata_filter:
-            if metadata_filter.get("dataset_type"):
-                filters["dataset_filter"] = metadata_filter["dataset_type"]
-            if metadata_filter.get("document_types"):
-                # 첫 번째 문서 유형을 필터로 사용
-                filters["document_type_filter"] = metadata_filter["document_types"][0]
+        db_config = _get_db_config()
+        embed_url = _get_embed_api_url()
 
-        return filters
-    
-    def _format_results(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
-        formatted = []
-        for r in results:
-            meta = r.metadata or {}
-            full_path = None
-            if isinstance(meta, dict):
-                # RDS law_guide stores a hierarchy path list.
-                hp = meta.get('hierarchy_path')
-                if isinstance(hp, list):
-                    full_path = ' > '.join(str(x) for x in hp if x)
+        document_types = None
+        if task_input:
+            metadata_filter = task_input.get("metadata_filter") or {}
+            document_types = metadata_filter.get("document_types") or None
+        
+        retriever = LawRetriever(db_config, embed_url)
+        retriever.connect()
+        
+        try:
+            per_query_k = max(top_k, 12)
+            all_results: List[List[SimilarChunkResult]] = []
+            for q in expanded_queries:
+                results = await asyncio.to_thread(
+                    retriever.hybrid_search,
+                    q,
+                    per_query_k,
+                    document_types,
+                )
+                all_results.append(results)
+
+            fused_scores: Dict[str, float] = {}
+            fused_results: Dict[str, SimilarChunkResult] = {}
+            from app.common.config import get_config
+            rrf_k = get_config().retrieval.rrf_k_python
+
+            for results in all_results:
+                for rank, result in enumerate(results, start=1):
+                    chunk_id = result.chunk_id
+                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rrf_k + rank))
+                    if chunk_id not in fused_results:
+                        fused_results[chunk_id] = result
+
+            for chunk_id, score in fused_scores.items():
+                fused_results[chunk_id].similarity = score
+
+            ranked = sorted(
+                fused_results.values(),
+                key=lambda r: r.similarity,
+                reverse=True,
+            )
+            # Filter deleted articles and limit to 2 per law/article key.
+            filtered: List[SimilarChunkResult] = []
+            seen_per_article: Dict[str, int] = {}
+            for result in ranked:
+                text = result.text or ""
+                if re.search(r"\(\).*삭제\s*<", text, re.DOTALL):
+                    continue
+
+                chunk_id = result.chunk_id or ""
+                parts = chunk_id.split("_")
+                if len(parts) >= 2:
+                    article_key = f"{parts[0]}_{parts[1]}"
                 else:
-                    full_path = meta.get('full_path')
+                    article_key = chunk_id
 
-            formatted.append({
-                'unit_id': None,
-                'law_name': meta.get('law_name') if isinstance(meta, dict) else None,
-                'full_path': full_path,
-                'text': r.content,
-                'similarity': r.similarity,
-            })
+                count = seen_per_article.get(article_key, 0)
+                if count >= 2:
+                    continue
+                seen_per_article[article_key] = count + 1
+                filtered.append(result)
+                if len(filtered) >= top_k:
+                    break
+
+            return filtered
+        finally:
+            retriever.close()
+    
+    def _format_results(self, results: List[SimilarChunkResult]) -> List[LawDocument]:
+        formatted: List[LawDocument] = []
+        for r in results:
+            raw_meta = r.metadata if isinstance(r.metadata, dict) else {}
+            merged_meta = dict(raw_meta)
+            merged_meta.update(
+                {
+                    "law_name": r.law_name,
+                    "full_path": raw_meta.get("hierarchy_path"),
+                    "article": raw_meta.get("조문번호"),
+                    "document_type": r.document_type,
+                    "dataset_type": r.dataset_type,
+                }
+            )
+
+            formatted.append(
+                {
+                    "chunk_id": r.chunk_id,
+                    "content": r.text,
+                    "metadata": merged_meta,
+                    "similarity": r.similarity,
+                }
+            )
+
         return formatted
     
-    def _build_sources(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
-        sources: List[Dict[str, Any]] = []
-        for i, r in enumerate(results):
-            meta = r.metadata or {}
-            full_path = None
-            if isinstance(meta, dict):
-                hp = meta.get('hierarchy_path')
-                if isinstance(hp, list):
-                    full_path = ' > '.join(str(x) for x in hp if x)
-                else:
-                    full_path = meta.get('full_path')
-
-            sources.append({
-                'type': 'law',
-                'index': i + 1,
-                'unit_id': None,
-                'law_name': r.doc_title,
-                'full_path': full_path,
-                'similarity': r.similarity,
-            })
-        return sources
+    def _build_sources(self, results: List[SimilarChunkResult]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "law",
+                "index": i + 1,
+                "chunk_id": r.chunk_id,
+                "law_name": r.law_name,
+                "hierarchy_path": (r.metadata or {}).get("hierarchy_path"),
+                "similarity": r.similarity,
+            }
+            for i, r in enumerate(results)
+        ]
 
 
 law_retrieval_agent = LawRetrievalAgent()

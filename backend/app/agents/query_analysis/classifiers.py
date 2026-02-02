@@ -187,7 +187,14 @@ def classify_query_type_with_confidence(query: str) -> Tuple[QueryType, float]:
         if re.search(pattern, query_lower):
             return "general", 0.9
 
+    # 법률명 패턴 우선 (예: "소비자보호법이 뭐야?" → law, not general)
+    # DEFINITIONAL 패턴보다 먼저 체크하여 법률명 포함 질문을 law로 분류
+    law_pattern_match = re.search(r'\S+법', query_lower)
+    if law_pattern_match:
+        return "law", 0.9
+
     # "환불이 뭐예요?" 같은 정의형 질문은 일반 대화로 처리
+    # (법률명이 포함되지 않은 정의형만 해당)
     for pattern in DEFINITIONAL_PATTERNS:
         if re.search(pattern, query_lower):
             return "general", 0.85
@@ -201,12 +208,6 @@ def classify_query_type_with_confidence(query: str) -> Tuple[QueryType, float]:
     # NEW: Procedure 체크 (절차 안내 질문)
     if is_procedure_query(query):
         return "procedure", 0.85
-
-    # 법령 문의 (법령 키워드가 명시적으로 포함)
-    # Pattern 1: 법률명 패턴 (예: "소비자기본법", "전자상거래법")
-    law_pattern_match = re.search(r'\S+법', query_lower)
-    if law_pattern_match:
-        return "law", 0.9
 
     # Pattern 2: 키워드 카운트 (2개 이상) 또는 특정 패턴
     law_count = sum(1 for kw in LAW_KEYWORDS if kw in query_lower)

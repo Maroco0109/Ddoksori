@@ -25,13 +25,9 @@ from app.auth.models import User
 from .models import (
     ChatRequest,
     ChatResponse,
-    AgencyRecommendation,
-    CaseReference,
-    LawReference,
-    CriteriaReference,
-    SimilarCases,
     NodeTiming,
 )
+from .response_builder import build_chat_response_data
 
 
 logger = logging.getLogger(__name__)
@@ -204,28 +200,18 @@ async def chat(
                 logger.debug(f"[L1 Cache SAVE] Cached response for: {request.message[:30]}...")
             # === PR-6 끝 ===
 
+        # 로깅용 retrieval 정보
         retrieval = final_state.get('retrieval') or {}
-        agency_info = retrieval.get('agency', {})
-        disputes = retrieval.get('disputes', [])
-        counsels = retrieval.get('counsels', [])
-        laws = retrieval.get('laws', [])
-        criteria = retrieval.get('criteria', [])
-
         rag_logger.log_structured_retrieval(
             entry=log_entry,
-            agency_info=agency_info,
-            disputes=disputes,
-            counsels=counsels,
-            laws=laws,
-            criteria=criteria
+            agency_info=retrieval.get('agency', {}),
+            disputes=retrieval.get('disputes', []),
+            counsels=retrieval.get('counsels', []),
+            laws=retrieval.get('laws', []),
+            criteria=retrieval.get('criteria', [])
         )
 
         answer = final_state.get('final_answer') or ''
-        sources = final_state.get('sources', [])
-        has_evidence = final_state.get('has_sufficient_evidence', True)
-
-        questions = []  # LEGACY: clarification 제거됨
-        followup_questions = final_state.get('followup_questions', [])
 
         # 어시스턴트 응답을 메모리에 추가
         if session_memory:
@@ -245,33 +231,18 @@ async def chat(
             )
             rag_logger.log_pipeline_trace(log_entry, pipeline_summary)
 
+        # 공통 응답 빌더로 응답 데이터 구성
+        response_data = build_chat_response_data(session_id, final_state)
+
         rag_logger.log_response(
             entry=log_entry,
             answer=answer,
-            chunks_used=len(sources),
-            sources_count=len(sources),
+            chunks_used=len(response_data['sources']),
+            sources_count=len(response_data['sources']),
             status="success"
         )
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
-
-        # 응답 구성
-        domain_response = None
-        if agency_info:
-            try:
-                domain_response = AgencyRecommendation(**agency_info)
-            except Exception:
-                pass
-
-        similar_cases_response = None
-        if disputes or counsels:
-            similar_cases_response = SimilarCases(
-                disputes=[CaseReference(**d) for d in disputes],
-                counsels=[CaseReference(**c) for c in counsels]
-            )
-
-        laws_response = [LawReference(**law) for law in laws] if laws else None
-        criteria_response = [CriteriaReference(**c) for c in criteria] if criteria else None
 
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None
@@ -287,18 +258,9 @@ async def chat(
             ]
 
         return ChatResponse(
-            session_id=session_id,
-            answer=answer,
-            chunks_used=len(sources),
+            **response_data,
+            chunks_used=len(response_data['sources']),
             model='gpt-4o-mini',
-            sources=sources,
-            has_sufficient_evidence=has_evidence,
-            clarifying_questions=questions,
-            followup_questions=followup_questions,
-            domain=domain_response,
-            similar_cases=similar_cases_response,
-            related_laws=laws_response,
-            related_criteria=criteria_response,
             node_timings=timing_response if request.debug else None,
             request_id=log_entry.request_id if request.debug else None,
             total_time_ms=log_entry.total_time_ms if request.debug else None
@@ -540,75 +502,18 @@ async def chat_stream_sse(
                             "(final_state.final_answer was empty, no review executed)"
                         )
 
-                retrieval = final_state.get('retrieval') or {}
-
-                # retrieval 정보 추출 (기존 /chat endpoint와 동일)
-                agency_info = retrieval.get('agency', {})
-                disputes = retrieval.get('disputes', [])
-                counsels = retrieval.get('counsels', [])
-                laws = retrieval.get('laws', [])
-                criteria = retrieval.get('criteria', [])
+                # 공통 응답 빌더로 응답 데이터 구성
+                response_data = build_chat_response_data(session_id, final_state)
+                # 스트리밍에서 누적한 answer가 더 정확할 수 있으므로 덮어쓰기
+                response_data['answer'] = answer
 
                 # 어시스턴트 응답을 메모리에 추가
                 if session_memory:
                     await session_memory.add_turn(role='assistant', content=answer)
 
-                # 소스 정보를 /chat endpoint와 동일하게 확장
-                sources = []
-                for dispute in disputes[:3]:
-                    sources.append({
-                        'type': 'dispute',
-                        'title': dispute.get('doc_title', ''),
-                        'source_org': dispute.get('source_org', ''),
-                        'similarity': dispute.get('similarity', 0),
-                        'content': dispute.get('content', ''),
-                        'case_uid': dispute.get('case_uid'),
-                        'product_name': dispute.get('product_name'),
-                    })
-                for counsel in counsels[:3]:
-                    sources.append({
-                        'type': 'counsel',
-                        'title': counsel.get('doc_title', ''),
-                        'source_org': counsel.get('source_org', ''),
-                        'similarity': counsel.get('similarity', 0),
-                        'content': counsel.get('content', ''),
-                    })
-                for law in laws[:3]:
-                    sources.append({
-                        'type': 'law',
-                        'title': f"{law.get('law_name', '')} {law.get('full_path', '')}",
-                        'similarity': law.get('similarity', 0),
-                        'content': law.get('content', ''),
-                        'law_name': law.get('law_name'),
-                        'article': law.get('article'),
-                    })
-                for criterion in criteria[:3]:
-                    sources.append({
-                        'type': 'criteria',
-                        'title': criterion.get('title', ''),
-                        'similarity': criterion.get('similarity', 0),
-                        'content': criterion.get('content', ''),
-                    })
-
-                _followup_qs = final_state.get('followup_questions', [])
-
                 complete_event = {
                     'type': 'complete',
-                    'data': {
-                        'session_id': session_id,
-                        'answer': answer,
-                        'sources': sources,
-                        'clarifying_questions': final_state.get('clarifying_questions', []),
-                        'followup_questions': _followup_qs,
-                        'has_sufficient_evidence': final_state.get('has_sufficient_evidence', True),
-                        'domain': agency_info if agency_info else None,
-                        'similar_cases': {
-                            'disputes': [{'doc_title': d.get('doc_title'), 'source_org': d.get('source_org'), 'similarity': d.get('similarity')} for d in disputes],
-                            'counsels': [{'doc_title': c.get('doc_title'), 'source_org': c.get('source_org'), 'similarity': c.get('similarity')} for c in counsels],
-                        } if (disputes or counsels) else None,
-                        'related_laws': [{'law_name': l.get('law_name'), 'article': l.get('article'), 'similarity': l.get('similarity')} for l in laws] if laws else None,
-                        'related_criteria': [{'title': c.get('title'), 'similarity': c.get('similarity')} for c in criteria] if criteria else None,
-                    }
+                    'data': response_data
                 }
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
 
@@ -622,20 +527,21 @@ async def chat_stream_sse(
                     )
                     rag_logger.log_pipeline_trace(log_entry, pipeline_summary)
 
-                # RAG 로깅 - /chat 엔드포인트와 동일
+                # RAG 로깅
+                retrieval = final_state.get('retrieval') or {}
                 rag_logger.log_structured_retrieval(
                     entry=log_entry,
-                    agency_info=agency_info,
-                    disputes=disputes,
-                    counsels=counsels,
-                    laws=laws,
-                    criteria=criteria
+                    agency_info=retrieval.get('agency', {}),
+                    disputes=retrieval.get('disputes', []),
+                    counsels=retrieval.get('counsels', []),
+                    laws=retrieval.get('laws', []),
+                    criteria=retrieval.get('criteria', [])
                 )
                 rag_logger.log_response(
                     entry=log_entry,
                     answer=answer,
-                    chunks_used=len(sources),
-                    sources_count=len(sources),
+                    chunks_used=len(response_data['sources']),
+                    sources_count=len(response_data['sources']),
                     status="success"
                 )
                 rag_logger.finalize(log_entry, start_time)

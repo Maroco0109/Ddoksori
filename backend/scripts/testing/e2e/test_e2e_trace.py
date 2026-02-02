@@ -22,6 +22,11 @@ _backend = str(Path(__file__).parent.parent.parent.parent)
 if _backend not in sys.path:
     sys.path.insert(0, _backend)
 
+# Ensure e2e directory on path for trace_logger
+_e2e_dir = str(Path(__file__).parent)
+if _e2e_dir not in sys.path:
+    sys.path.insert(0, _e2e_dir)
+
 from trace_logger import E2ETraceLogger
 
 pytestmark = [pytest.mark.e2e, pytest.mark.llm, pytest.mark.needs_db]

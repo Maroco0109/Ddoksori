@@ -48,11 +48,18 @@ class SearchRequest(BaseModel):
 
 class AgencyRecommendation(BaseModel):
     """추천 기관 정보"""
-    agency: str  # KCA, ECMC, KCDRC
-    agency_info: Dict[str, str]
-    dispute_type: str  # 1:N, 1:1, contents
-    reason: str
+    agency: str = ''  # KCA, ECMC, KCDRC
+    agency_info: Dict[str, str] = {}
+    dispute_type: str = ''  # 1:N, 1:1, contents
+    reason: str = ''
     confidence: float = 0.7
+    # 프론트엔드 호환 필드
+    is_restricted: bool = False
+    full_name: Optional[str] = None
+    description: Optional[str] = None
+    url: Optional[str] = None
+    agency_code: Optional[str] = None
+    restriction_reason: Optional[str] = None
 
 
 class CaseReference(BaseModel):

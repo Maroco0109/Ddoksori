@@ -14,7 +14,7 @@
 4. 최대 3-5개 질문 선택
 """
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 from .templates import (
     QUESTION_TEMPLATES,
     QuestionTemplate,
@@ -48,7 +48,8 @@ class FollowupQuestionGenerator:
         self,
         query_analysis: Dict,
         retrieval: Dict,
-        answer: str
+        answer: str,
+        format_id: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         """
         후속 질문과 명확화 질문을 생성합니다.
@@ -65,6 +66,7 @@ class FollowupQuestionGenerator:
                 - criteria: List
                 - agency: Dict
             answer: 생성된 답변
+            format_id: 답변 형식 식별자 (format 기반 필터링에 사용)
 
         Returns:
             {
@@ -85,7 +87,7 @@ class FollowupQuestionGenerator:
             }
         """
         # 1. 컨텍스트 구축
-        context = self._build_context(query_analysis, retrieval, answer)
+        context = self._build_context(query_analysis, retrieval, answer, format_id)
 
         # 2. 후속 질문 생성
         followup_questions = self._generate_followup_questions(context)
@@ -102,7 +104,8 @@ class FollowupQuestionGenerator:
         self,
         query_analysis: Dict,
         retrieval: Dict,
-        answer: str
+        answer: str,
+        format_id: Optional[str] = None,
     ) -> Dict:
         """
         템플릿 매칭을 위한 컨텍스트를 구축합니다.
@@ -111,6 +114,7 @@ class FollowupQuestionGenerator:
             query_analysis: 쿼리 분석 결과
             retrieval: 검색 결과
             answer: 생성된 답변
+            format_id: 답변 형식 식별자
 
         Returns:
             컨텍스트 딕셔너리
@@ -143,6 +147,9 @@ class FollowupQuestionGenerator:
             'missing_issue_detail': 'issue_detail' in missing_fields,
             'missing_seller_response': 'seller_response' in missing_fields,
             'missing_amount': 'amount' in missing_fields,
+
+            # 답변 형식
+            'format_id': format_id,
         }
 
     def _generate_followup_questions(self, context: Dict) -> List[str]:
@@ -156,6 +163,7 @@ class FollowupQuestionGenerator:
             후속 질문 목록 (최대 max_followup_questions개)
         """
         dispute_type = context.get('dispute_type', '일반')
+        format_id = context.get('format_id')
 
         # 1. 분쟁 유형에 맞는 템플릿 필터링
         candidate_templates = get_templates_by_dispute_type(dispute_type)
@@ -166,13 +174,29 @@ class FollowupQuestionGenerator:
             if t.question_type == 'followup'
         ]
 
-        # 3. 조건 매칭
-        matched_templates = self._match_templates(followup_templates, context)
+        # 3. format_id 기반 우선 필터링
+        if format_id:
+            format_preferred = self._get_format_preferred_templates(format_id)
+            if format_preferred:
+                # format 전용 템플릿 중 조건 매칭
+                preferred_matched = self._match_templates(format_preferred, context)
+                # 일반 템플릿 중 조건 매칭
+                general_matched = self._match_templates(
+                    [t for t in followup_templates if t not in format_preferred],
+                    context
+                )
+                # format 전용 우선, 나머지 보충
+                matched_templates = preferred_matched + general_matched
+            else:
+                matched_templates = self._match_templates(followup_templates, context)
+        else:
+            # 4. 조건 매칭 (기존 로직)
+            matched_templates = self._match_templates(followup_templates, context)
 
-        # 4. 우선순위 정렬
+        # 5. 우선순위 정렬
         matched_templates.sort(key=lambda t: t.priority, reverse=True)
 
-        # 5. 최대 개수 제한
+        # 6. 최대 개수 제한
         selected_templates = matched_templates[:self.max_followup_questions]
 
         return [t.question_text for t in selected_templates]
@@ -291,6 +315,37 @@ class FollowupQuestionGenerator:
                 return False
 
         return True
+
+    def _get_format_preferred_templates(
+        self,
+        format_id: str
+    ) -> List[QuestionTemplate]:
+        """
+        format_id에 맞는 우선 템플릿을 반환합니다.
+
+        Args:
+            format_id: 답변 형식 식별자
+
+        Returns:
+            해당 format에 우선 적용할 템플릿 목록
+        """
+        from .templates import FORMAT_GUIDED_TEMPLATES
+
+        FORMAT_TEMPLATE_MAP = {
+            'general_greeting': ['guide_to_dispute', 'guide_onboarding'],
+            'comprehensive_dispute': ['ask_similar_cases'],
+            'law_response': ['ask_law_detail', 'ask_situation_apply'],
+            'criteria_response': ['ask_criteria_cases'],
+        }
+
+        preferred_ids = FORMAT_TEMPLATE_MAP.get(format_id, [])
+        if not preferred_ids:
+            return []
+
+        return [
+            t for t in FORMAT_GUIDED_TEMPLATES
+            if t.template_id in preferred_ids
+        ]
 
 
 __all__ = ['FollowupQuestionGenerator']

@@ -26,6 +26,8 @@ from .search import router as search_router
 from .case import router as case_router
 from .metrics import router as metrics_router
 from .auth import router as auth_router
+from .admin import router as admin_router
+from .users import router as users_router
 
 # 모델도 함께 export
 from .models import (
@@ -57,6 +59,8 @@ __all__ = [
     'case_router',
     'metrics_router',
     'auth_router',
+    'admin_router',
+    'users_router',
 
     # 모델
     'ChatRequest',

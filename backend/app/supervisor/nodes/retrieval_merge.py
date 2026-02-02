@@ -277,6 +277,22 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     # 결과 병합
     merged = _merge_to_retrieval_result(individual_results)
 
+    # Agency 정보 병합 (query_analysis에서 도메인 라우팅 결과)
+    query_analysis = state.get('query_analysis') or {}
+    restricted_domain = query_analysis.get('restricted_domain')
+    restricted_agency_info = query_analysis.get('restricted_agency_info')
+
+    if restricted_domain and restricted_agency_info:
+        merged['agency'] = {
+            'domain': restricted_domain,
+            'name': restricted_agency_info.get('name', ''),
+            'organization': restricted_agency_info.get('organization', ''),
+            'url': restricted_agency_info.get('url', ''),
+            'phone': restricted_agency_info.get('phone', ''),
+            'is_restricted': True,
+        }
+        logger.info(f"[RetrievalMerge] Agency info populated: domain={restricted_domain}")
+
     # Post-retrieval product relevance filtering
     onboarding = state.get('onboarding') or {}
     purchase_item = onboarding.get('purchase_item')

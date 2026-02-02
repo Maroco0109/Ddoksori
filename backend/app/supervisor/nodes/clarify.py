@@ -190,11 +190,11 @@ def should_clarify(state: ChatState) -> bool:
     if chat_type == 'general':
         return False
 
-    # 조건 1: 검색 유사도 < 0.40
-    max_similarity = _get_max_similarity(state)
-    if max_similarity > 0 and max_similarity < SIMILARITY_THRESHOLD:
-        logger.info(f"[Clarify] Low similarity detected: {max_similarity:.2f} < {SIMILARITY_THRESHOLD}")
-        return True
+    # 조건 1: 검색 유사도 기반 clarify (비활성화 - RRF top-k 방식에서는 임계치 미적용)
+    # max_similarity = _get_max_similarity(state)
+    # if max_similarity > 0 and max_similarity < SIMILARITY_THRESHOLD:
+    #     logger.info(f"[Clarify] Low similarity detected: {max_similarity:.2f} < {SIMILARITY_THRESHOLD}")
+    #     return True
 
     # 조건 2: 필수 정보 누락
     missing_fields = _get_missing_fields(state)

@@ -335,10 +335,71 @@ CLARIFYING_TEMPLATES = [
 
 
 # ============================================================
+# 형식별 유도 질문 (Format-Guided) - 답변 형식 전환 유도
+# ============================================================
+
+FORMAT_GUIDED_TEMPLATES = [
+    # general_greeting → 분쟁 상담 유도
+    QuestionTemplate(
+        template_id='guide_to_dispute',
+        question_type='followup',
+        dispute_types=['일반', 'general', 'greeting', 'system_meta'],
+        question_text='혹시 제품이나 서비스 관련 불편한 경험이 있으셨나요?',
+        conditions={},
+        priority=5
+    ),
+    QuestionTemplate(
+        template_id='guide_onboarding',
+        question_type='followup',
+        dispute_types=['일반', 'general'],
+        question_text='어떤 제품에서 문제가 발생했나요? 품목과 상황을 알려주시면 관련 법령과 사례를 찾아드릴게요.',
+        conditions={},
+        priority=4
+    ),
+    # comprehensive_dispute → 사례 전환 유도
+    QuestionTemplate(
+        template_id='ask_similar_cases',
+        question_type='followup',
+        dispute_types=['dispute', '환불', '교환', '수리', '품질', '계약해지', '배송'],
+        question_text='유사한 사례에 대해 궁금하신가요?',
+        conditions={'has_cases': True},
+        priority=5
+    ),
+    # law_response → 상세/적용 유도
+    QuestionTemplate(
+        template_id='ask_law_detail',
+        question_type='followup',
+        dispute_types=['law', '법령'],
+        question_text='더 자세한 정보를 원하시나요?',
+        conditions={'has_laws': True},
+        priority=5
+    ),
+    QuestionTemplate(
+        template_id='ask_situation_apply',
+        question_type='followup',
+        dispute_types=['law', '법령'],
+        question_text='본인 상황에 이 법령이 어떻게 적용되는지 알려드릴까요?',
+        conditions={'has_laws': True},
+        priority=4
+    ),
+    # criteria_response → 사례/법령 전환 유도
+    QuestionTemplate(
+        template_id='ask_criteria_cases',
+        question_type='followup',
+        dispute_types=['criteria', '기준'],
+        question_text='이 기준이 적용된 실제 사례가 궁금하신가요?',
+        conditions={'has_cases': True},
+        priority=4
+    ),
+]
+
+
+# ============================================================
 # 통합 템플릿 라이브러리
 # ============================================================
 
 QUESTION_TEMPLATES: List[QuestionTemplate] = (
+    FORMAT_GUIDED_TEMPLATES +
     REFUND_TEMPLATES +
     EXCHANGE_TEMPLATES +
     REPAIR_TEMPLATES +
@@ -387,6 +448,7 @@ def get_templates_by_question_type(
 __all__ = [
     'QuestionTemplate',
     'QUESTION_TEMPLATES',
+    'FORMAT_GUIDED_TEMPLATES',
     'REFUND_TEMPLATES',
     'EXCHANGE_TEMPLATES',
     'REPAIR_TEMPLATES',

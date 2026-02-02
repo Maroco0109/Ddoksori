@@ -383,7 +383,8 @@ class RetrievalSettings(BaseSettings):
     RRF 파라미터, HyDE, Adaptive RAG, 도메인별 노출 제한 등을 관리합니다.
 
     환경변수:
-        RETRIEVAL_RRF_K: RRF k 파라미터 (기본값: 10)
+        RETRIEVAL_RRF_K: SQL 레벨 RRF k 파라미터 (기본값: 10)
+        RETRIEVAL_RRF_K_PYTHON: Python 2차 RRF fusion k값 (기본값: 60)
         RETRIEVAL_DEFAULT_TOP_K: 에이전트별 검색 수 (기본값: 10)
         RETRIEVAL_HYDE_ENABLED: HyDE 활성화 (기본값: true)
         RETRIEVAL_HYDE_MODEL: HyDE 가상 답변 생성 모델 (기본값: gpt-4o-mini)
@@ -400,7 +401,8 @@ class RetrievalSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="RETRIEVAL_")
 
     # RRF 파라미터
-    rrf_k: int = Field(default=10, description="RRF k 파라미터 (낮을수록 상위 결과 차별화)")
+    rrf_k: int = Field(default=10, description="SQL 레벨 RRF k 파라미터 (낮을수록 상위 결과 차별화)")
+    rrf_k_python: int = Field(default=60, description="Python 2차 RRF fusion k값 (expanded_queries 병합용)")
     default_top_k: int = Field(default=10, description="에이전트별 기본 검색 수")
 
     # HyDE 설정
@@ -421,6 +423,9 @@ class RetrievalSettings(BaseSettings):
     # 오버플로 캐시
     cache_overflow: bool = Field(default=True, description="오버플로 캐시 활성화")
     cache_ttl: int = Field(default=1800, description="오버플로 캐시 TTL (초)")
+
+    # 충분성 최소 품질 점수
+    sufficiency_min_score: float = Field(default=0.01, description="RRF 최소 품질 점수. 이하면 marginal 경고")
 
 
 # ============================================================
@@ -497,8 +502,6 @@ class AuthConfig(BaseSettings):
         JWT_TOKEN_EXPIRE_DAYS: JWT 토큰 만료 기간 (기본값: 30일)
         GOOGLE_CLIENT_ID: Google OAuth Client ID
         GOOGLE_CLIENT_SECRET: Google OAuth Client Secret
-        KAKAO_CLIENT_ID: Kakao REST API Key
-        KAKAO_CLIENT_SECRET: Kakao Client Secret
         NAVER_CLIENT_ID: Naver Client ID
         NAVER_CLIENT_SECRET: Naver Client Secret
         BACKEND_URL: Backend API URL (기본값: http://localhost:8000)
@@ -533,18 +536,6 @@ class AuthConfig(BaseSettings):
         default=None,
         alias="GOOGLE_CLIENT_SECRET",
         description="Google OAuth Client Secret"
-    )
-
-    # Kakao OAuth
-    kakao_client_id: Optional[str] = Field(
-        default=None,
-        alias="KAKAO_CLIENT_ID",
-        description="Kakao REST API Key"
-    )
-    kakao_client_secret: Optional[str] = Field(
-        default=None,
-        alias="KAKAO_CLIENT_SECRET",
-        description="Kakao Client Secret"
     )
 
     # Naver OAuth

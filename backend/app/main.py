@@ -49,6 +49,8 @@ from app.api import (
     case_router,
     metrics_router,
     auth_router,
+    admin_router,
+    users_router,
 )
 
 
@@ -82,6 +84,8 @@ app.include_router(search_router)
 app.include_router(case_router)
 app.include_router(metrics_router)
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(users_router)
 
 
 # 시작 로그

@@ -40,66 +40,56 @@ class RetrievalSufficiencyChecker:
         """
         검색 결과의 충분성을 평가합니다.
 
-        Args:
-            retrieval_result: RetrievalResult from base_retrieval_agent
-                Contains: disputes, counsels, laws, criteria, max_similarity, avg_similarity
+        RRF top-k 방식에서는 임계치 없이 결과가 있으면 항상 sufficient로 처리합니다.
+        결과가 0건일 때만 insufficient로 판정합니다.
 
-        Returns:
-            SufficiencyResult with confidence score, level, reason, and clarifying questions
+        PR-D: max_similarity가 매우 낮으면 marginal로 경고합니다.
         """
-        # 1. Extract metrics
+        from ...common.config import get_config
+
+        # Count total documents across all sections
+        total_doc_count = 0
+        for section in ["disputes", "counsels", "laws", "criteria"]:
+            total_doc_count += len(retrieval_result.get(section, []))
+
         max_similarity = retrieval_result.get("max_similarity", 0.0)
 
-        # Count relevant documents (similarity > 0.3) across all sections
-        relevant_doc_count = 0
-        for section in ["disputes", "counsels", "laws", "criteria"]:
-            docs = retrieval_result.get(section, [])
-            relevant_doc_count += sum(
-                1 for doc in docs if doc.get("similarity", 0.0) > 0.3
+        # Get minimum quality threshold from config
+        min_quality = get_config().retrieval.sufficiency_min_score
+
+        # 결과가 1건 이상이지만 품질이 매우 낮은 경우 → marginal
+        if total_doc_count > 0 and max_similarity < min_quality:
+            return SufficiencyResult(
+                confidence=0.5,
+                is_sufficient=True,
+                level="marginal",
+                reason=f"검색 결과 {total_doc_count}건 있으나 유사도가 낮음 (max={max_similarity:.4f})",
+                clarifying_questions=[
+                    "더 구체적인 제품명이나 상황을 알려주시면 더 정확한 정보를 찾을 수 있습니다.",
+                ],
             )
 
-        # Check if laws or criteria exist
-        has_laws = len(retrieval_result.get("laws", [])) >= 1
-        has_criteria = len(retrieval_result.get("criteria", [])) >= 1
+        # 결과가 1건 이상이면 sufficient
+        if total_doc_count > 0:
+            return SufficiencyResult(
+                confidence=1.0,
+                is_sufficient=True,
+                level="sufficient",
+                reason=f"검색된 문서 {total_doc_count}건으로 답변 생성이 가능합니다.",
+                clarifying_questions=[],
+            )
 
-        # 2. Compute scores
-        sim_score = min(max_similarity / self.min_similarity, 1.0)
-        doc_score = min(relevant_doc_count / self.min_documents, 1.0)
-        type_score = 1.0 if (has_laws or has_criteria) else 0.0
-
-        # 3. Compute confidence
-        confidence = 0.4 * sim_score + 0.3 * doc_score + 0.3 * type_score
-
-        # 4. Determine level
-        if confidence < self.low_threshold:
-            level = "insufficient"
-        elif confidence < self.medium_threshold:
-            level = "partial"
-        else:
-            level = "sufficient"
-
-        is_sufficient = confidence >= self.medium_threshold
-
-        # 5. Generate Korean reason
-        reason = self._generate_reason(
-            level, max_similarity, relevant_doc_count, has_laws, has_criteria
-        )
-
-        # 6. Generate clarifying questions if insufficient
-        clarifying_questions = []
-        if level == "insufficient":
-            clarifying_questions = [
+        # 결과가 0건일 때만 insufficient
+        return SufficiencyResult(
+            confidence=0.0,
+            is_sufficient=False,
+            level="insufficient",
+            reason="검색 결과가 없습니다. 질문을 더 구체적으로 해주세요.",
+            clarifying_questions=[
                 "분쟁 발생 날짜가 언제인가요?",
                 "구입한 제품/서비스의 구체적인 명칭은 무엇인가요?",
                 "어떤 문제가 발생했는지 자세히 설명해 주시겠어요?",
-            ]
-
-        return SufficiencyResult(
-            confidence=confidence,
-            is_sufficient=is_sufficient,
-            level=level,
-            reason=reason,
-            clarifying_questions=clarifying_questions,
+            ],
         )
 
     def _generate_reason(

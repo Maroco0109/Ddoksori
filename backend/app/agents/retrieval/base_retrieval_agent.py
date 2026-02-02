@@ -11,10 +11,12 @@ BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 """
 
 import asyncio
+import inspect
 import logging
 import os
+import time
 from abc import abstractmethod
-from typing import Dict, Any, List, ClassVar, Optional
+from typing import Dict, Any, List, ClassVar, Mapping, Optional, Sequence
 
 from ..base import BaseAgent
 from ...common.config import get_config
@@ -55,40 +57,40 @@ class BaseRetrievalAgent(BaseAgent):
         if error:
             return self.report_to_supervisor(status="failure", result=None, message=error)
 
-        context = request.get("context", {})
-        user_query = context.get("user_query", "")
-        query_analysis = context.get("query_analysis", {})
+        context = request.get("context") or {}
+        user_query = context.get("user_query") or ""
+        query_analysis = context.get("query_analysis") or {}
 
-        # === v2: 확장 쿼리 및 에이전트 키워드 지원 ===
-        expanded_queries = context.get("expanded_queries", [])
-        agent_keywords = context.get("agent_keywords", [])
-
-        params = request.get("params", {})
-        top_k = params.get("top_k", self.default_top_k)
-
-        # === v2: 메타데이터 필터 및 임계치 무시 옵션 ===
-        metadata_filter = params.get("metadata_filter", {})
-        ignore_threshold = params.get("ignore_threshold", False)
-
-        search_query = self._build_search_query(user_query, query_analysis)
-
-        try:
-            results = await self._execute_search(
-                search_query, top_k, metadata_filter, ignore_threshold
+        task_input = context.get("retrieval_task_input")
+        if task_input is None:
+            task_input = query_analysis.get("retrieval_task_input")
+        if task_input is None:
+            return self.report_to_supervisor(
+                status="failure",
+                result=None,
+                message=f"{self.agent_name}: retrieval_task_input missing."
             )
 
-            # Threshold 필터링 제거됨 (Adaptive RAG + HyDE에서 관련성 판단은 Answer Drafter가 수행)
-            if results:
-                logger.info(
-                    f"[{self.agent_name}] {len(results)} results retrieved "
-                    f"(top_sim={results[0].similarity:.3f}, "
-                    f"top_rrf={getattr(results[0], 'rrf_score', 0):.4f})"
-                )
+        search_query = user_query
+        top_k = task_input.get("top_k", self.default_top_k)
+
+        try:
+            search_start = time.time()
+            execute_params = inspect.signature(self._execute_search).parameters
+            if "task_input" in execute_params:
+                results = await self._execute_search(search_query, top_k, task_input)
+            else:
+                results = await self._execute_search(search_query, top_k)
+            search_time_ms = (time.time() - search_start) * 1000
 
             if not results:
                 return self.report_to_supervisor(
                     status="failure",
-                    result={"results": [], "sources": []},
+                    result={
+                        "results": [],
+                        "sources": [],
+                        "search_time_ms": search_time_ms,
+                    },
                     message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
                 )
 
@@ -105,6 +107,7 @@ class BaseRetrievalAgent(BaseAgent):
                     "sources": sources,
                     "max_similarity": max_sim,
                     "avg_similarity": avg_sim,
+                    "search_time_ms": search_time_ms,
                 },
                 message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
             )
@@ -140,7 +143,8 @@ class BaseRetrievalAgent(BaseAgent):
         query: str,
         top_k: int,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        ignore_threshold: bool = False
+        ignore_threshold: bool = False,
+        task_input: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
         """
         통합 RRF 검색 - UnifiedRetriever를 사용하여 SQL search_hybrid_rrf() 호출
@@ -156,18 +160,29 @@ class BaseRetrievalAgent(BaseAgent):
 
         try:
             filters = self._get_search_filters(metadata_filter)
-            results = await asyncio.to_thread(
-                retriever.search,
-                query=query,
-                top_k=top_k,
-                **filters,
-            )
+
+            # expanded_queries가 있으면 search_multi() 사용
+            expanded_queries = (task_input or {}).get('expanded_queries', [])
+            if expanded_queries and len(expanded_queries) > 1:
+                results = await asyncio.to_thread(
+                    retriever.search_multi,
+                    queries=expanded_queries,
+                    top_k=top_k,
+                    **filters,
+                )
+            else:
+                results = await asyncio.to_thread(
+                    retriever.search,
+                    query=query,
+                    top_k=top_k,
+                    **filters,
+                )
             return results
         finally:
             retriever.close()
 
     @abstractmethod
-    def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:
+    def _format_results(self, results: List[Any]) -> Sequence[Mapping[str, Any]]:
         """서브클래스에서 구현: 결과 포맷팅"""
         pass
 

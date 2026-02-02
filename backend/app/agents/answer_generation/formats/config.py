@@ -1,16 +1,20 @@
 """
 똑소리 프로젝트 - 답변 형식 설정
 
-작성일: 2026-01-28
+작성일: 2026-02-01
 
 [역할 및 책임]
 답변 형식(ResponseFormat)을 정의하고 관리합니다.
 각 형식은 쿼리 타입에 따라 다른 섹션 구성과 톤을 가집니다.
 
 [형식 종류]
-1. full_dispute: 분쟁/법률 조회 - 유사사례 + 법령 + 기관정보 (형식적)
-2. simple_general: 일반 대화 - 섹션 없는 자연스러운 대화 (친근함)
-3. info_only: 제한 영역 - 기관 안내 + 참고 사례 (정보제공)
+1. law_response: 법령 질문 - 법적 근거 + 면책 (형식적)
+2. law_onboarding: 법령+온보딩 - 온보딩 요약 + 적용 법령 + 근거 (형식적)
+3. criteria_response: 기준 질문 - 품질보증기간 + 하자기준 + 주의사항 (형식적)
+4. case_response: 사례 질문 - 조정사례 + 상담사례 + 분석 (형식적)
+5. comprehensive_dispute: 종합 분쟁 - 법령 + 기준 + 절차 (형식적)
+6. general_greeting: 일반/인사 - 섹션 없는 자연스러운 대화 (친근함)
+7. info_only: 제한 영역 - 기관 안내 + 참고 사례 (정보제공)
 """
 
 from typing import List, Dict, Literal, Optional
@@ -63,12 +67,14 @@ class ResponseFormat:
         sections: 포함할 섹션 목록
         include_disclaimer: 면책 문구 포함 여부
         tone: 답변 톤 (formal, friendly, informative)
+        closing_prompt: 마무리 멘트 (Optional)
     """
     format_id: str
     query_types: List[str]
     sections: List[SectionConfig]
     include_disclaimer: bool
     tone: Literal['formal', 'friendly', 'informative']
+    closing_prompt: Optional[str] = None
 
 
 # ============================================================
@@ -76,36 +82,128 @@ class ResponseFormat:
 # ============================================================
 
 RESPONSE_FORMATS: Dict[str, ResponseFormat] = {
-    'full_dispute': ResponseFormat(
-        format_id='full_dispute',
-        query_types=['dispute', 'law_inquiry'],
+    'law_response': ResponseFormat(
+        format_id='law_response',
+        query_types=['law'],
         sections=[
-            SectionConfig(
-                section_id='similar_cases',
-                required=True,
-                conditions={'has_cases': True}
-            ),
             SectionConfig(
                 section_id='legal_basis',
                 required=True,
                 conditions={'has_laws': True}
             ),
+        ],
+        include_disclaimer=True,
+        tone='formal',
+        closing_prompt="더 자세한 정보를 원하시나요?"
+    ),
+
+    'law_onboarding': ResponseFormat(
+        format_id='law_onboarding',
+        query_types=['law', 'dispute'],  # selected via onboarding context, not just query_type
+        sections=[
             SectionConfig(
-                section_id='agency_info',
+                section_id='onboarding_summary',
+                required=True,
+                conditions=None
+            ),
+            SectionConfig(
+                section_id='applicable_laws',
+                required=True,
+                conditions={'has_laws': True}
+            ),
+            SectionConfig(
+                section_id='rationale',
+                required=True,
+                conditions=None
+            ),
+        ],
+        include_disclaimer=True,
+        tone='formal',
+        closing_prompt=None
+    ),
+
+    'criteria_response': ResponseFormat(
+        format_id='criteria_response',
+        query_types=['criteria'],
+        sections=[
+            SectionConfig(
+                section_id='warranty_period',
+                required=True,
+                conditions=None
+            ),
+            SectionConfig(
+                section_id='defect_criteria',
+                required=True,
+                conditions={'has_criteria': True}
+            ),
+            SectionConfig(
+                section_id='caution_procedure',
+                required=True,
+                conditions=None
+            ),
+        ],
+        include_disclaimer=True,
+        tone='formal',
+        closing_prompt=None
+    ),
+
+    'case_response': ResponseFormat(
+        format_id='case_response',
+        query_types=['dispute'],  # selected via context, not just query_type
+        sections=[
+            SectionConfig(
+                section_id='mediation_cases',
+                required=True,
+                conditions={'has_cases': True}
+            ),
+            SectionConfig(
+                section_id='counsel_cases',
+                required=False,
+                conditions={'has_cases': True}
+            ),
+            SectionConfig(
+                section_id='case_analysis',
+                required=True,
+                conditions=None
+            ),
+        ],
+        include_disclaimer=True,
+        tone='formal',
+        closing_prompt=None
+    ),
+
+    'comprehensive_dispute': ResponseFormat(
+        format_id='comprehensive_dispute',
+        query_types=['dispute', 'procedure', 'ambiguous'],
+        sections=[
+            SectionConfig(
+                section_id='applicable_laws',
+                required=True,
+                conditions={'has_laws': True}
+            ),
+            SectionConfig(
+                section_id='criteria_detail',
+                required=True,
+                conditions={'has_criteria': True}
+            ),
+            SectionConfig(
+                section_id='next_steps',
                 required=False,
                 conditions=None
             ),
         ],
         include_disclaimer=True,
-        tone='formal'
+        tone='formal',
+        closing_prompt="유사한 사례에 대해 궁금하신가요?"
     ),
 
-    'simple_general': ResponseFormat(
-        format_id='simple_general',
-        query_types=['general', 'greeting', 'thanks', 'system_meta'],
+    'general_greeting': ResponseFormat(
+        format_id='general_greeting',
+        query_types=['general', 'greeting', 'thanks', 'system_meta', 'meta_conversational', 'ambiguous'],
         sections=[],
         include_disclaimer=False,
-        tone='friendly'
+        tone='friendly',
+        closing_prompt=None  # handled in prompt
     ),
 
     'info_only': ResponseFormat(
@@ -124,7 +222,8 @@ RESPONSE_FORMATS: Dict[str, ResponseFormat] = {
             ),
         ],
         include_disclaimer=True,
-        tone='informative'
+        tone='informative',
+        closing_prompt=None
     ),
 }
 

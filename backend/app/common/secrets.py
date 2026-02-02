@@ -28,7 +28,6 @@ SECRET_CATEGORIES = [
     "database",
     "llm",
     "oauth/google",
-    "oauth/kakao",
     "oauth/naver",
     "security",
     "infra",

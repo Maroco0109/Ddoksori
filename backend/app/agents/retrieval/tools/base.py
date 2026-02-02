@@ -146,6 +146,7 @@ def to_document(result: Any) -> Document:
 
     다음 타입들을 처리합니다:
     - SearchResult (retriever.py에서 사용)
+    - SimilarChunkResult (rds_retriever.py vector_chunks 기반 검색 결과)
     - 표준 필드를 가진 Dict
 
     Args:
@@ -176,7 +177,7 @@ def to_document(result: Any) -> Document:
         return Document(
             chunk_id=result.chunk_id,
             doc_id=getattr(result, 'doc_id', ''),
-            content=getattr(result, 'content', ''),
+            content=getattr(result, 'content', '') or getattr(result, 'text', ''),
             similarity=float(getattr(result, 'similarity', 0.0)),
             doc_type=getattr(result, 'doc_type', None),
             doc_title=getattr(result, 'doc_title', None),

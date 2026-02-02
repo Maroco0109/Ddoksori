@@ -3,7 +3,7 @@
 from typing import Dict, Any, List, ClassVar
 
 from ..base import BaseAgent
-from .agent import generation_node
+from .agent import generation_node_v2
 
 
 class AnswerDrafterAgent(BaseAgent):
@@ -30,7 +30,8 @@ class AnswerDrafterAgent(BaseAgent):
         }
         
         try:
-            result = generation_node(mock_state)
+            import asyncio
+            result = asyncio.run(generation_node_v2(mock_state))
             
             draft = result.get("draft_answer", "")
             has_evidence = result.get("has_sufficient_evidence", False)

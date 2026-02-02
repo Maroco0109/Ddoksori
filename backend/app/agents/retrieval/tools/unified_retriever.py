@@ -121,6 +121,54 @@ class UnifiedRetriever:
 
         return results
 
+    def search_multi(
+        self,
+        queries: List[str],
+        top_k: int = 10,
+        rrf_k: Optional[int] = None,
+        **filters,
+    ) -> List[SearchResult]:
+        """
+        다중 쿼리 검색 + Python-level RRF fusion.
+
+        expanded_queries 기반으로 여러 쿼리를 실행하고 RRF로 병합합니다.
+
+        Args:
+            queries: 검색 쿼리 리스트
+            top_k: 최종 반환 결과 수
+            rrf_k: RRF k 파라미터 (None이면 config.retrieval.rrf_k_python 사용)
+            **filters: search()에 전달할 필터 인자
+
+        Returns:
+            RRF 점수 기준 정렬된 검색 결과
+        """
+        if len(queries) <= 1:
+            return self.search(queries[0] if queries else "", top_k=top_k, **filters)
+
+        from ....common.config import get_config
+        effective_rrf_k = rrf_k if rrf_k is not None else get_config().retrieval.rrf_k_python
+
+        per_query_k = max(top_k, 12)
+
+        all_results = [self.search(q, top_k=per_query_k, **filters) for q in queries]
+
+        # RRF Fusion
+        fused_scores: Dict[str, float] = {}
+        fused_results: Dict[str, SearchResult] = {}
+        for results in all_results:
+            for rank, result in enumerate(results, start=1):
+                key = result.chunk_id
+                fused_scores[key] = fused_scores.get(key, 0.0) + 1.0 / (effective_rrf_k + rank)
+                if key not in fused_results:
+                    fused_results[key] = result
+
+        # Update similarity scores to fused scores
+        for chunk_id, score in fused_scores.items():
+            fused_results[chunk_id].similarity = score
+
+        ranked = sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+        return [fused_results[cid] for cid, _ in ranked[:top_k]]
+
     def _create_embedding(self, query: str) -> List[float]:
         """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim)"""
         if self._openai_client is None:

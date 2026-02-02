@@ -43,6 +43,8 @@ class AnswerGenerationFallback:
         include_disclaimer: bool = True,
         retry_supplement: Optional[str] = None,
         onboarding: Optional[Mapping[str, Any]] = None,
+        system_prompt: Optional[str] = None,
+        user_prompt: Optional[str] = None,
     ) -> Tuple[str, str, List[Dict]]:
         """
         폴백 체인을 통한 답변 생성
@@ -68,6 +70,8 @@ class AnswerGenerationFallback:
                     include_disclaimer=include_disclaimer,
                     retry_supplement=retry_supplement,
                     onboarding=onboarding,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
                 )
                 logger.info(f"[fallback] Successfully generated with {provider}/{model}")
                 return answer, model, claim_evidence_map
@@ -91,6 +95,8 @@ class AnswerGenerationFallback:
         include_disclaimer: bool,
         retry_supplement: Optional[str] = None,
         onboarding: Optional[Mapping[str, Any]] = None,
+        system_prompt: Optional[str] = None,
+        user_prompt: Optional[str] = None,
     ) -> Tuple[str, List[Dict]]:
         """LLM을 통한 답변 생성 시도"""
         from .tools.generator import RAGGenerator
@@ -107,6 +113,8 @@ class AnswerGenerationFallback:
             include_disclaimer=include_disclaimer,
             retry_supplement=retry_supplement,
             onboarding=dict(onboarding) if onboarding else None,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
         )
 
         answer = result.get('answer', '')

@@ -42,7 +42,7 @@ class User(BaseModel):
     email: str = Field(..., description="이메일 주소")
     name: str = Field(..., description="사용자 이름")
     avatar_url: Optional[str] = Field(None, description="프로필 이미지 URL")
-    provider: Literal["google", "kakao", "naver"] = Field(..., description="OAuth 제공자")
+    provider: Literal["google", "naver"] = Field(..., description="OAuth 제공자")
     provider_user_id: str = Field(..., description="제공자에서의 사용자 ID")
     created_at: Optional[datetime] = Field(None, description="계정 생성 시각")
     updated_at: Optional[datetime] = Field(None, description="계정 갱신 시각")

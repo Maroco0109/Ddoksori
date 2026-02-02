@@ -361,6 +361,28 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         use_fallback=True,
     )
 
+    # Step 5.5: 멀티턴 컨텍스트 보강 (짧은 후속 질문)
+    last_turn = state.get('_last_turn_context') or {}
+    last_query_type = last_turn.get('query_type')
+    last_product = (state.get('onboarding') or {}).get('purchase_item', '') or (state.get('onboarding') or {}).get('item_name', '')
+
+    if len(normalized_query) <= 10 and last_query_type in ('dispute', 'criteria', 'law'):
+        if "기준" in normalized_query and last_product:
+            query_type = "criteria"
+            logger.info(
+                f"[QueryAnalysis v2] Multi-turn override: '{normalized_query}' → criteria (last_product={last_product})"
+            )
+        elif "법" in normalized_query or "법령" in normalized_query:
+            query_type = "law"
+            logger.info(
+                f"[QueryAnalysis v2] Multi-turn override: '{normalized_query}' → law"
+            )
+        elif "사례" in normalized_query:
+            query_type = "dispute"
+            logger.info(
+                f"[QueryAnalysis v2] Multi-turn override: '{normalized_query}' → dispute (case)"
+            )
+
     # Step 6: 정보 추출 및 누락 필드 확인
     extracted_info = extract_info_from_message(user_query)
     missing_fields = check_missing_onboarding_fields(
