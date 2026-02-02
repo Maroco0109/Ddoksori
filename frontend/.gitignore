@@ -1,3 +1,19 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+dist-ssr
+*.tsbuildinfo
+
+# Environment variables (민감정보)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
 # Logs
 logs
 *.log
@@ -7,18 +23,36 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+nul
+
+# Claude Code (AI 도구 설정)
+.claude/
+
+# Testing
+coverage/
+*.lcov
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+*.cache

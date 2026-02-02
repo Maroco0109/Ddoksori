@@ -9,8 +9,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 설치
+# uv 설치 for faster builds
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Python 의존성 설치
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # 애플리케이션 코드 복사
 COPY . .

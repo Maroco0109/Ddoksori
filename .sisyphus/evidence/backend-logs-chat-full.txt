@@ -1,0 +1,37 @@
+⚠️ Remote server at http://localhost:19001 is not reachable.
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+⚠️ Remote server at http://localhost:19001 is not reachable.
+Remote BGE-M3 server at http://localhost:19003 is not reachable.
+BGE-M3 server not available. Sparse search will be disabled.
+INFO:     172.18.0.1:55384 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+Remote BGE-M3 server at http://localhost:19003 is not reachable.
+BGE-M3 server not available. Sparse search will be disabled.
+Remote BGE-M3 server at http://localhost:19003 is not reachable.
+Dense search failed: 임베딩 API 오류: HTTPConnectionPool(host='localhost', port=19001): Max retries exceeded with url: /embed (Caused by NewConnectionError("HTTPConnection(host='localhost', port=19001): Failed to establish a new connection: [Errno 111] Connection refused"))
+BGE-M3 server not available. Sparse search will be disabled.
+Remote BGE-M3 server at http://localhost:19003 is not reachable.
+Dense search failed: 임베딩 API 오류: HTTPConnectionPool(host='localhost', port=19001): Max retries exceeded with url: /embed (Caused by NewConnectionError("HTTPConnection(host='localhost', port=19001): Failed to establish a new connection: [Errno 111] Connection refused"))
+BGE-M3 server not available. Sparse search will be disabled.
+Remote BGE-M3 server at http://localhost:19003 is not reachable.
+Dense search failed: 임베딩 API 오류: HTTPConnectionPool(host='localhost', port=19001): Max retries exceeded with url: /embed (Caused by NewConnectionError("HTTPConnection(host='localhost', port=19001): Failed to establish a new connection: [Errno 111] Connection refused"))
+BGE-M3 server not available. Sparse search will be disabled.
+Dense search failed: 임베딩 API 오류: HTTPConnectionPool(host='localhost', port=19001): Max retries exceeded with url: /embed (Caused by NewConnectionError("HTTPConnection(host='localhost', port=19001): Failed to establish a new connection: [Errno 111] Connection refused"))
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.1:52894 - "POST /chat HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK
+INFO:     172.18.0.8:55462 - "GET /metrics HTTP/1.1" 200 OK

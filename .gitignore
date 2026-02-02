@@ -54,17 +54,42 @@ logs/
 .cache/
 models/
 
-# Test artifacts
-tests/**/*.log
-tests/**/results/
-tests/**/cache/
+# archives
+_archive
+backend/data/law/scripts/_archive
+backend/_archive
+docs/guides/_archive
 
-# SPLADE POC
-tests/splade_poc/models/
-tests/splade_poc/__pycache__/
-tests/splade_poc/*.pyc
 
-# Temporary test results
-/tmp/vector_db_test_results.json
-/tmp/chunking_quality_test_results.json
-/tmp/db_stats.json
+# documents
+docs/_archive
+# docs/plans
+docs/plans/manus
+
+
+# Data
+backend/data/counsel/
+backend/data/criteria/
+backend/data/dispute/
+backend/data/law
+backend/data/evaluation
+backend/data/golden_set
+backend/app/database
+
+# Test
+frontend/test-results
+frontend/e2e
+frontend/playwright-report
+frontend/vitest.config.ts
+backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
+
+# Agents
+.agent
+.claude
+.sisyphus
+.omc
+.cursorrules
+AGENTS.md
+CLAUDE.md
+AI_MEMO.md
+AUDIT_REPORT.md

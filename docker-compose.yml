@@ -1,26 +1,14 @@
-version: '3.8'
-
 services:
-  # PostgreSQL 데이터베이스 with pgvector
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: ddoksori_db
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-ddoksori}
+  # CloudBeaver (Web-based Database Manager for RDS)
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: ddoksori_cloudbeaver
     ports:
-      - "5432:5432"
+      - "8978:8978"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
 
-  # FastAPI 백엔드
+  # FastAPI backend
   backend:
     build:
       context: ./backend
@@ -31,16 +19,15 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
+      - REDIS_HOST=redis
     depends_on:
-      db:
+      redis:
         condition: service_healthy
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # React 프론트엔드
+  # React frontend
   frontend:
     build:
       context: ./frontend
@@ -52,8 +39,24 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://localhost:8000
     command: npm run dev -- --host
 
+  # Redis (Answer Caching)
+  redis:
+    image: redis:7-alpine
+    container_name: ddoksori_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
-  postgres_data:
+  cloudbeaver_data:
+  redis_data:
