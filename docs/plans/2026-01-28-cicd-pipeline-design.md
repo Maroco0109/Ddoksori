@@ -152,7 +152,7 @@ GitHub repo → **Settings → Secrets and variables → Actions → New reposit
 | 설정 | 값 |
 |------|---|
 | Name | `ddoksori-staging` |
-| AMI | Amazon Linux 2023 |
+| AMI | Ubuntu 24.04 LTS |
 | Instance type | `t3.small` (~$15/월) |
 | Key pair | 새로 생성 → `.pem` 파일 다운로드 & 안전 보관 |
 | Network | 기본 VPC |
@@ -173,30 +173,23 @@ GitHub repo → **Settings → Secrets and variables → Actions → New reposit
 SSH 접속 후 실행:
 
 ```bash
-# Docker 설치
-sudo yum update -y
-sudo yum install -y docker
+# Docker 설치 (Ubuntu)
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2 awscli curl
 sudo systemctl start docker && sudo systemctl enable docker
-sudo usermod -aG docker ec2-user
+sudo usermod -aG docker ubuntu
 
 # 재접속 (docker 그룹 반영)
 exit
 # SSH 재접속 후:
 
-# Docker Compose 설치
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
-  -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
 # 확인
 docker --version
-docker-compose --version
-
-# AWS CLI (Amazon Linux 2023에는 기본 포함)
+docker compose version
 aws --version
 
 # 프로젝트 디렉토리 생성
-mkdir -p /home/ec2-user/ddoksori/backups
+mkdir -p /home/ubuntu/ddoksori/backups
 ```
 
 #### B-3. EC2에 IAM Role 연결
@@ -219,19 +212,19 @@ EC2에 `docker-compose.prod.yml`을 배치:
 
 ```bash
 # 방법 1: scp로 로컬에서 전송
-scp -i <key.pem> docker-compose.prod.yml ec2-user@<EC2_HOST>:/home/ec2-user/ddoksori/
+scp -i <key.pem> docker-compose.prod.yml ubuntu@<EC2_HOST>:/home/ubuntu/ddoksori/
 
 # 방법 2: EC2에서 git clone (첫 배포 시)
-cd /home/ec2-user/ddoksori
+cd /home/ubuntu/ddoksori
 git clone <repo-url> .
 ```
 
 **Phase B 완료 체크리스트:**
-- [ ] EC2 인스턴스 생성 (t3.small, Amazon Linux 2023)
+- [ ] EC2 인스턴스 생성 (t3.small, Ubuntu 24.04 LTS)
 - [ ] 보안 그룹 설정 (22, 80, 8000)
 - [ ] Docker + Docker Compose 설치
 - [ ] EC2 IAM Role 연결 (ECR ReadOnly)
-- [ ] `/home/ec2-user/ddoksori/` 디렉토리 + `docker-compose.prod.yml` 배치
+- [ ] `/home/ubuntu/ddoksori/` 디렉토리 + `docker-compose.prod.yml` 배치
 - [ ] SSH 접속 테스트 성공
 
 ---
@@ -787,10 +780,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.EC2_HOST }}
-          username: ec2-user
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ddoksori
+            cd /home/ubuntu/ddoksori
 
             # ECR Login
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
@@ -1040,10 +1033,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.EC2_HOST }}
-          username: ec2-user
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ddoksori
+            cd /home/ubuntu/ddoksori
 
             # Backup current deployment
             echo "Creating backup..."
@@ -1144,10 +1137,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.EC2_HOST }}
-          username: ec2-user
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ddoksori
+            cd /home/ubuntu/ddoksori
 
             # ECR Login
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
@@ -1180,7 +1173,7 @@ jobs:
 
 ```bash
 # EC2에서 수동 롤백
-cd /home/ec2-user/ddoksori
+cd /home/ubuntu/ddoksori
 
 # 이전 이미지로 롤백
 export IMAGE_TAG=v1.0.0  # 이전 버전
