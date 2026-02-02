@@ -30,13 +30,14 @@ from app.supervisor.state import create_initial_state
 
 def _import_functions():
     from app.agents.query_analysis.agent import (
-        query_analysis_node,
-        _is_ambiguous_query,
-        _classify_query_type,
-        _classify_mode,
         AMBIGUOUS_QUERY_PATTERNS,
         DISPUTE_INTENT_KEYWORDS,
+        _classify_mode,
+        _classify_query_type,
+        _is_ambiguous_query,
+        query_analysis_node,
     )
+
     return (
         query_analysis_node,
         _is_ambiguous_query,
@@ -83,30 +84,40 @@ class TestAmbiguousQueryPatternMatching:
         "query,description,expected_type",
         [
             ("요약", "단독 동사", "ambiguous"),
-            ("도와줘", "단독 요청", "meta_conversational"),  # meta_conversational이 ambiguous보다 우선
+            (
+                "도와줘",
+                "단독 요청",
+                "meta_conversational",
+            ),  # meta_conversational이 ambiguous보다 우선
             ("이거 어떻게", "지시대명사+질문", "ambiguous"),
         ],
     )
     def test_pattern_matched_classify_type(self, query, description, expected_type):
         """Pattern 매칭 쿼리가 올바른 타입으로 분류되는지 확인"""
         query_type = self.classify_type(query)
-        assert query_type == expected_type, f"Expected '{expected_type}' type for '{query}', got '{query_type}'"
+        assert (
+            query_type == expected_type
+        ), f"Expected '{expected_type}' type for '{query}', got '{query_type}'"
 
     @pytest.mark.parametrize(
         "query,expected_mode",
         [
-            ("요약", "NEED_RAG"),       # ambiguous → NEED_RAG
-            ("도와줘", "NO_RETRIEVAL"),  # meta_conversational → NO_RETRIEVAL (legacy mode)
-            ("뭐", "NEED_RAG"),          # ambiguous → NEED_RAG
-            ("?", "NEED_RAG"),           # ambiguous → NEED_RAG
+            ("요약", "NEED_RAG"),  # ambiguous → NEED_RAG
+            (
+                "도와줘",
+                "NO_RETRIEVAL",
+            ),  # meta_conversational → NO_RETRIEVAL (legacy mode)
+            ("뭐", "NEED_RAG"),  # ambiguous → NEED_RAG
+            ("?", "NEED_RAG"),  # ambiguous → NEED_RAG
         ],
     )
     def test_pattern_matched_mode(self, query, expected_mode):
         """Pattern 매칭 쿼리가 올바른 모드로 설정되는지 확인"""
         state = create_initial_state(user_query=query, chat_type="dispute")
         result = self.qa_node(state)
-        assert result.get("mode") == expected_mode, \
-            f"Expected {expected_mode} for '{query}', got {result.get('mode')}"
+        assert (
+            result.get("mode") == expected_mode
+        ), f"Expected {expected_mode} for '{query}', got {result.get('mode')}"
 
 
 class TestAmbiguousQueryLLMFallback:
@@ -192,11 +203,12 @@ class TestSpecificDisputeQueries:
         state = create_initial_state(
             user_query=query,
             chat_type="dispute",
-            onboarding={"purchase_item": "테스트품목", "dispute_details": "테스트분쟁"}
+            onboarding={"purchase_item": "테스트품목", "dispute_details": "테스트분쟁"},
         )
         result = self.qa_node(state)
-        assert result.get("mode") == "NEED_RAG", \
-            f"Expected NEED_RAG for '{query}', got {result.get('mode')}"
+        assert (
+            result.get("mode") == "NEED_RAG"
+        ), f"Expected NEED_RAG for '{query}', got {result.get('mode')}"
 
 
 class TestGeneralConversation:
@@ -225,7 +237,9 @@ class TestGeneralConversation:
     def test_general_conversation_not_ambiguous(self, query):
         """D1-D4: 일반 대화는 ambiguous가 아닌 general 타입"""
         query_type = self.classify_type(query)
-        assert query_type == "general", f"Expected 'general' type for '{query}', got '{query_type}'"
+        assert (
+            query_type == "general"
+        ), f"Expected 'general' type for '{query}', got '{query_type}'"
 
     @pytest.mark.parametrize(
         "query",
@@ -235,8 +249,9 @@ class TestGeneralConversation:
         """일반 대화가 NO_RETRIEVAL 모드인지 확인"""
         state = create_initial_state(user_query=query, chat_type="dispute")
         result = self.qa_node(state)
-        assert result.get("mode") == "NO_RETRIEVAL", \
-            f"Expected NO_RETRIEVAL for '{query}', got {result.get('mode')}"
+        assert (
+            result.get("mode") == "NO_RETRIEVAL"
+        ), f"Expected NO_RETRIEVAL for '{query}', got {result.get('mode')}"
 
 
 class TestSystemMetaQueries:
@@ -264,7 +279,9 @@ class TestSystemMetaQueries:
     def test_system_meta_type(self, query):
         """E1-E3: 시스템 쿼리는 system_meta 타입"""
         query_type = self.classify_type(query)
-        assert query_type == "system_meta", f"Expected 'system_meta' type for '{query}', got '{query_type}'"
+        assert (
+            query_type == "system_meta"
+        ), f"Expected 'system_meta' type for '{query}', got '{query_type}'"
 
     @pytest.mark.parametrize(
         "query",
@@ -274,8 +291,9 @@ class TestSystemMetaQueries:
         """시스템 쿼리가 NO_RETRIEVAL 모드인지 확인"""
         state = create_initial_state(user_query=query, chat_type="dispute")
         result = self.qa_node(state)
-        assert result.get("mode") == "NO_RETRIEVAL", \
-            f"Expected NO_RETRIEVAL for '{query}', got {result.get('mode')}"
+        assert (
+            result.get("mode") == "NO_RETRIEVAL"
+        ), f"Expected NO_RETRIEVAL for '{query}', got {result.get('mode')}"
 
 
 class TestEdgeCases:
@@ -296,13 +314,17 @@ class TestEdgeCases:
         """F1: 짧지만 의도 키워드가 있는 쿼리 -> NOT ambiguous"""
         query = "환불"
         result = self.is_ambiguous(query)
-        assert result is False, f"'{query}' should NOT be ambiguous (has intent keyword)"
+        assert (
+            result is False
+        ), f"'{query}' should NOT be ambiguous (has intent keyword)"
 
     def test_short_query_with_verb(self):
         """F2: 의도 키워드 포함 -> NOT ambiguous"""
         query = "반품 어떻게"
         result = self.is_ambiguous(query)
-        assert result is False, f"'{query}' should NOT be ambiguous (has intent keyword)"
+        assert (
+            result is False
+        ), f"'{query}' should NOT be ambiguous (has intent keyword)"
 
     @pytest.mark.slow
     def test_product_only_no_problem(self):
@@ -310,7 +332,9 @@ class TestEdgeCases:
         query = "노트북"
         # 제품 키워드가 있으면 NOT ambiguous (Layer 2.5)
         result = self.is_ambiguous(query)
-        assert result is False, f"'{query}' should NOT be ambiguous (has product keyword)"
+        assert (
+            result is False
+        ), f"'{query}' should NOT be ambiguous (has product keyword)"
 
     @pytest.mark.slow
     def test_brand_and_product(self):
@@ -324,7 +348,9 @@ class TestEdgeCases:
         """F5: 법령 조회는 law 타입으로 분류"""
         query = "소비자보호법 제17조"
         query_type = self.classify_type(query)
-        assert query_type == "law", f"Expected 'law' type for '{query}', got '{query_type}'"
+        assert (
+            query_type == "law"
+        ), f"Expected 'law' type for '{query}', got '{query_type}'"
 
     def test_law_with_refund(self):
         """F6: 법령+환불 -> law 타입"""
@@ -339,9 +365,11 @@ class TestIntegrationFullFlow:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        (self.qa_node, _, _, _, _, _) = _import_functions()
+        self.qa_node, _, _, _, _, _ = _import_functions()
 
-    @pytest.mark.skip(reason="query_analysis_v2 필드가 현재 구현에서 사용되지 않음 - TODO: 구현 또는 테스트 제거")
+    @pytest.mark.skip(
+        reason="query_analysis_v2 필드가 현재 구현에서 사용되지 않음 - TODO: 구현 또는 테스트 제거"
+    )
     def test_ambiguous_query_full_flow(self):
         """모호한 쿼리의 전체 흐름 테스트"""
         state = create_initial_state(user_query="요약", chat_type="dispute")
@@ -356,7 +384,7 @@ class TestIntegrationFullFlow:
         state = create_initial_state(
             user_query="환불 거부당했어요",
             chat_type="dispute",
-            onboarding={"purchase_item": "노트북", "dispute_details": "환불 거부"}
+            onboarding={"purchase_item": "노트북", "dispute_details": "환불 거부"},
         )
         result = self.qa_node(state)
 

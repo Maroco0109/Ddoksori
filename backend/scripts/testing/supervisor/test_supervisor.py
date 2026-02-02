@@ -9,11 +9,11 @@ SupervisorNode 테스트
 - 입력 sanitization (Prompt Injection 방지)
 """
 
-import sys
-from pathlib import Path
 import asyncio
+import sys
 import time
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 backend_path = Path(__file__).parent.parent.parent.parent
@@ -25,12 +25,12 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from app.supervisor.nodes.supervisor import (
-    SupervisorNode,
-    supervisor_router,
-    create_initial_supervisor_state,
-    MAX_SUPERVISOR_ITERATIONS,
     LLM_TIMEOUT_SECONDS,
+    MAX_SUPERVISOR_ITERATIONS,
+    SupervisorNode,
     _determine_phase,
+    create_initial_supervisor_state,
+    supervisor_router,
 )
 from app.supervisor.state import ChatState, create_initial_state
 
@@ -84,7 +84,12 @@ class TestSupervisorNodeInit:
         # API 키가 있으면 LLM이 생성됨, 없으면 None
         # 최소 4개 핵심 에이전트 + 개별 retrieval agents 포함
         assert len(supervisor.available_agents) >= 4
-        for agent in ["query_analyst", "retrieval_team", "answer_drafter", "legal_reviewer"]:
+        for agent in [
+            "query_analyst",
+            "retrieval_team",
+            "answer_drafter",
+            "legal_reviewer",
+        ]:
             assert agent in supervisor.available_agents
 
 
@@ -101,7 +106,10 @@ class TestSupervisorNoLLM:
 
         assert decision["action"] == "call_agent"
         assert decision["target_agent"] == "query_analyst"
-        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
+        assert (
+            "Query Analysis" in decision["reasoning"]
+            or "Rule-based" in decision["reasoning"]
+        )
 
 
 class TestSupervisorRuleBasedOrder:
@@ -145,7 +153,11 @@ class TestSupervisorRuleBasedOrder:
         supervisor = SupervisorNode(llm=None)
         state = create_initial_state(user_query="테스트", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
-        state["supervisor"]["completed_tasks"] = ["query_analyst", "retrieval_team", "answer_drafter"]
+        state["supervisor"]["completed_tasks"] = [
+            "query_analyst",
+            "retrieval_team",
+            "answer_drafter",
+        ]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
 
@@ -157,7 +169,10 @@ class TestSupervisorRuleBasedOrder:
         state = create_initial_state(user_query="테스트", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = [
-            "query_analyst", "retrieval_team", "answer_drafter", "legal_reviewer"
+            "query_analyst",
+            "retrieval_team",
+            "answer_drafter",
+            "legal_reviewer",
         ]
 
         decision = asyncio.run(supervisor.decide_next_action(state))
@@ -178,7 +193,10 @@ class TestSupervisorTimeoutFallback:
 
         assert decision["action"] == "call_agent"
         assert decision["target_agent"] == "query_analyst"
-        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
+        assert (
+            "Query Analysis" in decision["reasoning"]
+            or "Rule-based" in decision["reasoning"]
+        )
 
 
 class TestSupervisorErrorFallback:
@@ -193,7 +211,10 @@ class TestSupervisorErrorFallback:
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "call_agent"
-        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
+        assert (
+            "Query Analysis" in decision["reasoning"]
+            or "Rule-based" in decision["reasoning"]
+        )
 
 
 class TestSupervisorJSONParseFallback:
@@ -208,11 +229,16 @@ class TestSupervisorJSONParseFallback:
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "call_agent"
-        assert "Query Analysis" in decision["reasoning"] or "Rule-based" in decision["reasoning"]
+        assert (
+            "Query Analysis" in decision["reasoning"]
+            or "Rule-based" in decision["reasoning"]
+        )
 
     def test_markdown_wrapped_json_parsed(self):
         """마크다운 코드 블록으로 감싼 JSON도 파싱 성공"""
-        json_in_markdown = '```json\n{"action": "respond", "reasoning": "마크다운 테스트"}\n```'
+        json_in_markdown = (
+            '```json\n{"action": "respond", "reasoning": "마크다운 테스트"}\n```'
+        )
         supervisor = SupervisorNode(llm=MockLLM(response=json_in_markdown))
         state = create_initial_state(user_query="테스트", chat_type="dispute")
         state["supervisor"] = create_initial_supervisor_state()
@@ -241,7 +267,9 @@ class TestSupervisorMaxIterationLimit:
 
         assert decision["action"] == "respond"
         assert decision.get("partial") is True
-        assert "부분 결과" in decision["reasoning"] or "최대 반복" in decision["reasoning"]
+        assert (
+            "부분 결과" in decision["reasoning"] or "최대 반복" in decision["reasoning"]
+        )
 
 
 class TestSupervisorLLMDecision:
@@ -489,7 +517,7 @@ class TestSupervisorMessage:
         msg = supervisor.create_supervisor_message(
             to_agent="query_analyst",
             message_type="request",
-            content={"task": "analyze_query"}
+            content={"task": "analyze_query"},
         )
 
         assert msg["from_agent"] == "supervisor"
@@ -502,9 +530,7 @@ class TestSupervisorMessage:
         """response 타입 메시지 생성"""
         supervisor = SupervisorNode(llm=None)
         msg = supervisor.create_supervisor_message(
-            to_agent="output",
-            message_type="response",
-            content={"action": "respond"}
+            to_agent="output", message_type="response", content={"action": "respond"}
         )
 
         assert msg["message_type"] == "response"

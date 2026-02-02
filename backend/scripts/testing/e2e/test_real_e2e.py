@@ -33,7 +33,10 @@ pytestmark = [pytest.mark.e2e, pytest.mark.llm, pytest.mark.needs_db]
 # Helper
 # ============================================================
 
-def _run_graph(compiled_graph, query: str, chat_type: str = "dispute") -> Dict[str, Any]:
+
+def _run_graph(
+    compiled_graph, query: str, chat_type: str = "dispute"
+) -> Dict[str, Any]:
     """MAS 그래프 동기 실행."""
     from app.supervisor import create_initial_state
 
@@ -53,6 +56,7 @@ def _run_graph(compiled_graph, query: str, chat_type: str = "dispute") -> Dict[s
 # ============================================================
 # 3.1 다중 도메인 쿼리 — 법령 + 사례 동시 필요
 # ============================================================
+
 
 class TestMultiDomainQuery:
     """여러 도메인의 검색 결과가 필요한 복합 쿼리 검증."""
@@ -96,6 +100,7 @@ class TestMultiDomainQuery:
 # 3.2 모호한 쿼리 — 의도 불명확
 # ============================================================
 
+
 class TestAmbiguousQuery:
     """모호하거나 불완전한 쿼리 처리 검증."""
 
@@ -121,6 +126,7 @@ class TestAmbiguousQuery:
 # 3.3 일반(general) 쿼리 — Fast Path 상세 검증
 # ============================================================
 
+
 class TestFastPathDetailed:
     """Fast path (일반 쿼리)의 상세 동작 검증."""
 
@@ -132,9 +138,7 @@ class TestFastPathDetailed:
         answer = result.get("final_answer") or result.get("draft_answer", "")
         assert answer, "인사 쿼리에 답변이 없습니다"
 
-    def test_fast_path_mode_set(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_fast_path_mode_set(self, compiled_mas_graph, openai_api_key):
         """Fast path 쿼리에서 mode가 NO_RETRIEVAL로 설정되는지 확인."""
         result = _run_graph(compiled_mas_graph, "오늘 날씨 어때요?", "general")
         mode = result.get("mode")
@@ -142,32 +146,39 @@ class TestFastPathDetailed:
         # Supervisor가 LLM 기반으로 결정하므로 mode가 설정되었는지만 확인
         assert mode is not None, "general 쿼리에서 mode가 설정되지 않았습니다"
 
-    def test_fast_path_no_review(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_fast_path_no_review(self, compiled_mas_graph, openai_api_key):
         """Fast path에서 review가 실행되지 않는지 확인."""
         result = _run_graph(compiled_mas_graph, "감사합니다", "general")
         timings = result.get("_node_timings", {})
-        assert "review" not in timings, (
-            f"Fast path에서 review가 실행됨: {list(timings.keys())}"
-        )
+        assert (
+            "review" not in timings
+        ), f"Fast path에서 review가 실행됨: {list(timings.keys())}"
 
 
 # ============================================================
 # 3.4 프로토콜 필수 키 검증 (실제 데이터)
 # ============================================================
 
+
 class TestProtocolComplianceReal:
     """실제 파이프라인 출력의 프로토콜 필수 키 검증."""
 
     QUERY_ANALYSIS_KEYS = {
-        "intent", "original_query", "expanded_queries",
-        "keywords", "retriever_types", "needs_clarification", "missing_fields",
+        "intent",
+        "original_query",
+        "expanded_queries",
+        "keywords",
+        "retriever_types",
+        "needs_clarification",
+        "missing_fields",
     }
 
     RETRIEVAL_KEYS = {
-        "source", "documents", "max_similarity",
-        "avg_similarity", "search_time_ms",
+        "source",
+        "documents",
+        "max_similarity",
+        "avg_similarity",
+        "search_time_ms",
     }
 
     def test_query_analysis_has_all_protocol_keys(
@@ -200,13 +211,9 @@ class TestProtocolComplianceReal:
         for ir in individual:
             missing = self.RETRIEVAL_KEYS - set(ir.keys())
             source = ir.get("source", "unknown")
-            assert not missing, (
-                f"retrieval_{source}에 누락된 프로토콜 키: {missing}"
-            )
+            assert not missing, f"retrieval_{source}에 누락된 프로토콜 키: {missing}"
 
-    def test_retrieval_similarity_positive(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_retrieval_similarity_positive(self, compiled_mas_graph, openai_api_key):
         """retrieval 결과의 similarity 값이 양수인지 확인."""
         result = _run_graph(
             compiled_mas_graph,
@@ -216,14 +223,15 @@ class TestProtocolComplianceReal:
         individual = result.get("individual_retrieval_results", [])
         for ir in individual:
             max_sim = ir.get("max_similarity", 0)
-            assert max_sim > 0, (
-                f"retrieval_{ir.get('source')}의 max_similarity가 0 이하: {max_sim}"
-            )
+            assert (
+                max_sim > 0
+            ), f"retrieval_{ir.get('source')}의 max_similarity가 0 이하: {max_sim}"
 
 
 # ============================================================
 # 3.5 Node Timing 검증
 # ============================================================
+
 
 class TestNodeTimings:
     """_node_timings를 통한 파이프라인 단계별 실행 검증."""
@@ -247,9 +255,7 @@ class TestNodeTimings:
             f"실행된 노드: {sorted(actual_nodes)}"
         )
 
-    def test_node_timings_have_duration(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_node_timings_have_duration(self, compiled_mas_graph, openai_api_key):
         """각 노드의 duration_ms가 양수인지 확인."""
         result = _run_graph(
             compiled_mas_graph,
@@ -259,21 +265,18 @@ class TestNodeTimings:
         timings = result.get("_node_timings", {})
         for node_name, timing_data in timings.items():
             duration = timing_data.get("duration_ms", 0)
-            assert duration > 0, (
-                f"{node_name}의 duration_ms가 0 이하: {duration}"
-            )
+            assert duration > 0, f"{node_name}의 duration_ms가 0 이하: {duration}"
 
 
 # ============================================================
 # 3.6 Supervisor 상태 검증
 # ============================================================
 
+
 class TestSupervisorState:
     """Supervisor 상태 필드 검증."""
 
-    def test_supervisor_state_populated(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_supervisor_state_populated(self, compiled_mas_graph, openai_api_key):
         """분쟁 쿼리 실행 후 supervisor 상태가 채워지는지 확인."""
         result = _run_graph(
             compiled_mas_graph,
@@ -283,9 +286,7 @@ class TestSupervisorState:
         supervisor = result.get("supervisor", {})
         assert supervisor, "supervisor 상태가 비어있습니다"
 
-    def test_dispute_mode_set(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_dispute_mode_set(self, compiled_mas_graph, openai_api_key):
         """분쟁 쿼리에서 mode가 설정되는지 확인."""
         result = _run_graph(
             compiled_mas_graph,
@@ -300,12 +301,11 @@ class TestSupervisorState:
 # 3.7 답변 품질 — 법률 인용 포함 검증
 # ============================================================
 
+
 class TestAnswerQualityExtended:
     """답변의 법률 인용 품질 검증."""
 
-    def test_dispute_answer_length_sufficient(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_dispute_answer_length_sufficient(self, compiled_mas_graph, openai_api_key):
         """분쟁 답변이 충분한 길이인지 확인 (최소 200자)."""
         result = _run_graph(
             compiled_mas_graph,
@@ -348,12 +348,11 @@ class TestAnswerQualityExtended:
 # 3.8 Restricted 도메인 쿼리
 # ============================================================
 
+
 class TestRestrictedDomain:
     """금융/의료 등 제한 도메인 쿼리 처리 검증."""
 
-    def test_medical_query_handled_gracefully(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_medical_query_handled_gracefully(self, compiled_mas_graph, openai_api_key):
         """의료 관련 쿼리가 적절히 처리되는지 확인."""
         result = _run_graph(
             compiled_mas_graph,
@@ -368,12 +367,11 @@ class TestRestrictedDomain:
 # 3.9 캐시 미사용 확인
 # ============================================================
 
+
 class TestCacheBehavior:
     """캐시 관련 상태 검증."""
 
-    def test_first_query_not_cached(
-        self, compiled_mas_graph, openai_api_key
-    ):
+    def test_first_query_not_cached(self, compiled_mas_graph, openai_api_key):
         """고유한 쿼리의 첫 실행은 캐시 히트가 아닌지 확인."""
         unique_query = f"환불 테스트 쿼리 {uuid.uuid4().hex[:8]}"
         result = _run_graph(compiled_mas_graph, unique_query)

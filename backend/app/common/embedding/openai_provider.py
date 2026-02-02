@@ -61,8 +61,7 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
             )
         except ImportError:
             raise ImportError(
-                "openai 패키지가 필요합니다. "
-                "pip install openai 명령어로 설치하세요."
+                "openai 패키지가 필요합니다. " "pip install openai 명령어로 설치하세요."
             )
 
         self._model = model

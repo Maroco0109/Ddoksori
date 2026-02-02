@@ -23,45 +23,48 @@
     from app.supervisor.state import SupervisorState, AgentMessage
 """
 
-from typing import List, Dict, Optional, Annotated, Literal, Any
-from typing_extensions import TypedDict
 import operator
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from langgraph.graph import MessagesState
+from typing_extensions import TypedDict
 
-# === 개별 모듈에서 타입 import ===
-from .session import (
-    OnboardingInfo,
-    ChatType,
-    SessionState,
-)
-from .agent_results import (
+from .agent_results import (  # v2 타입
+    AgentResultsState,
+    CitedCase,
+    IndividualRetrievalResult,
     QueryAnalysisResult,
     RetrievalResult,
-    IndividualRetrievalResult,
-    ReviewResult,
-    AgentResultsState,
-    # v2 타입
-    CitedCase,
-    ViolationV2,
     RetryContext,
+    ReviewResult,
+    ViolationV2,
+)
+from .control import (
+    ControlState,
+    RoutingMode,
+    TraceEntry,
 )
 from .output import (
     ClaimEvidenceMapping,
-    ResponseDepth,
     OutputState,
+    ResponseDepth,
 )
-from .control import (
-    RoutingMode,
-    TraceEntry,
-    ControlState,
+
+# === 개별 모듈에서 타입 import ===
+from .session import (
+    ChatType,
+    OnboardingInfo,
+    SessionState,
 )
+
+
 # =============================================================================
 # [DEPRECATED] ReAct 패턴 - MAS Supervisor로 대체됨 (Phase 7)
 # 하위 호환성을 위해 stub 정의만 유지. 실제 구현은 _archive/로 이동됨.
 # =============================================================================
 class ReActStep(TypedDict):
     """[DEPRECATED] ReAct pattern removed in Phase 7. Use MAS Supervisor instead."""
+
     thought: str
     action: str
     action_input: Dict[str, Any]
@@ -70,6 +73,7 @@ class ReActStep(TypedDict):
 
 class ReActState(TypedDict, total=False):
     """[DEPRECATED] ReAct pattern removed in Phase 7. Use SupervisorState instead."""
+
     react_steps: List[ReActStep]
     current_iteration: int
     max_iterations: int
@@ -77,9 +81,11 @@ class ReActState(TypedDict, total=False):
     last_thought: Optional[str]
     last_action: Optional[str]
     last_observation: Optional[str]
+
+
 from .memory import (
-    ConversationTurn,
     CompactSummary,
+    ConversationTurn,
     MemoryState,
     RAGConversationMemory,
     RAGTurn,
@@ -88,8 +94,6 @@ from .supervisor import (
     AgentMessage,
     SupervisorState,
 )
-
-
 
 
 def _merge_dicts(existing: Optional[Dict], new: Optional[Dict]) -> Dict:
@@ -167,8 +171,9 @@ class ChatState(MessagesState):
         # 노드 타이밍
         _node_timings: 노드별 실행 시간 기록
     """
+
     # === 세션 메타데이터 ===
-    chat_type: Literal['dispute', 'general']
+    chat_type: Literal["dispute", "general"]
     onboarding: Optional[OnboardingInfo]
     user_query: str
     session_id: Optional[str]  # 세션 ID (캐시 키로 사용)
@@ -210,7 +215,9 @@ class ChatState(MessagesState):
     # === 개별 Retrieval 결과 (Phase 5: MAS) ===
     # 4개 Retrieval Agent가 병렬로 실행되어 각각의 결과를 저장
     # operator.add로 누적되어 retrieval_merge_node에서 병합됨
-    individual_retrieval_results: Annotated[List[IndividualRetrievalResult], operator.add]
+    individual_retrieval_results: Annotated[
+        List[IndividualRetrievalResult], operator.add
+    ]
 
     # === MAS v2 추가 필드 ===
     retry_context: Optional[RetryContext]  # 재생성 컨텍스트
@@ -244,7 +251,7 @@ class ChatState(MessagesState):
 
 def create_initial_state(
     user_query: str,
-    chat_type: Literal['dispute', 'general'] = 'general',
+    chat_type: Literal["dispute", "general"] = "general",
     onboarding: Optional[OnboardingInfo] = None,
     max_iterations: Optional[int] = None,
 ) -> ChatState:
@@ -269,7 +276,7 @@ def create_initial_state(
     """
     # chat_type에 따른 max_iterations 기본값 설정
     if max_iterations is None:
-        max_iterations = 1 if chat_type == 'general' else 2
+        max_iterations = 1 if chat_type == "general" else 2
 
     return ChatState(
         # 세션 메타데이터
@@ -278,29 +285,25 @@ def create_initial_state(
         onboarding=onboarding,
         user_query=user_query,
         session_id=None,
-
         # 에이전트 결과
         query_analysis=None,
         retrieval=None,
         draft_answer=None,
         review=None,
-
         # 최종 출력
         final_answer=None,
         sources=[],
         has_sufficient_evidence=True,
         retrieval_confidence=0.0,
         claim_evidence_map=[],
-        response_depth='full',
+        response_depth="full",
         available_details=None,
-
         # 제어 플래그
         retry_count=0,
         low_similarity_mode=False,
-        mode='NEED_RAG',
+        mode="NEED_RAG",
         guardrail_blocked=False,
         guardrail_type=None,
-
         # ReAct 패턴
         react_steps=[],
         current_iteration=0,
@@ -309,41 +312,31 @@ def create_initial_state(
         last_thought=None,
         last_action=None,
         last_observation=None,
-
         # === Supervisor (Phase 5: MAS) ===
         supervisor=None,
-
         # === 개별 Retrieval 결과 (Phase 5: MAS) ===
         individual_retrieval_results=[],
-
         # === MAS v2 추가 필드 ===
         retry_context=None,
         cited_cases=[],
         expanded_queries=[],
-
         # 노드 타이밍
         _node_timings={},
-
         # 에이전트 트레이스
         _agent_trace_entries=[],
-
         # 메모리 관리
         conversation_history=[],
         compact_summary=None,
         total_turn_count=0,
-
         # RAG 대화 메모리
         rag_conversation_memory=[],
-
         # Phase D: 이전 턴 컨텍스트
         _last_turn_context=None,
-
         # 후속 질문
         followup_questions=[],
-
         # 분쟁 슬롯
         dispute_slots={},
-        conversation_phase='initial',
+        conversation_phase="initial",
     )
 
 
@@ -354,48 +347,41 @@ UnifiedState = ChatState
 # === 모든 public 심볼 export ===
 __all__ = [
     # 세션
-    'OnboardingInfo',
-    'ChatType',
-    'SessionState',
-
+    "OnboardingInfo",
+    "ChatType",
+    "SessionState",
     # 에이전트 결과
-    'QueryAnalysisResult',
-    'RetrievalResult',
-    'IndividualRetrievalResult',
-    'ReviewResult',
-    'AgentResultsState',
+    "QueryAnalysisResult",
+    "RetrievalResult",
+    "IndividualRetrievalResult",
+    "ReviewResult",
+    "AgentResultsState",
     # v2 타입
-    'CitedCase',
-    'ViolationV2',
-    'RetryContext',
-
+    "CitedCase",
+    "ViolationV2",
+    "RetryContext",
     # 출력
-    'ClaimEvidenceMapping',
-    'ResponseDepth',
-    'OutputState',
-
+    "ClaimEvidenceMapping",
+    "ResponseDepth",
+    "OutputState",
     # 제어
-    'RoutingMode',
-    'TraceEntry',
-    'ControlState',
-
+    "RoutingMode",
+    "TraceEntry",
+    "ControlState",
     # ReAct
-    'ReActStep',
-    'ReActState',
-
+    "ReActStep",
+    "ReActState",
     # 메모리
-    'ConversationTurn',
-    'CompactSummary',
-    'MemoryState',
-    'RAGConversationMemory',
-    'RAGTurn',
-
+    "ConversationTurn",
+    "CompactSummary",
+    "MemoryState",
+    "RAGConversationMemory",
+    "RAGTurn",
     # 슈퍼바이저
-    'AgentMessage',
-    'SupervisorState',
-
+    "AgentMessage",
+    "SupervisorState",
     # 통합 상태
-    'ChatState',
-    'UnifiedState',
-    'create_initial_state',
+    "ChatState",
+    "UnifiedState",
+    "create_initial_state",
 ]

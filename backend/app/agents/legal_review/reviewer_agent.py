@@ -10,12 +10,12 @@ LegalReviewerAgent - 법률 검토 에이전트 (Enhanced)
 """
 
 import logging
-from typing import Dict, Any, List, ClassVar, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from ..base import BaseAgent
-from .llm_reviewer import get_reviewer
-from .relevance_checker import get_relevance_checker, RelevanceResult
 from .agent import verify_citation_accuracy
+from .llm_reviewer import get_reviewer
+from .relevance_checker import RelevanceResult, get_relevance_checker
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,12 @@ class LegalReviewerAgent(BaseAgent):
     )
     required_inputs: ClassVar[List[str]] = ["draft_answer"]
     provided_outputs: ClassVar[List[str]] = [
-        "review", "final_answer", "passed",
-        "hallucination_check", "relevance_check", "confidence_score"
+        "review",
+        "final_answer",
+        "passed",
+        "hallucination_check",
+        "relevance_check",
+        "confidence_score",
     ]
 
     def __init__(self):
@@ -52,13 +56,17 @@ class LegalReviewerAgent(BaseAgent):
             try:
                 self._relevance_checker = get_relevance_checker()
             except Exception as e:
-                logger.warning(f"[LegalReviewerAgent] RelevanceChecker init failed: {e}")
+                logger.warning(
+                    f"[LegalReviewerAgent] RelevanceChecker init failed: {e}"
+                )
         return self._relevance_checker
 
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
         if error:
-            return self.report_to_supervisor(status="failure", result=None, message=error)
+            return self.report_to_supervisor(
+                status="failure", result=None, message=error
+            )
 
         context = request.get("context", {})
 
@@ -67,7 +75,7 @@ class LegalReviewerAgent(BaseAgent):
             return self.report_to_supervisor(
                 status="failure",
                 result=None,
-                message="검토할 답변이 없습니다 (draft_answer 누락)"
+                message="검토할 답변이 없습니다 (draft_answer 누락)",
             )
 
         # 상태 구성
@@ -106,7 +114,9 @@ class LegalReviewerAgent(BaseAgent):
             if hallucination_check and not hallucination_check.get("passed", True):
                 unverified = hallucination_check.get("unverified_refs", [])
                 if unverified:
-                    violations.append(f"Hallucination 의심: {', '.join(unverified[:3])}")
+                    violations.append(
+                        f"Hallucination 의심: {', '.join(unverified[:3])}"
+                    )
 
             # 4. Confidence Score 계산
             confidence_score = self._calculate_confidence(
@@ -131,7 +141,7 @@ class LegalReviewerAgent(BaseAgent):
                         "violations": violations,
                         "confidence_score": confidence_score,
                     },
-                    message=f"검토 통과. 신뢰도: {confidence_score:.2f}"
+                    message=f"검토 통과. 신뢰도: {confidence_score:.2f}",
                 )
 
             if result.get("retry_count", 0) > mock_state["retry_count"]:
@@ -144,7 +154,7 @@ class LegalReviewerAgent(BaseAgent):
                         "needs_retry": True,
                         "confidence_score": confidence_score,
                     },
-                    message=f"검토 실패 - 재생성 필요. 위반: {', '.join(violations[:3])}"
+                    message=f"검토 실패 - 재생성 필요. 위반: {', '.join(violations[:3])}",
                 )
 
             filtered_answer = review.get("filtered_answer")
@@ -158,22 +168,17 @@ class LegalReviewerAgent(BaseAgent):
                     "was_filtered": filtered_answer is not None,
                     "confidence_score": confidence_score,
                 },
-                message=f"조건부 통과 (신뢰도: {confidence_score:.2f})"
+                message=f"조건부 통과 (신뢰도: {confidence_score:.2f})",
             )
 
         except Exception as e:
             logger.error(f"[LegalReviewerAgent] Error: {e}")
             return self.report_to_supervisor(
-                status="failure",
-                result=None,
-                message=f"법률 검토 오류: {str(e)}"
+                status="failure", result=None, message=f"법률 검토 오류: {str(e)}"
             )
 
     def _check_relevance(
-        self,
-        query: str,
-        answer: str,
-        sources: List[Dict]
+        self, query: str, answer: str, sources: List[Dict]
     ) -> Optional[Dict]:
         """Query-Answer 관련성 검증"""
         if not query or not answer:
@@ -190,7 +195,7 @@ class LegalReviewerAgent(BaseAgent):
             # 검색 결과 텍스트 추출
             source_texts = []
             for s in sources[:5]:
-                text = s.get('content', '') or s.get('text', '')
+                text = s.get("content", "") or s.get("text", "")
                 if text:
                     source_texts.append(text)
 
@@ -203,18 +208,15 @@ class LegalReviewerAgent(BaseAgent):
                 "passed": qa_result.passed and (as_result is None or as_result.passed),
                 "query_answer_score": qa_result.score,
                 "answer_source_score": as_result.score if as_result else 0.0,
-                "message": qa_result.message or (as_result.message if as_result else None),
+                "message": qa_result.message
+                or (as_result.message if as_result else None),
             }
 
         except Exception as e:
             logger.warning(f"[LegalReviewerAgent] Relevance check failed: {e}")
             return None
 
-    def _check_hallucination(
-        self,
-        answer: str,
-        sources: List[Dict]
-    ) -> Optional[Dict]:
+    def _check_hallucination(self, answer: str, sources: List[Dict]) -> Optional[Dict]:
         """인용 정확성 검증 (Hallucination 탐지)"""
         if not answer:
             return None
@@ -236,7 +238,7 @@ class LegalReviewerAgent(BaseAgent):
         self,
         relevance_check: Optional[Dict],
         hallucination_check: Optional[Dict],
-        review: Dict
+        review: Dict,
     ) -> float:
         """
         종합 신뢰도 점수 계산 (0.0 ~ 1.0)

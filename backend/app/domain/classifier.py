@@ -14,13 +14,13 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from .config import (
-    AgencyCode,
     AGENCY_INFO,
     CONTENT_KEYWORDS,
-    INDIVIDUAL_KEYWORDS,
     FINANCE_KEYWORDS,
+    INDIVIDUAL_KEYWORDS,
     MEDICAL_KEYWORDS,
     PRIVACY_KEYWORDS,
+    AgencyCode,
 )
 
 
@@ -40,9 +40,9 @@ class DomainClassifier:
     INDIVIDUAL_THRESHOLD = 1
 
     RESTRICTED_DOMAINS: List[Tuple[AgencyCode, str, str, List[str]]] = [
-        ('FSS', 'finance', '금융', FINANCE_KEYWORDS),
-        ('K_MEDI', 'medical', '의료', MEDICAL_KEYWORDS),
-        ('KOPICO', 'privacy', '개인정보', PRIVACY_KEYWORDS),
+        ("FSS", "finance", "금융", FINANCE_KEYWORDS),
+        ("K_MEDI", "medical", "의료", MEDICAL_KEYWORDS),
+        ("KOPICO", "privacy", "개인정보", PRIVACY_KEYWORDS),
     ]
 
     def classify(self, query: str) -> ClassificationResult:
@@ -52,22 +52,26 @@ class DomainClassifier:
         if restricted_result:
             return restricted_result
 
-        content_matches = self._find_matches_with_boundary(query_lower, CONTENT_KEYWORDS)
+        content_matches = self._find_matches_with_boundary(
+            query_lower, CONTENT_KEYWORDS
+        )
         if len(content_matches) >= self.CONTENT_THRESHOLD:
             return ClassificationResult(
-                agency='KCDRC',
-                dispute_type='contents',
+                agency="KCDRC",
+                dispute_type="contents",
                 reason=f"콘텐츠 관련 분쟁으로 판단됩니다 (키워드: {', '.join(content_matches[:3])})",
                 confidence=min(0.6 + len(content_matches) * 0.1, 0.95),
                 matched_keywords=content_matches,
                 is_restricted=False,
             )
 
-        individual_matches = self._find_matches_with_boundary(query_lower, INDIVIDUAL_KEYWORDS)
+        individual_matches = self._find_matches_with_boundary(
+            query_lower, INDIVIDUAL_KEYWORDS
+        )
         if len(individual_matches) >= self.INDIVIDUAL_THRESHOLD:
             return ClassificationResult(
-                agency='ECMC',
-                dispute_type='1:1',
+                agency="ECMC",
+                dispute_type="1:1",
                 reason=f"개인간 거래 분쟁으로 판단됩니다 (키워드: {', '.join(individual_matches[:3])})",
                 confidence=min(0.6 + len(individual_matches) * 0.1, 0.95),
                 matched_keywords=individual_matches,
@@ -75,15 +79,17 @@ class DomainClassifier:
             )
 
         return ClassificationResult(
-            agency='KCA',
-            dispute_type='1:N',
-            reason='일반 소비자 분쟁으로 판단됩니다 (사업자 대 소비자)',
+            agency="KCA",
+            dispute_type="1:N",
+            reason="일반 소비자 분쟁으로 판단됩니다 (사업자 대 소비자)",
             confidence=0.7,
             matched_keywords=[],
             is_restricted=False,
         )
 
-    def _classify_restricted_domains(self, query: str) -> Optional[ClassificationResult]:
+    def _classify_restricted_domains(
+        self, query: str
+    ) -> Optional[ClassificationResult]:
         candidates: List[Tuple[AgencyCode, str, str, List[str], float]] = []
 
         for agency, dispute_type, domain_name, keywords in self.RESTRICTED_DOMAINS:
@@ -115,7 +121,7 @@ class DomainClassifier:
         return matches
 
     def get_agency_info(self, agency: AgencyCode) -> dict:
-        return dict(AGENCY_INFO.get(agency, AGENCY_INFO['KCA']))
+        return dict(AGENCY_INFO.get(agency, AGENCY_INFO["KCA"]))
 
 
 _classifier = DomainClassifier()

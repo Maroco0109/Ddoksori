@@ -20,26 +20,39 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 # ============================================================
 # 프로토콜 필수 키 정의 (protocols.py 기반)
 # ============================================================
 
 PROTOCOL_REQUIRED_KEYS = {
     "query_analysis": {
-        "intent", "original_query", "expanded_queries",
-        "keywords", "retriever_types", "needs_clarification", "missing_fields",
+        "intent",
+        "original_query",
+        "expanded_queries",
+        "keywords",
+        "retriever_types",
+        "needs_clarification",
+        "missing_fields",
     },
     "retrieval": {
-        "source", "documents", "max_similarity",
-        "avg_similarity", "search_time_ms",
+        "source",
+        "documents",
+        "max_similarity",
+        "avg_similarity",
+        "search_time_ms",
     },
     "generation": {
-        "draft_answer", "claim_evidence_map", "cited_cases",
-        "has_sufficient_evidence", "generation_time_ms",
+        "draft_answer",
+        "claim_evidence_map",
+        "cited_cases",
+        "has_sufficient_evidence",
+        "generation_time_ms",
     },
     "review": {
-        "passed", "violations", "final_answer", "review_time_ms",
+        "passed",
+        "violations",
+        "final_answer",
+        "review_time_ms",
     },
 }
 
@@ -48,9 +61,11 @@ PROTOCOL_REQUIRED_KEYS = {
 # Trace 데이터 클래스
 # ============================================================
 
+
 @dataclass
 class AgentTraceEntry:
     """개별 에이전트 실행 추적."""
+
     agent_name: str
     phase: str
     input_data: Dict[str, Any]
@@ -65,6 +80,7 @@ class AgentTraceEntry:
 @dataclass
 class E2ETraceLog:
     """전체 E2E 실행 추적."""
+
     trace_id: str
     test_name: str
     query: str
@@ -80,6 +96,7 @@ class E2ETraceLog:
 # ============================================================
 # Trace Logger
 # ============================================================
+
 
 class E2ETraceLogger:
     """
@@ -108,6 +125,7 @@ class E2ETraceLogger:
         3. supervisor → Supervisor 결정 내역
         """
         import time
+
         start = time.time()
 
         self._capture_node_timings(final_state)
@@ -129,8 +147,11 @@ class E2ETraceLogger:
         """
         if base_dir is None:
             base_dir = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-                "logs", "e2e_trace",
+                os.path.dirname(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                ),
+                "logs",
+                "e2e_trace",
             )
 
         date_dir = os.path.join(base_dir, datetime.now().strftime("%Y-%m-%d"))
@@ -175,8 +196,12 @@ class E2ETraceLogger:
 
             output_snapshot = timing_data.get("output_snapshot", {})
             # For query_analysis, the actual data is nested under the key
-            actual_output = self._extract_agent_output(node_name, output_snapshot, state)
-            actual_keys = sorted(actual_output.keys()) if isinstance(actual_output, dict) else []
+            actual_output = self._extract_agent_output(
+                node_name, output_snapshot, state
+            )
+            actual_keys = (
+                sorted(actual_output.keys()) if isinstance(actual_output, dict) else []
+            )
 
             expected_set = set(expected_keys)
             actual_set = set(actual_keys)
@@ -218,7 +243,9 @@ class E2ETraceLogger:
                 agent_name=agent_name,
                 phase="retrieving",
                 input_data={
-                    "expanded_queries": state.get("query_analysis", {}).get("expanded_queries", []),
+                    "expanded_queries": state.get("query_analysis", {}).get(
+                        "expanded_queries", []
+                    ),
                     "top_k": 5,  # Supervisor 하드코딩 값
                 },
                 output_data=_safe_serialize(result),
@@ -244,21 +271,25 @@ class E2ETraceLogger:
             if isinstance(msg, dict):
                 decisions.append(msg)
             elif hasattr(msg, "__dict__"):
-                decisions.append({
-                    "agent": getattr(msg, "agent", "unknown"),
-                    "status": getattr(msg, "status", "unknown"),
-                    "summary": getattr(msg, "summary", ""),
-                })
+                decisions.append(
+                    {
+                        "agent": getattr(msg, "agent", "unknown"),
+                        "status": getattr(msg, "status", "unknown"),
+                        "summary": getattr(msg, "summary", ""),
+                    }
+                )
 
         # 기본 supervisor 메타데이터
-        decisions.append({
-            "_meta": {
-                "current_phase": supervisor_state.get("current_phase", "unknown"),
-                "iteration_count": supervisor_state.get("iteration_count", 0),
-                "next_agent": supervisor_state.get("next_agent", None),
-                "reasoning": supervisor_state.get("reasoning", ""),
+        decisions.append(
+            {
+                "_meta": {
+                    "current_phase": supervisor_state.get("current_phase", "unknown"),
+                    "iteration_count": supervisor_state.get("iteration_count", 0),
+                    "next_agent": supervisor_state.get("next_agent", None),
+                    "reasoning": supervisor_state.get("reasoning", ""),
+                }
             }
-        })
+        )
 
         self.trace.supervisor_decisions = decisions
 
@@ -320,7 +351,9 @@ class E2ETraceLogger:
                 "claim_evidence_map": state.get("claim_evidence_map", []),
                 "cited_cases": state.get("cited_cases", []),
                 "has_sufficient_evidence": state.get("has_sufficient_evidence", False),
-                "generation_time_ms": state.get("_node_timings", {}).get("generation", {}).get("duration_ms", 0),
+                "generation_time_ms": state.get("_node_timings", {})
+                .get("generation", {})
+                .get("duration_ms", 0),
             }
         elif node_name == "review":
             review_data = state.get("review", {})
@@ -330,7 +363,9 @@ class E2ETraceLogger:
                 "passed": state.get("review_passed", None),
                 "violations": state.get("violations", []),
                 "final_answer": state.get("final_answer", ""),
-                "review_time_ms": state.get("_node_timings", {}).get("review", {}).get("duration_ms", 0),
+                "review_time_ms": state.get("_node_timings", {})
+                .get("review", {})
+                .get("duration_ms", 0),
             }
         return output_snapshot
 
@@ -339,12 +374,15 @@ class E2ETraceLogger:
 # 유틸리티
 # ============================================================
 
+
 def _safe_serialize(data: Any, max_str_len: int = 2000) -> Any:
     """JSON 직렬화 안전 변환."""
     if isinstance(data, dict):
         return {k: _safe_serialize(v, max_str_len) for k, v in data.items()}
     elif isinstance(data, list):
-        return [_safe_serialize(item, max_str_len) for item in data[:50]]  # 최대 50 항목
+        return [
+            _safe_serialize(item, max_str_len) for item in data[:50]
+        ]  # 최대 50 항목
     elif isinstance(data, str):
         return data[:max_str_len]
     elif isinstance(data, (int, float, bool, type(None))):

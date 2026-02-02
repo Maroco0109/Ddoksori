@@ -36,6 +36,7 @@ pytestmark = [pytest.mark.e2e, pytest.mark.llm, pytest.mark.needs_db]
 # Helper
 # ============================================================
 
+
 def _create_initial_state(query: str, chat_type: str = "dispute") -> dict:
     """테스트용 ChatState 초기값 생성."""
     from langchain_core.messages import HumanMessage
@@ -75,6 +76,7 @@ def _run_graph(compiled_graph, state: dict) -> dict:
 # Tests
 # ============================================================
 
+
 class TestDisputeFullPipelineTrace:
     """분쟁 쿼리 전체 파이프라인 추적 테스트."""
 
@@ -102,31 +104,39 @@ class TestDisputeFullPipelineTrace:
 
         print(f"\n[Trace saved] {filepath}")
         print(f"[Agents traced] {len(trace.agent_traces)}")
-        print(f"[Protocol compliance] {trace.protocol_summary.get('compliance_rate', 'N/A')}")
+        print(
+            f"[Protocol compliance] {trace.protocol_summary.get('compliance_rate', 'N/A')}"
+        )
         for t in trace.agent_traces:
             status = "PASS" if t.protocol_compliant else f"FAIL ({t.protocol_gaps})"
             print(f"  {t.agent_name}: {t.duration_ms:.0f}ms — {status}")
 
         # 기본 검증
-        assert final_state.get("final_answer") or final_state.get("draft_answer"), \
-            "답변이 생성되지 않았습니다"
+        assert final_state.get("final_answer") or final_state.get(
+            "draft_answer"
+        ), "답변이 생성되지 않았습니다"
 
         # 에이전트 추적 존재 검증
         traced_agents = {t.agent_name for t in trace.agent_traces}
         assert "query_analysis" in traced_agents, "query_analysis 추적 누락"
 
         # Retrieval 결과 존재 검증
-        retrieval_agents = {t.agent_name for t in trace.agent_traces if t.phase == "retrieving"}
+        retrieval_agents = {
+            t.agent_name for t in trace.agent_traces if t.phase == "retrieving"
+        }
         assert len(retrieval_agents) >= 1, "retrieval 에이전트 추적 누락"
 
         # generation 추적 존재 검증
         assert "generation" in traced_agents, "generation 추적 누락"
 
         # 프로토콜 준수 검증 (query_analysis)
-        qa_trace = next((t for t in trace.agent_traces if t.agent_name == "query_analysis"), None)
+        qa_trace = next(
+            (t for t in trace.agent_traces if t.agent_name == "query_analysis"), None
+        )
         if qa_trace:
-            assert qa_trace.protocol_compliant, \
-                f"query_analysis 프로토콜 불일치: {qa_trace.protocol_gaps}"
+            assert (
+                qa_trace.protocol_compliant
+            ), f"query_analysis 프로토콜 불일치: {qa_trace.protocol_gaps}"
 
 
 class TestGeneralFastPathTrace:
@@ -157,18 +167,19 @@ class TestGeneralFastPathTrace:
             print(f"  {t.agent_name}: {t.duration_ms:.0f}ms")
 
         # 답변 존재
-        assert final_state.get("final_answer") or final_state.get("draft_answer"), \
-            "답변이 생성되지 않았습니다"
+        assert final_state.get("final_answer") or final_state.get(
+            "draft_answer"
+        ), "답변이 생성되지 않았습니다"
 
         # Fast path: retrieval 없음
         retrieval_agents = [t for t in trace.agent_traces if t.phase == "retrieving"]
-        assert len(retrieval_agents) == 0, \
-            f"Fast path에서 retrieval이 호출됨: {[t.agent_name for t in retrieval_agents]}"
+        assert (
+            len(retrieval_agents) == 0
+        ), f"Fast path에서 retrieval이 호출됨: {[t.agent_name for t in retrieval_agents]}"
 
         # Fast path: review 없음
         review_agents = [t for t in trace.agent_traces if t.agent_name == "review"]
-        assert len(review_agents) == 0, \
-            "Fast path에서 review가 호출됨"
+        assert len(review_agents) == 0, "Fast path에서 review가 호출됨"
 
 
 class TestLawQueryTrace:
@@ -201,18 +212,22 @@ class TestLawQueryTrace:
             print(f"  {t.agent_name}: {t.duration_ms:.0f}ms — {status}")
 
         # 답변 존재
-        assert final_state.get("final_answer") or final_state.get("draft_answer"), \
-            "답변이 생성되지 않았습니다"
+        assert final_state.get("final_answer") or final_state.get(
+            "draft_answer"
+        ), "답변이 생성되지 않았습니다"
 
         # Retrieval 존재 (법령 검색은 반드시 포함)
-        retrieval_agents = {t.agent_name for t in trace.agent_traces if t.phase == "retrieving"}
+        retrieval_agents = {
+            t.agent_name for t in trace.agent_traces if t.phase == "retrieving"
+        }
         assert "retrieval_law" in retrieval_agents, "법령 검색(retrieval_law) 누락"
 
         # Retrieval 결과 프로토콜 검증
         for t in trace.agent_traces:
             if t.phase == "retrieving":
-                assert t.protocol_compliant, \
-                    f"{t.agent_name} 프로토콜 불일치: {t.protocol_gaps}"
+                assert (
+                    t.protocol_compliant
+                ), f"{t.agent_name} 프로토콜 불일치: {t.protocol_gaps}"
 
 
 class TestProtocolCompliance:
@@ -240,5 +255,6 @@ class TestProtocolCompliance:
             print(f"  {agent_name}: {status}")
 
         # 최소 에이전트 추적 수 (query_analysis + retrieval(1+) + generation)
-        assert len(trace.agent_traces) >= 3, \
-            f"추적된 에이전트가 부족합니다: {len(trace.agent_traces)}"
+        assert (
+            len(trace.agent_traces) >= 3
+        ), f"추적된 에이전트가 부족합니다: {len(trace.agent_traces)}"

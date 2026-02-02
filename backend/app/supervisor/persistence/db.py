@@ -38,11 +38,12 @@ PostgreSQL 기반 대화 이력 저장 및 조회를 담당합니다.
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any
-from uuid import UUID
 
 from app.common.config import DatabaseConfig, get_config
 
@@ -88,7 +89,7 @@ class ConversationDB:
         session_id: str,
         chat_type: str,
         user_id: Optional[str] = None,
-        expires_at: Optional[datetime] = None
+        expires_at: Optional[datetime] = None,
     ) -> UUID:
         """
         새 대화 세션을 생성합니다.
@@ -124,11 +125,13 @@ class ConversationDB:
                         VALUES (%s, %s, %s, %s)
                         RETURNING conversation_id
                         """,
-                        (session_id, user_id, chat_type, expires_at)
+                        (session_id, user_id, chat_type, expires_at),
                     )
                     conv_id = cur.fetchone()[0]
                 conn.commit()
-                logger.info(f"[ConversationDB] 대화 생성: session_id={session_id}, conv_id={conv_id}")
+                logger.info(
+                    f"[ConversationDB] 대화 생성: session_id={session_id}, conv_id={conv_id}"
+                )
                 return conv_id
             except Exception as e:
                 conn.rollback()
@@ -139,7 +142,9 @@ class ConversationDB:
 
         return await asyncio.to_thread(_create)
 
-    async def get_conversation_by_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_conversation_by_session(
+        self, session_id: str
+    ) -> Optional[Dict[str, Any]]:
         """
         세션 ID로 대화 정보를 조회합니다.
 
@@ -161,6 +166,7 @@ class ConversationDB:
                 "expires_at": datetime | None
             }
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -169,7 +175,7 @@ class ConversationDB:
                         """
                         SELECT * FROM conversations WHERE session_id = %s
                         """,
-                        (session_id,)
+                        (session_id,),
                     )
                     row = cur.fetchone()
                     return dict(row) if row else None
@@ -183,7 +189,7 @@ class ConversationDB:
         conversation_id: UUID,
         role: str,
         content: str,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
     ) -> UUID:
         """
         대화에 새 턴을 추가합니다.
@@ -216,7 +222,7 @@ class ConversationDB:
                         WHERE conversation_id = %s
                         RETURNING turn_count
                         """,
-                        (conversation_id,)
+                        (conversation_id,),
                     )
                     row = cur.fetchone()
                     if not row:
@@ -231,7 +237,13 @@ class ConversationDB:
                         VALUES (%s, %s, %s, %s, %s)
                         RETURNING turn_id
                         """,
-                        (conversation_id, turn_number, role, content, psycopg2.extras.Json(metadata or {}))
+                        (
+                            conversation_id,
+                            turn_number,
+                            role,
+                            content,
+                            psycopg2.extras.Json(metadata or {}),
+                        ),
                     )
                     turn_id = cur.fetchone()[0]
                 conn.commit()
@@ -250,10 +262,7 @@ class ConversationDB:
         return await asyncio.to_thread(_add)
 
     async def get_conversation_history(
-        self,
-        conversation_id: UUID,
-        limit: Optional[int] = None,
-        offset: int = 0
+        self, conversation_id: UUID, limit: Optional[int] = None, offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
         대화 이력을 조회합니다.
@@ -277,6 +286,7 @@ class ConversationDB:
                 ...
             ]
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -309,7 +319,7 @@ class ConversationDB:
         self,
         conversation_id: UUID,
         summary_data: Dict[str, Any],
-        compacted_turn_count: int
+        compacted_turn_count: int,
     ) -> UUID:
         """
         대화 요약을 저장합니다 (Compaction).
@@ -335,6 +345,7 @@ class ConversationDB:
         Note:
             conversation_id당 하나의 요약만 존재 (UPSERT)
         """
+
         def _save():
             conn = self._get_connection()
             try:
@@ -370,8 +381,8 @@ class ConversationDB:
                             summary_data.get("dispute_details"),
                             summary_data.get("desired_resolution"),
                             psycopg2.extras.Json(summary_data.get("key_facts", {})),
-                            compacted_turn_count
-                        )
+                            compacted_turn_count,
+                        ),
                     )
                     summary_id = cur.fetchone()[0]
 
@@ -382,7 +393,7 @@ class ConversationDB:
                         SET last_compaction_at = %s
                         WHERE conversation_id = %s
                         """,
-                        (compacted_turn_count, conversation_id)
+                        (compacted_turn_count, conversation_id),
                     )
 
                 conn.commit()
@@ -410,6 +421,7 @@ class ConversationDB:
         Returns:
             요약 딕셔너리 (없으면 None)
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -419,7 +431,7 @@ class ConversationDB:
                         SELECT * FROM conversation_summaries
                         WHERE conversation_id = %s
                         """,
-                        (conversation_id,)
+                        (conversation_id,),
                     )
                     row = cur.fetchone()
                     return dict(row) if row else None
@@ -438,6 +450,7 @@ class ConversationDB:
         Note:
             CASCADE로 turns, summaries도 자동 삭제됨
         """
+
         def _cleanup():
             conn = self._get_connection()
             try:
@@ -452,7 +465,9 @@ class ConversationDB:
                     deleted_count = cur.rowcount
                 conn.commit()
                 if deleted_count > 0:
-                    logger.info(f"[ConversationDB] 만료 세션 정리: {deleted_count}개 삭제")
+                    logger.info(
+                        f"[ConversationDB] 만료 세션 정리: {deleted_count}개 삭제"
+                    )
                 return deleted_count
             except Exception as e:
                 conn.rollback()
@@ -470,6 +485,7 @@ class ConversationDB:
         Args:
             conversation_id: 대화 ID
         """
+
         def _deactivate():
             conn = self._get_connection()
             try:
@@ -480,10 +496,12 @@ class ConversationDB:
                         SET is_active = false
                         WHERE conversation_id = %s
                         """,
-                        (conversation_id,)
+                        (conversation_id,),
                     )
                 conn.commit()
-                logger.info(f"[ConversationDB] 대화 비활성화: conv_id={conversation_id}")
+                logger.info(
+                    f"[ConversationDB] 대화 비활성화: conv_id={conversation_id}"
+                )
             except Exception as e:
                 conn.rollback()
                 logger.error(f"[ConversationDB] 대화 비활성화 실패: {e}")
@@ -498,7 +516,7 @@ class ConversationDB:
         user_id: str,
         limit: int = 20,
         offset: int = 0,
-        include_inactive: bool = False
+        include_inactive: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         사용자의 대화 목록을 조회합니다.
@@ -512,6 +530,7 @@ class ConversationDB:
         Returns:
             대화 목록 (최신순)
         """
+
         def _get():
             conn = self._get_connection()
             try:

@@ -10,13 +10,13 @@ v2 업데이트 (2026-01-28):
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Literal
+from typing import Dict, List, Literal, Optional, Tuple
 
 from ...supervisor.state import OnboardingInfo
 from .constants import (
     DISPUTE_VERBS,
-    VERB_SYNONYMS,
     RESTRICTED_DOMAIN_KEYWORDS,
+    VERB_SYNONYMS,
 )
 from .detectors import detect_restricted_domain
 
@@ -24,8 +24,14 @@ logger = logging.getLogger(__name__)
 
 # Query type literal
 QueryType = Literal[
-    "dispute", "general", "law", "criteria",
-    "procedure", "restricted", "system_meta", "ambiguous"
+    "dispute",
+    "general",
+    "law",
+    "criteria",
+    "procedure",
+    "restricted",
+    "system_meta",
+    "ambiguous",
 ]
 
 
@@ -174,7 +180,7 @@ def create_synonym_variant_query(original: str, keywords: List[str]) -> Optional
 async def expand_query_with_llm_v2(
     query: str,
     keywords: List[str],
-    intent: Literal['general', 'information_search'] = 'information_search',
+    intent: Literal["general", "information_search"] = "information_search",
     use_fallback: bool = True,
 ) -> List[str]:
     """
@@ -193,7 +199,7 @@ async def expand_query_with_llm_v2(
         확장된 쿼리 목록 (최대 5개, 원본 쿼리 포함)
     """
     # general 의도는 확장 불필요
-    if intent == 'general':
+    if intent == "general":
         return [query]
 
     try:

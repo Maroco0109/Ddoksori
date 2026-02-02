@@ -25,6 +25,7 @@ if _backend_root not in sys.path:
 # RDS Database Fixture
 # ============================================================
 
+
 @pytest.fixture(scope="module")
 def rds_db_config():
     """
@@ -50,6 +51,7 @@ def rds_db_config():
 # Embedding API URL Fixture
 # ============================================================
 
+
 @pytest.fixture(scope="module")
 def embed_api_url():
     """임베딩 API URL (OpenAI 또는 KURE-v1)."""
@@ -59,6 +61,7 @@ def embed_api_url():
 # ============================================================
 # HybridRetriever Fixture
 # ============================================================
+
 
 @pytest.fixture(scope="module")
 def hybrid_retriever(rds_db_config, embed_api_url):
@@ -82,6 +85,7 @@ def hybrid_retriever(rds_db_config, embed_api_url):
 # MAS Supervisor Graph Fixture
 # ============================================================
 
+
 @pytest.fixture(scope="module")
 def compiled_mas_graph():
     """
@@ -89,9 +93,10 @@ def compiled_mas_graph():
 
     E2E 파이프라인 테스트에서 전체 그래프를 invoke할 때 사용합니다.
     """
+    from langgraph.checkpoint.memory import MemorySaver
+
     from app.supervisor import reset_graph
     from app.supervisor.graph_mas import create_mas_supervisor_graph
-    from langgraph.checkpoint.memory import MemorySaver
 
     reset_graph()
     graph = create_mas_supervisor_graph()
@@ -101,6 +106,7 @@ def compiled_mas_graph():
 # ============================================================
 # UnifiedRetriever Fixture (Phase 8)
 # ============================================================
+
 
 @pytest.fixture(scope="module")
 def unified_retriever(rds_db_config):
@@ -128,6 +134,7 @@ def unified_retriever(rds_db_config):
 # ============================================================
 # 공통 Helper
 # ============================================================
+
 
 @pytest.fixture(scope="module")
 def openai_api_key():

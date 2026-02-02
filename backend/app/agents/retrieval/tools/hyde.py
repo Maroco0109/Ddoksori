@@ -27,7 +27,6 @@ HYDE_PROMPTS = {
 질문: {query}
 
 답변:""",
-
     "criteria": """당신은 한국 소비자분쟁해결기준 전문가입니다.
 다음 소비자 질문에 대해 분쟁해결기준 별표의 내용을 기반으로 답변해주세요.
 품목별 보상 기준, 교환/환불 조건 등을 구체적으로 포함하세요.
@@ -35,7 +34,6 @@ HYDE_PROMPTS = {
 질문: {query}
 
 답변:""",
-
     "case": """당신은 한국소비자원 분쟁조정 전문가입니다.
 다음 소비자 질문과 유사한 분쟁조정 사례의 결과를 작성해주세요.
 사건 개요, 당사자 주장, 조정 결정 등을 포함하세요.
@@ -43,7 +41,6 @@ HYDE_PROMPTS = {
 질문: {query}
 
 답변:""",
-
     "counsel": """당신은 소비자상담 전문 상담사입니다.
 다음 소비자 질문에 대해 실제 상담 사례처럼 답변해주세요.
 관련 법률, 해결 절차, 주의사항 등을 포함하세요.
@@ -51,7 +48,6 @@ HYDE_PROMPTS = {
 질문: {query}
 
 답변:""",
-
     "default": """당신은 한국 소비자 분쟁 해결 전문가입니다.
 다음 소비자 질문에 대해 관련 법률과 기준을 근거로 답변해주세요.
 
@@ -82,6 +78,7 @@ class HyDEGenerator:
             api_key: OpenAI API 키 (기본: OPENAI_API_KEY 환경변수)
         """
         from ....common.config import get_config
+
         config = get_config().retrieval
 
         self._model = model or config.hyde_model
@@ -93,6 +90,7 @@ class HyDEGenerator:
         """OpenAI 클라이언트를 지연 생성합니다."""
         if self._client is None:
             from openai import AsyncOpenAI
+
             self._client = AsyncOpenAI(api_key=self._api_key, timeout=15.0)
         return self._client
 
@@ -133,7 +131,9 @@ class HyDEGenerator:
             return hypothetical_doc
 
         except Exception as e:
-            logger.warning(f"[HyDE] Generation failed: {e}. Falling back to original query.")
+            logger.warning(
+                f"[HyDE] Generation failed: {e}. Falling back to original query."
+            )
             return None
 
 

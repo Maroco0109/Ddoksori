@@ -14,26 +14,28 @@ Combines dense (pgvector) and lexical (PostgreSQL FTS) retrieval
 using Reciprocal Rank Fusion (RRF) algorithm.
 """
 
-import os
 import json
+import os
 import time
-import requests
-from typing import List, Dict, Optional, Any, cast, Union
+from typing import Any, Dict, List, Optional, Union, cast
+
 import psycopg2
-from .retriever import (
-    RAGRetriever,
-    SearchResult,
-    _map_doc_type_filter_to_vector_chunks,
-    _map_vector_chunks_doc_type,
-    _to_category_path,
-)
-from .base import BaseRetriever, Document, to_documents
+import requests
 
 # Import embedding configuration
 from utils.embedding_connection import (
     EMBEDDING_MODEL,
     RRF_WEIGHT_DENSE,
     RRF_WEIGHT_LEXICAL,
+)
+
+from .base import BaseRetriever, Document, to_documents
+from .retriever import (
+    RAGRetriever,
+    SearchResult,
+    _map_doc_type_filter_to_vector_chunks,
+    _map_vector_chunks_doc_type,
+    _to_category_path,
 )
 
 
@@ -53,7 +55,7 @@ class HybridRetriever:
         self,
         db_config: Dict[str, str],
         embed_api_url: str = "http://localhost:8001/embed",
-        embedding_model: Optional[str] = None
+        embedding_model: Optional[str] = None,
     ):
         """
         Initialize hybrid retriever
@@ -95,7 +97,7 @@ class HybridRetriever:
         doc_type_filter: Optional[str] = None,
         dataset_type_filter: Optional[str] = None,
         chunk_type_filter: Optional[Union[str, List[str]]] = None,
-        category_filter: Optional[Union[str, List[str]]] = None
+        category_filter: Optional[Union[str, List[str]]] = None,
     ) -> List[SearchResult]:
         """
         Main hybrid search with RRF fusion
@@ -122,7 +124,7 @@ class HybridRetriever:
             doc_type_filter,
             dataset_type_filter,
             chunk_type_filter,
-            category_filter
+            category_filter,
         )
 
         # 2. Lexical retrieval (FTS)
@@ -132,14 +134,12 @@ class HybridRetriever:
             doc_type_filter,
             dataset_type_filter,
             chunk_type_filter,
-            category_filter
+            category_filter,
         )
 
         # 3. RRF fusion (2-way: Dense + Lexical)
         fused_results = self._reciprocal_rank_fusion(
-            dense_results,
-            lexical_results,
-            k=60
+            dense_results, lexical_results, k=60
         )
 
         return fused_results[:top_k]
@@ -149,7 +149,7 @@ class HybridRetriever:
         query: str,
         top_k: int = 10,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        chunk_type_filter: Optional[str] = None,
     ) -> List[SearchResult]:
         return self.search(query, top_k, doc_type_filter, chunk_type_filter)
 
@@ -159,7 +159,7 @@ class HybridRetriever:
         top_k: int = 10,
         doc_type_filter: Optional[str] = None,
         chunk_type_filter: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> List[Document]:
         results = self.search(query, top_k, doc_type_filter, chunk_type_filter)
         return to_documents(results)
@@ -169,7 +169,7 @@ class HybridRetriever:
         query: str,
         top_k: int = 10,
         doc_type_filter: Optional[str] = None,
-        chunk_type_filter: Optional[str] = None
+        chunk_type_filter: Optional[str] = None,
     ) -> Dict:
         """
         Instrumented hybrid search with timing and candidate counts.
@@ -205,11 +205,11 @@ class HybridRetriever:
         )
 
         return {
-            'results': fused_results[:top_k],
-            'embedding_time_ms': dense_time,  # Dense includes embedding
-            'search_time_ms': lex_time,       # Lexical search time
-            'dense_candidates': len(dense_results),
-            'lexical_candidates': len(lexical_results)
+            "results": fused_results[:top_k],
+            "embedding_time_ms": dense_time,  # Dense includes embedding
+            "search_time_ms": lex_time,  # Lexical search time
+            "dense_candidates": len(dense_results),
+            "lexical_candidates": len(lexical_results),
         }
 
     def _dense_search(
@@ -219,7 +219,7 @@ class HybridRetriever:
         doc_type_filter: Optional[str] = None,
         dataset_type_filter: Optional[str] = None,
         chunk_type_filter: Optional[Union[str, List[str]]] = None,
-        category_filter: Optional[Union[str, List[str]]] = None
+        category_filter: Optional[Union[str, List[str]]] = None,
     ) -> List[SearchResult]:
         """
         Dense retrieval using pgvector
@@ -234,7 +234,7 @@ class HybridRetriever:
                 doc_type_filter=doc_type_filter,
                 dataset_type_filter=dataset_type_filter,
                 chunk_type_filter=chunk_type_filter,
-                category_filter=category_filter
+                category_filter=category_filter,
             )
         except Exception as e:
             # Handle embedding API errors gracefully
@@ -248,7 +248,7 @@ class HybridRetriever:
         doc_type_filter: Optional[str] = None,
         dataset_type_filter: Optional[str] = None,
         chunk_type_filter: Optional[Union[str, List[str]]] = None,
-        category_filter: Optional[Union[str, List[str]]] = None
+        category_filter: Optional[Union[str, List[str]]] = None,
     ) -> List[SearchResult]:
         """
         Lexical retrieval using PostgreSQL FTS
@@ -260,7 +260,9 @@ class HybridRetriever:
                 final_dataset_type = dataset_type_filter
                 mapped_category_filter = None
             else:
-                final_dataset_type, mapped_category_filter = _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                final_dataset_type, mapped_category_filter = (
+                    _map_doc_type_filter_to_vector_chunks(doc_type_filter)
+                )
 
             # === PR-4: category 필터 우선순위 ===
             # category_filter 파라미터가 명시적으로 제공된 경우 우선 사용
@@ -311,7 +313,8 @@ class HybridRetriever:
             params = [
                 query,
                 query,
-                final_dataset_type, final_dataset_type,
+                final_dataset_type,
+                final_dataset_type,
             ]
             if final_category_filter:
                 params.append(final_category_filter)
@@ -351,7 +354,8 @@ class HybridRetriever:
 
                 fallback_params = [
                     search_pattern,
-                    final_dataset_type, final_dataset_type,
+                    final_dataset_type,
+                    final_dataset_type,
                 ]
                 if final_category_filter:
                     fallback_params.append(final_category_filter)
@@ -371,50 +375,59 @@ class HybridRetriever:
 
                 title = None
                 if isinstance(metadata_json, dict):
-                    title = metadata_json.get('title')
-                if not title and dataset_type == 'law_guide':
+                    title = metadata_json.get("title")
+                if not title and dataset_type == "law_guide":
                     if isinstance(metadata_json, dict):
-                        article_no = metadata_json.get('조문번호')
-                        article_title = metadata_json.get('조문제목')
+                        article_no = metadata_json.get("조문번호")
+                        article_title = metadata_json.get("조문제목")
                     else:
                         article_no, article_title = None, None
                     parts = [p for p in [row[3], article_no, article_title] if p]
-                    title = ' '.join(parts) if parts else (row[3] or row[0])
+                    title = " ".join(parts) if parts else (row[3] or row[0])
 
                 doc_id = row[0]
-                if isinstance(metadata_json, dict) and metadata_json.get('number'):
-                    doc_id = str(metadata_json.get('number'))
-                url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
+                if isinstance(metadata_json, dict) and metadata_json.get("number"):
+                    doc_id = str(metadata_json.get("number"))
+                url = row[6] or (
+                    metadata_json.get("url")
+                    if isinstance(metadata_json, dict)
+                    else None
+                )
                 source_org = None
-                if dataset_type == 'law_guide':
-                    source_org = 'statute'
+                if dataset_type == "law_guide":
+                    source_org = "statute"
                 elif isinstance(metadata_json, dict):
-                    source_org = metadata_json.get('source')
-                decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                    source_org = metadata_json.get("source")
+                decision_date = (
+                    metadata_json.get("decision_date")
+                    if isinstance(metadata_json, dict)
+                    else None
+                )
 
-                results.append(SearchResult(
-                    chunk_id=row[0],
-                    doc_id=doc_id,
-                    chunk_type=row[4] or '',
-                    content=row[2] or '',
-                    doc_title=title or '',
-                    doc_type=doc_type,
-                    category_path=_to_category_path(category),
-                    similarity=float(row[10]) if row[10] is not None else 0.0,
-                    source_org=source_org,
-                    url=url,
-                    collected_at=row[9].isoformat() if row[9] else None,
-                    decision_date=decision_date,
-                    metadata=metadata_json if isinstance(metadata_json, dict) else None,
-                ))
+                results.append(
+                    SearchResult(
+                        chunk_id=row[0],
+                        doc_id=doc_id,
+                        chunk_type=row[4] or "",
+                        content=row[2] or "",
+                        doc_title=title or "",
+                        doc_type=doc_type,
+                        category_path=_to_category_path(category),
+                        similarity=float(row[10]) if row[10] is not None else 0.0,
+                        source_org=source_org,
+                        url=url,
+                        collected_at=row[9].isoformat() if row[9] else None,
+                        decision_date=decision_date,
+                        metadata=(
+                            metadata_json if isinstance(metadata_json, dict) else None
+                        ),
+                    )
+                )
 
             return results
 
     def _reciprocal_rank_fusion(
-        self,
-        results_a: List[SearchResult],
-        results_b: List[SearchResult],
-        k: int = 60
+        self, results_a: List[SearchResult], results_b: List[SearchResult], k: int = 60
     ) -> List[SearchResult]:
         """
         Reciprocal Rank Fusion (RRF) algorithm
@@ -452,9 +465,7 @@ class HybridRetriever:
 
         # Sort by RRF score (descending)
         sorted_chunk_ids = sorted(
-            rrf_scores.keys(),
-            key=lambda cid: rrf_scores[cid],
-            reverse=True
+            rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True
         )
 
         # Create final result list with updated similarity scores
@@ -471,8 +482,8 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int = 5,
-        primary_doc_type: str = 'mediation_case',
-        secondary_doc_type: str = 'counsel_case'
+        primary_doc_type: str = "mediation_case",
+        secondary_doc_type: str = "counsel_case",
     ) -> List[SearchResult]:
         """
         2단계 검색: primary doc_type 우선, 부족분은 secondary에서 채움
@@ -488,9 +499,7 @@ class HybridRetriever:
         """
         # 1단계: primary doc_type (분쟁조정사례) 우선 검색
         primary_results = self.search(
-            query=query,
-            top_k=top_k,
-            doc_type_filter=primary_doc_type
+            query=query, top_k=top_k, doc_type_filter=primary_doc_type
         )
 
         # 결과가 충분하면 반환
@@ -500,9 +509,7 @@ class HybridRetriever:
         # 2단계: 부족분만큼 secondary doc_type (상담사례) 추가
         remaining = top_k - len(primary_results)
         secondary_results = self.search(
-            query=query,
-            top_k=remaining,
-            doc_type_filter=secondary_doc_type
+            query=query, top_k=remaining, doc_type_filter=secondary_doc_type
         )
 
         return primary_results + secondary_results
@@ -521,10 +528,7 @@ class HybridRetriever:
         return self.rag_retriever.get_case_chunks(case_uid)
 
     def search_by_doc_type(
-        self,
-        query: str,
-        doc_type: str,
-        top_k: int = 5
+        self, query: str, doc_type: str, top_k: int = 5
     ) -> List[SearchResult]:
         """
         특정 doc_type만 검색
@@ -537,11 +541,7 @@ class HybridRetriever:
         Returns:
             List[SearchResult]: 해당 doc_type의 검색 결과
         """
-        return self.search(
-            query=query,
-            top_k=top_k,
-            doc_type_filter=doc_type
-        )
+        return self.search(query=query, top_k=top_k, doc_type_filter=doc_type)
 
     def search_all_sections(
         self,
@@ -549,7 +549,7 @@ class HybridRetriever:
         dispute_k: int = 3,
         counsel_k: int = 3,
         law_k: int = 3,
-        criteria_k: int = 3
+        criteria_k: int = 3,
     ) -> Dict[str, List[SearchResult]]:
         """
         4개 섹션 데이터 일괄 검색 (간소화 버전)
@@ -573,10 +573,10 @@ class HybridRetriever:
             }
         """
         return {
-            'disputes': self.search_by_doc_type(query, 'mediation_case', dispute_k),
-            'counsels': self.search_by_doc_type(query, 'counsel_case', counsel_k),
-            'laws': self.search_by_doc_type(query, 'law', law_k),
-            'criteria': self._search_criteria(query, criteria_k)
+            "disputes": self.search_by_doc_type(query, "mediation_case", dispute_k),
+            "counsels": self.search_by_doc_type(query, "counsel_case", counsel_k),
+            "laws": self.search_by_doc_type(query, "law", law_k),
+            "criteria": self._search_criteria(query, criteria_k),
         }
 
     def _search_criteria(self, query: str, top_k: int = 3) -> List[SearchResult]:
@@ -612,7 +612,7 @@ class HybridRetriever:
                     ORDER BY vc.embedding <=> %s::vector
                     LIMIT %s
                     """,
-                    (query_embedding, query_embedding, candidate_count)
+                    (query_embedding, query_embedding, candidate_count),
                 )
 
                 for row in cur.fetchall():
@@ -623,38 +623,60 @@ class HybridRetriever:
 
                     title = None
                     if isinstance(metadata_json, dict):
-                        title = metadata_json.get('title')
-                    if not title and dataset_type == 'law_guide':
+                        title = metadata_json.get("title")
+                    if not title and dataset_type == "law_guide":
                         if isinstance(metadata_json, dict):
-                            article_no = metadata_json.get('조문번호')
-                            article_title = metadata_json.get('조문제목')
+                            article_no = metadata_json.get("조문번호")
+                            article_title = metadata_json.get("조문제목")
                         else:
                             article_no, article_title = None, None
                         parts = [p for p in [row[3], article_no, article_title] if p]
-                        title = ' '.join(parts) if parts else (row[3] or row[0])
+                        title = " ".join(parts) if parts else (row[3] or row[0])
 
                     doc_id = row[0]
-                    if isinstance(metadata_json, dict) and metadata_json.get('number'):
-                        doc_id = str(metadata_json.get('number'))
-                    url = row[6] or (metadata_json.get('url') if isinstance(metadata_json, dict) else None)
-                    source_org = 'statute' if dataset_type == 'law_guide' else (metadata_json.get('source') if isinstance(metadata_json, dict) else None)
-                    decision_date = metadata_json.get('decision_date') if isinstance(metadata_json, dict) else None
+                    if isinstance(metadata_json, dict) and metadata_json.get("number"):
+                        doc_id = str(metadata_json.get("number"))
+                    url = row[6] or (
+                        metadata_json.get("url")
+                        if isinstance(metadata_json, dict)
+                        else None
+                    )
+                    source_org = (
+                        "statute"
+                        if dataset_type == "law_guide"
+                        else (
+                            metadata_json.get("source")
+                            if isinstance(metadata_json, dict)
+                            else None
+                        )
+                    )
+                    decision_date = (
+                        metadata_json.get("decision_date")
+                        if isinstance(metadata_json, dict)
+                        else None
+                    )
 
-                    dense_results.append(SearchResult(
-                        chunk_id=row[0],
-                        doc_id=doc_id,
-                        chunk_type=row[4] or '',
-                        content=row[2] or '',
-                        doc_title=title or '',
-                        doc_type=doc_type,
-                        category_path=_to_category_path(category),
-                        similarity=float(row[10]) if row[10] is not None else 0.0,
-                        source_org=source_org,
-                        url=url,
-                        collected_at=row[9].isoformat() if row[9] else None,
-                        decision_date=decision_date,
-                        metadata=metadata_json if isinstance(metadata_json, dict) else None,
-                    ))
+                    dense_results.append(
+                        SearchResult(
+                            chunk_id=row[0],
+                            doc_id=doc_id,
+                            chunk_type=row[4] or "",
+                            content=row[2] or "",
+                            doc_title=title or "",
+                            doc_type=doc_type,
+                            category_path=_to_category_path(category),
+                            similarity=float(row[10]) if row[10] is not None else 0.0,
+                            source_org=source_org,
+                            url=url,
+                            collected_at=row[9].isoformat() if row[9] else None,
+                            decision_date=decision_date,
+                            metadata=(
+                                metadata_json
+                                if isinstance(metadata_json, dict)
+                                else None
+                            ),
+                        )
+                    )
         except Exception as e:
             print(f"Criteria dense search failed: {e}")
 

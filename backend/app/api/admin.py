@@ -6,12 +6,13 @@
 
 import logging
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.admin.models import Admin, AdminLoginRequest, AdminLoginResponse
 from app.admin.admin_db import AdminDB
-from app.admin.dependencies import get_current_admin, hash_password, create_admin_token
+from app.admin.dependencies import create_admin_token, get_current_admin, hash_password
+from app.admin.models import Admin, AdminLoginRequest, AdminLoginResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 # ============================================================
 # Admin Auth
 # ============================================================
+
 
 @router.post("/login", response_model=AdminLoginResponse)
 async def admin_login(request: AdminLoginRequest):
@@ -50,6 +52,7 @@ async def admin_login(request: AdminLoginRequest):
 # Dashboard
 # ============================================================
 
+
 @router.get("/stats")
 async def get_stats(admin: Admin = Depends(get_current_admin)):
     """대시보드 통계 데이터"""
@@ -60,6 +63,7 @@ async def get_stats(admin: Admin = Depends(get_current_admin)):
 # ============================================================
 # Posts Management
 # ============================================================
+
 
 @router.get("/posts")
 async def get_posts(
@@ -73,7 +77,9 @@ async def get_posts(
 ):
     """게시글 목록 조회 (관리자)"""
     admin_db = AdminDB()
-    return await admin_db.get_posts(page, limit, searchType, searchKeyword, category, isPublic)
+    return await admin_db.get_posts(
+        page, limit, searchType, searchKeyword, category, isPublic
+    )
 
 
 @router.get("/posts/{post_id}")
@@ -100,7 +106,11 @@ async def update_post_visibility(
     if not success:
         raise HTTPException(status_code=404, detail="Post not found")
     await admin_db.log_action(admin.id, "toggle_post_visibility", "post", post_id)
-    msg = "게시글이 공개 처리되었습니다." if request.isPublic else "게시글이 비공개 처리되었습니다."
+    msg = (
+        "게시글이 공개 처리되었습니다."
+        if request.isPublic
+        else "게시글이 비공개 처리되었습니다."
+    )
     return {"success": True, "message": msg}
 
 
@@ -122,10 +132,14 @@ class NoticeRequest(BaseModel):
 
 
 @router.post("/posts/notice")
-async def create_notice(request: NoticeRequest, admin: Admin = Depends(get_current_admin)):
+async def create_notice(
+    request: NoticeRequest, admin: Admin = Depends(get_current_admin)
+):
     """공지사항 작성"""
     admin_db = AdminDB()
-    post_id = await admin_db.create_notice(admin.id, request.title, request.content, request.isPinned)
+    post_id = await admin_db.create_notice(
+        admin.id, request.title, request.content, request.isPinned
+    )
     await admin_db.log_action(admin.id, "create_notice", "post", post_id)
     return {"success": True, "postId": post_id, "message": "공지사항이 작성되었습니다."}
 
@@ -133,6 +147,7 @@ async def create_notice(request: NoticeRequest, admin: Admin = Depends(get_curre
 # ============================================================
 # Comments Management
 # ============================================================
+
 
 @router.get("/comments")
 async def get_comments(
@@ -148,14 +163,18 @@ async def get_comments(
 
 @router.put("/comments/{comment_id}/visibility")
 async def update_comment_visibility(
-    comment_id: int, request: VisibilityRequest, admin: Admin = Depends(get_current_admin)
+    comment_id: int,
+    request: VisibilityRequest,
+    admin: Admin = Depends(get_current_admin),
 ):
     """댓글 공개/비공개 전환"""
     admin_db = AdminDB()
     success = await admin_db.update_comment_visibility(comment_id, request.isPublic)
     if not success:
         raise HTTPException(status_code=404, detail="Comment not found")
-    await admin_db.log_action(admin.id, "toggle_comment_visibility", "comment", comment_id)
+    await admin_db.log_action(
+        admin.id, "toggle_comment_visibility", "comment", comment_id
+    )
     return {"success": True, "message": "댓글 공개 상태가 변경되었습니다."}
 
 
@@ -173,6 +192,7 @@ async def delete_comment(comment_id: int, admin: Admin = Depends(get_current_adm
 # ============================================================
 # Users Management
 # ============================================================
+
 
 @router.get("/users")
 async def get_users(
@@ -213,13 +233,16 @@ async def update_user_status(
     success = await admin_db.update_user_status(user_id, request.status)
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
-    await admin_db.log_action(admin.id, f"change_user_status_{request.status}", "user", reason=user_id)
+    await admin_db.log_action(
+        admin.id, f"change_user_status_{request.status}", "user", reason=user_id
+    )
     return {"success": True, "message": "사용자 상태가 변경되었습니다."}
 
 
 # ============================================================
 # Reports Management
 # ============================================================
+
 
 @router.get("/reports")
 async def get_reports(
@@ -251,14 +274,24 @@ class ReportStatusRequest(BaseModel):
 
 @router.put("/reports/{report_id}/status")
 async def update_report_status(
-    report_id: int, request: ReportStatusRequest, admin: Admin = Depends(get_current_admin)
+    report_id: int,
+    request: ReportStatusRequest,
+    admin: Admin = Depends(get_current_admin),
 ):
     """신고 처리 상태 변경"""
     if request.status not in ("reviewed", "resolved", "rejected"):
         raise HTTPException(status_code=400, detail="Invalid status")
     admin_db = AdminDB()
-    success = await admin_db.update_report_status(report_id, request.status, request.adminNote)
+    success = await admin_db.update_report_status(
+        report_id, request.status, request.adminNote
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Report not found")
-    await admin_db.log_action(admin.id, f"update_report_{request.status}", "report", report_id, request.adminNote)
+    await admin_db.log_action(
+        admin.id,
+        f"update_report_{request.status}",
+        "report",
+        report_id,
+        request.adminNote,
+    )
     return {"success": True, "message": "신고 처리 상태가 변경되었습니다."}

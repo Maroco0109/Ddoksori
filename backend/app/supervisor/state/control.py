@@ -4,9 +4,9 @@
 그래프 실행 흐름을 제어하는 플래그와 라우팅 정보를 관리합니다.
 """
 
-from typing import Optional, Literal, Dict, Any
-from typing_extensions import TypedDict
+from typing import Any, Dict, Literal, Optional
 
+from typing_extensions import TypedDict
 
 # 라우팅 모드 타입 정의
 # - NO_RETRIEVAL: 검색 불필요 (인사, 시스템 질문 등)
@@ -14,12 +14,12 @@ from typing_extensions import TypedDict
 # - CACHED_RAG: 후속 턴 → 캐시된 Retrieval 사용
 # - RESTRICTED_DOMAIN: 전문기관 도메인 (금융, 의료, 개인정보, 부동산, 건설)
 RoutingMode = Literal[
-    'NO_RETRIEVAL',
-    'NEED_RAG',
-    'CACHED_RAG',
-    'RESTRICTED_DOMAIN',
-    'META_CONVERSATIONAL',
-    'FOLLOWUP_WITH_CONTEXT',
+    "NO_RETRIEVAL",
+    "NEED_RAG",
+    "CACHED_RAG",
+    "RESTRICTED_DOMAIN",
+    "META_CONVERSATIONAL",
+    "FOLLOWUP_WITH_CONTEXT",
 ]
 
 
@@ -38,6 +38,7 @@ class TraceEntry(TypedDict):
         protocol_summary: 노드별 축약된 프로토콜 요약 (선택)
         metadata: 추가 컨텍스트 (예: error, cache_hit 등, 선택)
     """
+
     node_name: str
     timestamp: float
     duration_ms: float
@@ -91,6 +92,7 @@ class ControlState(TypedDict, total=False):
         ...     'guardrail_blocked': False
         ... }
     """
+
     retry_count: int
     low_similarity_mode: bool
     mode: RoutingMode
@@ -101,7 +103,7 @@ class ControlState(TypedDict, total=False):
 
 
 __all__ = [
-    'RoutingMode',
-    'TraceEntry',
-    'ControlState',
+    "RoutingMode",
+    "TraceEntry",
+    "ControlState",
 ]

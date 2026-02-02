@@ -28,7 +28,8 @@
 """
 
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -38,6 +39,7 @@ class User(BaseModel):
 
     OAuth 인증을 통해 생성된 사용자 정보를 표현합니다.
     """
+
     user_id: str = Field(..., description="사용자 고유 ID")
     email: str = Field(..., description="이메일 주소")
     name: str = Field(..., description="사용자 이름")
@@ -59,7 +61,7 @@ class User(BaseModel):
                 "provider_user_id": "123456789",
                 "created_at": "2026-01-28T10:00:00",
                 "updated_at": "2026-01-28T10:00:00",
-                "last_login_at": "2026-01-28T12:00:00"
+                "last_login_at": "2026-01-28T12:00:00",
             }
         }
 
@@ -70,6 +72,7 @@ class AuthResponse(BaseModel):
 
     OAuth 인증 완료 후 반환되는 JWT 토큰 및 사용자 정보입니다.
     """
+
     access_token: str = Field(..., description="JWT Access Token")
     token_type: str = Field(default="bearer", description="토큰 타입")
     expires_in: int = Field(..., description="토큰 만료 시간 (초)")
@@ -87,8 +90,8 @@ class AuthResponse(BaseModel):
                     "name": "홍길동",
                     "avatar_url": "https://example.com/avatar.jpg",
                     "provider": "google",
-                    "provider_user_id": "123456789"
-                }
+                    "provider_user_id": "123456789",
+                },
             }
         }
 
@@ -99,6 +102,7 @@ class TokenPayload(BaseModel):
 
     JWT 토큰에 포함되는 클레임(claims) 정보입니다.
     """
+
     sub: str = Field(..., description="Subject (user_id)")
     email: str = Field(..., description="이메일 주소")
     name: str = Field(..., description="사용자 이름")
@@ -114,7 +118,7 @@ class TokenPayload(BaseModel):
                 "name": "홍길동",
                 "provider": "google",
                 "exp": 1738051200,
-                "iat": 1735459200
+                "iat": 1735459200,
             }
         }
 
@@ -125,13 +129,9 @@ class OAuthCallbackRequest(BaseModel):
 
     프론트엔드에서 OAuth 콜백 URL의 쿼리 파라미터를 전달할 때 사용합니다.
     """
+
     code: str = Field(..., description="OAuth Authorization Code")
     state: str = Field(..., description="OAuth State (CSRF 방지)")
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "code": "4/0AY0e-g7...",
-                "state": "abc123xyz"
-            }
-        }
+        json_schema_extra = {"example": {"code": "4/0AY0e-g7...", "state": "abc123xyz"}}

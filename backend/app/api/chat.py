@@ -5,22 +5,22 @@ LangGraph 기반 멀티턴 챗봇 응답 생성 엔드포인트입니다.
 SSE 스트리밍과 일반 응답 모두 지원합니다.
 """
 
-import time
 import asyncio
-import uuid
 import json
 import logging
-from typing import Dict, Any, cast, Optional
+import time
+import uuid
+from typing import Any, Dict, Optional, cast
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.common.logger import get_rag_logger
-from app.common.config import get_config
-from app.supervisor import get_graph_for_chat_type, create_initial_state
-from app.supervisor.memory import ConversationMemory, should_use_memory
 from app.auth.dependencies import get_current_user_optional
 from app.auth.models import User
+from app.common.config import get_config
+from app.common.logger import get_rag_logger
+from app.supervisor import create_initial_state, get_graph_for_chat_type
+from app.supervisor.memory import ConversationMemory, should_use_memory
 
 from .models import (
     ChatRequest,
@@ -28,7 +28,6 @@ from .models import (
     NodeTiming,
 )
 from .response_builder import build_chat_response_data
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Chat"])
@@ -38,30 +37,36 @@ rag_logger = get_rag_logger()
 
 # SSE 실시간 상태 표시용 노드 라벨 및 진행률
 NODE_LABELS: Dict[str, tuple[str, int]] = {
-    'input_guardrail': ('입력 검증중...', 5),
-    'query_analysis': ('질의 분석중...', 15),
-    'react_think': ('추론중...', 25),
-    'react_act': ('정보 검색중...', 50),
-    'generation': ('답변 생성중...', 80),
-    'review': ('검토중...', 95),
-    'output_guardrail': ('완료', 100),
+    "input_guardrail": ("입력 검증중...", 5),
+    "query_analysis": ("질의 분석중...", 15),
+    "react_think": ("추론중...", 25),
+    "react_act": ("정보 검색중...", 50),
+    "generation": ("답변 생성중...", 80),
+    "review": ("검토중...", 95),
+    "output_guardrail": ("완료", 100),
 }
 
 # on_chain_end 이벤트 필터링: 등록된 그래프 노드만 final_state에 반영
 KNOWN_GRAPH_NODES = {
-    'cache_check', 'cache_response',
-    'input_guardrail', 'output_guardrail',
-    'supervisor',
-    'query_analysis', 'generation', 'review',
-    'retrieval_law', 'retrieval_criteria', 'retrieval_case',
-    'retrieval_merge',
+    "cache_check",
+    "cache_response",
+    "input_guardrail",
+    "output_guardrail",
+    "supervisor",
+    "query_analysis",
+    "generation",
+    "review",
+    "retrieval_law",
+    "retrieval_criteria",
+    "retrieval_case",
+    "retrieval_merge",
 }
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     LangGraph 기반 멀티턴 챗봇 응답 생성
@@ -93,7 +98,7 @@ async def chat(
         onboarding=request.onboarding,
         top_k=request.top_k or 5,
         chunk_types=request.chunk_types,
-        agencies=request.agencies
+        agencies=request.agencies,
     )
 
     try:
@@ -106,7 +111,7 @@ async def chat(
 
         # Create memory with DB persistence
         config = get_config()
-        use_db = config.memory.backend == 'db'
+        use_db = config.memory.backend == "db"
 
         session_memory = None
         memory_context = {}
@@ -115,11 +120,11 @@ async def chat(
                 chat_type=request.chat_type,
                 session_id=session_id,
                 user_id=user_id,
-                use_db=use_db
+                use_db=use_db,
             )
 
             # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
-            await session_memory.add_turn(role='user', content=request.message)
+            await session_memory.add_turn(role="user", content=request.message)
 
             # 메모리 컨텍스트 가져오기
             memory_context = session_memory.get_context_for_llm()
@@ -133,98 +138,124 @@ async def chat(
 
         # 온보딩 데이터 영속화
         if request.onboarding and session_memory:
-            session_memory.save_metadata('onboarding', dict(request.onboarding))
+            session_memory.save_metadata("onboarding", dict(request.onboarding))
         elif session_memory:
-            saved_onboarding = session_memory.get_metadata('onboarding')
+            saved_onboarding = session_memory.get_metadata("onboarding")
             if saved_onboarding:
-                initial_state['onboarding'] = saved_onboarding
+                initial_state["onboarding"] = saved_onboarding
 
         # 메모리 컨텍스트를 초기 상태에 병합
         if memory_context and session_memory:
-            initial_state['conversation_history'] = memory_context.get('conversation_history', [])
-            initial_state['compact_summary'] = memory_context.get('compact_summary')
-            initial_state['total_turn_count'] = session_memory.get_total_turn_count()
+            initial_state["conversation_history"] = memory_context.get(
+                "conversation_history", []
+            )
+            initial_state["compact_summary"] = memory_context.get("compact_summary")
+            initial_state["total_turn_count"] = session_memory.get_total_turn_count()
 
         # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
-        initial_state['session_id'] = session_id
+        initial_state["session_id"] = session_id
 
-        config = cast(Any, {
-            "configurable": {"thread_id": session_id},
-            "recursion_limit": GRAPH_RECURSION_LIMIT
-        })
+        config = cast(
+            Any,
+            {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": GRAPH_RECURSION_LIMIT,
+            },
+        )
 
         # === PR-6: L1 Supervisor Response Cache Check ===
         from app.supervisor.cache import SupervisorResponseCache
+
         cached_response = SupervisorResponseCache.get(request.message, session_id)
         if cached_response:
-            logger.info(f"[L1 Cache HIT] Returning cached response for: {request.message[:30]}...")
+            logger.info(
+                f"[L1 Cache HIT] Returning cached response for: {request.message[:30]}..."
+            )
             # 캐시에서 복원한 응답을 사용
             final_state = {
-                'final_answer': cached_response.get('final_answer', ''),
-                'mode': cached_response.get('mode'),
-                'query_analysis': cached_response.get('query_analysis', {}),
-                'citations': cached_response.get('citations', []),
-                'sources': [],
-                'retrieval': {},
-                '_cache_hit': True,
+                "final_answer": cached_response.get("final_answer", ""),
+                "mode": cached_response.get("mode"),
+                "query_analysis": cached_response.get("query_analysis", {}),
+                "citations": cached_response.get("citations", []),
+                "sources": [],
+                "retrieval": {},
+                "_cache_hit": True,
             }
         else:
             # === PR-6 끝 ===
             # MAS graph includes async nodes; prefer the async API when available.
-            GRAPH_TIMEOUT_SECONDS = getattr(get_config(), 'graph_timeout_seconds', 120)
-            logger.info(f"[chat] Starting graph execution for session={session_id[:8]}...")
+            GRAPH_TIMEOUT_SECONDS = getattr(get_config(), "graph_timeout_seconds", 120)
+            logger.info(
+                f"[chat] Starting graph execution for session={session_id[:8]}..."
+            )
             try:
-                if hasattr(graph, 'ainvoke'):
+                if hasattr(graph, "ainvoke"):
                     final_state = await asyncio.wait_for(
                         graph.ainvoke(initial_state, config),
-                        timeout=GRAPH_TIMEOUT_SECONDS
+                        timeout=GRAPH_TIMEOUT_SECONDS,
                     )
                 else:
                     final_state = await asyncio.wait_for(
                         asyncio.to_thread(graph.invoke, initial_state, config),
-                        timeout=GRAPH_TIMEOUT_SECONDS
+                        timeout=GRAPH_TIMEOUT_SECONDS,
                     )
             except asyncio.TimeoutError:
-                logger.error(f"[chat] Graph execution timed out after {GRAPH_TIMEOUT_SECONDS}s for session={session_id[:8]}")
-                raise HTTPException(status_code=504, detail="요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.")
-            logger.info(f"[chat] Graph execution completed for session={session_id[:8]}")
+                logger.error(
+                    f"[chat] Graph execution timed out after {GRAPH_TIMEOUT_SECONDS}s for session={session_id[:8]}"
+                )
+                raise HTTPException(
+                    status_code=504,
+                    detail="요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+                )
+            logger.info(
+                f"[chat] Graph execution completed for session={session_id[:8]}"
+            )
 
             # === PR-6: L1 Cache Save ===
-            if final_state.get('final_answer') and not final_state.get('guardrail_blocked'):
-                SupervisorResponseCache.set(request.message, {
-                    'final_answer': final_state.get('final_answer'),
-                    'mode': final_state.get('mode'),
-                    'query_analysis': final_state.get('query_analysis', {}),
-                    'citations': final_state.get('citations', []),
-                }, session_id)
-                logger.debug(f"[L1 Cache SAVE] Cached response for: {request.message[:30]}...")
+            if final_state.get("final_answer") and not final_state.get(
+                "guardrail_blocked"
+            ):
+                SupervisorResponseCache.set(
+                    request.message,
+                    {
+                        "final_answer": final_state.get("final_answer"),
+                        "mode": final_state.get("mode"),
+                        "query_analysis": final_state.get("query_analysis", {}),
+                        "citations": final_state.get("citations", []),
+                    },
+                    session_id,
+                )
+                logger.debug(
+                    f"[L1 Cache SAVE] Cached response for: {request.message[:30]}..."
+                )
             # === PR-6 끝 ===
 
         # 로깅용 retrieval 정보
-        retrieval = final_state.get('retrieval') or {}
+        retrieval = final_state.get("retrieval") or {}
         rag_logger.log_structured_retrieval(
             entry=log_entry,
-            agency_info=retrieval.get('agency', {}),
-            disputes=retrieval.get('disputes', []),
-            counsels=retrieval.get('counsels', []),
-            laws=retrieval.get('laws', []),
-            criteria=retrieval.get('criteria', [])
+            agency_info=retrieval.get("agency", {}),
+            disputes=retrieval.get("disputes", []),
+            counsels=retrieval.get("counsels", []),
+            laws=retrieval.get("laws", []),
+            criteria=retrieval.get("criteria", []),
         )
 
-        answer = final_state.get('final_answer') or ''
+        answer = final_state.get("final_answer") or ""
 
         # 어시스턴트 응답을 메모리에 추가
         if session_memory:
-            await session_memory.add_turn(role='assistant', content=answer)
+            await session_memory.add_turn(role="assistant", content=answer)
 
-        node_timings = final_state.get('_node_timings', {})
+        node_timings = final_state.get("_node_timings", {})
         if node_timings:
             rag_logger.log_node_timings(log_entry, node_timings)
 
         # 에이전트 트레이스 로깅
-        trace_entries = final_state.get('_agent_trace_entries', [])
+        trace_entries = final_state.get("_agent_trace_entries", [])
         if trace_entries:
             from app.supervisor.graph import build_pipeline_summary
+
             pipeline_summary = build_pipeline_summary(
                 trace_entries,
                 total_duration_ms=log_entry.total_time_ms or 0,
@@ -237,9 +268,9 @@ async def chat(
         rag_logger.log_response(
             entry=log_entry,
             answer=answer,
-            chunks_used=len(response_data['sources']),
-            sources_count=len(response_data['sources']),
-            status="success"
+            chunks_used=len(response_data["sources"]),
+            sources_count=len(response_data["sources"]),
+            status="success",
         )
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
@@ -250,20 +281,20 @@ async def chat(
             timing_response = [
                 NodeTiming(
                     node_name=name,
-                    duration_ms=info.get('duration_ms', 0),
-                    start_time=info.get('start_time', ''),
-                    end_time=info.get('end_time', '')
+                    duration_ms=info.get("duration_ms", 0),
+                    start_time=info.get("start_time", ""),
+                    end_time=info.get("end_time", ""),
                 )
                 for name, info in node_timings.items()
             ]
 
         return ChatResponse(
             **response_data,
-            chunks_used=len(response_data['sources']),
-            model='gpt-4o-mini',
+            chunks_used=len(response_data["sources"]),
+            model="gpt-4o-mini",
             node_timings=timing_response if request.debug else None,
             request_id=log_entry.request_id if request.debug else None,
-            total_time_ms=log_entry.total_time_ms if request.debug else None
+            total_time_ms=log_entry.total_time_ms if request.debug else None,
         )
 
     except Exception as e:
@@ -274,7 +305,7 @@ async def chat(
             chunks_used=0,
             sources_count=0,
             status="error",
-            error_message=str(e)
+            error_message=str(e),
         )
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
@@ -292,7 +323,9 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
     aiter = async_iterable.__aiter__()
     while True:
         try:
-            event = await asyncio.wait_for(aiter.__anext__(), timeout=heartbeat_interval)
+            event = await asyncio.wait_for(
+                aiter.__anext__(), timeout=heartbeat_interval
+            )
             yield ("event", event)
         except asyncio.TimeoutError:
             yield ("heartbeat", None)
@@ -303,7 +336,7 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
 @router.post("/chat/stream")
 async def chat_stream_sse(
     request: ChatRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     LangGraph astream 기반 SSE 스트리밍 챗봇 응답 생성
@@ -317,6 +350,7 @@ async def chat_stream_sse(
         data: {"type": "status", "data": {"node": "query_analysis", "status": "질의 분석중...", "progress": 15}}
         data: {"type": "complete", "data": {"session_id": "...", "answer": "...", "sources": [...]}}
     """
+
     async def event_generator():
         start_time = time.time()
         log_entry = rag_logger.create_entry(query=request.message)
@@ -328,7 +362,7 @@ async def chat_stream_sse(
             onboarding=request.onboarding,
             top_k=request.top_k or 5,
             chunk_types=request.chunk_types,
-            agencies=request.agencies
+            agencies=request.agencies,
         )
 
         session_id = request.session_id or str(uuid.uuid4())
@@ -346,7 +380,7 @@ async def chat_stream_sse(
 
             # Create memory with DB persistence
             config = get_config()
-            use_db = config.memory.backend == 'db'
+            use_db = config.memory.backend == "db"
 
             session_memory = None
             memory_context = {}
@@ -355,9 +389,9 @@ async def chat_stream_sse(
                     chat_type=request.chat_type,
                     session_id=session_id,
                     user_id=user_id,
-                    use_db=use_db
+                    use_db=use_db,
                 )
-                await session_memory.add_turn(role='user', content=request.message)
+                await session_memory.add_turn(role="user", content=request.message)
                 memory_context = session_memory.get_context_for_llm()
 
             # 초기 상태 생성
@@ -369,27 +403,36 @@ async def chat_stream_sse(
 
             # 온보딩 데이터 영속화
             if request.onboarding and session_memory:
-                session_memory.save_metadata('onboarding', dict(request.onboarding))
+                session_memory.save_metadata("onboarding", dict(request.onboarding))
             elif session_memory:
-                saved_onboarding = session_memory.get_metadata('onboarding')
+                saved_onboarding = session_memory.get_metadata("onboarding")
                 if saved_onboarding:
-                    initial_state['onboarding'] = saved_onboarding
+                    initial_state["onboarding"] = saved_onboarding
 
             # 메모리 컨텍스트 병합
             if memory_context and session_memory:
-                initial_state['conversation_history'] = memory_context.get('conversation_history', [])
-                initial_state['compact_summary'] = memory_context.get('compact_summary')
-                initial_state['total_turn_count'] = session_memory.get_total_turn_count()
+                initial_state["conversation_history"] = memory_context.get(
+                    "conversation_history", []
+                )
+                initial_state["compact_summary"] = memory_context.get("compact_summary")
+                initial_state["total_turn_count"] = (
+                    session_memory.get_total_turn_count()
+                )
 
             # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
-            initial_state['session_id'] = session_id
+            initial_state["session_id"] = session_id
 
-            runnable_config = cast(Any, {
-                "configurable": {"thread_id": session_id},
-                "recursion_limit": GRAPH_RECURSION_LIMIT
-            })
+            runnable_config = cast(
+                Any,
+                {
+                    "configurable": {"thread_id": session_id},
+                    "recursion_limit": GRAPH_RECURSION_LIMIT,
+                },
+            )
 
-            logger.info(f"[chat_stream] Starting graph streaming for session={session_id[:8]}...")
+            logger.info(
+                f"[chat_stream] Starting graph streaming for session={session_id[:8]}..."
+            )
 
             # LangGraph astream_events로 실시간 토큰 스트리밍 + 노드 진행 상황
             # on_custom_event: 토큰, fallback 이벤트 (generation_node가 발생)
@@ -416,32 +459,36 @@ async def chat_stream_sse(
 
                     if custom_event_name == "generation_token":
                         # Token from LLM streaming
-                        full_answer += custom_data.get('content', '')
+                        full_answer += custom_data.get("content", "")
                         sse_event = {
-                            'type': 'token',
-                            'data': {
-                                'content': custom_data.get('content'),
-                                'model': custom_data.get('model', 'unknown')
-                            }
+                            "type": "token",
+                            "data": {
+                                "content": custom_data.get("content"),
+                                "model": custom_data.get("model", "unknown"),
+                            },
                         }
                         yield f"data: {json.dumps(sse_event, ensure_ascii=False)}\n\n"
 
                     elif custom_event_name == "generation_fallback":
                         # Fallback model switch
                         fallback_event = {
-                            'type': 'fallback',
-                            'data': {
-                                'model': custom_data.get('model', 'unknown'),
-                                'message': custom_data.get('message', 'Fallback triggered')
-                            }
+                            "type": "fallback",
+                            "data": {
+                                "model": custom_data.get("model", "unknown"),
+                                "message": custom_data.get(
+                                    "message", "Fallback triggered"
+                                ),
+                            },
                         }
                         yield f"data: {json.dumps(fallback_event, ensure_ascii=False)}\n\n"
 
                     elif custom_event_name == "generation_error":
                         # Error during generation
                         error_event = {
-                            'type': 'error',
-                            'data': {'message': custom_data.get('message', 'Unknown error')}
+                            "type": "error",
+                            "data": {
+                                "message": custom_data.get("message", "Unknown error")
+                            },
                         }
                         yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
@@ -451,12 +498,12 @@ async def chat_stream_sse(
                     if node_name in NODE_LABELS:
                         label, progress = NODE_LABELS[node_name]
                         status_event = {
-                            'type': 'status',
-                            'data': {
-                                'node': node_name,
-                                'status': label,
-                                'progress': progress
-                            }
+                            "type": "status",
+                            "data": {
+                                "node": node_name,
+                                "status": label,
+                                "progress": progress,
+                            },
                         }
                         yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
 
@@ -465,30 +512,37 @@ async def chat_stream_sse(
                     chain_name = event.get("name", "")
                     node_output = event.get("data", {}).get("output", {})
 
-                    if isinstance(node_output, dict) and chain_name in KNOWN_GRAPH_NODES:
-                        existing_answer = final_state.get('final_answer', '')
+                    if (
+                        isinstance(node_output, dict)
+                        and chain_name in KNOWN_GRAPH_NODES
+                    ):
+                        existing_answer = final_state.get("final_answer", "")
                         final_state.update(node_output)
 
                         # final_answer가 유효한 값에서 빈 값으로 덮어쓰여진 경우 복원
-                        new_answer = final_state.get('final_answer', '')
+                        new_answer = final_state.get("final_answer", "")
                         if existing_answer and not new_answer:
-                            final_state['final_answer'] = existing_answer
+                            final_state["final_answer"] = existing_answer
                             logger.warning(
                                 f"[SSE] Restored final_answer overwritten by node={chain_name}"
                             )
 
             # 최종 결과 전송
             if final_state:
-                answer = final_state.get('final_answer', '')
+                answer = final_state.get("final_answer", "")
 
                 # Fallback: final_answer가 비어있을 때 토큰 누적 답변 사용
                 if not answer and full_answer:
-                    review_executed = bool(final_state.get('review'))
+                    review_executed = bool(final_state.get("review"))
                     if review_executed:
-                        review_answer = (final_state.get('review', {}) or {}).get('final_answer', '')
+                        review_answer = (final_state.get("review", {}) or {}).get(
+                            "final_answer", ""
+                        )
                         if review_answer:
                             answer = review_answer
-                            logger.warning("[SSE] Using review.final_answer as fallback")
+                            logger.warning(
+                                "[SSE] Using review.final_answer as fallback"
+                            )
                         else:
                             answer = full_answer
                             logger.error(
@@ -505,22 +559,22 @@ async def chat_stream_sse(
                 # 공통 응답 빌더로 응답 데이터 구성
                 response_data = build_chat_response_data(session_id, final_state)
                 # 스트리밍에서 누적한 answer가 더 정확할 수 있으므로 덮어쓰기
-                response_data['answer'] = answer
+                response_data["answer"] = answer
 
                 # 어시스턴트 응답을 메모리에 추가
                 if session_memory:
-                    await session_memory.add_turn(role='assistant', content=answer)
+                    await session_memory.add_turn(role="assistant", content=answer)
 
-                complete_event = {
-                    'type': 'complete',
-                    'data': response_data
-                }
+                complete_event = {"type": "complete", "data": response_data}
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
 
                 # 에이전트 트레이스 로깅
-                trace_entries = final_state.get('_agent_trace_entries', []) if final_state else []
+                trace_entries = (
+                    final_state.get("_agent_trace_entries", []) if final_state else []
+                )
                 if trace_entries:
                     from app.supervisor.graph import build_pipeline_summary
+
                     pipeline_summary = build_pipeline_summary(
                         trace_entries,
                         total_duration_ms=(time.time() - start_time) * 1000,
@@ -528,34 +582,36 @@ async def chat_stream_sse(
                     rag_logger.log_pipeline_trace(log_entry, pipeline_summary)
 
                 # RAG 로깅
-                retrieval = final_state.get('retrieval') or {}
+                retrieval = final_state.get("retrieval") or {}
                 rag_logger.log_structured_retrieval(
                     entry=log_entry,
-                    agency_info=retrieval.get('agency', {}),
-                    disputes=retrieval.get('disputes', []),
-                    counsels=retrieval.get('counsels', []),
-                    laws=retrieval.get('laws', []),
-                    criteria=retrieval.get('criteria', [])
+                    agency_info=retrieval.get("agency", {}),
+                    disputes=retrieval.get("disputes", []),
+                    counsels=retrieval.get("counsels", []),
+                    laws=retrieval.get("laws", []),
+                    criteria=retrieval.get("criteria", []),
                 )
                 rag_logger.log_response(
                     entry=log_entry,
                     answer=answer,
-                    chunks_used=len(response_data['sources']),
-                    sources_count=len(response_data['sources']),
-                    status="success"
+                    chunks_used=len(response_data["sources"]),
+                    sources_count=len(response_data["sources"]),
+                    status="success",
                 )
                 rag_logger.finalize(log_entry, start_time)
                 rag_logger.save(log_entry)
 
         except asyncio.CancelledError:
-            logger.info(f"[chat_stream] Client disconnected during streaming, session={session_id[:8]}")
+            logger.info(
+                f"[chat_stream] Client disconnected during streaming, session={session_id[:8]}"
+            )
             rag_logger.log_response(
                 entry=log_entry,
                 answer="",
                 chunks_used=0,
                 sources_count=0,
                 status="cancelled",
-                error_message="Client disconnected"
+                error_message="Client disconnected",
             )
             rag_logger.finalize(log_entry, start_time)
             rag_logger.save(log_entry)
@@ -568,15 +624,13 @@ async def chat_stream_sse(
                 chunks_used=0,
                 sources_count=0,
                 status="error",
-                error_message=str(e)
+                error_message=str(e),
             )
             rag_logger.finalize(log_entry, start_time)
             rag_logger.save(log_entry)
             error_event = {
-                'type': 'error',
-                'data': {
-                    'message': f"답변 생성 중 오류 발생: {str(e)}"
-                }
+                "type": "error",
+                "data": {"message": f"답변 생성 중 오류 발생: {str(e)}"},
             }
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
@@ -586,9 +640,9 @@ async def chat_stream_sse(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Nginx buffering 비활성화
-        }
+            "X-Accel-Buffering": "no",  # Nginx buffering 비활성화
+        },
     )
 
 
-__all__ = ['router']
+__all__ = ["router"]

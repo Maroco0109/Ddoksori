@@ -17,30 +17,37 @@ from typing import Literal, Tuple
 
 from ...supervisor.state import RoutingMode
 from .constants import (
-    LAW_KEYWORDS,
-    CRITERIA_KEYWORDS,
-    GENERAL_PATTERNS,
-    DEFINITIONAL_PATTERNS,
     COMMON_PRODUCTS,
+    CRITERIA_KEYWORDS,
+    DEFINITIONAL_PATTERNS,
+    GENERAL_PATTERNS,
+    LAW_KEYWORDS,
 )
 from .detectors import (
-    should_promote_to_rag,
-    is_ambiguous_query,
-    is_system_meta_query,
     detect_restricted_domain,
-    is_procedure_query,
-    is_meta_conversational,
+    is_ambiguous_query,
     is_followup_with_context,
+    is_meta_conversational,
+    is_procedure_query,
+    is_system_meta_query,
+    should_promote_to_rag,
 )
 
 logger = logging.getLogger(__name__)
 
 # Query type literal
 QueryType = Literal[
-    "dispute", "general", "law", "criteria",
-    "procedure", "restricted", "system_meta", "ambiguous",
+    "dispute",
+    "general",
+    "law",
+    "criteria",
+    "procedure",
+    "restricted",
+    "system_meta",
+    "ambiguous",
     "meta_conversational",
 ]
+
 
 # 쿼리 복잡도 (Adaptive RAG용)
 class QueryComplexity(str, Enum):
@@ -51,17 +58,19 @@ class QueryComplexity(str, Enum):
     - MODERATE: 일반적 분쟁 상담 → HyDE + RRF 기본 검색
     - COMPLEX: 복잡한 상황 설명 → HyDE + RRF + 확장 검색
     """
+
     SIMPLE = "simple"
     MODERATE = "moderate"
     COMPLEX = "complex"
 
+
 # 분쟁 의도 복합 패턴 (Issue #3: dispute-specific compound patterns)
 # 규칙 기반 분류 정확도를 높이기 위해 LLM fallback 전에 체크
 DISPUTE_COMPOUND_PATTERNS: list[Tuple[str, float]] = [
-    (r'.+(?:인데|했는데|됐는데).+(?:가능|해줘|되나|할\s*수)', 0.85),  # "~인데 ~가능해?"
-    (r'(?:파손|불량|하자|결함|고장)', 0.85),  # 제품 하자 키워드
-    (r'(?:환불|교환|수리|반품|AS|as)', 0.85),  # 분쟁 해결 키워드
-    (r'(?:피해|손해|배상|보상)', 0.80),  # 피해/배상 키워드
+    (r".+(?:인데|했는데|됐는데).+(?:가능|해줘|되나|할\s*수)", 0.85),  # "~인데 ~가능해?"
+    (r"(?:파손|불량|하자|결함|고장)", 0.85),  # 제품 하자 키워드
+    (r"(?:환불|교환|수리|반품|AS|as)", 0.85),  # 분쟁 해결 키워드
+    (r"(?:피해|손해|배상|보상)", 0.80),  # 피해/배상 키워드
 ]
 
 
@@ -95,20 +104,28 @@ def classify_mode(
     if query_type == "meta_conversational":
         try:
             from ...common.config import get_config
+
             response_mode = get_config().response.response_mode
         except Exception:
-            logger.warning("[QueryAnalysis] Failed to read response_mode, defaulting to legacy")
+            logger.warning(
+                "[QueryAnalysis] Failed to read response_mode, defaulting to legacy"
+            )
             response_mode = "legacy"
         if response_mode == "legacy":
-            logger.info("[QueryAnalysis] Meta-conversational in legacy mode → NO_RETRIEVAL")
+            logger.info(
+                "[QueryAnalysis] Meta-conversational in legacy mode → NO_RETRIEVAL"
+            )
             return "NO_RETRIEVAL"
-        logger.info(f"[QueryAnalysis] Meta-conversational query → META_CONVERSATIONAL (mode={response_mode})")
+        logger.info(
+            f"[QueryAnalysis] Meta-conversational query → META_CONVERSATIONAL (mode={response_mode})"
+        )
         return "META_CONVERSATIONAL"
 
     # Phase D: FOLLOWUP_WITH_CONTEXT — 이전 턴 후속 질문 매칭
     if previous_followups:
         try:
             from ...common.config import get_config
+
             threshold = get_config().response.followup_similarity_threshold
             response_mode = get_config().response.response_mode
         except Exception:
@@ -122,9 +139,7 @@ def classify_mode(
 
     # NEW: 모호한 쿼리는 RAG로 라우팅 (명확화 단계 제거됨)
     if query_type == "ambiguous":
-        logger.info(
-            "[QueryAnalysis] Ambiguous query detected, routing to RAG"
-        )
+        logger.info("[QueryAnalysis] Ambiguous query detected, routing to RAG")
         return "NEED_RAG"
 
     if query_type == "general":
@@ -139,7 +154,9 @@ def classify_mode(
 
     # NEW: Restricted 도메인은 전문기관 안내 + 유사 사례 검색
     if query_type == "restricted":
-        logger.info("[QueryAnalysis] Restricted domain detected, routing to specialist agency guidance")
+        logger.info(
+            "[QueryAnalysis] Restricted domain detected, routing to specialist agency guidance"
+        )
         return "RESTRICTED_DOMAIN"
 
     # needs_clarification parameter kept for backward compatibility but ignored
@@ -189,7 +206,7 @@ def classify_query_type_with_confidence(query: str) -> Tuple[QueryType, float]:
 
     # 법률명 패턴 우선 (예: "소비자보호법이 뭐야?" → law, not general)
     # DEFINITIONAL 패턴보다 먼저 체크하여 법률명 포함 질문을 law로 분류
-    law_pattern_match = re.search(r'\S+법', query_lower)
+    law_pattern_match = re.search(r"\S+법", query_lower)
     if law_pattern_match:
         return "law", 0.9
 
@@ -247,7 +264,9 @@ def classify_query_type_with_confidence(query: str) -> Tuple[QueryType, float]:
 
     # 기본값: 분쟁 상담 (confidence 낮음 → LLM fallback 대상)
     result = ("dispute", 0.5)
-    logger.info(f"[classify_query_type_with_confidence] Result: type={result[0]}, confidence={result[1]}")
+    logger.info(
+        f"[classify_query_type_with_confidence] Result: type={result[0]}, confidence={result[1]}"
+    )
     return result
 
 
@@ -289,9 +308,9 @@ def classify_query_complexity(query: str) -> QueryComplexity:
 
     # COMPLEX 패턴: 복합 문장 구조 (단어 수보다 우선)
     complex_patterns = [
-        r'.+(?:인데|했는데|됐는데|거든요|는데요).+(?:가능|해줘|되나|할\s*수|어떻게)',
-        r'(?:구매|주문|결제).+(?:후|지난).+(?:불량|하자|파손|고장)',
-        r'.+(?:거부|무시|연락).+(?:어떻게|방법|도움)',
+        r".+(?:인데|했는데|됐는데|거든요|는데요).+(?:가능|해줘|되나|할\s*수|어떻게)",
+        r"(?:구매|주문|결제).+(?:후|지난).+(?:불량|하자|파손|고장)",
+        r".+(?:거부|무시|연락).+(?:어떻게|방법|도움)",
     ]
     for pattern in complex_patterns:
         if re.search(pattern, query_stripped):

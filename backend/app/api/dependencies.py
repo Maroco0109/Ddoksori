@@ -5,10 +5,10 @@ FastAPI Dependency Injection을 위한 공통 의존성을 정의합니다.
 """
 
 import os
-from typing import Generator, Any, Dict
+from typing import Any, Dict, Generator
 
-from app.agents.retrieval.tools.retriever import RAGRetriever
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
+from app.agents.retrieval.tools.retriever import RAGRetriever
 from utils.embedding_connection import get_embedding_api_url
 
 
@@ -19,12 +19,12 @@ def get_db_config() -> Dict[str, Any]:
     환경변수에서 DB 연결 정보를 로드합니다.
     """
     return {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', 5432)),
-        'database': os.getenv('DB_NAME', 'ddoksori'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'postgres'),
-        'client_encoding': 'UTF8'  # 한국어 텍스트를 위한 UTF-8 인코딩
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 5432)),
+        "database": os.getenv("DB_NAME", "ddoksori"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "postgres"),
+        "client_encoding": "UTF8",  # 한국어 텍스트를 위한 UTF-8 인코딩
     }
 
 
@@ -35,7 +35,7 @@ def get_embed_api_url() -> str:
 
 def get_retrieval_mode() -> str:
     """검색 모드 반환 ('hybrid' 또는 'dense')"""
-    return os.getenv('RETRIEVAL_MODE', 'dense')
+    return os.getenv("RETRIEVAL_MODE", "dense")
 
 
 def get_retriever() -> Generator[Any, None, None]:
@@ -52,7 +52,7 @@ def get_retriever() -> Generator[Any, None, None]:
     embed_api_url = get_embed_api_url()
     retrieval_mode = get_retrieval_mode()
 
-    if retrieval_mode == 'hybrid':
+    if retrieval_mode == "hybrid":
         retriever_instance = HybridRetriever(db_config, embed_api_url)
     else:
         retriever_instance = RAGRetriever(db_config, embed_api_url)
@@ -65,8 +65,8 @@ def get_retriever() -> Generator[Any, None, None]:
 
 
 __all__ = [
-    'get_db_config',
-    'get_embed_api_url',
-    'get_retrieval_mode',
-    'get_retriever',
+    "get_db_config",
+    "get_embed_api_url",
+    "get_retrieval_mode",
+    "get_retriever",
 ]

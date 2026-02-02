@@ -33,6 +33,7 @@ class RelevanceResult:
         threshold: 적용된 임계값
         message: 검증 결과 메시지 (실패 시 상세 설명)
     """
+
     passed: bool
     score: float
     threshold: float
@@ -51,6 +52,7 @@ class CitationVerifyResult:
         unverified_laws: 검색 결과에서 확인되지 않은 법령/조문 (Hallucination 의심)
         accuracy: 인용 정확도 (verified / cited)
     """
+
     passed: bool
     cited_laws: List[str]
     verified_laws: List[str]
@@ -86,10 +88,15 @@ class RelevanceChecker:
         if self._client is None:
             try:
                 from app.agents.retrieval.tools.embedding_client import EmbeddingClient
+
                 self._client = EmbeddingClient()
-                logger.info("[RelevanceChecker] EmbeddingClient initialized (text-embedding-3-large)")
+                logger.info(
+                    "[RelevanceChecker] EmbeddingClient initialized (text-embedding-3-large)"
+                )
             except Exception as e:
-                logger.error(f"[RelevanceChecker] Failed to initialize EmbeddingClient: {e}")
+                logger.error(
+                    f"[RelevanceChecker] Failed to initialize EmbeddingClient: {e}"
+                )
                 raise
         return self._client
 
@@ -117,10 +124,7 @@ class RelevanceChecker:
         return float(dot_product / (norm_a * norm_b))
 
     def check_query_answer_relevance(
-        self,
-        query: str,
-        answer: str,
-        threshold: float = 0.5
+        self, query: str, answer: str, threshold: float = 0.5
     ) -> RelevanceResult:
         """
         Query-Answer 관련성 검증
@@ -141,7 +145,7 @@ class RelevanceChecker:
                 passed=False,
                 score=0.0,
                 threshold=threshold,
-                message="Query 또는 Answer가 비어있습니다."
+                message="Query 또는 Answer가 비어있습니다.",
             )
 
         try:
@@ -156,7 +160,11 @@ class RelevanceChecker:
             similarity = self._cosine_similarity(q_emb, a_emb)
 
             passed = similarity >= threshold
-            message = None if passed else f"Query-Answer 관련성 부족 (score={similarity:.3f} < threshold={threshold})"
+            message = (
+                None
+                if passed
+                else f"Query-Answer 관련성 부족 (score={similarity:.3f} < threshold={threshold})"
+            )
 
             logger.debug(
                 f"[RelevanceChecker] Query-Answer relevance: "
@@ -164,10 +172,7 @@ class RelevanceChecker:
             )
 
             return RelevanceResult(
-                passed=passed,
-                score=similarity,
-                threshold=threshold,
-                message=message
+                passed=passed, score=similarity, threshold=threshold, message=message
             )
 
         except Exception as e:
@@ -177,14 +182,11 @@ class RelevanceChecker:
                 passed=True,
                 score=0.0,
                 threshold=threshold,
-                message=f"임베딩 실패로 검증 생략: {str(e)}"
+                message=f"임베딩 실패로 검증 생략: {str(e)}",
             )
 
     def check_retrieval_relevance(
-        self,
-        query: str,
-        chunks: List[str],
-        threshold: float = 0.4
+        self, query: str, chunks: List[str], threshold: float = 0.4
     ) -> RelevanceResult:
         """
         Query-Retrieval 관련성 검증
@@ -205,16 +207,13 @@ class RelevanceChecker:
                 passed=False,
                 score=0.0,
                 threshold=threshold,
-                message="Query가 비어있습니다."
+                message="Query가 비어있습니다.",
             )
 
         if not chunks:
             # 검색 결과가 없는 경우 통과 (검색 실패는 별도 처리)
             return RelevanceResult(
-                passed=True,
-                score=0.0,
-                threshold=threshold,
-                message="검색 결과 없음"
+                passed=True, score=0.0, threshold=threshold, message="검색 결과 없음"
             )
 
         try:
@@ -228,17 +227,22 @@ class RelevanceChecker:
 
             # 각 청크와의 유사도 계산
             similarities = [
-                self._cosine_similarity(q_emb, c_emb)
-                for c_emb in chunk_embeddings
+                self._cosine_similarity(q_emb, c_emb) for c_emb in chunk_embeddings
             ]
 
             max_similarity = max(similarities) if similarities else 0.0
-            avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
+            avg_similarity = (
+                sum(similarities) / len(similarities) if similarities else 0.0
+            )
 
             passed = max_similarity >= threshold
-            message = None if passed else (
-                f"검색 결과와 Query 관련성 부족 "
-                f"(max={max_similarity:.3f} < threshold={threshold})"
+            message = (
+                None
+                if passed
+                else (
+                    f"검색 결과와 Query 관련성 부족 "
+                    f"(max={max_similarity:.3f} < threshold={threshold})"
+                )
             )
 
             logger.debug(
@@ -250,23 +254,22 @@ class RelevanceChecker:
                 passed=passed,
                 score=max_similarity,
                 threshold=threshold,
-                message=message
+                message=message,
             )
 
         except Exception as e:
-            logger.error(f"[RelevanceChecker] Query-Retrieval relevance check failed: {e}")
+            logger.error(
+                f"[RelevanceChecker] Query-Retrieval relevance check failed: {e}"
+            )
             return RelevanceResult(
                 passed=True,
                 score=0.0,
                 threshold=threshold,
-                message=f"임베딩 실패로 검증 생략: {str(e)}"
+                message=f"임베딩 실패로 검증 생략: {str(e)}",
             )
 
     def check_answer_source_relevance(
-        self,
-        answer: str,
-        chunks: List[str],
-        threshold: float = 0.45
+        self, answer: str, chunks: List[str], threshold: float = 0.45
     ) -> RelevanceResult:
         """
         Answer-Source 관련성 검증
@@ -287,16 +290,13 @@ class RelevanceChecker:
                 passed=False,
                 score=0.0,
                 threshold=threshold,
-                message="Answer가 비어있습니다."
+                message="Answer가 비어있습니다.",
             )
 
         if not chunks:
             # 출처가 없는 경우 (일반 대화 등) 통과
             return RelevanceResult(
-                passed=True,
-                score=0.0,
-                threshold=threshold,
-                message="출처 문서 없음"
+                passed=True, score=0.0, threshold=threshold, message="출처 문서 없음"
             )
 
         try:
@@ -310,16 +310,19 @@ class RelevanceChecker:
 
             # 각 청크와의 유사도 계산
             similarities = [
-                self._cosine_similarity(a_emb, c_emb)
-                for c_emb in chunk_embeddings
+                self._cosine_similarity(a_emb, c_emb) for c_emb in chunk_embeddings
             ]
 
             max_similarity = max(similarities) if similarities else 0.0
 
             passed = max_similarity >= threshold
-            message = None if passed else (
-                f"Answer가 출처와 관련성 부족 - Hallucination 의심 "
-                f"(max={max_similarity:.3f} < threshold={threshold})"
+            message = (
+                None
+                if passed
+                else (
+                    f"Answer가 출처와 관련성 부족 - Hallucination 의심 "
+                    f"(max={max_similarity:.3f} < threshold={threshold})"
+                )
             )
 
             logger.debug(
@@ -331,16 +334,18 @@ class RelevanceChecker:
                 passed=passed,
                 score=max_similarity,
                 threshold=threshold,
-                message=message
+                message=message,
             )
 
         except Exception as e:
-            logger.error(f"[RelevanceChecker] Answer-Source relevance check failed: {e}")
+            logger.error(
+                f"[RelevanceChecker] Answer-Source relevance check failed: {e}"
+            )
             return RelevanceResult(
                 passed=True,
                 score=0.0,
                 threshold=threshold,
-                message=f"임베딩 실패로 검증 생략: {str(e)}"
+                message=f"임베딩 실패로 검증 생략: {str(e)}",
             )
 
 
@@ -362,8 +367,8 @@ def get_relevance_checker() -> RelevanceChecker:
 
 
 __all__ = [
-    'RelevanceResult',
-    'CitationVerifyResult',
-    'RelevanceChecker',
-    'get_relevance_checker',
+    "RelevanceResult",
+    "CitationVerifyResult",
+    "RelevanceChecker",
+    "get_relevance_checker",
 ]

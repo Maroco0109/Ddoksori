@@ -11,22 +11,23 @@ Legal Review Agent Enhanced 기능 테스트
     pytest backend/scripts/testing/legal_review/test_enhanced_review.py -v
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 # 테스트 대상 모듈
 from app.agents.legal_review.agent import (
-    verify_citation_accuracy,
-    _extract_law_references,
     CitationVerifyResult,
-)
-from app.agents.legal_review.relevance_checker import (
-    RelevanceChecker,
-    RelevanceResult,
+    _extract_law_references,
+    verify_citation_accuracy,
 )
 from app.agents.legal_review.confidence_scorer import (
     ConfidenceScorer,
     ConfidenceScoreResult,
+)
+from app.agents.legal_review.relevance_checker import (
+    RelevanceChecker,
+    RelevanceResult,
 )
 
 
@@ -37,7 +38,7 @@ class TestExtractLawReferences:
         """제XX조 패턴 추출"""
         text = "소비자기본법 제17조에 따르면 환불이 가능합니다."
         refs = _extract_law_references(text)
-        assert any('17' in ref for ref in refs)
+        assert any("17" in ref for ref in refs)
 
     def test_extract_article_with_paragraph(self):
         """제XX조 제X항 패턴 추출"""
@@ -49,7 +50,7 @@ class TestExtractLawReferences:
         """별표 패턴 추출"""
         text = "별표 1에 규정된 기준에 따릅니다."
         refs = _extract_law_references(text)
-        assert any('1' in ref for ref in refs)
+        assert any("1" in ref for ref in refs)
 
     def test_extract_law_names(self):
         """법령명 추출"""
@@ -86,7 +87,7 @@ class TestVerifyCitationAccuracy:
         result = verify_citation_accuracy(answer, sources)
 
         assert result.passed is True
-        assert '17' in str(result.verified_refs)
+        assert "17" in str(result.verified_refs)
         assert len(result.unverified_refs) == 0
 
     def test_hallucination_citation(self):
@@ -98,7 +99,7 @@ class TestVerifyCitationAccuracy:
 
         # 관대 모드에서는 50% 이상 검증되면 통과
         # 여기서는 0% 검증이므로 실패할 수 있음
-        assert '99' in str(result.unverified_refs) or '99' in str(result.cited_refs)
+        assert "99" in str(result.unverified_refs) or "99" in str(result.cited_refs)
 
     def test_empty_sources(self):
         """검색 결과가 없는 경우"""
@@ -117,7 +118,9 @@ class TestRelevanceChecker:
     @pytest.fixture
     def mock_embedding_client(self):
         """EmbeddingClient Mock"""
-        with patch('app.agents.legal_review.relevance_checker.RelevanceChecker._get_client') as mock:
+        with patch(
+            "app.agents.legal_review.relevance_checker.RelevanceChecker._get_client"
+        ) as mock:
             client = MagicMock()
             # 유사한 텍스트에 대해 높은 유사도 반환
             client.embed.return_value = [
@@ -135,7 +138,7 @@ class TestRelevanceChecker:
         result = checker.check_query_answer_relevance(
             query="헬스장 환불 가능한가요?",
             answer="헬스장 회원권은 청약철회 기간 내 환불이 가능합니다.",
-            threshold=0.5
+            threshold=0.5,
         )
 
         # Mock이므로 cosine similarity = 1.0
@@ -147,9 +150,7 @@ class TestRelevanceChecker:
         checker = RelevanceChecker()
 
         result = checker.check_query_answer_relevance(
-            query="",
-            answer="환불이 가능합니다.",
-            threshold=0.5
+            query="", answer="환불이 가능합니다.", threshold=0.5
         )
 
         assert result.passed is False
@@ -160,9 +161,7 @@ class TestRelevanceChecker:
         checker = RelevanceChecker()
 
         result = checker.check_query_answer_relevance(
-            query="헬스장 환불 가능한가요?",
-            answer="",
-            threshold=0.5
+            query="헬스장 환불 가능한가요?", answer="", threshold=0.5
         )
 
         assert result.passed is False
@@ -179,11 +178,11 @@ class TestConfidenceScorer:
             answer="환불이 가능합니다. 제17조에 따르면...",
             sources=[{"content": "제17조 (청약철회) 소비자는..."}] * 3,
             relevance_score=0.9,
-            citation_accuracy=0.95
+            citation_accuracy=0.95,
         )
 
         assert result.total_score >= 0.7
-        assert result.grade in ['A', 'B']
+        assert result.grade in ["A", "B"]
         assert result.is_reliable is True
 
     def test_low_confidence(self):
@@ -194,11 +193,11 @@ class TestConfidenceScorer:
             answer="환불이 가능합니다.",
             sources=[],
             relevance_score=0.2,
-            citation_accuracy=0.1
+            citation_accuracy=0.1,
         )
 
         assert result.total_score < 0.5
-        assert result.grade in ['D', 'F']
+        assert result.grade in ["D", "F"]
         assert result.is_reliable is False
 
     def test_grade_thresholds(self):
@@ -210,18 +209,15 @@ class TestConfidenceScorer:
             answer="x" * 100,
             sources=[{"content": "x" * 500}] * 5,
             relevance_score=0.95,
-            citation_accuracy=0.95
+            citation_accuracy=0.95,
         )
-        assert result_a.grade == 'A'
+        assert result_a.grade == "A"
 
         # F 등급 (<0.40)
         result_f = scorer.calculate(
-            answer="x" * 100,
-            sources=[],
-            relevance_score=0.1,
-            citation_accuracy=0.0
+            answer="x" * 100, sources=[], relevance_score=0.1, citation_accuracy=0.0
         )
-        assert result_f.grade in ['D', 'F']
+        assert result_f.grade in ["D", "F"]
 
 
 class TestEnhancedLLMReview:
@@ -230,11 +226,11 @@ class TestEnhancedLLMReview:
     @pytest.fixture
     def mock_openai(self):
         """OpenAI Mock"""
-        with patch('app.agents.legal_review.llm_reviewer.OpenAI') as mock_class:
+        with patch("app.agents.legal_review.llm_reviewer.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
             mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = '''
+            mock_response.choices[0].message.content = """
             {
                 "passed": true,
                 "issues": [],
@@ -243,7 +239,7 @@ class TestEnhancedLLMReview:
                 "overall_severity": "low",
                 "overall_comment": "안전한 답변입니다."
             }
-            '''
+            """
             mock_client.chat.completions.create.return_value = mock_response
             mock_class.return_value = mock_client
             yield mock_client
@@ -255,16 +251,16 @@ class TestEnhancedLLMReview:
         reviewer = HybridLegalReviewer(enable_llm=False)
 
         state = {
-            'draft_answer': '일반적으로 환불이 가능할 수 있습니다.',
-            'query_analysis': {'query_type': 'dispute'},
-            'sources': [],
-            'retry_count': 0,
+            "draft_answer": "일반적으로 환불이 가능할 수 있습니다.",
+            "query_analysis": {"query_type": "dispute"},
+            "sources": [],
+            "retry_count": 0,
         }
 
         result = reviewer.review(state)
 
-        assert result['review']['passed'] is True
-        assert len(result['review']['violations']) == 0
+        assert result["review"]["passed"] is True
+        assert len(result["review"]["violations"]) == 0
 
     def test_hybrid_review_with_prohibited_expression(self, mock_openai):
         """금지 표현 포함된 경우"""
@@ -273,16 +269,16 @@ class TestEnhancedLLMReview:
         reviewer = HybridLegalReviewer(enable_llm=False)
 
         state = {
-            'draft_answer': '반드시 환불받으실 수 있습니다. 100% 승소합니다.',
-            'query_analysis': {'query_type': 'dispute'},
-            'sources': [],
-            'retry_count': 0,
+            "draft_answer": "반드시 환불받으실 수 있습니다. 100% 승소합니다.",
+            "query_analysis": {"query_type": "dispute"},
+            "sources": [],
+            "retry_count": 0,
         }
 
         result = reviewer.review(state)
 
         # 금지 표현이 있으므로 위반 탐지
-        assert len(result['review']['violations']) > 0
+        assert len(result["review"]["violations"]) > 0
 
     def test_skip_review_for_general_query(self, mock_openai):
         """일반 대화는 리뷰 스킵"""
@@ -291,17 +287,17 @@ class TestEnhancedLLMReview:
         reviewer = HybridLegalReviewer(enable_llm=True)
 
         state = {
-            'draft_answer': '안녕하세요!',
-            'query_analysis': {'query_type': 'general'},
-            'sources': [],
-            'retry_count': 0,
+            "draft_answer": "안녕하세요!",
+            "query_analysis": {"query_type": "general"},
+            "sources": [],
+            "retry_count": 0,
         }
 
         result = reviewer.review(state)
 
-        assert result['review']['passed'] is True
-        assert result['final_answer'] == '안녕하세요!'
+        assert result["review"]["passed"] is True
+        assert result["final_answer"] == "안녕하세요!"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

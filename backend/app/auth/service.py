@@ -22,14 +22,14 @@ OAuth 인증 흐름을 관리하고 JWT 토큰을 발행합니다.
     auth_response = await auth_service.handle_google_callback(code, state)
 """
 
-from typing import Tuple, Optional
-
-from app.common.config import get_config
 import logging
-from app.auth.models import User, AuthResponse
+from typing import Optional, Tuple
+
+from app.auth.dependencies import create_access_token
+from app.auth.models import AuthResponse, User
 from app.auth.oauth import GoogleOAuth, NaverOAuth
 from app.auth.user_db import UserDB
-from app.auth.dependencies import create_access_token
+from app.common.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class AuthService:
             provider_user_id=user_info["provider_user_id"],
             email=user_info["email"],
             name=user_info["name"],
-            avatar_url=user_info.get("avatar_url")
+            avatar_url=user_info.get("avatar_url"),
         )
 
         # 4. JWT 토큰 생성
@@ -113,7 +113,7 @@ class AuthService:
             access_token=access_token,
             token_type="bearer",
             expires_in=expires_in,
-            user=user
+            user=user,
         )
 
     async def handle_naver_callback(self, code: str) -> AuthResponse:
@@ -141,7 +141,7 @@ class AuthService:
             provider_user_id=user_info["provider_user_id"],
             email=user_info["email"],
             name=user_info["name"],
-            avatar_url=user_info.get("avatar_url")
+            avatar_url=user_info.get("avatar_url"),
         )
 
         # 4. JWT 토큰 생성
@@ -153,7 +153,7 @@ class AuthService:
             access_token=access_token,
             token_type="bearer",
             expires_in=expires_in,
-            user=user
+            user=user,
         )
 
     async def close(self) -> None:

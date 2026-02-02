@@ -25,6 +25,7 @@ if _backend_root not in sys.path:
 # Test 1.1: MAS 그래프 구조 검증
 # ============================================================
 
+
 @pytest.mark.e2e
 @pytest.mark.unit
 class TestMASGraphStructure:
@@ -68,13 +69,15 @@ class TestMASGraphStructure:
         graph = create_mas_supervisor_graph()
         node_names = set(graph.nodes.keys())
 
-        assert "retrieval_counsel" not in node_names, \
-            "retrieval_counsel 노드가 여전히 존재합니다 (Phase 10에서 제거 필요)"
+        assert (
+            "retrieval_counsel" not in node_names
+        ), "retrieval_counsel 노드가 여전히 존재합니다 (Phase 10에서 제거 필요)"
 
 
 # ============================================================
 # Test 1.2: Agent Registry 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -84,9 +87,9 @@ class TestAgentRegistry:
     def test_retrieval_agents_registered(self):
         """3개 Retrieval Agent가 올바르게 등록되었는지 확인"""
         from app.agents.retrieval import (
-            LawRetrievalAgent,
-            CriteriaRetrievalAgent,
             CaseRetrievalAgent,
+            CriteriaRetrievalAgent,
+            LawRetrievalAgent,
         )
 
         agents = {
@@ -96,19 +99,22 @@ class TestAgentRegistry:
         }
 
         for key, agent_cls in agents.items():
-            assert hasattr(agent_cls, "domain_key"), \
-                f"{agent_cls.__name__} missing domain_key"
-            assert hasattr(agent_cls, "required_inputs"), \
-                f"{agent_cls.__name__} missing required_inputs"
-            assert hasattr(agent_cls, "provided_outputs"), \
-                f"{agent_cls.__name__} missing provided_outputs"
+            assert hasattr(
+                agent_cls, "domain_key"
+            ), f"{agent_cls.__name__} missing domain_key"
+            assert hasattr(
+                agent_cls, "required_inputs"
+            ), f"{agent_cls.__name__} missing required_inputs"
+            assert hasattr(
+                agent_cls, "provided_outputs"
+            ), f"{agent_cls.__name__} missing provided_outputs"
 
     def test_agent_domain_keys(self):
         """각 Agent의 domain_key가 올바르게 설정되었는지 확인"""
         from app.agents.retrieval import (
-            LawRetrievalAgent,
-            CriteriaRetrievalAgent,
             CaseRetrievalAgent,
+            CriteriaRetrievalAgent,
+            LawRetrievalAgent,
         )
 
         assert LawRetrievalAgent.domain_key == "law"
@@ -119,19 +125,25 @@ class TestAgentRegistry:
         """모든 Retrieval Agent가 BaseRetrievalAgent를 상속하는지 확인"""
         from app.agents.retrieval import (
             BaseRetrievalAgent,
+            CaseRetrievalAgent,
+            CriteriaRetrievalAgent,
+            LawRetrievalAgent,
+        )
+
+        for agent_cls in [
             LawRetrievalAgent,
             CriteriaRetrievalAgent,
             CaseRetrievalAgent,
-        )
-
-        for agent_cls in [LawRetrievalAgent, CriteriaRetrievalAgent, CaseRetrievalAgent]:
-            assert issubclass(agent_cls, BaseRetrievalAgent), \
-                f"{agent_cls.__name__} does not inherit BaseRetrievalAgent"
+        ]:
+            assert issubclass(
+                agent_cls, BaseRetrievalAgent
+            ), f"{agent_cls.__name__} does not inherit BaseRetrievalAgent"
 
 
 # ============================================================
 # Test 1.3: Config 중앙화 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -165,8 +177,9 @@ class TestConfigCentralized:
 
         # AgentSettings 소스에서 case → dispute 매핑 확인
         source = inspect.getsource(AgentSettings.get_similarity_threshold)
-        assert '"case"' in source and "dispute" in source, \
-            "get_similarity_threshold()에 case → dispute 매핑이 없습니다"
+        assert (
+            '"case"' in source and "dispute" in source
+        ), "get_similarity_threshold()에 case → dispute 매핑이 없습니다"
 
     def test_no_orchestrator_mode_field(self):
         """config.py에 ORCHESTRATOR_MODE 필드가 없는지 확인 (레거시 제거)"""
@@ -174,13 +187,15 @@ class TestConfigCentralized:
 
         source = inspect.getsource(config_module)
         # AppConfig, AgentSettings 등 모든 Settings 클래스에서 orchestrator_mode 필드 없음
-        assert "orchestrator_mode" not in source, \
-            "config.py에 레거시 orchestrator_mode 필드가 남아있습니다"
+        assert (
+            "orchestrator_mode" not in source
+        ), "config.py에 레거시 orchestrator_mode 필드가 남아있습니다"
 
 
 # ============================================================
 # Test 1.4: Legacy 코드 제거 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -203,34 +218,39 @@ class TestNoLegacyImports:
         """specialized_retrievers 모듈 참조가 없는지 확인"""
         for py_file in active_source_files:
             content = py_file.read_text(errors="ignore")
-            assert "specialized_retriever" not in content, \
-                f"{py_file.relative_to(_backend_root)} references deleted specialized_retrievers"
+            assert (
+                "specialized_retriever" not in content
+            ), f"{py_file.relative_to(_backend_root)} references deleted specialized_retrievers"
 
     def test_no_rdb_retriever_import(self, active_source_files):
         """rdb_retriever 모듈 참조가 없는지 확인"""
         for py_file in active_source_files:
             content = py_file.read_text(errors="ignore")
-            assert "rdb_retriever" not in content, \
-                f"{py_file.relative_to(_backend_root)} references deleted rdb_retriever"
+            assert (
+                "rdb_retriever" not in content
+            ), f"{py_file.relative_to(_backend_root)} references deleted rdb_retriever"
 
     def test_no_splade_retriever_import(self, active_source_files):
         """splade_retriever 모듈 참조가 없는지 확인"""
         for py_file in active_source_files:
             content = py_file.read_text(errors="ignore")
-            assert "splade_retriever" not in content, \
-                f"{py_file.relative_to(_backend_root)} references deleted splade_retriever"
+            assert (
+                "splade_retriever" not in content
+            ), f"{py_file.relative_to(_backend_root)} references deleted splade_retriever"
 
     def test_no_orchestrator_mode_env_var(self, active_source_files):
         """ORCHESTRATOR_MODE 환경변수 참조가 config.py 내에 없는지 확인"""
         config_path = Path(_backend_root) / "app" / "common" / "config.py"
         content = config_path.read_text(errors="ignore")
-        assert "ORCHESTRATOR_MODE" not in content, \
-            "config.py에 ORCHESTRATOR_MODE 환경변수 참조가 남아있습니다"
+        assert (
+            "ORCHESTRATOR_MODE" not in content
+        ), "config.py에 ORCHESTRATOR_MODE 환경변수 참조가 남아있습니다"
 
 
 # ============================================================
 # Test 1.5: Retrieval Agent DB 쿼리 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -239,33 +259,58 @@ class TestRetrieverUsesVectorChunks:
 
     def test_hybrid_retriever_uses_vector_chunks(self):
         """hybrid_retriever.py 소스에서 vector_chunks 참조 확인"""
-        retriever_path = Path(_backend_root) / "app" / "agents" / "retrieval" / "tools" / "hybrid_retriever.py"
+        retriever_path = (
+            Path(_backend_root)
+            / "app"
+            / "agents"
+            / "retrieval"
+            / "tools"
+            / "hybrid_retriever.py"
+        )
         source = retriever_path.read_text()
 
-        assert "vector_chunks" in source, \
-            "hybrid_retriever.py에 vector_chunks 참조가 없습니다"
+        assert (
+            "vector_chunks" in source
+        ), "hybrid_retriever.py에 vector_chunks 참조가 없습니다"
 
     def test_no_legacy_join_pattern(self):
         """hybrid_retriever.py에 레거시 documents JOIN chunks 패턴이 없는지 확인"""
-        retriever_path = Path(_backend_root) / "app" / "agents" / "retrieval" / "tools" / "hybrid_retriever.py"
+        retriever_path = (
+            Path(_backend_root)
+            / "app"
+            / "agents"
+            / "retrieval"
+            / "tools"
+            / "hybrid_retriever.py"
+        )
         source = retriever_path.read_text()
 
         # documents JOIN chunks 패턴 검사 (대소문자 무관)
-        assert not re.search(r"documents\s+JOIN\s+chunks", source, re.IGNORECASE), \
-            "hybrid_retriever.py에 레거시 'documents JOIN chunks' 패턴이 남아있습니다"
+        assert not re.search(
+            r"documents\s+JOIN\s+chunks", source, re.IGNORECASE
+        ), "hybrid_retriever.py에 레거시 'documents JOIN chunks' 패턴이 남아있습니다"
 
     def test_no_mv_searchable_chunks_reference(self):
         """hybrid_retriever.py에 mv_searchable_chunks 참조가 없는지 확인"""
-        retriever_path = Path(_backend_root) / "app" / "agents" / "retrieval" / "tools" / "hybrid_retriever.py"
+        retriever_path = (
+            Path(_backend_root)
+            / "app"
+            / "agents"
+            / "retrieval"
+            / "tools"
+            / "hybrid_retriever.py"
+        )
         source = retriever_path.read_text()
 
-        assert "mv_searchable_chunks" not in source, \
-            "hybrid_retriever.py에 레거시 mv_searchable_chunks 참조가 남아있습니다"
+        assert (
+            "mv_searchable_chunks" not in source
+        ), "hybrid_retriever.py에 레거시 mv_searchable_chunks 참조가 남아있습니다"
 
 
 # ============================================================
 # Test 1.6: Docker Config 동기화 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -281,13 +326,18 @@ class TestDockerConfigSync:
 
     def test_model_supervisor_default(self, docker_compose_content):
         """MODEL_SUPERVISOR 기본값이 gpt-4o인지 확인"""
-        assert "MODEL_SUPERVISOR:-gpt-4o" in docker_compose_content or \
-               "MODEL_SUPERVISOR=${MODEL_SUPERVISOR:-gpt-4o}" in docker_compose_content
+        assert (
+            "MODEL_SUPERVISOR:-gpt-4o" in docker_compose_content
+            or "MODEL_SUPERVISOR=${MODEL_SUPERVISOR:-gpt-4o}" in docker_compose_content
+        )
 
     def test_similarity_threshold_default(self, docker_compose_content):
         """SIMILARITY_THRESHOLD 기본값이 0.55인지 확인"""
-        assert "SIMILARITY_THRESHOLD:-0.55" in docker_compose_content or \
-               "SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.55}" in docker_compose_content
+        assert (
+            "SIMILARITY_THRESHOLD:-0.55" in docker_compose_content
+            or "SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.55}"
+            in docker_compose_content
+        )
 
     def test_embedding_model_default(self, docker_compose_content):
         """EMBEDDING_MODEL 기본값이 text-embedding-3-large인지 확인"""
@@ -301,13 +351,15 @@ class TestDockerConfigSync:
             "MAX_RETRY_COUNT",
         ]
         for var in removed_vars:
-            assert var not in docker_compose_content, \
-                f"docker-compose.prod.yml에 제거된 환경변수 {var}가 남아있습니다"
+            assert (
+                var not in docker_compose_content
+            ), f"docker-compose.prod.yml에 제거된 환경변수 {var}가 남아있습니다"
 
 
 # ============================================================
 # Test 1.7: Fallback Chain 보존 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -316,7 +368,9 @@ class TestFallbackChainsPreserved:
 
     def test_answer_generation_fallback_models(self):
         """Answer Generation에 fallback 모델 체인이 존재하는지 확인"""
-        gen_path = Path(_backend_root) / "app" / "agents" / "answer_generation" / "agent.py"
+        gen_path = (
+            Path(_backend_root) / "app" / "agents" / "answer_generation" / "agent.py"
+        )
         source = gen_path.read_text()
 
         # gpt-4o-mini 또는 다른 fallback 모델 언급 확인
@@ -327,18 +381,21 @@ class TestFallbackChainsPreserved:
             or "safe_fallback" in source
             or "gpt-4o-mini" in source
         )
-        assert has_fallback, \
-            "answer_generation/agent.py에 fallback 체인이 없습니다"
+        assert has_fallback, "answer_generation/agent.py에 fallback 체인이 없습니다"
 
     def test_legal_review_prohibited_patterns_exist(self):
         """legal_review/agent.py에 PROHIBITED_PATTERNS가 정의되어 있는지 확인"""
-        review_path = Path(_backend_root) / "app" / "agents" / "legal_review" / "agent.py"
+        review_path = (
+            Path(_backend_root) / "app" / "agents" / "legal_review" / "agent.py"
+        )
         source = review_path.read_text()
 
-        assert "PROHIBITED_PATTERNS" in source, \
-            "legal_review/agent.py에 PROHIBITED_PATTERNS가 정의되어 있지 않습니다"
-        assert "CITATION_PATTERNS" in source, \
-            "legal_review/agent.py에 CITATION_PATTERNS가 정의되어 있지 않습니다"
+        assert (
+            "PROHIBITED_PATTERNS" in source
+        ), "legal_review/agent.py에 PROHIBITED_PATTERNS가 정의되어 있지 않습니다"
+        assert (
+            "CITATION_PATTERNS" in source
+        ), "legal_review/agent.py에 CITATION_PATTERNS가 정의되어 있지 않습니다"
 
     def test_query_analysis_intent_classifier_exists(self):
         """query_analysis에 의도 분류 로직이 존재하는지 확인"""
@@ -351,5 +408,4 @@ class TestFallbackChainsPreserved:
             or "IntentClassifier" in source
             or "classify" in source.lower()
         )
-        assert has_intent, \
-            "query_analysis/agent.py에 의도 분류 로직이 없습니다"
+        assert has_intent, "query_analysis/agent.py에 의도 분류 로직이 없습니다"

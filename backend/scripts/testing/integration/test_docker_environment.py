@@ -7,10 +7,12 @@ Usage:
     conda activate dsr
     pytest backend/scripts/testing/test_docker_environment.py -v -m docker
 """
-import pytest
-import docker
+
 import subprocess
 import time
+
+import docker
+import pytest
 
 
 @pytest.mark.docker
@@ -28,7 +30,7 @@ class TestDockerStack:
             ["docker-compose", "-f", "/home/maroco/LLM/docker-compose.yml", "up", "-d"],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
         assert result.returncode == 0, f"docker-compose up failed: {result.stderr}"
 
@@ -67,8 +69,7 @@ class TestDockerStack:
 
         client = httpx.Client()
         resp = client.options(
-            "http://localhost:8000/search",
-            headers={"Origin": "http://localhost:5173"}
+            "http://localhost:8000/search", headers={"Origin": "http://localhost:5173"}
         )
 
         # Should return CORS headers or 200
@@ -95,6 +96,6 @@ class TestDockerStack:
             ["docker-compose", "-f", "/home/maroco/LLM/docker-compose.yml", "down"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
         assert result.returncode == 0, f"docker-compose down failed: {result.stderr}"

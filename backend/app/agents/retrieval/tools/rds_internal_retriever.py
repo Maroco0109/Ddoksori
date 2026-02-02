@@ -3,8 +3,8 @@
 
 import os
 import time
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import psycopg2
 import requests
@@ -28,7 +28,7 @@ class SimilarChunkResult:
     vector_similarity: Optional[float] = None
     rrf_score: Optional[float] = None
 
-    
+
 class RDSInternalRetriever:
     """Client for calling stored DB functions on vector_chunks."""
 
@@ -93,7 +93,9 @@ class RDSInternalRetriever:
         result_limit: int = 10,
     ) -> List[SimilarChunkResult]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query)
 
@@ -145,7 +147,9 @@ class RDSInternalRetriever:
         filter_year: Optional[int] = None,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query)
 
@@ -192,7 +196,9 @@ class RDSInternalRetriever:
         result_limit: int = 10,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query)
 
@@ -233,7 +239,9 @@ class RDSInternalRetriever:
         result_limit: int = 100,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         with self.conn.cursor() as cur:
             cur.execute(
@@ -276,7 +284,9 @@ class RDSInternalRetriever:
         rrf_k: int = 60,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -336,7 +346,9 @@ class RDSInternalRetriever:
         rrf_k: int = 60,
     ) -> Tuple[List[Dict], float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 

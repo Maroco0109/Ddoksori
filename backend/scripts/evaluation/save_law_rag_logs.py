@@ -41,7 +41,9 @@ def _load_queries(path: str) -> List[Tuple[str, Dict]]:
                 continue
             row = json.loads(line)
             for q_idx, q in enumerate(row.get("queries_llm", []) or []):
-                queries.append((q, {"case_index": case_index, "query_index": q_idx, **row}))
+                queries.append(
+                    (q, {"case_index": case_index, "query_index": q_idx, **row})
+                )
     return queries
 
 

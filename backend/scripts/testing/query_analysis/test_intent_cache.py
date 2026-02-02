@@ -4,8 +4,10 @@ PR-4: Intent Classification 캐싱 테스트
 Redis L3 캐시를 활용한 Intent Classification 결과 캐싱을 테스트합니다.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from app.agents.query_analysis.classifier import (
     HybridIntentClassifier,
     IntentClassificationResult,
@@ -28,7 +30,7 @@ class TestIntentClassificationCacheUnit:
     def test_classifier_cache_disabled(self, classifier_no_cache):
         """캐시 비활성화 시 캐시 조회 안 함"""
         with patch.object(
-            classifier_no_cache, '_get_from_cache', return_value=None
+            classifier_no_cache, "_get_from_cache", return_value=None
         ) as mock_get:
             # Fast path query (should not check cache)
             result = classifier_no_cache.classify("너 누구야?")
@@ -40,7 +42,7 @@ class TestIntentClassificationCacheUnit:
     def test_fast_path_skips_cache(self, classifier_with_cache):
         """Fast Path는 캐시 조회 건너뜀"""
         with patch.object(
-            classifier_with_cache, '_get_from_cache', return_value=None
+            classifier_with_cache, "_get_from_cache", return_value=None
         ) as mock_get:
             result = classifier_with_cache.classify("안녕")
             assert result.query_type == "general"
@@ -59,7 +61,7 @@ class TestIntentClassificationCacheUnit:
         )
 
         with patch.object(
-            classifier_with_cache, '_get_from_cache', return_value=cached_result
+            classifier_with_cache, "_get_from_cache", return_value=cached_result
         ):
             result = classifier_with_cache.classify("노트북 환불해줘")
             assert result.query_type == "dispute"
@@ -81,7 +83,7 @@ class TestIntentClassificationCacheIntegration:
 
     def test_cache_get_miss(self, mock_redis):
         """캐시 미스 시 None 반환"""
-        with patch('app.supervisor.cache._get_redis', return_value=mock_redis):
+        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             mock_redis.get.return_value = None
@@ -93,36 +95,36 @@ class TestIntentClassificationCacheIntegration:
         import json
 
         cached_data = {
-            'query_type': 'dispute',
-            'domain': None,
-            'agency': 'KCA',
-            'confidence': 0.92,
-            'reasoning': 'test',
-            'model_used': 'gpt-4o-mini',
+            "query_type": "dispute",
+            "domain": None,
+            "agency": "KCA",
+            "confidence": 0.92,
+            "reasoning": "test",
+            "model_used": "gpt-4o-mini",
         }
 
-        with patch('app.supervisor.cache._get_redis', return_value=mock_redis):
+        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             mock_redis.get.return_value = json.dumps(cached_data)
             result = IntentClassificationCache.get("테스트 쿼리")
 
             assert result is not None
-            assert result['query_type'] == 'dispute'
-            assert result['from_cache'] is True  # get()에서 추가됨
+            assert result["query_type"] == "dispute"
+            assert result["from_cache"] is True  # get()에서 추가됨
 
     def test_cache_set(self, mock_redis):
         """캐시 저장 테스트"""
-        with patch('app.supervisor.cache._get_redis', return_value=mock_redis):
+        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             classification = {
-                'query_type': 'dispute',
-                'domain': None,
-                'agency': 'KCA',
-                'confidence': 0.92,
-                'reasoning': 'test',
-                'model_used': 'gpt-4o-mini',
+                "query_type": "dispute",
+                "domain": None,
+                "agency": "KCA",
+                "confidence": 0.92,
+                "reasoning": "test",
+                "model_used": "gpt-4o-mini",
             }
 
             result = IntentClassificationCache.set("테스트 쿼리", classification)
@@ -131,12 +133,12 @@ class TestIntentClassificationCacheIntegration:
 
     def test_cache_ttl(self, mock_redis):
         """캐시 TTL 설정 확인"""
-        with patch('app.supervisor.cache._get_redis', return_value=mock_redis):
+        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             classification = {
-                'query_type': 'dispute',
-                'confidence': 0.9,
+                "query_type": "dispute",
+                "confidence": 0.9,
             }
 
             IntentClassificationCache.set("쿼리", classification)
@@ -159,7 +161,7 @@ class TestHybridClassifierWithCache:
         assert result1.from_cache is False
 
         # 2. LLM 비활성화 + 캐시 미스 → ambiguous
-        with patch.object(classifier, '_get_from_cache', return_value=None):
+        with patch.object(classifier, "_get_from_cache", return_value=None):
             result2 = classifier.classify("복잡한 쿼리")
             assert result2.query_type == "ambiguous"
 
@@ -176,9 +178,11 @@ class TestHybridClassifierWithCache:
             model_used="gpt-4o-mini",
         )
 
-        with patch.object(classifier, '_get_from_cache', return_value=None):
-            with patch.object(classifier.llm_classifier, 'classify', return_value=mock_result):
-                with patch.object(classifier, '_save_to_cache') as mock_save:
+        with patch.object(classifier, "_get_from_cache", return_value=None):
+            with patch.object(
+                classifier.llm_classifier, "classify", return_value=mock_result
+            ):
+                with patch.object(classifier, "_save_to_cache") as mock_save:
                     result = classifier.classify("환불 해줘")
 
                     assert result.query_type == "dispute"

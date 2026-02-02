@@ -6,25 +6,25 @@ Query Detectors
 
 import logging
 import re
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from .constants import (
+    AMBIGUOUS_QUERY_PATTERNS,
+    COMMON_PRODUCTS,
+    CRITERIA_KEYWORDS,
+    DISPUTE_INTENT_KEYWORDS,
     ENABLE_AMBIGUOUS_DETECTION,
     ENABLE_FAST_PATH_PROMOTION,
+    FAST_PATH_PROMOTION_KEYWORDS,
+    LAW_KEYWORDS,
     LLM_AMBIGUITY_CHECK_MAX_LENGTH,
-    RESTRICTED_DOMAIN_KEYWORDS,
+    META_CONVERSATIONAL_KEYWORDS,
+    META_CONVERSATIONAL_PATTERNS,
     PROCEDURE_KEYWORDS,
+    PROCEDURE_PATTERNS,
+    RESTRICTED_DOMAIN_KEYWORDS,
     SYSTEM_META_KEYWORDS,
     SYSTEM_META_PATTERNS,
-    FAST_PATH_PROMOTION_KEYWORDS,
-    AMBIGUOUS_QUERY_PATTERNS,
-    DISPUTE_INTENT_KEYWORDS,
-    COMMON_PRODUCTS,
-    LAW_KEYWORDS,
-    CRITERIA_KEYWORDS,
-    PROCEDURE_PATTERNS,
-    META_CONVERSATIONAL_PATTERNS,
-    META_CONVERSATIONAL_KEYWORDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,9 @@ def check_ambiguity_with_llm(query: str) -> bool:
         else:
             logger.info("[QueryAnalysis] EXAONE not available, trying fallback...")
     except Exception as e:
-        logger.warning(f"[QueryAnalysis] EXAONE ambiguity check failed: {e}, trying fallback...")
+        logger.warning(
+            f"[QueryAnalysis] EXAONE ambiguity check failed: {e}, trying fallback..."
+        )
 
     # 2. gpt-4o-mini Function Calling Fallback (PR-2 IntentClassifier 통합)
     try:
@@ -137,7 +139,7 @@ def is_ambiguous_query(query: str) -> bool:
         return False
 
     # Layer 0.6: 법령명 패턴 있으면 → NOT ambiguous (예: "소비자기본법", "전자상거래법")
-    law_pattern_match = re.search(r'\S+법', query_lower)
+    law_pattern_match = re.search(r"\S+법", query_lower)
     logger.debug(f"law_pattern_match check: law_pattern_match={law_pattern_match}")
     if law_pattern_match:
         return False
@@ -199,24 +201,65 @@ def detect_restricted_domain(query: str) -> Optional[str]:
 
     # 핵심 키워드 (1개만 있어도 해당 도메인으로 판단)
     core_keywords = {
-        "finance": ["금융분쟁", "보험분쟁", "대출분쟁", "대출", "보험금", "보험료", "은행", "금융회사", "증권", "펀드"],
-        "medical": ["의료사고", "의료분쟁", "의료과실", "진료", "수술", "병원", "의사", "오진"],
+        "finance": [
+            "금융분쟁",
+            "보험분쟁",
+            "대출분쟁",
+            "대출",
+            "보험금",
+            "보험료",
+            "은행",
+            "금융회사",
+            "증권",
+            "펀드",
+        ],
+        "medical": [
+            "의료사고",
+            "의료분쟁",
+            "의료과실",
+            "진료",
+            "수술",
+            "병원",
+            "의사",
+            "오진",
+        ],
         "privacy": ["개인정보유출", "개인정보침해", "개인정보", "정보유출", "해킹"],
-        "realestate": ["임대차분쟁", "전세분쟁", "보증금분쟁", "전세", "월세", "임대차", "보증금반환", "집주인"],
-        "construction": ["건축분쟁", "시공분쟁", "하자분쟁", "시공불량", "시공", "건축", "아파트하자"],
+        "realestate": [
+            "임대차분쟁",
+            "전세분쟁",
+            "보증금분쟁",
+            "전세",
+            "월세",
+            "임대차",
+            "보증금반환",
+            "집주인",
+        ],
+        "construction": [
+            "건축분쟁",
+            "시공분쟁",
+            "하자분쟁",
+            "시공불량",
+            "시공",
+            "건축",
+            "아파트하자",
+        ],
     }
 
     # 우선순위: 핵심 키워드 먼저 체크
     for domain, keywords in core_keywords.items():
         if any(kw in query_lower for kw in keywords):
-            logger.info(f"[QueryAnalysis] Restricted domain detected by core keyword: {domain}")
+            logger.info(
+                f"[QueryAnalysis] Restricted domain detected by core keyword: {domain}"
+            )
             return domain
 
     # 일반 키워드 2개 이상 매칭 체크
     for domain, keywords in RESTRICTED_DOMAIN_KEYWORDS.items():
         match_count = sum(1 for kw in keywords if kw in query_lower)
         if match_count >= 2:
-            logger.info(f"[QueryAnalysis] Restricted domain detected: {domain} (matches: {match_count})")
+            logger.info(
+                f"[QueryAnalysis] Restricted domain detected: {domain} (matches: {match_count})"
+            )
             return domain
 
     return None
@@ -233,7 +276,9 @@ def is_procedure_query(query: str) -> bool:
     # 절차 키워드 매칭
     procedure_match = sum(1 for kw in PROCEDURE_KEYWORDS if kw in query_lower)
     if procedure_match >= 1:
-        logger.info(f"[QueryAnalysis] Procedure query detected (matches: {procedure_match})")
+        logger.info(
+            f"[QueryAnalysis] Procedure query detected (matches: {procedure_match})"
+        )
         return True
 
     # 절차 질문 패턴
@@ -271,7 +316,9 @@ def is_meta_conversational(query: str) -> bool:
     # 패턴 매칭
     for pattern in META_CONVERSATIONAL_PATTERNS:
         if re.search(pattern, query_lower):
-            logger.info(f"[QueryAnalysis] Meta-conversational by pattern: '{query[:30]}'")
+            logger.info(
+                f"[QueryAnalysis] Meta-conversational by pattern: '{query[:30]}'"
+            )
             return True
 
     return False
@@ -297,19 +344,24 @@ def is_followup_with_context(
         return False
 
     import difflib
+
     query_normalized = query.strip()
 
     for followup in previous_followups:
         if not followup:
             continue
-        ratio = difflib.SequenceMatcher(None, query_normalized, followup.strip()).ratio()
+        ratio = difflib.SequenceMatcher(
+            None, query_normalized, followup.strip()
+        ).ratio()
         if ratio >= threshold:
             return True
 
     return False
 
 
-def detect_requested_detail_type(query: str, available_details: Optional[Dict] = None) -> str:
+def detect_requested_detail_type(
+    query: str, available_details: Optional[Dict] = None
+) -> str:
     """
     후속 질문에서 요청된 상세 정보 유형을 감지합니다.
 
@@ -319,24 +371,80 @@ def detect_requested_detail_type(query: str, available_details: Optional[Dict] =
     query_lower = query.strip().lower()
 
     # 법령 관련 키워드
-    law_patterns = ['법령', '법률', '법적', '법', '조항', '조문', '규정', '전자상거래법',
-                    '소비자기본법', '소비자보호법', '약관규제법', '시행령',
-                    '법적 근거', '법에', '법으로', '법상']
+    law_patterns = [
+        "법령",
+        "법률",
+        "법적",
+        "법",
+        "조항",
+        "조문",
+        "규정",
+        "전자상거래법",
+        "소비자기본법",
+        "소비자보호법",
+        "약관규제법",
+        "시행령",
+        "법적 근거",
+        "법에",
+        "법으로",
+        "법상",
+    ]
 
     # 절차 관련 키워드 (procedure는 case보다 먼저 체크 - '조정신청'이 '조정'에 선행)
-    procedure_patterns = ['절차', '방법', '어떻게', '신청', '접수', '소비자원',
-                         '분쟁조정', '조정신청', '어디에', '어디로', '과정']
+    procedure_patterns = [
+        "절차",
+        "방법",
+        "어떻게",
+        "신청",
+        "접수",
+        "소비자원",
+        "분쟁조정",
+        "조정신청",
+        "어디에",
+        "어디로",
+        "과정",
+    ]
 
     # 사례 관련 키워드 ('조정'은 '조정사례'로 구체화 - '조정신청'과 구분)
-    case_patterns = ['사례', '케이스', '판례', '조정사례', '비슷한', '유사한', '다른 사람',
-                     '남들은', '보통', '일반적', '건도']
+    case_patterns = [
+        "사례",
+        "케이스",
+        "판례",
+        "조정사례",
+        "비슷한",
+        "유사한",
+        "다른 사람",
+        "남들은",
+        "보통",
+        "일반적",
+        "건도",
+    ]
 
     # 기준 관련 키워드
-    criteria_patterns = ['기준', '해결기준', '분쟁해결', '배상', '보상', '환불 기준',
-                        '교환 기준', '수리 기준']
+    criteria_patterns = [
+        "기준",
+        "해결기준",
+        "분쟁해결",
+        "배상",
+        "보상",
+        "환불 기준",
+        "교환 기준",
+        "수리 기준",
+    ]
 
     # Yes/No 패턴 (이전 후속 질문에 대한 긍정 응답)
-    yes_patterns = ['네', '예', '응', '어', '그래', '좋아', '알려', '보여', '궁금', '보고 싶']
+    yes_patterns = [
+        "네",
+        "예",
+        "응",
+        "어",
+        "그래",
+        "좋아",
+        "알려",
+        "보여",
+        "궁금",
+        "보고 싶",
+    ]
 
     # 긍정 응답인 경우 available_details에서 첫 번째 항목 반환
     is_yes = any(p in query_lower for p in yes_patterns) and len(query_lower) < 20
@@ -344,29 +452,29 @@ def detect_requested_detail_type(query: str, available_details: Optional[Dict] =
     # 키워드 매칭 (순서 중요: laws → procedure → cases → criteria)
     for pattern in law_patterns:
         if pattern in query_lower:
-            return 'laws'
+            return "laws"
 
     for pattern in procedure_patterns:
         if pattern in query_lower:
-            return 'procedure'
+            return "procedure"
 
     for pattern in case_patterns:
         if pattern in query_lower:
-            return 'cases'
+            return "cases"
 
     for pattern in criteria_patterns:
         if pattern in query_lower:
-            return 'criteria'
+            return "criteria"
 
     # 긍정 응답 + available_details 기반 추론
     if is_yes and available_details:
         # 첫 번째 available detail type 반환
-        for detail_type in ['laws', 'cases', 'criteria']:
+        for detail_type in ["laws", "cases", "criteria"]:
             if detail_type in available_details:
                 return detail_type
-        return 'procedure'
+        return "procedure"
 
-    return 'full'
+    return "full"
 
 
 __all__ = [

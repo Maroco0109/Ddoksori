@@ -31,14 +31,15 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict
 from urllib.parse import urlencode
-from fastapi import APIRouter, HTTPException, Query, Depends, status
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
-from app.common.config import get_config
-from app.auth.models import User, AuthResponse
+from app.auth.dependencies import decode_access_token, get_current_user
+from app.auth.models import AuthResponse, User
 from app.auth.service import AuthService
-from app.auth.dependencies import get_current_user, decode_access_token
 from app.auth.user_db import UserDB
+from app.common.config import get_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -90,6 +91,7 @@ async def _periodic_state_cleanup():
 # Google OAuth
 # ============================================================
 
+
 @router.get("/google")
 async def google_login():
     """
@@ -113,7 +115,7 @@ async def google_login():
 @router.get("/google/callback")
 async def google_callback(
     code: str = Query(..., description="Authorization Code"),
-    state: str = Query(..., description="OAuth State")
+    state: str = Query(..., description="OAuth State"),
 ):
     """
     Google OAuth 콜백을 처리합니다.
@@ -134,8 +136,7 @@ async def google_callback(
     if not _verify_and_remove_state(state):
         logger.warning(f"[Auth] Google 콜백: 잘못된 state={state[:8]}...")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired state"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
         )
 
     try:
@@ -147,9 +148,11 @@ async def google_callback(
         redirect_params = {
             "access_token": auth_response.access_token,
             "token_type": auth_response.token_type,
-            "expires_in": auth_response.expires_in
+            "expires_in": auth_response.expires_in,
         }
-        redirect_url = f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+        redirect_url = (
+            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+        )
 
         logger.info(f"[Auth] Google 콜백 성공: user_id={auth_response.user.user_id}")
         return RedirectResponse(redirect_url)
@@ -163,6 +166,7 @@ async def google_callback(
 # ============================================================
 # Naver OAuth
 # ============================================================
+
 
 @router.get("/naver")
 async def naver_login():
@@ -187,7 +191,7 @@ async def naver_login():
 @router.get("/naver/callback")
 async def naver_callback(
     code: str = Query(..., description="Authorization Code"),
-    state: str = Query(..., description="OAuth State")
+    state: str = Query(..., description="OAuth State"),
 ):
     """
     Naver OAuth 콜백을 처리합니다.
@@ -208,8 +212,7 @@ async def naver_callback(
     if not _verify_and_remove_state(state):
         logger.warning(f"[Auth] Naver 콜백: 잘못된 state={state[:8]}...")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired state"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
         )
 
     try:
@@ -221,9 +224,11 @@ async def naver_callback(
         redirect_params = {
             "access_token": auth_response.access_token,
             "token_type": auth_response.token_type,
-            "expires_in": auth_response.expires_in
+            "expires_in": auth_response.expires_in,
         }
-        redirect_url = f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+        redirect_url = (
+            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+        )
 
         logger.info(f"[Auth] Naver 콜백 성공: user_id={auth_response.user.user_id}")
         return RedirectResponse(redirect_url)
@@ -237,6 +242,7 @@ async def naver_callback(
 # ============================================================
 # User Info
 # ============================================================
+
 
 @router.get("/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
@@ -272,7 +278,7 @@ async def verify_token(token: str = Query(..., description="JWT Token")):
             "email": user.email,
             "name": user.name,
             "provider": user.provider,
-        }
+        },
     }
 
 
@@ -287,18 +293,18 @@ async def delete_account(current_user: User = Depends(get_current_user)):
         await user_db.delete_user(current_user.user_id)
 
         logger.info(f"[Auth] 회원탈퇴 완료: user_id={current_user.user_id}")
-        return {
-            "success": True,
-            "message": "회원탈퇴가 완료되었습니다."
-        }
+        return {"success": True, "message": "회원탈퇴가 완료되었습니다."}
     except Exception as e:
         logger.error(f"[Auth] 회원탈퇴 실패: user_id={current_user.user_id}, error={e}")
-        raise HTTPException(status_code=500, detail="회원탈퇴 처리 중 오류가 발생했습니다.")
+        raise HTTPException(
+            status_code=500, detail="회원탈퇴 처리 중 오류가 발생했습니다."
+        )
 
 
 # ============================================================
 # Startup/Shutdown
 # ============================================================
+
 
 @router.on_event("startup")
 async def start_state_cleanup():

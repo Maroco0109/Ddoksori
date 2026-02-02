@@ -5,19 +5,20 @@ Unit tests for JWT dependencies
 설명: JWT 토큰 생성 및 검증 테스트 (Unit - 모킹 사용)
 """
 
-import pytest
-import jwt
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import jwt
+import pytest
+from fastapi import HTTPException
 
 from app.auth.dependencies import (
     create_access_token,
     decode_access_token,
     get_current_user,
-    get_current_user_optional
+    get_current_user_optional,
 )
 from app.auth.models import User
-from fastapi import HTTPException
 
 
 @pytest.mark.unit
@@ -28,7 +29,7 @@ def test_create_access_token():
         email="test@example.com",
         name="Test User",
         provider="google",
-        provider_user_id="123456"
+        provider_user_id="123456",
     )
 
     token, expires_in = create_access_token(user)
@@ -39,8 +40,11 @@ def test_create_access_token():
 
     # 토큰 디코드 검증
     from app.common.config import get_config
+
     config = get_config().auth
-    payload = jwt.decode(token, config.jwt_secret_key, algorithms=[config.jwt_algorithm])
+    payload = jwt.decode(
+        token, config.jwt_secret_key, algorithms=[config.jwt_algorithm]
+    )
 
     assert payload["sub"] == user.user_id
     assert payload["email"] == user.email
@@ -56,7 +60,7 @@ def test_decode_access_token_valid():
         email="test@example.com",
         name="Test User",
         provider="google",
-        provider_user_id="123456"
+        provider_user_id="123456",
     )
 
     token, _ = create_access_token(user)
@@ -72,6 +76,7 @@ def test_decode_access_token_valid():
 def test_decode_access_token_expired():
     """만료된 JWT 토큰 디코드 테스트"""
     from app.common.config import get_config
+
     config = get_config().auth
 
     # 이미 만료된 토큰 생성
@@ -81,9 +86,11 @@ def test_decode_access_token_expired():
         "name": "Test User",
         "provider": "google",
         "exp": int((datetime.utcnow() - timedelta(days=1)).timestamp()),
-        "iat": int(datetime.utcnow().timestamp())
+        "iat": int(datetime.utcnow().timestamp()),
     }
-    expired_token = jwt.encode(payload, config.jwt_secret_key, algorithm=config.jwt_algorithm)
+    expired_token = jwt.encode(
+        payload, config.jwt_secret_key, algorithm=config.jwt_algorithm
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         decode_access_token(expired_token)
@@ -112,7 +119,7 @@ async def test_get_current_user_valid():
         email="test@example.com",
         name="Test User",
         provider="google",
-        provider_user_id="123456"
+        provider_user_id="123456",
     )
 
     token, _ = create_access_token(user)
@@ -122,7 +129,7 @@ async def test_get_current_user_valid():
     credentials.credentials = token
 
     # UserDB 모킹
-    with patch('app.auth.dependencies.UserDB') as MockUserDB:
+    with patch("app.auth.dependencies.UserDB") as MockUserDB:
         mock_db_instance = MockUserDB.return_value
         mock_db_instance.get_user_by_id = AsyncMock(return_value=user)
 
@@ -151,7 +158,7 @@ async def test_get_current_user_optional_valid():
         email="test@example.com",
         name="Test User",
         provider="google",
-        provider_user_id="123456"
+        provider_user_id="123456",
     )
 
     token, _ = create_access_token(user)
@@ -159,7 +166,7 @@ async def test_get_current_user_optional_valid():
     credentials = MagicMock()
     credentials.credentials = token
 
-    with patch('app.auth.dependencies.UserDB') as MockUserDB:
+    with patch("app.auth.dependencies.UserDB") as MockUserDB:
         mock_db_instance = MockUserDB.return_value
         mock_db_instance.get_user_by_id = AsyncMock(return_value=user)
 

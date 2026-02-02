@@ -17,7 +17,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ...common.config import get_config
 
@@ -29,12 +29,13 @@ logger = logging.getLogger(__name__)
 
 def _get_agent_functions():
     from .agent import (
-        _check_prohibited_expressions,
+        _build_violation_messages,
         _check_citation_presence,
         _check_evidence_sufficiency,
+        _check_prohibited_expressions,
         _filter_prohibited_expressions,
-        _build_violation_messages,
     )
+
     return (
         _check_prohibited_expressions,
         _check_citation_presence,
@@ -143,9 +144,11 @@ JSON 형식으로만 응답하세요."""
 # LLM Review 결과 데이터 클래스
 # =============================================================================
 
+
 @dataclass
 class LLMReviewResult:
     """LLM 기반 검토 결과 (Enhanced)"""
+
     passed: bool = True
     issues: List[Dict[str, str]] = field(default_factory=list)
     severity: str = "low"  # low, medium, high
@@ -162,39 +165,40 @@ class LLMReviewResult:
 # 하이브리드 법률 검토기
 # =============================================================================
 
+
 class HybridLegalReviewer:
     """
     하이브리드 법률 검토기 (규칙 + LLM)
-    
+
     2단계 검토:
     1단계: 규칙 기반 검토 (빠름, 명확한 패턴)
     2단계: LLM 기반 검토 (문맥 이해, 미묘한 위반) - 선택적
-    
+
     Usage:
         reviewer = HybridLegalReviewer()
         result = reviewer.review(state)
     """
-    
+
     def __init__(self, enable_llm: Optional[bool] = None):
         """
         Args:
-            enable_llm: LLM 검토 활성화 여부. 
+            enable_llm: LLM 검토 활성화 여부.
                        None이면 환경 변수(ENABLE_LLM_REVIEW) 참조.
         """
         if enable_llm is not None:
             self.enable_llm = enable_llm
         else:
-            self.enable_llm = os.getenv('ENABLE_LLM_REVIEW', 'false').lower() == 'true'
-        
+            self.enable_llm = os.getenv("ENABLE_LLM_REVIEW", "false").lower() == "true"
+
         self._llm_call_count = 0
         self._total_llm_latency_ms = 0.0
-        
+
         logger.info(f"[HybridLegalReviewer] initialized, enable_llm={self.enable_llm}")
-    
+
     # =========================================================================
     # 공개 API
     # =========================================================================
-    
+
     def review(self, state: "ChatState") -> Dict:
         """
         2단계 하이브리드 검토 (조건부 LLM)
@@ -208,30 +212,31 @@ class HybridLegalReviewer:
         Returns:
             부분 상태 업데이트 dict (review, final_answer, retry_count 등)
         """
-        draft_answer = state.get('draft_answer', '') or ''
-        query_analysis = state.get('query_analysis')
-        sources = state.get('sources', [])
-        retry_count = state.get('retry_count', 0) or 0
-        user_query = state.get('query', '') or state.get('user_query', '') or ''
+        draft_answer = state.get("draft_answer", "") or ""
+        query_analysis = state.get("query_analysis")
+        sources = state.get("sources", [])
+        retry_count = state.get("retry_count", 0) or 0
+        user_query = state.get("query", "") or state.get("user_query", "") or ""
 
         # 일반 대화는 검토 스킵
-        if query_analysis and query_analysis.get('query_type') == 'general':
+        if query_analysis and query_analysis.get("query_type") == "general":
             review_result: "ReviewResult" = {
-                'passed': True,
-                'violations': [],
-                'filtered_answer': None,
+                "passed": True,
+                "violations": [],
+                "filtered_answer": None,
             }
             return {
-                'review': review_result,
-                'final_answer': draft_answer,
+                "review": review_result,
+                "final_answer": draft_answer,
             }
 
         # 1단계: 규칙 기반 검토
         rule_result = self._rule_based_review(state)
 
         from ...common.config import AgentConfig
-        rule_violation_count = len(rule_result.get('violations', []))
-        has_violations = rule_violation_count > 0 or not rule_result['passed']
+
+        rule_violation_count = len(rule_result.get("violations", []))
+        has_violations = rule_violation_count > 0 or not rule_result["passed"]
 
         # 2단계: LLM 기반 검토 - 위반 감지 시에만 실행 (비용 최적화)
         if self.enable_llm and has_violations:
@@ -241,24 +246,27 @@ class HybridLegalReviewer:
             )
             # 컨텍스트 주입: query, sources 포함
             llm_result = self._llm_based_review_with_context(
-                draft_answer=draft_answer,
-                query=user_query,
-                sources=sources
+                draft_answer=draft_answer, query=user_query, sources=sources
             )
             merged_result = self._merge_results(rule_result, llm_result)
             return self._format_final_result(merged_result, state, retry_count)
 
         # 규칙 기반에서 심각한 위반 발견 시 즉시 반환
-        if not rule_result['passed'] and rule_violation_count >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD:
-            logger.info(f"[HybridLegalReviewer] severe rule violations ({rule_violation_count})")
+        if (
+            not rule_result["passed"]
+            and rule_violation_count >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD
+        ):
+            logger.info(
+                f"[HybridLegalReviewer] severe rule violations ({rule_violation_count})"
+            )
             return self._format_final_result(rule_result, state, retry_count)
 
         return self._format_final_result(rule_result, state, retry_count)
-    
+
     def get_metrics(self) -> Dict[str, Any]:
         """
         비용 모니터링용 메트릭 반환
-        
+
         Returns:
             {
                 'llm_call_count': int,
@@ -268,25 +276,26 @@ class HybridLegalReviewer:
             }
         """
         avg_latency = (
-            self._total_llm_latency_ms / self._llm_call_count 
-            if self._llm_call_count > 0 else 0.0
+            self._total_llm_latency_ms / self._llm_call_count
+            if self._llm_call_count > 0
+            else 0.0
         )
         return {
-            'llm_call_count': self._llm_call_count,
-            'total_llm_latency_ms': round(self._total_llm_latency_ms, 2),
-            'avg_llm_latency_ms': round(avg_latency, 2),
-            'enable_llm': self.enable_llm,
+            "llm_call_count": self._llm_call_count,
+            "total_llm_latency_ms": round(self._total_llm_latency_ms, 2),
+            "avg_llm_latency_ms": round(avg_latency, 2),
+            "enable_llm": self.enable_llm,
         }
-    
+
     def reset_metrics(self) -> None:
         """메트릭 초기화 (테스트용)"""
         self._llm_call_count = 0
         self._total_llm_latency_ms = 0.0
-    
+
     # =========================================================================
     # 내부 메서드
     # =========================================================================
-    
+
     def _rule_based_review(self, state: "ChatState") -> Dict:
         (
             _check_prohibited_expressions,
@@ -295,43 +304,43 @@ class HybridLegalReviewer:
             _filter_prohibited_expressions,
             _build_violation_messages,
         ) = _get_agent_functions()
-        
-        draft_answer = state.get('draft_answer', '') or ''
-        sources = state.get('sources', [])
-        
+
+        draft_answer = state.get("draft_answer", "") or ""
+        sources = state.get("sources", [])
+
         prohibited_violations = _check_prohibited_expressions(draft_answer)
-        
+
         has_sources = len(sources) > 0
         has_citation = _check_citation_presence(draft_answer, has_sources)
-        
+
         has_evidence = _check_evidence_sufficiency(state)
-        
+
         violation_messages = _build_violation_messages(
             prohibited_violations, has_citation, has_evidence
         )
-        
-        passed = (
-            len(prohibited_violations) == 0 
-            and (has_citation or not has_sources)
-        )
-        
+
+        passed = len(prohibited_violations) == 0 and (has_citation or not has_sources)
+
         from ...common.config import AgentConfig
+
         needs_retry = (
             len(prohibited_violations) >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD
         )
-        
+
         if prohibited_violations and not needs_retry:
-            filtered = _filter_prohibited_expressions(draft_answer, prohibited_violations)
+            filtered = _filter_prohibited_expressions(
+                draft_answer, prohibited_violations
+            )
         else:
             filtered = None
-        
+
         return {
-            'passed': passed,
-            'violations': violation_messages,
-            'filtered_answer': filtered,
-            'prohibited_violations': prohibited_violations,
+            "passed": passed,
+            "violations": violation_messages,
+            "filtered_answer": filtered,
+            "prohibited_violations": prohibited_violations,
         }
-    
+
     def _llm_based_review(self, draft_answer: str) -> LLMReviewResult:
         """
         LLM 기반 검토 (기본 - 컨텍스트 없음)
@@ -345,10 +354,7 @@ class HybridLegalReviewer:
         return self._llm_based_review_with_context(draft_answer, query="", sources=[])
 
     def _llm_based_review_with_context(
-        self,
-        draft_answer: str,
-        query: str = "",
-        sources: List[Dict] = None
+        self, draft_answer: str, query: str = "", sources: List[Dict] = None
     ) -> LLMReviewResult:
         """
         LLM 기반 검토 (컨텍스트 주입)
@@ -373,6 +379,7 @@ class HybridLegalReviewer:
 
         try:
             from openai import OpenAI
+
             client = OpenAI()
 
             config = get_config()
@@ -385,14 +392,14 @@ class HybridLegalReviewer:
             user_prompt = LLM_REVIEW_USER_PROMPT_TEMPLATE.format(
                 query=query if query else "(질문 없음)",
                 sources=sources_text if sources_text else "(출처 없음)",
-                answer=draft_answer
+                answer=draft_answer,
             )
 
             response = client.chat.completions.create(
                 model=review_model,
                 messages=[
                     {"role": "system", "content": LLM_REVIEW_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 response_format={"type": "json_object"},
                 timeout=15,
@@ -408,14 +415,16 @@ class HybridLegalReviewer:
             result_dict = json.loads(content)
 
             return LLMReviewResult(
-                passed=result_dict.get('passed', True),
-                issues=result_dict.get('issues', []),
-                severity=result_dict.get('severity', 'low'),
-                overall_comment=result_dict.get('overall_comment', ''),
+                passed=result_dict.get("passed", True),
+                issues=result_dict.get("issues", []),
+                severity=result_dict.get("severity", "low"),
+                overall_comment=result_dict.get("overall_comment", ""),
                 latency_ms=latency_ms,
-                legal_judgment_detected=result_dict.get('legal_judgment_detected', False),
-                hedging_level=result_dict.get('hedging_level', 'safe'),
-                overall_severity=result_dict.get('overall_severity', 'low'),
+                legal_judgment_detected=result_dict.get(
+                    "legal_judgment_detected", False
+                ),
+                hedging_level=result_dict.get("hedging_level", "safe"),
+                overall_severity=result_dict.get("overall_severity", "low"),
             )
 
         except ImportError:
@@ -427,14 +436,18 @@ class HybridLegalReviewer:
             self._llm_call_count += 1
             self._total_llm_latency_ms += latency_ms
             logger.warning(f"[llm_review] JSON parsing failed: {e}")
-            return LLMReviewResult(error=f"json_parse_error: {str(e)}", latency_ms=latency_ms)
+            return LLMReviewResult(
+                error=f"json_parse_error: {str(e)}", latency_ms=latency_ms
+            )
 
         except Exception as e:
             latency_ms = (time.time() - start_time) * 1000
             logger.warning(f"[llm_review] LLM review failed: {e}")
             return LLMReviewResult(error=str(e), latency_ms=latency_ms)
 
-    def _format_sources_for_prompt(self, sources: List[Dict], max_chars: int = 2000) -> str:
+    def _format_sources_for_prompt(
+        self, sources: List[Dict], max_chars: int = 2000
+    ) -> str:
         """
         출처 문서를 프롬프트용 텍스트로 포맷팅
 
@@ -452,8 +465,8 @@ class HybridLegalReviewer:
         total_chars = 0
 
         for i, source in enumerate(sources[:5], 1):  # 최대 5개
-            content = source.get('content', '') or source.get('text', '') or str(source)
-            title = source.get('title', '') or source.get('doc_type', f'출처 {i}')
+            content = source.get("content", "") or source.get("text", "") or str(source)
+            title = source.get("title", "") or source.get("doc_type", f"출처 {i}")
 
             # 청크 길이 제한
             if len(content) > 500:
@@ -468,7 +481,7 @@ class HybridLegalReviewer:
             total_chars += len(part)
 
         return "\n\n".join(formatted_parts)
-    
+
     def _merge_results(self, rule_result: Dict, llm_result: LLMReviewResult) -> Dict:
         """
         규칙/LLM 결과 병합
@@ -484,18 +497,22 @@ class HybridLegalReviewer:
         """
         # LLM 실패 시 규칙 결과만 반환
         if llm_result.error:
-            logger.info(f"[HybridLegalReviewer] LLM review failed ({llm_result.error}), using rule result only")
+            logger.info(
+                f"[HybridLegalReviewer] LLM review failed ({llm_result.error}), using rule result only"
+            )
             return rule_result
 
-        combined_violations = rule_result['violations'].copy()
+        combined_violations = rule_result["violations"].copy()
 
         # LLM에서 추가 이슈 발견 시 병합
         if llm_result.issues:
             for issue in llm_result.issues:
-                issue_type = issue.get('type', 'unknown')
-                issue_text = issue.get('text', '')
-                issue_severity = issue.get('severity', 'low')
-                combined_violations.append(f"[LLM-{issue_severity}] {issue_type}: {issue_text}")
+                issue_type = issue.get("type", "unknown")
+                issue_text = issue.get("text", "")
+                issue_severity = issue.get("severity", "low")
+                combined_violations.append(
+                    f"[LLM-{issue_severity}] {issue_type}: {issue_text}"
+                )
 
         # 법적 판단 탐지 시 강제 실패
         if llm_result.legal_judgment_detected:
@@ -507,32 +524,31 @@ class HybridLegalReviewer:
         # LLM이 법적 판단 탐지하면 실패
         if llm_result.legal_judgment_detected:
             final_passed = False
-        elif llm_result.passed and llm_result.overall_severity == 'low':
+        elif llm_result.passed and llm_result.overall_severity == "low":
             # LLM이 문맥상 안전하다고 판단하면 규칙 위반 완화
             final_passed = True
-            logger.info("[HybridLegalReviewer] LLM verified as safe, relaxing rule violations")
+            logger.info(
+                "[HybridLegalReviewer] LLM verified as safe, relaxing rule violations"
+            )
         else:
-            final_passed = rule_result['passed'] and llm_result.passed
+            final_passed = rule_result["passed"] and llm_result.passed
 
         return {
-            'passed': final_passed,
-            'violations': combined_violations,
-            'filtered_answer': rule_result.get('filtered_answer'),
-            'llm_severity': llm_result.overall_severity,
-            'llm_comment': llm_result.overall_comment,
-            'legal_judgment_detected': llm_result.legal_judgment_detected,
-            'hedging_level': llm_result.hedging_level,
+            "passed": final_passed,
+            "violations": combined_violations,
+            "filtered_answer": rule_result.get("filtered_answer"),
+            "llm_severity": llm_result.overall_severity,
+            "llm_comment": llm_result.overall_comment,
+            "legal_judgment_detected": llm_result.legal_judgment_detected,
+            "hedging_level": llm_result.hedging_level,
         }
-    
+
     def _format_final_result(
-        self, 
-        review_result: Dict, 
-        state: "ChatState", 
-        retry_count: int
+        self, review_result: Dict, state: "ChatState", retry_count: int
     ) -> Dict:
         """
         최종 결과 포맷팅 (기존 review_node 반환 형식과 호환)
-        
+
         Returns:
             {
                 'review': ReviewResult,
@@ -541,51 +557,50 @@ class HybridLegalReviewer:
             }
         """
         from ...common.config import AgentConfig
-        
-        draft_answer = state.get('draft_answer', '')
-        violations = review_result.get('violations', [])
-        passed = review_result.get('passed', False)
-        filtered = review_result.get('filtered_answer')
-        
+
+        draft_answer = state.get("draft_answer", "")
+        violations = review_result.get("violations", [])
+        passed = review_result.get("passed", False)
+        filtered = review_result.get("filtered_answer")
+
         # 재생성 필요 여부 판단
         # prohibited_violations가 있으면 그 수로 판단, 아니면 violations 수로
-        prohibited_count = len(review_result.get('prohibited_violations', []))
+        prohibited_count = len(review_result.get("prohibited_violations", []))
         if prohibited_count == 0:
             # 규칙 위반 중 금지 표현 관련만 카운트
             prohibited_count = sum(
-                1 for v in violations 
-                if '금지 표현' in v or '[LLM]' in v
+                1 for v in violations if "금지 표현" in v or "[LLM]" in v
             )
-        
+
         needs_retry = (
-            prohibited_count >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD 
+            prohibited_count >= AgentConfig.PROHIBITED_VIOLATION_THRESHOLD
             and retry_count < AgentConfig.MAX_REVIEW_RETRIES
         )
-        
+
         review_output: "ReviewResult" = {
-            'passed': passed,
-            'violations': violations,
-            'filtered_answer': filtered,
+            "passed": passed,
+            "violations": violations,
+            "filtered_answer": filtered,
         }
-        
+
         if needs_retry:
             # 재생성 필요
             return {
-                'review': review_output,
-                'retry_count': retry_count + 1,
+                "review": review_output,
+                "retry_count": retry_count + 1,
             }
         elif passed:
             # 통과
             return {
-                'review': review_output,
-                'final_answer': draft_answer,
+                "review": review_output,
+                "final_answer": draft_answer,
             }
         else:
             # 필터링된 답변 사용
             final = filtered if filtered else draft_answer
             return {
-                'review': review_output,
-                'final_answer': final,
+                "review": review_output,
+                "final_answer": final,
             }
 
 
@@ -608,12 +623,12 @@ def get_reviewer() -> HybridLegalReviewer:
 def hybrid_review_node(state: "ChatState") -> Dict:
     """
     하이브리드 검토 노드 함수
-    
+
     기존 review_node를 대체하여 사용 가능.
-    
+
     Args:
         state: 현재 ChatState
-        
+
     Returns:
         부분 상태 업데이트 dict
     """
@@ -624,30 +639,30 @@ def hybrid_review_node(state: "ChatState") -> Dict:
 def hybrid_review_node_wrapper(state: "ChatState") -> Dict:
     """
     PR-2: 통합 그래프용 하이브리드 리뷰 노드 래퍼
-    
+
     chat_type에 따라 리뷰 동작을 분기:
     - general: 자동 통과 (draft_answer → final_answer)
     - dispute: 하이브리드 리뷰 수행
-    
+
     Args:
         state: 현재 ChatState (또는 UnifiedState)
-        
+
     Returns:
         부분 상태 업데이트 dict
     """
-    chat_type = state.get('chat_type', 'dispute')
-    
-    if chat_type == 'general':
+    chat_type = state.get("chat_type", "dispute")
+
+    if chat_type == "general":
         # 일반 채팅: 리뷰 스킵
-        draft_answer = state.get('draft_answer', '')
+        draft_answer = state.get("draft_answer", "")
         review_result: "ReviewResult" = {
-            'passed': True,
-            'violations': [],
-            'filtered_answer': None,
+            "passed": True,
+            "violations": [],
+            "filtered_answer": None,
         }
         return {
-            'review': review_result,
-            'final_answer': draft_answer,
+            "review": review_result,
+            "final_answer": draft_answer,
         }
-    
+
     return hybrid_review_node(state)

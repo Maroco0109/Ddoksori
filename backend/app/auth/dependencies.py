@@ -21,16 +21,17 @@ JWT 토큰 생성 및 검증 의존성을 제공합니다.
         return {"user": user}
 """
 
-import jwt
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.common.config import get_config
-import logging
-from app.auth.models import User, TokenPayload
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.auth.models import TokenPayload, User
 from app.auth.user_db import UserDB
+from app.common.config import get_config
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
@@ -56,13 +57,11 @@ def create_access_token(user: User) -> tuple[str, int]:
         name=user.name,
         provider=user.provider,
         exp=int(expires_at.timestamp()),
-        iat=int(datetime.utcnow().timestamp())
+        iat=int(datetime.utcnow().timestamp()),
     )
 
     token = jwt.encode(
-        payload.model_dump(),
-        config.jwt_secret_key,
-        algorithm=config.jwt_algorithm
+        payload.model_dump(), config.jwt_secret_key, algorithm=config.jwt_algorithm
     )
 
     logger.info(f"[JWT] 토큰 생성: user_id={user.user_id}")
@@ -86,9 +85,7 @@ def decode_access_token(token: str) -> TokenPayload:
 
     try:
         payload = jwt.decode(
-            token,
-            config.jwt_secret_key,
-            algorithms=[config.jwt_algorithm]
+            token, config.jwt_secret_key, algorithms=[config.jwt_algorithm]
         )
         return TokenPayload(**payload)
     except jwt.ExpiredSignatureError:
@@ -96,19 +93,19 @@ def decode_access_token(token: str) -> TokenPayload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.InvalidTokenError as e:
         logger.warning(f"[JWT] 토큰 검증 실패: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
     """
     현재 인증된 사용자를 조회합니다 (필수).
@@ -128,7 +125,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     token_payload = decode_access_token(credentials.credentials)
@@ -141,14 +138,14 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return user
 
 
 async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[User]:
     """
     현재 인증된 사용자를 조회합니다 (선택).

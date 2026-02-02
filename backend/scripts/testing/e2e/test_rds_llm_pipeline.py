@@ -17,7 +17,7 @@ import re
 import sys
 import uuid
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pytest
 
@@ -28,12 +28,14 @@ if _backend_root not in sys.path:
 
 from app.common.config import get_config
 
-
 # ============================================================
 # Helper: MAS 그래프 실행 (동기 래퍼)
 # ============================================================
 
-def _run_mas_graph(compiled_graph, user_query: str, chat_type: str = "dispute") -> Dict[str, Any]:
+
+def _run_mas_graph(
+    compiled_graph, user_query: str, chat_type: str = "dispute"
+) -> Dict[str, Any]:
     """MAS Supervisor 그래프를 invoke하고 최종 state를 반환합니다 (동기)."""
     from app.supervisor import create_initial_state
 
@@ -54,6 +56,7 @@ def _run_mas_graph(compiled_graph, user_query: str, chat_type: str = "dispute") 
 # ============================================================
 # Test 2.1: Retrieval — Law 도메인 검색
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.needs_db
@@ -84,6 +87,7 @@ class TestLawRetrieval:
 # Test 2.2: Retrieval — Criteria 도메인 검색
 # ============================================================
 
+
 @pytest.mark.e2e
 @pytest.mark.needs_db
 class TestCriteriaRetrieval:
@@ -108,13 +112,15 @@ class TestCriteriaRetrieval:
         )
         if results:
             chunk_ids = [r.chunk_id for r in results]
-            assert len(chunk_ids) == len(set(chunk_ids)), \
-                f"중복 chunk_id 발견: {[c for c in chunk_ids if chunk_ids.count(c) > 1]}"
+            assert len(chunk_ids) == len(
+                set(chunk_ids)
+            ), f"중복 chunk_id 발견: {[c for c in chunk_ids if chunk_ids.count(c) > 1]}"
 
 
 # ============================================================
 # Test 2.3: Retrieval — Case 도메인 검색
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.needs_db
@@ -133,6 +139,7 @@ class TestCaseRetrieval:
 # ============================================================
 # Test 2.4: Retrieval — Hybrid RRF Fusion
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.needs_db
@@ -154,6 +161,7 @@ class TestHybridRRFFusion:
 # ============================================================
 # Test 2.5: Dispute 전체 파이프라인
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.llm
@@ -185,7 +193,9 @@ class TestDisputeFullPipeline:
         has_results = bool(individual) or bool(retrieval)
         assert has_results, "retrieval 결과가 존재하지 않습니다"
 
-    def test_dispute_no_prohibited_expressions(self, compiled_mas_graph, openai_api_key):
+    def test_dispute_no_prohibited_expressions(
+        self, compiled_mas_graph, openai_api_key
+    ):
         """분쟁 답변에 금지 표현이 없는지 확인"""
         from app.agents.legal_review.agent import _check_prohibited_expressions
 
@@ -198,13 +208,13 @@ class TestDisputeFullPipeline:
         final_answer = result.get("final_answer", "")
         if final_answer:
             violations = _check_prohibited_expressions(final_answer)
-            assert len(violations) == 0, \
-                f"금지 표현 발견: {violations}"
+            assert len(violations) == 0, f"금지 표현 발견: {violations}"
 
 
 # ============================================================
 # Test 2.6: Law Query Pipeline
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.llm
@@ -227,12 +237,15 @@ class TestLawQueryPipeline:
 # Test 2.7: Criteria Query Pipeline
 # ============================================================
 
+
 @pytest.mark.e2e
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestCriteriaQueryPipeline:
 
-    def test_criteria_pipeline_produces_answer(self, compiled_mas_graph, openai_api_key):
+    def test_criteria_pipeline_produces_answer(
+        self, compiled_mas_graph, openai_api_key
+    ):
         """분쟁해결기준 쿼리의 전체 파이프라인이 답변을 생성하는지 확인"""
         result = _run_mas_graph(
             compiled_mas_graph,
@@ -247,6 +260,7 @@ class TestCriteriaQueryPipeline:
 # ============================================================
 # Test 2.8: General Query Fast Path
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.llm
@@ -274,20 +288,24 @@ class TestGeneralQueryFastPath:
         individual = result.get("individual_retrieval_results", [])
         if individual:
             total_docs = sum(len(ir.get("documents", [])) for ir in individual)
-            assert total_docs == 0, \
-                f"general 쿼리인데 retrieval 결과가 {total_docs}건 존재합니다"
+            assert (
+                total_docs == 0
+            ), f"general 쿼리인데 retrieval 결과가 {total_docs}건 존재합니다"
 
 
 # ============================================================
 # Test 2.9: LLM 답변 품질 검증 — 금지 표현
 # ============================================================
 
+
 @pytest.mark.e2e
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestAnswerQuality:
 
-    def test_multiple_dispute_queries_no_prohibited(self, compiled_mas_graph, openai_api_key):
+    def test_multiple_dispute_queries_no_prohibited(
+        self, compiled_mas_graph, openai_api_key
+    ):
         """여러 dispute 쿼리에 금지 표현이 없는지 확인"""
         from app.agents.legal_review.agent import _check_prohibited_expressions
 
@@ -306,13 +324,15 @@ class TestAnswerQuality:
             final_answer = result.get("final_answer", "")
             if final_answer:
                 violations = _check_prohibited_expressions(final_answer)
-                assert len(violations) == 0, \
-                    f"쿼리 '{query[:20]}...'의 답변에 금지 표현 발견: {violations}"
+                assert (
+                    len(violations) == 0
+                ), f"쿼리 '{query[:20]}...'의 답변에 금지 표현 발견: {violations}"
 
 
 # ============================================================
 # Test 2.10: LLM 답변 출처 인용 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.llm
@@ -338,13 +358,15 @@ class TestAnswerCitations:
             has_citation_in_text = any(
                 re.search(p, final_answer) for p in CITATION_PATTERNS
             )
-            assert has_citation_in_text, \
-                "dispute 답변에 sources도 없고, 텍스트 내 인용 패턴도 없습니다"
+            assert (
+                has_citation_in_text
+            ), "dispute 답변에 sources도 없고, 텍스트 내 인용 패턴도 없습니다"
 
 
 # ============================================================
 # Test 2.11: Similarity Threshold 도메인별 적용 검증
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.unit
@@ -365,7 +387,9 @@ class TestDomainThresholdFiltering:
 
         source = inspect.getsource(BaseRetrievalAgent.process)
 
-        assert "get_similarity_threshold" in source, \
-            "BaseRetrievalAgent.process()에 threshold 필터링 로직이 없습니다"
-        assert "filtered_results" in source, \
-            "BaseRetrievalAgent.process()에 filtered_results 변수가 없습니다"
+        assert (
+            "get_similarity_threshold" in source
+        ), "BaseRetrievalAgent.process()에 threshold 필터링 로직이 없습니다"
+        assert (
+            "filtered_results" in source
+        ), "BaseRetrievalAgent.process()에 filtered_results 변수가 없습니다"

@@ -12,8 +12,10 @@ Usage:
     @pytest.mark.api - API 엔드포인트 테스트
     @pytest.mark.slow - 느린 테스트
 """
-import pytest
+
 import concurrent.futures
+
+import pytest
 
 # 전체 모듈에 마커 적용
 pytestmark = [
@@ -32,8 +34,7 @@ class TestConcurrency:
 
         def make_request(query_id):
             resp = api_client.post(
-                "/search",
-                json={"query": f"환불 테스트 {query_id}", "top_k": 5}
+                "/search", json={"query": f"환불 테스트 {query_id}", "top_k": 5}
             )
             return resp.status_code
 
@@ -42,19 +43,18 @@ class TestConcurrency:
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # All requests should succeed
-        assert all(status == 200 for status in results), \
-            f"Some requests failed: {results}"
+        assert all(
+            status == 200 for status in results
+        ), f"Some requests failed: {results}"
 
     @pytest.mark.slow
     def test_no_connection_pool_exhaustion(self, api_client):
         """API maintains connection pool under sustained load"""
         # Send 50 rapid sequential requests
         for i in range(50):
-            resp = api_client.post(
-                "/search",
-                json={"query": f"테스트 {i}", "top_k": 3}
-            )
-            assert resp.status_code == 200, \
-                f"Request {i} failed with status {resp.status_code}"
+            resp = api_client.post("/search", json={"query": f"테스트 {i}", "top_k": 3})
+            assert (
+                resp.status_code == 200
+            ), f"Request {i} failed with status {resp.status_code}"
 
         # No connection errors should occur

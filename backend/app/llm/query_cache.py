@@ -29,7 +29,6 @@ COMMON_REWRITES = {
     "채무불이행": "약속 안 지킴 계약 위반",
     "이행지체": "약속 시간 지연 늦음",
     "이행불능": "약속 이행 불가",
-
     # 책임 관련
     "하자담보책임": "불량 제품 책임 수리 교환",
     "손해배상": "피해 보상",
@@ -37,38 +36,32 @@ COMMON_REWRITES = {
     "연대책임": "함께 책임",
     "면책": "책임 없음 면제",
     "면책 조항": "책임 면제 조건",
-
     # 보상/배상 관련
     "위약금": "취소 수수료 벌금",
     "위약벌": "취소 벌금",
     "지연손해금": "늦어서 내는 이자",
     "원상회복": "원래대로 돌려놓기",
-
     # 기간 관련
     "소멸시효": "청구 기한 만료",
     "제척기간": "권리 행사 기한",
     "유예기간": "기다리는 기간",
-
     # 거래 관련
     "전자상거래": "온라인 쇼핑 인터넷 구매",
     "통신판매": "전화 인터넷 판매",
     "방문판매": "집으로 찾아와서 판매",
     "할부거래": "나눠서 결제",
     "선불식할부거래": "미리 돈 내고 나중에 받기",
-
     # 소비자 권리
     "소비자 기본권": "소비자 권리",
     "약관": "계약 조건 규정",
     "불공정약관": "불공정한 계약 조건",
     "표시광고": "광고 표시",
     "허위과장광고": "거짓 과장 광고",
-
     # 분쟁 해결
     "분쟁조정": "분쟁 해결 조정",
     "피해구제": "피해 해결 보상",
     "합의": "서로 동의 협의",
     "조정결정": "조정 결과 결정",
-
     # 금융 관련
     "채권": "돈 받을 권리",
     "채무": "돈 갚을 의무",
@@ -76,7 +69,6 @@ COMMON_REWRITES = {
     "채무자": "돈 갚을 사람",
     "담보": "보증 담보물",
     "보증": "책임 보장",
-
     # 기타 법률 용어
     "준거법": "적용되는 법",
     "관할법원": "담당 법원",
@@ -124,7 +116,9 @@ class QueryCache:
         # Pre-seed 법률 용어 매핑
         self._preseed_common_rewrites()
 
-        logger.info(f"[QueryCache] Initialized with maxsize={maxsize}, pre-seeded={len(COMMON_REWRITES)}")
+        logger.info(
+            f"[QueryCache] Initialized with maxsize={maxsize}, pre-seeded={len(COMMON_REWRITES)}"
+        )
 
     def _preseed_common_rewrites(self) -> None:
         """Pre-seed 공통 법률 용어 매핑"""
@@ -150,20 +144,20 @@ class QueryCache:
         """
         # 정규화
         normalized = query.lower().strip()
-        normalized = re.sub(r'\s+', ' ', normalized)
+        normalized = re.sub(r"\s+", " ", normalized)
 
         # 일반적인 접미사 제거 (캐시 히트율 향상)
         suffix_patterns = [
-            r'[해주세요|알려주세요|싶어요|인가요|할까요|있나요|있어요|될까요]$',
-            r'[?？!！。\.]+$',
+            r"[해주세요|알려주세요|싶어요|인가요|할까요|있나요|있어요|될까요]$",
+            r"[?？!！。\.]+$",
         ]
         for pattern in suffix_patterns:
-            normalized = re.sub(pattern, '', normalized)
+            normalized = re.sub(pattern, "", normalized)
 
         normalized = normalized.strip()
 
         # MD5 해시 (빠른 조회용)
-        return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+        return hashlib.md5(normalized.encode("utf-8")).hexdigest()
 
     def get(self, query: str) -> Optional[str]:
         """
@@ -237,11 +231,11 @@ class QueryCache:
             hit_rate = self._hits / total if total > 0 else 0.0
 
             return {
-                'size': len(self._cache),
-                'maxsize': self._maxsize,
-                'hits': self._hits,
-                'misses': self._misses,
-                'hit_rate': hit_rate
+                "size": len(self._cache),
+                "maxsize": self._maxsize,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": hit_rate,
             }
 
     def clear(self) -> None:

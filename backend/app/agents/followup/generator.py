@@ -14,7 +14,8 @@
 4. 최대 3-5개 질문 선택
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
 from .templates import (
     QUESTION_TEMPLATES,
     QuestionTemplate,
@@ -32,9 +33,7 @@ class FollowupQuestionGenerator:
     """
 
     def __init__(
-        self,
-        max_followup_questions: int = 3,
-        max_clarifying_questions: int = 2
+        self, max_followup_questions: int = 3, max_clarifying_questions: int = 2
     ):
         """
         Args:
@@ -96,8 +95,8 @@ class FollowupQuestionGenerator:
         clarifying_questions = self._generate_clarifying_questions(context)
 
         return {
-            'followup_questions': followup_questions,
-            'clarifying_questions': clarifying_questions
+            "followup_questions": followup_questions,
+            "clarifying_questions": clarifying_questions,
         }
 
     def _build_context(
@@ -119,37 +118,33 @@ class FollowupQuestionGenerator:
         Returns:
             컨텍스트 딕셔너리
         """
-        disputes = retrieval.get('disputes', [])
-        counsels = retrieval.get('counsels', [])
-        laws = retrieval.get('laws', [])
-        criteria = retrieval.get('criteria', [])
-        agency = retrieval.get('agency', {})
+        disputes = retrieval.get("disputes", [])
+        counsels = retrieval.get("counsels", [])
+        laws = retrieval.get("laws", [])
+        criteria = retrieval.get("criteria", [])
+        agency = retrieval.get("agency", {})
 
-        missing_fields = query_analysis.get('missing_fields', [])
+        missing_fields = query_analysis.get("missing_fields", [])
 
         return {
             # 분쟁 유형
-            'dispute_type': query_analysis.get('dispute_type', '일반'),
-
+            "dispute_type": query_analysis.get("dispute_type", "일반"),
             # 검색 결과 존재 여부
-            'has_cases': bool(disputes or counsels),
-            'has_laws': bool(laws),
-            'has_criteria': bool(criteria),
-            'has_agency_recommendation': bool(agency),
-
+            "has_cases": bool(disputes or counsels),
+            "has_laws": bool(laws),
+            "has_criteria": bool(criteria),
+            "has_agency_recommendation": bool(agency),
             # 답변 내용 분석
-            'no_timeline_mentioned': self._check_no_timeline(answer),
-            'no_procedure_mentioned': self._check_no_procedure(answer),
-
+            "no_timeline_mentioned": self._check_no_timeline(answer),
+            "no_procedure_mentioned": self._check_no_procedure(answer),
             # 누락된 정보
-            'missing_purchase_date': 'purchase_date' in missing_fields,
-            'missing_product_name': 'product_name' in missing_fields,
-            'missing_issue_detail': 'issue_detail' in missing_fields,
-            'missing_seller_response': 'seller_response' in missing_fields,
-            'missing_amount': 'amount' in missing_fields,
-
+            "missing_purchase_date": "purchase_date" in missing_fields,
+            "missing_product_name": "product_name" in missing_fields,
+            "missing_issue_detail": "issue_detail" in missing_fields,
+            "missing_seller_response": "seller_response" in missing_fields,
+            "missing_amount": "amount" in missing_fields,
             # 답변 형식
-            'format_id': format_id,
+            "format_id": format_id,
         }
 
     def _generate_followup_questions(self, context: Dict) -> List[str]:
@@ -162,16 +157,15 @@ class FollowupQuestionGenerator:
         Returns:
             후속 질문 목록 (최대 max_followup_questions개)
         """
-        dispute_type = context.get('dispute_type', '일반')
-        format_id = context.get('format_id')
+        dispute_type = context.get("dispute_type", "일반")
+        format_id = context.get("format_id")
 
         # 1. 분쟁 유형에 맞는 템플릿 필터링
         candidate_templates = get_templates_by_dispute_type(dispute_type)
 
         # 2. followup 타입만 필터링
         followup_templates = [
-            t for t in candidate_templates
-            if t.question_type == 'followup'
+            t for t in candidate_templates if t.question_type == "followup"
         ]
 
         # 3. format_id 기반 우선 필터링
@@ -183,7 +177,7 @@ class FollowupQuestionGenerator:
                 # 일반 템플릿 중 조건 매칭
                 general_matched = self._match_templates(
                     [t for t in followup_templates if t not in format_preferred],
-                    context
+                    context,
                 )
                 # format 전용 우선, 나머지 보충
                 matched_templates = preferred_matched + general_matched
@@ -197,7 +191,7 @@ class FollowupQuestionGenerator:
         matched_templates.sort(key=lambda t: t.priority, reverse=True)
 
         # 6. 최대 개수 제한
-        selected_templates = matched_templates[:self.max_followup_questions]
+        selected_templates = matched_templates[: self.max_followup_questions]
 
         return [t.question_text for t in selected_templates]
 
@@ -211,15 +205,14 @@ class FollowupQuestionGenerator:
         Returns:
             명확화 질문 목록 (최대 max_clarifying_questions개)
         """
-        dispute_type = context.get('dispute_type', '일반')
+        dispute_type = context.get("dispute_type", "일반")
 
         # 1. 분쟁 유형에 맞는 템플릿 필터링
         candidate_templates = get_templates_by_dispute_type(dispute_type)
 
         # 2. clarifying 타입만 필터링
         clarifying_templates = [
-            t for t in candidate_templates
-            if t.question_type == 'clarifying'
+            t for t in candidate_templates if t.question_type == "clarifying"
         ]
 
         # 3. 조건 매칭
@@ -229,14 +222,12 @@ class FollowupQuestionGenerator:
         matched_templates.sort(key=lambda t: t.priority, reverse=True)
 
         # 5. 최대 개수 제한
-        selected_templates = matched_templates[:self.max_clarifying_questions]
+        selected_templates = matched_templates[: self.max_clarifying_questions]
 
         return [t.question_text for t in selected_templates]
 
     def _match_templates(
-        self,
-        templates: List[QuestionTemplate],
-        context: Dict
+        self, templates: List[QuestionTemplate], context: Dict
     ) -> List[QuestionTemplate]:
         """
         조건에 맞는 템플릿을 필터링합니다.
@@ -288,7 +279,7 @@ class FollowupQuestionGenerator:
         Returns:
             기간 정보가 없으면 True
         """
-        timeline_keywords = ['기간', '일', '주', '개월', '년', '시간', '날짜']
+        timeline_keywords = ["기간", "일", "주", "개월", "년", "시간", "날짜"]
         answer_lower = answer.lower()
 
         for keyword in timeline_keywords:
@@ -307,7 +298,7 @@ class FollowupQuestionGenerator:
         Returns:
             절차 정보가 없으면 True
         """
-        procedure_keywords = ['신청', '절차', '방법', '단계', '순서', '진행']
+        procedure_keywords = ["신청", "절차", "방법", "단계", "순서", "진행"]
         answer_lower = answer.lower()
 
         for keyword in procedure_keywords:
@@ -316,10 +307,7 @@ class FollowupQuestionGenerator:
 
         return True
 
-    def _get_format_preferred_templates(
-        self,
-        format_id: str
-    ) -> List[QuestionTemplate]:
+    def _get_format_preferred_templates(self, format_id: str) -> List[QuestionTemplate]:
         """
         format_id에 맞는 우선 템플릿을 반환합니다.
 
@@ -332,20 +320,17 @@ class FollowupQuestionGenerator:
         from .templates import FORMAT_GUIDED_TEMPLATES
 
         FORMAT_TEMPLATE_MAP = {
-            'general_greeting': ['guide_to_dispute', 'guide_onboarding'],
-            'comprehensive_dispute': ['ask_similar_cases'],
-            'law_response': ['ask_law_detail', 'ask_situation_apply'],
-            'criteria_response': ['ask_criteria_cases'],
+            "general_greeting": ["guide_to_dispute", "guide_onboarding"],
+            "comprehensive_dispute": ["ask_similar_cases"],
+            "law_response": ["ask_law_detail", "ask_situation_apply"],
+            "criteria_response": ["ask_criteria_cases"],
         }
 
         preferred_ids = FORMAT_TEMPLATE_MAP.get(format_id, [])
         if not preferred_ids:
             return []
 
-        return [
-            t for t in FORMAT_GUIDED_TEMPLATES
-            if t.template_id in preferred_ids
-        ]
+        return [t for t in FORMAT_GUIDED_TEMPLATES if t.template_id in preferred_ids]
 
 
-__all__ = ['FollowupQuestionGenerator']
+__all__ = ["FollowupQuestionGenerator"]

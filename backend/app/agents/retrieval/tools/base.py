@@ -13,8 +13,8 @@ Sprint 3 - s3-4: 통합 리트리버 인터페이스 정의
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -38,11 +38,12 @@ class Document:
         category_path: 카테고리 경로 (예: ['휘트니스', '헬스장'])
         metadata: 추가 메타데이터
     """
+
     chunk_id: str
     doc_id: str
     content: str
     similarity: float
-    
+
     doc_type: Optional[str] = None
     doc_title: Optional[str] = None
     chunk_type: Optional[str] = None
@@ -99,10 +100,7 @@ class BaseRetriever(ABC):
         pass
 
     def search_instrumented(
-        self,
-        query: str,
-        top_k: int = 10,
-        **kwargs
+        self, query: str, top_k: int = 10, **kwargs
     ) -> Dict[str, Any]:
         """
         타이밍 및 진단 정보가 포함된 검색
@@ -119,14 +117,15 @@ class BaseRetriever(ABC):
             }
         """
         import time
+
         start = time.time()
         results = self.invoke(query, top_k, **kwargs)
         elapsed = (time.time() - start) * 1000
 
         return {
-            'results': results,
-            'total_time_ms': elapsed,
-            'result_count': len(results)
+            "results": results,
+            "total_time_ms": elapsed,
+            "result_count": len(results),
         }
 
     def __enter__(self):
@@ -157,60 +156,63 @@ def to_document(result: Any) -> Document:
     """
     if isinstance(result, Document):
         return result
-    
+
     if isinstance(result, dict):
         return Document(
-            chunk_id=result.get('chunk_id') or result.get('unit_id', ''),
-            doc_id=result.get('doc_id') or result.get('source_id', ''),
-            content=result.get('content') or result.get('text') or result.get('unit_text', ''),
-            similarity=float(result.get('similarity', 0.0)),
-            doc_type=result.get('doc_type'),
-            doc_title=result.get('doc_title') or result.get('title'),
-            chunk_type=result.get('chunk_type') or result.get('level'),
-            source_org=result.get('source_org') or result.get('source_label'),
-            url=result.get('url'),
-            category_path=result.get('category_path', []),
-            metadata=result.get('metadata', {})
+            chunk_id=result.get("chunk_id") or result.get("unit_id", ""),
+            doc_id=result.get("doc_id") or result.get("source_id", ""),
+            content=result.get("content")
+            or result.get("text")
+            or result.get("unit_text", ""),
+            similarity=float(result.get("similarity", 0.0)),
+            doc_type=result.get("doc_type"),
+            doc_title=result.get("doc_title") or result.get("title"),
+            chunk_type=result.get("chunk_type") or result.get("level"),
+            source_org=result.get("source_org") or result.get("source_label"),
+            url=result.get("url"),
+            category_path=result.get("category_path", []),
+            metadata=result.get("metadata", {}),
         )
-    
-    if hasattr(result, 'chunk_id'):
+
+    if hasattr(result, "chunk_id"):
         return Document(
             chunk_id=result.chunk_id,
-            doc_id=getattr(result, 'doc_id', ''),
-            content=getattr(result, 'content', '') or getattr(result, 'text', ''),
-            similarity=float(getattr(result, 'similarity', 0.0)),
-            doc_type=getattr(result, 'doc_type', None),
-            doc_title=getattr(result, 'doc_title', None),
-            chunk_type=getattr(result, 'chunk_type', None),
-            source_org=getattr(result, 'source_org', None),
-            url=getattr(result, 'url', None),
-            category_path=getattr(result, 'category_path', []),
-            metadata=getattr(result, 'metadata', {})
+            doc_id=getattr(result, "doc_id", ""),
+            content=getattr(result, "content", "") or getattr(result, "text", ""),
+            similarity=float(getattr(result, "similarity", 0.0)),
+            doc_type=getattr(result, "doc_type", None),
+            doc_title=getattr(result, "doc_title", None),
+            chunk_type=getattr(result, "chunk_type", None),
+            source_org=getattr(result, "source_org", None),
+            url=getattr(result, "url", None),
+            category_path=getattr(result, "category_path", []),
+            metadata=getattr(result, "metadata", {}),
         )
-    
-    if hasattr(result, 'unit_id'):
-        content = getattr(result, 'text', None) or getattr(result, 'unit_text', '')
+
+    if hasattr(result, "unit_id"):
+        content = getattr(result, "text", None) or getattr(result, "unit_text", "")
         return Document(
             chunk_id=result.unit_id,
-            doc_id=getattr(result, 'law_id', '') or getattr(result, 'source_id', ''),
+            doc_id=getattr(result, "law_id", "") or getattr(result, "source_id", ""),
             content=content,
-            similarity=float(getattr(result, 'similarity', 0.0)),
-            doc_type='law' if hasattr(result, 'law_name') else 'criteria',
-            doc_title=getattr(result, 'law_name', None) or getattr(result, 'source_label', None),
-            chunk_type=getattr(result, 'level', None),
-            source_org=getattr(result, 'source_label', None),
+            similarity=float(getattr(result, "similarity", 0.0)),
+            doc_type="law" if hasattr(result, "law_name") else "criteria",
+            doc_title=getattr(result, "law_name", None)
+            or getattr(result, "source_label", None),
+            chunk_type=getattr(result, "level", None),
+            source_org=getattr(result, "source_label", None),
             url=None,
             category_path=[],
             metadata={
-                'full_path': getattr(result, 'full_path', None),
-                'article_no': getattr(result, 'article_no', None),
-                'category': getattr(result, 'category', None),
-                'industry': getattr(result, 'industry', None),
-                'item_group': getattr(result, 'item_group', None),
-                'item': getattr(result, 'item', None),
-            }
+                "full_path": getattr(result, "full_path", None),
+                "article_no": getattr(result, "article_no", None),
+                "category": getattr(result, "category", None),
+                "industry": getattr(result, "industry", None),
+                "item_group": getattr(result, "item_group", None),
+                "item": getattr(result, "item", None),
+            },
         )
-    
+
     raise ValueError(f"Cannot convert {type(result)} to Document")
 
 

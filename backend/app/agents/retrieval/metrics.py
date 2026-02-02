@@ -14,15 +14,11 @@
 """
 
 import math
-from typing import List, Dict, Set, Optional, Union
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Union
 
 
-def calculate_ndcg(
-    retrieved: List[str],
-    relevant: Set[str],
-    k: int = 3
-) -> float:
+def calculate_ndcg(retrieved: List[str], relevant: Set[str], k: int = 3) -> float:
     """
     Normalized Discounted Cumulative Gain (nDCG@K)
 
@@ -54,10 +50,7 @@ def calculate_ndcg(
     return dcg / idcg if idcg > 0 else 0.0
 
 
-def calculate_mrr(
-    retrieved: List[str],
-    relevant: Set[str]
-) -> float:
+def calculate_mrr(retrieved: List[str], relevant: Set[str]) -> float:
     """
     Mean Reciprocal Rank (MRR)
 
@@ -78,9 +71,7 @@ def calculate_mrr(
 
 
 def calculate_precision_at_k(
-    retrieved: List[str],
-    relevant: Set[str],
-    k: int = 3
+    retrieved: List[str], relevant: Set[str], k: int = 3
 ) -> float:
     """
     Precision@K
@@ -103,10 +94,7 @@ def calculate_precision_at_k(
     return hits / k
 
 
-def calculate_recall(
-    retrieved: List[str],
-    relevant: Set[str]
-) -> float:
+def calculate_recall(retrieved: List[str], relevant: Set[str]) -> float:
     """
     Recall
 
@@ -126,10 +114,7 @@ def calculate_recall(
     return hits / len(relevant)
 
 
-def calculate_domain_accuracy(
-    predicted: str,
-    expected: str
-) -> float:
+def calculate_domain_accuracy(predicted: str, expected: str) -> float:
     """
     Domain (기관추천) 정확도
 
@@ -143,11 +128,7 @@ def calculate_domain_accuracy(
     return 1.0 if predicted == expected else 0.0
 
 
-def calculate_hit_rate(
-    retrieved: List[str],
-    relevant: Set[str],
-    k: int = 3
-) -> float:
+def calculate_hit_rate(retrieved: List[str], relevant: Set[str], k: int = 3) -> float:
     """
     Hit Rate@K
 
@@ -168,6 +149,7 @@ def calculate_hit_rate(
 @dataclass
 class SectionMetrics:
     """섹션별 평가 결과"""
+
     section: str
     ndcg: float = 0.0
     mrr: float = 0.0
@@ -177,17 +159,18 @@ class SectionMetrics:
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            f'{self.section}_ndcg': self.ndcg,
-            f'{self.section}_mrr': self.mrr,
-            f'{self.section}_precision@k': self.precision_at_k,
-            f'{self.section}_recall': self.recall,
-            f'{self.section}_hit_rate': self.hit_rate
+            f"{self.section}_ndcg": self.ndcg,
+            f"{self.section}_mrr": self.mrr,
+            f"{self.section}_precision@k": self.precision_at_k,
+            f"{self.section}_recall": self.recall,
+            f"{self.section}_hit_rate": self.hit_rate,
         }
 
 
 @dataclass
 class EvaluationResult:
     """단일 평가 항목 결과"""
+
     item_id: str
     question: str
     category: str
@@ -210,16 +193,16 @@ class EvaluationResult:
 
     def to_dict(self) -> Dict:
         result = {
-            'id': self.item_id,
-            'question': self.question,
-            'category': self.category,
-            'domain_accuracy': self.domain_accuracy,
-            'predicted_agency': self.predicted_agency,
-            'expected_agency': self.expected_agency,
-            'overall_ndcg': self.overall_ndcg,
-            'overall_mrr': self.overall_mrr,
-            'overall_hit_rate': self.overall_hit_rate,
-            'retrieval_time_ms': self.retrieval_time_ms
+            "id": self.item_id,
+            "question": self.question,
+            "category": self.category,
+            "domain_accuracy": self.domain_accuracy,
+            "predicted_agency": self.predicted_agency,
+            "expected_agency": self.expected_agency,
+            "overall_ndcg": self.overall_ndcg,
+            "overall_mrr": self.overall_mrr,
+            "overall_hit_rate": self.overall_hit_rate,
+            "retrieval_time_ms": self.retrieval_time_ms,
         }
 
         if self.cases_metrics:
@@ -258,10 +241,7 @@ class RetrievalMetrics:
         self.k = k
 
     def evaluate_section(
-        self,
-        section: str,
-        retrieved_ids: List[str],
-        relevant_ids: Set[str]
+        self, section: str, retrieved_ids: List[str], relevant_ids: Set[str]
     ) -> SectionMetrics:
         """
         단일 섹션 평가
@@ -275,9 +255,11 @@ class RetrievalMetrics:
             section=section,
             ndcg=calculate_ndcg(retrieved_ids, relevant_ids, self.k),
             mrr=calculate_mrr(retrieved_ids, relevant_ids),
-            precision_at_k=calculate_precision_at_k(retrieved_ids, relevant_ids, self.k),
+            precision_at_k=calculate_precision_at_k(
+                retrieved_ids, relevant_ids, self.k
+            ),
             recall=calculate_recall(retrieved_ids, relevant_ids),
-            hit_rate=calculate_hit_rate(retrieved_ids, relevant_ids, self.k)
+            hit_rate=calculate_hit_rate(retrieved_ids, relevant_ids, self.k),
         )
 
     def evaluate_item(
@@ -289,7 +271,7 @@ class RetrievalMetrics:
         expected_contexts: List[Dict],
         expected_agency: str,
         predicted_agency: str,
-        retrieval_time_ms: float = 0.0
+        retrieval_time_ms: float = 0.0,
     ) -> EvaluationResult:
         """
         단일 평가 항목 전체 평가
@@ -320,42 +302,56 @@ class RetrievalMetrics:
             category=category,
             predicted_agency=predicted_agency,
             expected_agency=expected_agency,
-            retrieval_time_ms=retrieval_time_ms
+            retrieval_time_ms=retrieval_time_ms,
         )
 
         # Domain 정확도
-        result.domain_accuracy = calculate_domain_accuracy(predicted_agency, expected_agency)
+        result.domain_accuracy = calculate_domain_accuracy(
+            predicted_agency, expected_agency
+        )
 
         # expected_contexts를 doc_type별로 분류
         expected_by_type = self._group_expected_by_type(expected_contexts)
 
         # Cases 섹션 평가 (disputes + counsels)
         cases_retrieved = []
-        for d in retrieved_results.get('disputes', []):
+        for d in retrieved_results.get("disputes", []):
             cases_retrieved.append(self._get_doc_id(d))
-        for c in retrieved_results.get('counsels', []):
+        for c in retrieved_results.get("counsels", []):
             cases_retrieved.append(self._get_doc_id(c))
 
-        cases_relevant = expected_by_type.get('mediation_case', set()) | \
-                        expected_by_type.get('counsel_case', set()) | \
-                        expected_by_type.get('case', set())
+        cases_relevant = (
+            expected_by_type.get("mediation_case", set())
+            | expected_by_type.get("counsel_case", set())
+            | expected_by_type.get("case", set())
+        )
 
         if cases_relevant:
-            result.cases_metrics = self.evaluate_section('cases', cases_retrieved, cases_relevant)
+            result.cases_metrics = self.evaluate_section(
+                "cases", cases_retrieved, cases_relevant
+            )
 
         # Laws 섹션 평가
-        laws_retrieved = [self._get_doc_id(l) for l in retrieved_results.get('laws', [])]
-        laws_relevant = expected_by_type.get('law', set())
+        laws_retrieved = [
+            self._get_doc_id(l) for l in retrieved_results.get("laws", [])
+        ]
+        laws_relevant = expected_by_type.get("law", set())
 
         if laws_relevant:
-            result.laws_metrics = self.evaluate_section('laws', laws_retrieved, laws_relevant)
+            result.laws_metrics = self.evaluate_section(
+                "laws", laws_retrieved, laws_relevant
+            )
 
         # Criteria 섹션 평가
-        criteria_retrieved = [self._get_doc_id(c) for c in retrieved_results.get('criteria', [])]
-        criteria_relevant = expected_by_type.get('criteria', set())
+        criteria_retrieved = [
+            self._get_doc_id(c) for c in retrieved_results.get("criteria", [])
+        ]
+        criteria_relevant = expected_by_type.get("criteria", set())
 
         if criteria_relevant:
-            result.criteria_metrics = self.evaluate_section('criteria', criteria_retrieved, criteria_relevant)
+            result.criteria_metrics = self.evaluate_section(
+                "criteria", criteria_retrieved, criteria_relevant
+            )
 
         # 전체 메트릭 계산
         all_retrieved = cases_retrieved + laws_retrieved + criteria_retrieved
@@ -367,17 +363,23 @@ class RetrievalMetrics:
         essential_relevant = self._get_essential_ids(expected_contexts)
 
         result.overall_ndcg = calculate_ndcg(all_retrieved, all_relevant, self.k * 3)
-        result.overall_mrr = calculate_mrr(all_retrieved, essential_relevant or all_relevant)
-        result.overall_hit_rate = calculate_hit_rate(all_retrieved, essential_relevant or all_relevant, self.k * 3)
+        result.overall_mrr = calculate_mrr(
+            all_retrieved, essential_relevant or all_relevant
+        )
+        result.overall_hit_rate = calculate_hit_rate(
+            all_retrieved, essential_relevant or all_relevant, self.k * 3
+        )
 
         return result
 
-    def _group_expected_by_type(self, expected_contexts: List[Dict]) -> Dict[str, Set[str]]:
+    def _group_expected_by_type(
+        self, expected_contexts: List[Dict]
+    ) -> Dict[str, Set[str]]:
         """expected_contexts를 doc_type별로 그룹화"""
         grouped = {}
         for ctx in expected_contexts:
-            doc_type = ctx.get('doc_type', '')
-            doc_id = ctx.get('doc_id') or ctx.get('unit_id', '')
+            doc_type = ctx.get("doc_type", "")
+            doc_id = ctx.get("doc_id") or ctx.get("unit_id", "")
 
             if doc_type not in grouped:
                 grouped[doc_type] = set()
@@ -389,14 +391,14 @@ class RetrievalMetrics:
     def _get_essential_ids(self, expected_contexts: List[Dict]) -> Set[str]:
         """essential relevance를 가진 문서 ID만 추출"""
         return {
-            ctx.get('doc_id') or ctx.get('unit_id', '')
+            ctx.get("doc_id") or ctx.get("unit_id", "")
             for ctx in expected_contexts
-            if ctx.get('relevance') == 'essential'
+            if ctx.get("relevance") == "essential"
         }
 
     def _get_doc_id(self, doc: Dict) -> str:
         """검색 결과에서 문서 ID 추출"""
-        return doc.get('doc_id') or doc.get('chunk_id') or doc.get('unit_id', '')
+        return doc.get("doc_id") or doc.get("chunk_id") or doc.get("unit_id", "")
 
 
 def aggregate_results(results: List[EvaluationResult]) -> Dict[str, float]:
@@ -417,7 +419,7 @@ def aggregate_results(results: List[EvaluationResult]) -> Dict[str, float]:
     for r in results:
         r_dict = r.to_dict()
         for key, value in r_dict.items():
-            if isinstance(value, (int, float)) and key not in ('retrieval_time_ms',):
+            if isinstance(value, (int, float)) and key not in ("retrieval_time_ms",):
                 if key not in all_metrics:
                     all_metrics[key] = []
                 all_metrics[key].append(value)
@@ -428,11 +430,13 @@ def aggregate_results(results: List[EvaluationResult]) -> Dict[str, float]:
         valid_values = [v for v in values if v is not None]
         if valid_values:
             mean = sum(valid_values) / len(valid_values)
-            summary[f'{key}_mean'] = round(mean, 4)
+            summary[f"{key}_mean"] = round(mean, 4)
 
             # 표준편차
             if len(valid_values) > 1:
-                variance = sum((v - mean) ** 2 for v in valid_values) / len(valid_values)
-                summary[f'{key}_std'] = round(math.sqrt(variance), 4)
+                variance = sum((v - mean) ** 2 for v in valid_values) / len(
+                    valid_values
+                )
+                summary[f"{key}_std"] = round(math.sqrt(variance), 4)
 
     return summary

@@ -7,20 +7,21 @@ display limits, HyDE generation, RetrievalOverflowCache, and config settings.
 작성일: 2026-01-31
 """
 
-import pytest
+from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, List, Optional
+
+import pytest
+
+from app.agents.query_analysis.classifiers import (
+    QueryComplexity,
+    classify_query_complexity,
+)
+from app.common.config import RetrievalSettings, get_config
+from app.supervisor.nodes.retrieval_merge import _apply_display_limits
 
 # ============================================================================
 # Import modules under test
 # ============================================================================
-
-from app.agents.query_analysis.classifiers import (
-    classify_query_complexity,
-    QueryComplexity,
-)
-from app.supervisor.nodes.retrieval_merge import _apply_display_limits
-from app.common.config import get_config, RetrievalSettings
 
 
 # ============================================================================
@@ -108,84 +109,81 @@ class TestDisplayLimits:
     def test_display_limits_no_truncation(self):
         """문서 수 ≤ 제한일 때 truncation 발생하지 않음"""
         merged = {
-            'laws': [{'chunk_id': 'law1', 'title': 'Test Law'}],
-            'criteria': [{'chunk_id': 'crit1'}, {'chunk_id': 'crit2'}],
-            'disputes': [{'chunk_id': 'case1'}, {'chunk_id': 'case2'}],
-            'counsels': [{'chunk_id': 'counsel1'}],
-            'agency': {},
-            'max_similarity': 0.85,
-            'avg_similarity': 0.75,
+            "laws": [{"chunk_id": "law1", "title": "Test Law"}],
+            "criteria": [{"chunk_id": "crit1"}, {"chunk_id": "crit2"}],
+            "disputes": [{"chunk_id": "case1"}, {"chunk_id": "case2"}],
+            "counsels": [{"chunk_id": "counsel1"}],
+            "agency": {},
+            "max_similarity": 0.85,
+            "avg_similarity": 0.75,
         }
 
         # Config defaults: display_law=1, display_criteria=2, display_case=3, display_counsel=2
         result = _apply_display_limits(merged, session_id=None)
 
         # No truncation expected (all within limits)
-        assert len(result['laws']) == 1
-        assert len(result['criteria']) == 2
-        assert len(result['disputes']) == 2
-        assert len(result['counsels']) == 1
+        assert len(result["laws"]) == 1
+        assert len(result["criteria"]) == 2
+        assert len(result["disputes"]) == 2
+        assert len(result["counsels"]) == 1
 
     @pytest.mark.unit
     def test_display_limits_with_truncation(self):
         """문서 수 > 제한일 때 상위 N개만 유지"""
         merged = {
-            'laws': [
-                {'chunk_id': 'law1', 'similarity': 0.9},
-                {'chunk_id': 'law2', 'similarity': 0.8},
-                {'chunk_id': 'law3', 'similarity': 0.7},
+            "laws": [
+                {"chunk_id": "law1", "similarity": 0.9},
+                {"chunk_id": "law2", "similarity": 0.8},
+                {"chunk_id": "law3", "similarity": 0.7},
             ],
-            'criteria': [
-                {'chunk_id': 'crit1'},
-                {'chunk_id': 'crit2'},
-                {'chunk_id': 'crit3'},
+            "criteria": [
+                {"chunk_id": "crit1"},
+                {"chunk_id": "crit2"},
+                {"chunk_id": "crit3"},
             ],
-            'disputes': [
-                {'chunk_id': f'case{i}'}
-                for i in range(1, 6)
-            ],  # 5 cases
-            'counsels': [
-                {'chunk_id': 'counsel1'},
-                {'chunk_id': 'counsel2'},
-                {'chunk_id': 'counsel3'},
+            "disputes": [{"chunk_id": f"case{i}"} for i in range(1, 6)],  # 5 cases
+            "counsels": [
+                {"chunk_id": "counsel1"},
+                {"chunk_id": "counsel2"},
+                {"chunk_id": "counsel3"},
             ],
-            'agency': {},
-            'max_similarity': 0.9,
-            'avg_similarity': 0.8,
+            "agency": {},
+            "max_similarity": 0.9,
+            "avg_similarity": 0.8,
         }
 
         result = _apply_display_limits(merged, session_id=None)
 
         # Config defaults: display_law=1, display_criteria=2, display_case=3, display_counsel=2
-        assert len(result['laws']) == 1  # truncated from 3 to 1
-        assert len(result['criteria']) == 2  # truncated from 3 to 2
-        assert len(result['disputes']) == 3  # truncated from 5 to 3
-        assert len(result['counsels']) == 2  # truncated from 3 to 2
+        assert len(result["laws"]) == 1  # truncated from 3 to 1
+        assert len(result["criteria"]) == 2  # truncated from 3 to 2
+        assert len(result["disputes"]) == 3  # truncated from 5 to 3
+        assert len(result["counsels"]) == 2  # truncated from 3 to 2
 
         # Check that top items are kept (order matters)
-        assert result['laws'][0]['chunk_id'] == 'law1'
-        assert result['disputes'][0]['chunk_id'] == 'case1'
-        assert result['disputes'][2]['chunk_id'] == 'case3'
+        assert result["laws"][0]["chunk_id"] == "law1"
+        assert result["disputes"][0]["chunk_id"] == "case1"
+        assert result["disputes"][2]["chunk_id"] == "case3"
 
     @pytest.mark.unit
     def test_display_limits_empty_sections(self):
         """빈 섹션도 에러 없이 처리"""
         merged = {
-            'laws': [],
-            'criteria': [],
-            'disputes': [],
-            'counsels': [],
-            'agency': {},
-            'max_similarity': 0.0,
-            'avg_similarity': 0.0,
+            "laws": [],
+            "criteria": [],
+            "disputes": [],
+            "counsels": [],
+            "agency": {},
+            "max_similarity": 0.0,
+            "avg_similarity": 0.0,
         }
 
         result = _apply_display_limits(merged, session_id=None)
 
-        assert len(result['laws']) == 0
-        assert len(result['criteria']) == 0
-        assert len(result['disputes']) == 0
-        assert len(result['counsels']) == 0
+        assert len(result["laws"]) == 0
+        assert len(result["criteria"]) == 0
+        assert len(result["disputes"]) == 0
+        assert len(result["counsels"]) == 0
 
 
 # ============================================================================
@@ -200,8 +198,10 @@ class TestRetrievalOverflowCache:
     def skip_no_redis(self):
         """Redis 미사용 시 테스트 스킵"""
         import redis
+
         try:
             from app.common.cache import get_redis_client
+
             client = get_redis_client()
             if client is None:
                 pytest.skip("Redis not available")
@@ -215,10 +215,13 @@ class TestRetrievalOverflowCache:
 
         session_id = "test_session_overflow_001"
         overflow_data = {
-            'laws': [{'chunk_id': 'law_overflow_1'}],
-            'criteria': [{'chunk_id': 'crit_overflow_1'}, {'chunk_id': 'crit_overflow_2'}],
-            'disputes': [],
-            'counsels': [{'chunk_id': 'counsel_overflow_1'}],
+            "laws": [{"chunk_id": "law_overflow_1"}],
+            "criteria": [
+                {"chunk_id": "crit_overflow_1"},
+                {"chunk_id": "crit_overflow_2"},
+            ],
+            "disputes": [],
+            "counsels": [{"chunk_id": "counsel_overflow_1"}],
         }
 
         # Set
@@ -227,10 +230,10 @@ class TestRetrievalOverflowCache:
         # Get
         retrieved = RetrievalOverflowCache.get_by_session(session_id)
         assert retrieved is not None
-        assert len(retrieved['laws']) == 1
-        assert retrieved['laws'][0]['chunk_id'] == 'law_overflow_1'
-        assert len(retrieved['criteria']) == 2
-        assert len(retrieved['counsels']) == 1
+        assert len(retrieved["laws"]) == 1
+        assert retrieved["laws"][0]["chunk_id"] == "law_overflow_1"
+        assert len(retrieved["criteria"]) == 2
+        assert len(retrieved["counsels"]) == 1
 
         # Cleanup
         RetrievalOverflowCache.invalidate_session(session_id)
@@ -242,10 +245,10 @@ class TestRetrievalOverflowCache:
 
         session_id = "test_session_overflow_002"
         overflow_data = {
-            'laws': [{'chunk_id': 'law1'}],
-            'criteria': [],
-            'disputes': [],
-            'counsels': [],
+            "laws": [{"chunk_id": "law1"}],
+            "criteria": [],
+            "disputes": [],
+            "counsels": [],
         }
 
         RetrievalOverflowCache.set_by_session(session_id, overflow_data)
@@ -297,10 +300,7 @@ class TestHyDEModule:
         # Inject mocked client directly
         hyde._client = mock_client
 
-        result = await hyde.generate(
-            query="노트북 환불 가능한가요?",
-            domain="law"
-        )
+        result = await hyde.generate(query="노트북 환불 가능한가요?", domain="law")
 
         assert result is not None
         assert "가상 법률 답변" in result
@@ -321,10 +321,7 @@ class TestHyDEModule:
         # Inject mocked client directly
         hyde._client = mock_client
 
-        result = await hyde.generate(
-            query="노트북 환불 가능한가요?",
-            domain="law"
-        )
+        result = await hyde.generate(query="노트북 환불 가능한가요?", domain="law")
 
         assert result is None  # Should return None on failure
 
@@ -464,35 +461,49 @@ def test_all_adaptive_rag_components_exist():
     """모든 Adaptive RAG 컴포넌트 존재 확인 (smoke test)"""
     # 1. QueryComplexity enum
     from app.agents.query_analysis.classifiers import QueryComplexity
+
     assert QueryComplexity.SIMPLE
     assert QueryComplexity.MODERATE
     assert QueryComplexity.COMPLEX
 
     # 2. classify_query_complexity function
     from app.agents.query_analysis.classifiers import classify_query_complexity
+
     result = classify_query_complexity("환불")
-    assert result in [QueryComplexity.SIMPLE, QueryComplexity.MODERATE, QueryComplexity.COMPLEX]
+    assert result in [
+        QueryComplexity.SIMPLE,
+        QueryComplexity.MODERATE,
+        QueryComplexity.COMPLEX,
+    ]
 
     # 3. _apply_display_limits function
     from app.supervisor.nodes.retrieval_merge import _apply_display_limits
+
     test_merged = {
-        'laws': [], 'criteria': [], 'disputes': [], 'counsels': [],
-        'agency': {}, 'max_similarity': 0.0, 'avg_similarity': 0.0,
+        "laws": [],
+        "criteria": [],
+        "disputes": [],
+        "counsels": [],
+        "agency": {},
+        "max_similarity": 0.0,
+        "avg_similarity": 0.0,
     }
     result = _apply_display_limits(test_merged, None)
     assert result is not None
 
     # 4. HyDEGenerator class
     from app.agents.retrieval.tools.hyde import HyDEGenerator
+
     hyde = HyDEGenerator()
     assert hyde is not None
 
     # 5. RetrievalOverflowCache class
     from app.supervisor.cache import RetrievalOverflowCache
+
     assert RetrievalOverflowCache is not None
 
     # 6. RetrievalSettings config
     config = get_config().retrieval
     assert config is not None
-    assert hasattr(config, 'rrf_k')
-    assert hasattr(config, 'display_law')
+    assert hasattr(config, "rrf_k")
+    assert hasattr(config, "display_law")

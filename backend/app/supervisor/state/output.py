@@ -5,10 +5,10 @@
 사용자에게 반환되는 응답 데이터입니다.
 """
 
-from typing import List, Dict, Literal, Optional, Annotated
-from typing_extensions import TypedDict
 import operator
+from typing import Annotated, Dict, List, Literal, Optional
 
+from typing_extensions import TypedDict
 
 # Progressive Disclosure 응답 깊이
 ResponseDepth = Literal["summary", "detail", "full"]
@@ -35,6 +35,7 @@ class ClaimEvidenceMapping(TypedDict):
         ...     'grounded': True
         ... }
     """
+
     claim: str
     evidence_chunk_ids: List[str]
     evidence_texts: List[str]
@@ -82,6 +83,7 @@ class OutputState(TypedDict, total=False):
     Track 2 변경사항 (2026-01-28):
         - followup_questions 필드 추가
     """
+
     final_answer: Optional[str]
     sources: Annotated[List[Dict], operator.add]
     has_sufficient_evidence: bool
@@ -95,7 +97,7 @@ class OutputState(TypedDict, total=False):
 
 
 __all__ = [
-    'ClaimEvidenceMapping',
-    'ResponseDepth',
-    'OutputState',
+    "ClaimEvidenceMapping",
+    "ResponseDepth",
+    "OutputState",
 ]

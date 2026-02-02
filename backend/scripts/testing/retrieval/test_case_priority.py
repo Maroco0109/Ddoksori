@@ -4,9 +4,11 @@ PR-4: 사례 우선순위 검색 테스트
 실행 방법:
     conda run -n dsr pytest backend/scripts/testing/retrieval/test_case_priority.py -v
 """
+
 import os
-import pytest
 from typing import List
+
+import pytest
 
 from app.agents.retrieval.case_agent import CaseRetrievalAgent
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
@@ -17,11 +19,11 @@ from app.common.config import get_config
 def db_config():
     """데이터베이스 설정"""
     return {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', '5432')),
-        'dbname': os.getenv('DB_NAME', 'ddoksori'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'postgres')
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", "5432")),
+        "dbname": os.getenv("DB_NAME", "ddoksori"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "postgres"),
     }
 
 
@@ -49,15 +51,14 @@ class TestHybridRetrieverCategoryFilter:
             results = retriever.search(
                 query="환불",
                 top_k=5,
-                dataset_type_filter='case',
-                category_filter='해결',
+                dataset_type_filter="case",
+                category_filter="해결",
             )
 
             # 모든 결과가 해결 category여야 함
             for r in results:
                 category = get_category(r)
-                assert category == '해결', \
-                    f"Expected category='해결', got '{category}'"
+                assert category == "해결", f"Expected category='해결', got '{category}'"
 
             print(f"✓ 해결 사례 {len(results)}건 검색됨")
 
@@ -73,16 +74,17 @@ class TestHybridRetrieverCategoryFilter:
             results = retriever.search(
                 query="환불",
                 top_k=10,
-                dataset_type_filter='case',
-                category_filter=['해결', '조정'],
+                dataset_type_filter="case",
+                category_filter=["해결", "조정"],
             )
 
             # 모든 결과가 해결 또는 조정이어야 함
-            allowed_categories = {'해결', '조정'}
+            allowed_categories = {"해결", "조정"}
             for r in results:
                 category = get_category(r)
-                assert category in allowed_categories, \
-                    f"Expected category in {allowed_categories}, got '{category}'"
+                assert (
+                    category in allowed_categories
+                ), f"Expected category in {allowed_categories}, got '{category}'"
 
             print(f"✓ 해결+조정 사례 {len(results)}건 검색됨")
 
@@ -98,15 +100,14 @@ class TestHybridRetrieverCategoryFilter:
             results = retriever.search(
                 query="환불",
                 top_k=5,
-                dataset_type_filter='case',
-                category_filter='상담',
+                dataset_type_filter="case",
+                category_filter="상담",
             )
 
             # 모든 결과가 상담 category여야 함
             for r in results:
                 category = get_category(r)
-                assert category == '상담', \
-                    f"Expected category='상담', got '{category}'"
+                assert category == "상담", f"Expected category='상담', got '{category}'"
 
             print(f"✓ 상담 사례 {len(results)}건 검색됨")
 
@@ -128,23 +129,22 @@ class TestCaseAgentPrioritySearch:
         assert len(results) > 0, "Should have results"
 
         # 앞쪽에 해결/조정 사례가 있어야 함
-        primary_categories = {'해결', '조정'}
-        counsel_category = '상담'
+        primary_categories = {"해결", "조정"}
+        counsel_category = "상담"
 
         primary_indices = [
-            i for i, r in enumerate(results)
-            if get_category(r) in primary_categories
+            i for i, r in enumerate(results) if get_category(r) in primary_categories
         ]
 
         counsel_indices = [
-            i for i, r in enumerate(results)
-            if get_category(r) == counsel_category
+            i for i, r in enumerate(results) if get_category(r) == counsel_category
         ]
 
         if primary_indices and counsel_indices:
             # 해결/조정 사례가 상담 사례보다 앞에 있어야 함
-            assert min(primary_indices) < min(counsel_indices), \
-                "Primary (해결/조정) results should come before counsel (상담) results"
+            assert min(primary_indices) < min(
+                counsel_indices
+            ), "Primary (해결/조정) results should come before counsel (상담) results"
 
         # 결과 분포 출력
         categories = [get_category(r) for r in results]
@@ -158,8 +158,9 @@ class TestCaseAgentPrioritySearch:
         results = await agent._execute_search("노트북 환불", top_k=10)
 
         chunk_ids = [r.chunk_id for r in results]
-        assert len(chunk_ids) == len(set(chunk_ids)), \
-            "Should not have duplicate chunk_ids"
+        assert len(chunk_ids) == len(
+            set(chunk_ids)
+        ), "Should not have duplicate chunk_ids"
 
     @pytest.mark.asyncio
     async def test_counsel_supplement_when_primary_insufficient(self):
@@ -174,7 +175,7 @@ class TestCaseAgentPrioritySearch:
             print(f"✓ 검색 결과 categories: {categories}")
 
             # 상담 사례가 보충으로 포함될 수 있음
-            has_counsel = '상담' in categories
+            has_counsel = "상담" in categories
             print(f"✓ 상담 보충 여부: {has_counsel}")
 
 
@@ -197,9 +198,9 @@ class TestCasePriorityDistribution:
 
             if results:
                 categories = [get_category(r) for r in results]
-                해결_count = categories.count('해결')
-                조정_count = categories.count('조정')
-                상담_count = categories.count('상담')
+                해결_count = categories.count("해결")
+                조정_count = categories.count("조정")
+                상담_count = categories.count("상담")
 
                 print(f"Query: '{query}'")
                 print(f"  - 해결: {해결_count}")

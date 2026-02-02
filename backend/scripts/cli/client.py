@@ -2,14 +2,16 @@
 HTTP 클라이언트 - 백엔드 /chat 엔드포인트 호출
 """
 
-import httpx
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
+import httpx
 
 
 @dataclass
 class NodeTiming:
     """에이전트 노드 실행 시간"""
+
     node_name: str
     duration_ms: float
     start_time: str
@@ -19,6 +21,7 @@ class NodeTiming:
 @dataclass
 class ChatResponse:
     """채팅 응답"""
+
     session_id: str
     answer: str
     chunks_used: int
@@ -39,7 +42,7 @@ class ChatClient:
     """백엔드 채팅 API 클라이언트"""
 
     def __init__(self, server_url: str = "http://localhost:8000", timeout: int = 120):
-        self.server_url = server_url.rstrip('/')
+        self.server_url = server_url.rstrip("/")
         self.timeout = timeout
 
     def send_message(
@@ -49,7 +52,7 @@ class ChatClient:
         chat_type: str = "general",
         onboarding: Optional[Dict[str, str]] = None,
         top_k: int = 5,
-        debug: bool = True
+        debug: bool = True,
     ) -> ChatResponse:
         """
         메시지 전송 및 응답 수신
@@ -69,7 +72,7 @@ class ChatClient:
             "message": message,
             "chat_type": chat_type,
             "top_k": top_k,
-            "debug": debug
+            "debug": debug,
         }
 
         if session_id:
@@ -97,7 +100,7 @@ class ChatClient:
                 related_criteria=data.get("related_criteria"),
                 node_timings=data.get("node_timings"),
                 request_id=data.get("request_id"),
-                total_time_ms=data.get("total_time_ms")
+                total_time_ms=data.get("total_time_ms"),
             )
 
     def health_check(self) -> bool:

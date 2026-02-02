@@ -5,10 +5,11 @@
 """
 
 import logging
+
 from fastapi import APIRouter, Depends, Query
 
-from app.auth.models import User
 from app.auth.dependencies import get_current_user
+from app.auth.models import User
 from app.board.board_db import BoardDB
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 async def get_my_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """내가 작성한 게시글 목록을 조회합니다."""
     board_db = BoardDB()
@@ -31,7 +32,7 @@ async def get_my_posts(
 async def get_my_commented_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """내가 댓글을 단 게시글 목록을 조회합니다."""
     board_db = BoardDB()

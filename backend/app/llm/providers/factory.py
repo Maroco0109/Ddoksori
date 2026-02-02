@@ -55,7 +55,7 @@ class LLMProviderFactory:
         if _openai_client is not None:
             return _openai_client
 
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             logger.warning("[LLMProvider] OPENAI_API_KEY not set")
             return None
@@ -92,11 +92,11 @@ class LLMProviderFactory:
         """
         global _shared_exaone_client, _domain_exaone_clients
 
-        api_key = os.getenv('EXAONE_RUNPOD_API_KEY', 'dummy')
+        api_key = os.getenv("EXAONE_RUNPOD_API_KEY", "dummy")
 
         # 도메인별 URL 확인
         if domain:
-            domain_url = os.getenv(f'RETRIEVAL_LLM_{domain.upper()}_URL')
+            domain_url = os.getenv(f"RETRIEVAL_LLM_{domain.upper()}_URL")
             if domain_url:
                 if domain not in _domain_exaone_clients:
                     _domain_exaone_clients[domain] = OpenAI(
@@ -104,12 +104,14 @@ class LLMProviderFactory:
                         api_key=api_key,
                         timeout=timeout,
                     )
-                    logger.info(f"[LLMProvider] EXAONE client for domain '{domain}': {domain_url}")
+                    logger.info(
+                        f"[LLMProvider] EXAONE client for domain '{domain}': {domain_url}"
+                    )
                 return _domain_exaone_clients[domain]
 
         # 공유 클라이언트 fallback
         if _shared_exaone_client is None:
-            runpod_url = os.getenv('EXAONE_RUNPOD_URL')
+            runpod_url = os.getenv("EXAONE_RUNPOD_URL")
             if runpod_url:
                 _shared_exaone_client = OpenAI(
                     base_url=runpod_url,
@@ -139,13 +141,14 @@ class LLMProviderFactory:
         if _anthropic_client is not None:
             return _anthropic_client
 
-        api_key = os.getenv('ANTHROPIC_API_KEY')
+        api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             logger.warning("[LLMProvider] ANTHROPIC_API_KEY not set")
             return None
 
         try:
             from anthropic import Anthropic
+
             _anthropic_client = Anthropic(
                 api_key=api_key,
                 timeout=timeout,

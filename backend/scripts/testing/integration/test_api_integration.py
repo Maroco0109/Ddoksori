@@ -11,8 +11,10 @@ Usage:
     @pytest.mark.integration - API 서버 연결 필요
     @pytest.mark.api - API 엔드포인트 테스트
 """
-import pytest
+
 import os
+
+import pytest
 
 # 전체 모듈에 마커 적용
 pytestmark = [
@@ -30,8 +32,7 @@ class TestRAGWorkflow:
 
         # Step 1: Search for relevant cases
         search_resp = api_client.post(
-            "/search",
-            json={"query": "환불 기준", "top_k": 3}
+            "/search", json={"query": "환불 기준", "top_k": 3}
         )
         assert search_resp.status_code == 200
         results = search_resp.json()["results"]
@@ -39,8 +40,7 @@ class TestRAGWorkflow:
         # Step 2: Generate answer using same query (if API key available)
         if os.getenv("OPENAI_API_KEY") and len(results) > 0:
             chat_resp = api_client.post(
-                "/chat",
-                json={"message": "환불 기준은?", "top_k": 3}
+                "/chat", json={"message": "환불 기준은?", "top_k": 3}
             )
             assert chat_resp.status_code == 200
             assert len(chat_resp.json()["answer"]) > 0
@@ -64,16 +64,14 @@ class TestRAGWorkflow:
 
         # First search
         search_resp = api_client.post(
-            "/search",
-            json={"query": "배송지연 손해배상", "top_k": 5}
+            "/search", json={"query": "배송지연 손해배상", "top_k": 5}
         )
         assert search_resp.status_code == 200
         search_count = search_resp.json()["results_count"]
 
         # Then chat
         chat_resp = api_client.post(
-            "/chat",
-            json={"message": "배송지연 시 손해배상은?", "top_k": 5}
+            "/chat", json={"message": "배송지연 시 손해배상은?", "top_k": 5}
         )
         assert chat_resp.status_code == 200
         chunks_used = chat_resp.json()["chunks_used"]
@@ -87,8 +85,7 @@ class TestRAGWorkflow:
         """Agency routing logic works for dispute queries"""
         # Query about KCA jurisdiction
         resp = api_client.post(
-            "/search",
-            json={"query": "한국소비자원 분쟁조정", "top_k": 5}
+            "/search", json={"query": "한국소비자원 분쟁조정", "top_k": 5}
         )
         assert resp.status_code == 200
 
@@ -97,8 +94,8 @@ class TestRAGWorkflow:
         if len(results) > 0:
             # Check if any result is from KCA
             has_kca = any(
-                "KCA" in result.get("category_path", []) or
-                "한국소비자원" in result.get("doc_title", "")
+                "KCA" in result.get("category_path", [])
+                or "한국소비자원" in result.get("doc_title", "")
                 for result in results
             )
             # Informational check
@@ -119,10 +116,7 @@ class TestHybridRetrieval:
 
     def test_fts_search_works_with_null_embeddings(self, api_client):
         """FTS lexical search works even with NULL embeddings"""
-        resp = api_client.post(
-            "/search",
-            json={"query": "환불", "top_k": 5}
-        )
+        resp = api_client.post("/search", json={"query": "환불", "top_k": 5})
         assert resp.status_code == 200
 
         # May have 0 results if no data loaded, but should not error

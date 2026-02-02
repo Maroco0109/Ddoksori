@@ -9,9 +9,10 @@ MAS Supervisor Graph 통합 테스트 (Phase 5)
 - Fan-out 라우팅 동작
 """
 
+from typing import Any, Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from typing import Dict, Any
-from unittest.mock import patch, MagicMock, AsyncMock
 
 # 전체 파일에 unit 마커 적용 (Mock 사용, DB 불필요)
 pytestmark = pytest.mark.unit
@@ -36,18 +37,18 @@ class TestSupervisorRuleBasedFallback:
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '노트북 환불',
-            'mode': 'NEED_RAG',
-            'supervisor': {
-                'completed_tasks': [],
-                'iteration_count': 0,
-            }
+            "user_query": "노트북 환불",
+            "mode": "NEED_RAG",
+            "supervisor": {
+                "completed_tasks": [],
+                "iteration_count": 0,
+            },
         }
 
         decision = supervisor._rule_based_fallback(state)
 
-        assert decision['action'] == 'call_agent'
-        assert decision['target_agent'] == 'retrieval_team'
+        assert decision["action"] == "call_agent"
+        assert decision["target_agent"] == "retrieval_team"
 
     def test_rule_based_calls_drafter_after_retrieval(self):
         """retrieval 완료 후 answer_drafter 호출"""
@@ -56,19 +57,19 @@ class TestSupervisorRuleBasedFallback:
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '노트북 환불',
-            'mode': 'NEED_RAG',
-            'retrieval': {'laws': [{'content': '전자상거래법'}], 'max_similarity': 0.8},
-            'supervisor': {
-                'completed_tasks': ['retrieval_team'],
-                'iteration_count': 1,
-            }
+            "user_query": "노트북 환불",
+            "mode": "NEED_RAG",
+            "retrieval": {"laws": [{"content": "전자상거래법"}], "max_similarity": 0.8},
+            "supervisor": {
+                "completed_tasks": ["retrieval_team"],
+                "iteration_count": 1,
+            },
         }
 
         decision = supervisor._rule_based_fallback(state)
 
-        assert decision['action'] == 'call_agent'
-        assert decision['target_agent'] == 'answer_drafter'
+        assert decision["action"] == "call_agent"
+        assert decision["target_agent"] == "answer_drafter"
 
     def test_rule_based_calls_reviewer_after_draft(self):
         """draft 완료 후 legal_reviewer 호출"""
@@ -77,20 +78,20 @@ class TestSupervisorRuleBasedFallback:
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '노트북 환불',
-            'mode': 'NEED_RAG',
-            'retrieval': {'laws': [{'content': '전자상거래법'}], 'max_similarity': 0.8},
-            'draft_answer': '환불이 가능합니다.',
-            'supervisor': {
-                'completed_tasks': ['retrieval_team', 'answer_drafter'],
-                'iteration_count': 2,
-            }
+            "user_query": "노트북 환불",
+            "mode": "NEED_RAG",
+            "retrieval": {"laws": [{"content": "전자상거래법"}], "max_similarity": 0.8},
+            "draft_answer": "환불이 가능합니다.",
+            "supervisor": {
+                "completed_tasks": ["retrieval_team", "answer_drafter"],
+                "iteration_count": 2,
+            },
         }
 
         decision = supervisor._rule_based_fallback(state)
 
-        assert decision['action'] == 'call_agent'
-        assert decision['target_agent'] == 'legal_reviewer'
+        assert decision["action"] == "call_agent"
+        assert decision["target_agent"] == "legal_reviewer"
 
     def test_rule_based_responds_after_all_complete(self):
         """모든 작업 완료 후 respond"""
@@ -99,20 +100,24 @@ class TestSupervisorRuleBasedFallback:
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '노트북 환불',
-            'mode': 'NEED_RAG',
-            'retrieval': {'laws': [{'content': '전자상거래법'}], 'max_similarity': 0.8},
-            'draft_answer': '환불이 가능합니다.',
-            'review': {'passed': True, 'violations': []},
-            'supervisor': {
-                'completed_tasks': ['retrieval_team', 'answer_drafter', 'legal_reviewer'],
-                'iteration_count': 3,
-            }
+            "user_query": "노트북 환불",
+            "mode": "NEED_RAG",
+            "retrieval": {"laws": [{"content": "전자상거래법"}], "max_similarity": 0.8},
+            "draft_answer": "환불이 가능합니다.",
+            "review": {"passed": True, "violations": []},
+            "supervisor": {
+                "completed_tasks": [
+                    "retrieval_team",
+                    "answer_drafter",
+                    "legal_reviewer",
+                ],
+                "iteration_count": 3,
+            },
         }
 
         decision = supervisor._rule_based_fallback(state)
 
-        assert decision['action'] == 'respond'
+        assert decision["action"] == "respond"
 
     def test_no_retrieval_mode_skips_retrieval(self):
         """NO_RETRIEVAL 모드에서는 retrieval 생략하고 바로 generation"""
@@ -121,18 +126,18 @@ class TestSupervisorRuleBasedFallback:
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '안녕하세요',
-            'mode': 'NO_RETRIEVAL',
-            'supervisor': {
-                'completed_tasks': [],
-                'iteration_count': 0,
-            }
+            "user_query": "안녕하세요",
+            "mode": "NO_RETRIEVAL",
+            "supervisor": {
+                "completed_tasks": [],
+                "iteration_count": 0,
+            },
         }
 
         decision = supervisor._rule_based_fallback(state)
 
-        assert decision['action'] == 'call_agent'
-        assert decision['target_agent'] == 'answer_drafter'
+        assert decision["action"] == "call_agent"
+        assert decision["target_agent"] == "answer_drafter"
 
 
 class TestSupervisorMaxIterations:
@@ -140,23 +145,27 @@ class TestSupervisorMaxIterations:
 
     def test_max_iterations_forces_respond(self):
         """최대 반복 횟수 도달 시 강제 응답"""
-        from app.supervisor.nodes.supervisor import SupervisorNode, MAX_SUPERVISOR_ITERATIONS
+        from app.supervisor.nodes.supervisor import (
+            MAX_SUPERVISOR_ITERATIONS,
+            SupervisorNode,
+        )
 
         supervisor = SupervisorNode(llm=None)
 
         state = {
-            'user_query': '노트북 환불',
-            'supervisor': {
-                'completed_tasks': [],
-                'iteration_count': MAX_SUPERVISOR_ITERATIONS,  # 이미 최대 도달
-            }
+            "user_query": "노트북 환불",
+            "supervisor": {
+                "completed_tasks": [],
+                "iteration_count": MAX_SUPERVISOR_ITERATIONS,  # 이미 최대 도달
+            },
         }
 
         import asyncio
+
         decision = asyncio.run(supervisor.decide_next_action(state))
 
-        assert decision['action'] == 'respond'
-        assert decision.get('partial') == True
+        assert decision["action"] == "respond"
+        assert decision.get("partial") == True
 
 
 class TestMasGraphRouting:
@@ -166,21 +175,20 @@ class TestMasGraphRouting:
         """Supervisor → query_analysis 라우팅"""
         from app.supervisor.graph_mas import _route_mas_supervisor
 
-        state = {
-            'supervisor': {'next_agent': 'query_analyst'}
-        }
+        state = {"supervisor": {"next_agent": "query_analyst"}}
 
         result = _route_mas_supervisor(state)
-        assert result == 'query_analysis'
+        assert result == "query_analysis"
 
     def test_supervisor_to_retrieval_fan_out(self):
         """Supervisor → 3개 Retrieval Agent Fan-out (v2: counsel 제거)"""
-        from app.supervisor.graph_mas import _route_mas_supervisor
         from langgraph.types import Send
 
+        from app.supervisor.graph_mas import _route_mas_supervisor
+
         state = {
-            'user_query': '노트북 환불',
-            'supervisor': {'next_agent': 'retrieval_team'}
+            "user_query": "노트북 환불",
+            "supervisor": {"next_agent": "retrieval_team"},
         }
 
         result = _route_mas_supervisor(state)
@@ -190,9 +198,9 @@ class TestMasGraphRouting:
         assert len(result) == 3  # v2: counsel 제거
 
         node_names = [s.node for s in result]
-        assert 'retrieval_law' in node_names
-        assert 'retrieval_criteria' in node_names
-        assert 'retrieval_case' in node_names
+        assert "retrieval_law" in node_names
+        assert "retrieval_criteria" in node_names
+        assert "retrieval_case" in node_names
 
 
 class TestSupervisorNodeFunction:
@@ -215,18 +223,19 @@ class TestSupervisorNodeFunction:
         node_fn = supervisor.as_node()
 
         state = {
-            'user_query': '노트북 환불',
-            'supervisor': {
-                'completed_tasks': [],
-                'iteration_count': 0,
-                'agent_messages': [],
-            }
+            "user_query": "노트북 환불",
+            "supervisor": {
+                "completed_tasks": [],
+                "iteration_count": 0,
+                "agent_messages": [],
+            },
         }
 
         import asyncio
+
         result = asyncio.run(node_fn(state))
 
-        assert result['supervisor']['iteration_count'] == 1
+        assert result["supervisor"]["iteration_count"] == 1
 
 
 class TestSupervisorAgentMessage:
@@ -239,15 +248,15 @@ class TestSupervisorAgentMessage:
         supervisor = SupervisorNode(llm=None)
 
         message = supervisor.create_supervisor_message(
-            to_agent='query_analyst',
-            message_type='request',
-            content={'action': 'analyze'}
+            to_agent="query_analyst",
+            message_type="request",
+            content={"action": "analyze"},
         )
 
-        assert message['from_agent'] == 'supervisor'
-        assert message['to_agent'] == 'query_analyst'
-        assert message['message_type'] == 'request'
-        assert 'timestamp' in message
+        assert message["from_agent"] == "supervisor"
+        assert message["to_agent"] == "query_analyst"
+        assert message["message_type"] == "request"
+        assert "timestamp" in message
 
 
 class TestGraphEndToEnd:
@@ -263,15 +272,15 @@ class TestGraphEndToEnd:
         nodes = list(graph.nodes.keys())
 
         # 필수 노드 존재 (v2: counsel 제거, memory_save 추가)
-        assert 'input_guardrail' in nodes
-        assert 'supervisor' in nodes
-        assert 'query_analysis' in nodes
-        assert 'retrieval_law' in nodes
-        assert 'retrieval_merge' in nodes
-        assert 'generation' in nodes
-        assert 'review' in nodes
-        assert 'output_guardrail' in nodes
-        assert 'memory_save' in nodes
+        assert "input_guardrail" in nodes
+        assert "supervisor" in nodes
+        assert "query_analysis" in nodes
+        assert "retrieval_law" in nodes
+        assert "retrieval_merge" in nodes
+        assert "generation" in nodes
+        assert "review" in nodes
+        assert "output_guardrail" in nodes
+        assert "memory_save" in nodes
 
     def test_compiled_graph_has_invoke_method(self):
         """컴파일된 그래프에 invoke 메서드 존재"""
@@ -280,11 +289,11 @@ class TestGraphEndToEnd:
         reset_mas_graph()
         compiled = get_mas_supervisor_graph()
 
-        assert hasattr(compiled, 'invoke')
-        assert hasattr(compiled, 'ainvoke')
+        assert hasattr(compiled, "invoke")
+        assert hasattr(compiled, "ainvoke")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 직접 실행 테스트
     print("=== MAS Integration Tests ===")
 

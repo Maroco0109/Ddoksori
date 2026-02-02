@@ -4,12 +4,14 @@ PR-2: Selective Retrieval 테스트
 실행 방법:
     conda run -n dsr pytest backend/scripts/testing/supervisor/test_selective_retrieval.py -v
 """
-import pytest
+
 import asyncio
 from typing import List
 
-from app.supervisor.graph import get_graph_for_chat_type
+import pytest
+
 from app.agents.query_analysis.agent import QUERY_TYPE_TO_RETRIEVERS
+from app.supervisor.graph import get_graph_for_chat_type
 
 
 @pytest.fixture
@@ -31,7 +33,12 @@ class TestQueryTypeToRetrievers:
 
     def test_dispute_query_maps_to_all(self):
         """dispute 쿼리는 전체 retriever 사용"""
-        assert QUERY_TYPE_TO_RETRIEVERS["dispute"] == ["law", "criteria", "case", "counsel"]
+        assert QUERY_TYPE_TO_RETRIEVERS["dispute"] == [
+            "law",
+            "criteria",
+            "case",
+            "counsel",
+        ]
 
     def test_general_query_maps_to_empty(self):
         """general 쿼리는 검색 불필요"""
@@ -51,35 +58,41 @@ class TestRetrieverTypesInQueryAnalysis:
 
     def test_query_analysis_has_retriever_types_field(self, graph):
         """쿼리 분석 결과에 retriever_types 필드 포함"""
+
         async def run_test():
             return await graph.ainvoke(
                 {"messages": [{"role": "user", "content": "안녕"}]},
-                config={"configurable": {"thread_id": "test-retriever-types"}}
+                config={"configurable": {"thread_id": "test-retriever-types"}},
             )
 
         result = asyncio.run(run_test())
         query_analysis = result.get("query_analysis", {})
 
         # retriever_types 필드 존재
-        assert "retriever_types" in query_analysis, \
-            "query_analysis should have 'retriever_types' field"
+        assert (
+            "retriever_types" in query_analysis
+        ), "query_analysis should have 'retriever_types' field"
 
 
 class TestSelectiveFanOut:
     """Selective Fan-out 동작 검증"""
 
-    @pytest.mark.parametrize("query,expected_contains", [
-        ("소비자기본법 제10조", ["law"]),  # law 쿼리
-        ("안녕", []),  # general 쿼리 (NO_RETRIEVAL)
-    ])
+    @pytest.mark.parametrize(
+        "query,expected_contains",
+        [
+            ("소비자기본법 제10조", ["law"]),  # law 쿼리
+            ("안녕", []),  # general 쿼리 (NO_RETRIEVAL)
+        ],
+    )
     def test_retriever_selection_by_query(
         self, graph, query: str, expected_contains: List[str]
     ):
         """쿼리별 retriever 선택 검증"""
+
         async def run_test():
             return await graph.ainvoke(
                 {"messages": [{"role": "user", "content": query}]},
-                config={"configurable": {"thread_id": f"test-selective-{query[:5]}"}}
+                config={"configurable": {"thread_id": f"test-selective-{query[:5]}"}},
             )
 
         result = asyncio.run(run_test())
@@ -88,8 +101,9 @@ class TestSelectiveFanOut:
         retriever_types = query_analysis.get("retriever_types", [])
 
         for expected in expected_contains:
-            assert expected in retriever_types, \
-                f"Query '{query}' should use '{expected}' retriever, got {retriever_types}"
+            assert (
+                expected in retriever_types
+            ), f"Query '{query}' should use '{expected}' retriever, got {retriever_types}"
 
         print(f"✓ '{query}' → retriever_types={retriever_types}")
 

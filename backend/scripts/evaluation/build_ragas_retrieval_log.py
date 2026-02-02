@@ -43,7 +43,9 @@ def _load_queries(path: str) -> List[Tuple[str, Dict]]:
                 continue
             row = json.loads(line)
             for q_idx, q in enumerate(row.get("queries_llm", []) or []):
-                queries.append((q, {"case_index": case_index, "query_index": q_idx, **row}))
+                queries.append(
+                    (q, {"case_index": case_index, "query_index": q_idx, **row})
+                )
     return queries
 
 
@@ -192,7 +194,9 @@ def main() -> int:
         f"ragas_retrieval_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl",
     )
 
-    parser = argparse.ArgumentParser(description="Build RAGAS retrieval log (retriever-only).")
+    parser = argparse.ArgumentParser(
+        description="Build RAGAS retrieval log (retriever-only)."
+    )
     parser.add_argument("--input", dest="input_path", default=default_input)
     parser.add_argument("--output", dest="output_path", default=default_output)
     parser.add_argument("--max-queries", type=int, default=300)

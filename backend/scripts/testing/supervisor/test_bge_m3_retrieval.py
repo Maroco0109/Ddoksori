@@ -11,29 +11,31 @@ Requirements:
     - Database with BGE-M3 embeddings (run embed_bge_m3_all_data.py first)
 """
 
+import json
 import os
 import sys
-import json
 import time
+
 import pytest
 import requests
 
 # Add backend to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Test configuration
-BGE_M3_URL = os.getenv('BGE_M3_EMBED_URL', 'http://localhost:8003/embed')
-BGE_M3_HEALTH_URL = BGE_M3_URL.replace('/embed', '/health')
+BGE_M3_URL = os.getenv("BGE_M3_EMBED_URL", "http://localhost:8003/embed")
+BGE_M3_HEALTH_URL = BGE_M3_URL.replace("/embed", "/health")
 
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', 5432)),
-    'database': os.getenv('DB_NAME', 'ddoksori'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'postgres')
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": int(os.getenv("DB_PORT", 5432)),
+    "database": os.getenv("DB_NAME", "ddoksori"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "postgres"),
 }
 
 
@@ -47,10 +49,10 @@ class TestBGEM3Server:
             assert response.status_code == 200
 
             health = response.json()
-            assert health.get('status') == 'healthy'
-            assert health.get('model') == 'BAAI/bge-m3'
-            assert health.get('dense_dim') == 1024
-            assert 'sparse' in health.get('capabilities', [])
+            assert health.get("status") == "healthy"
+            assert health.get("model") == "BAAI/bge-m3"
+            assert health.get("dense_dim") == 1024
+            assert "sparse" in health.get("capabilities", [])
 
             print(f"BGE-M3 Server Health: {health}")
         except requests.exceptions.ConnectionError:
@@ -62,24 +64,24 @@ class TestBGEM3Server:
             response = requests.post(
                 BGE_M3_URL,
                 json={
-                    'text': '헬스장 환불 규정',
-                    'return_dense': True,
-                    'return_sparse': True
+                    "text": "헬스장 환불 규정",
+                    "return_dense": True,
+                    "return_sparse": True,
                 },
-                timeout=30
+                timeout=30,
             )
 
             assert response.status_code == 200
             result = response.json()
 
             # Check dense embedding
-            assert 'dense_embedding' in result
-            assert len(result['dense_embedding']) == 1024
+            assert "dense_embedding" in result
+            assert len(result["dense_embedding"]) == 1024
 
             # Check sparse embedding
-            assert 'sparse_embedding' in result
-            assert isinstance(result['sparse_embedding'], dict)
-            assert len(result['sparse_embedding']) > 0  # Should have some tokens
+            assert "sparse_embedding" in result
+            assert isinstance(result["sparse_embedding"], dict)
+            assert len(result["sparse_embedding"]) > 0  # Should have some tokens
 
             print(f"Dense dim: {len(result['dense_embedding'])}")
             print(f"Sparse tokens: {len(result['sparse_embedding'])}")
@@ -90,33 +92,25 @@ class TestBGEM3Server:
     def test_batch_embedding(self):
         """Test batch embedding generation"""
         try:
-            texts = [
-                '헬스장 환불 규정',
-                '온라인 쇼핑 환불',
-                '소비자 피해 구제'
-            ]
+            texts = ["헬스장 환불 규정", "온라인 쇼핑 환불", "소비자 피해 구제"]
 
             response = requests.post(
                 BGE_M3_URL,
-                json={
-                    'texts': texts,
-                    'return_dense': True,
-                    'return_sparse': True
-                },
-                timeout=60
+                json={"texts": texts, "return_dense": True, "return_sparse": True},
+                timeout=60,
             )
 
             assert response.status_code == 200
             result = response.json()
 
             # Check batch results
-            assert 'dense_embeddings' in result
-            assert len(result['dense_embeddings']) == len(texts)
+            assert "dense_embeddings" in result
+            assert len(result["dense_embeddings"]) == len(texts)
 
-            assert 'sparse_embeddings' in result
-            assert len(result['sparse_embeddings']) == len(texts)
+            assert "sparse_embeddings" in result
+            assert len(result["sparse_embeddings"]) == len(texts)
 
-            for i, emb in enumerate(result['dense_embeddings']):
+            for i, emb in enumerate(result["dense_embeddings"]):
                 assert len(emb) == 1024
 
             print(f"Batch size: {len(texts)}")
@@ -129,7 +123,7 @@ class TestBGEM3Server:
     def test_embedding_latency(self):
         """Test embedding generation latency (target: < 100ms per text)"""
         try:
-            text = '헬스장 환불 규정'
+            text = "헬스장 환불 규정"
             iterations = 5
             latencies = []
 
@@ -137,8 +131,8 @@ class TestBGEM3Server:
                 start = time.time()
                 response = requests.post(
                     BGE_M3_URL,
-                    json={'text': text, 'return_dense': True, 'return_sparse': True},
-                    timeout=30
+                    json={"text": text, "return_dense": True, "return_sparse": True},
+                    timeout=30,
                 )
                 latency = (time.time() - start) * 1000
                 latencies.append(latency)
@@ -151,7 +145,9 @@ class TestBGEM3Server:
 
             # Warning if latency is high (but don't fail the test)
             if avg_latency > 100:
-                print(f"WARNING: Average latency {avg_latency:.1f}ms exceeds 100ms target")
+                print(
+                    f"WARNING: Average latency {avg_latency:.1f}ms exceeds 100ms target"
+                )
 
         except requests.exceptions.ConnectionError:
             pytest.skip("BGE-M3 server not running")
@@ -166,10 +162,7 @@ class TestHybridRetriever3Way:
         try:
             from rag.hybrid_retriever import HybridRetriever
 
-            retriever = HybridRetriever(
-                db_config=DB_CONFIG,
-                enable_sparse=True
-            )
+            retriever = HybridRetriever(db_config=DB_CONFIG, enable_sparse=True)
             retriever.connect()
             yield retriever
             retriever.close()
@@ -239,9 +232,9 @@ class TestEmbeddingModelSwitch:
         """Test switching between KURE and BGE-M3"""
         try:
             from utils.embedding_connection import (
-                get_embedding_api_url,
+                EMBEDDING_MODEL,
                 get_bge_m3_api_url,
-                EMBEDDING_MODEL
+                get_embedding_api_url,
             )
 
             kure_url = get_embedding_api_url()
@@ -262,7 +255,7 @@ class TestEmbeddingModelSwitch:
         from utils.embedding_connection import (
             RRF_WEIGHT_DENSE,
             RRF_WEIGHT_LEXICAL,
-            RRF_WEIGHT_SPARSE
+            RRF_WEIGHT_SPARSE,
         )
 
         print(f"RRF Weights:")
@@ -283,6 +276,7 @@ class TestDatabaseBGEM3:
     def local_db_connection(self):
         """Create database connection (local fixture to avoid scope mismatch)"""
         import psycopg2
+
         try:
             conn = psycopg2.connect(**DB_CONFIG)
             yield conn
@@ -307,7 +301,7 @@ class TestDatabaseBGEM3:
         if not columns:
             pytest.skip("BGE-M3 columns not yet created. Run migration first.")
 
-        assert 'bge_dense_vector' in columns or 'bge_m3_encoded' in columns
+        assert "bge_dense_vector" in columns or "bge_m3_encoded" in columns
 
     def test_bge_m3_encoding_status(self, local_db_connection):
         """Check BGE-M3 encoding status"""
@@ -336,7 +330,9 @@ class TestDatabaseBGEM3:
         print(f"  Encoded: {encoded:,}")
         print(f"  Not encoded: {not_encoded:,}")
         print(f"  Total: {total:,}")
-        print(f"  Progress: {encoded/total*100:.1f}%" if total > 0 else "  Progress: 0%")
+        print(
+            f"  Progress: {encoded/total*100:.1f}%" if total > 0 else "  Progress: 0%"
+        )
 
 
 if __name__ == "__main__":

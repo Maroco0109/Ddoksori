@@ -39,11 +39,11 @@ import json
 import os
 import re
 import time
-from typing import Dict, Any, Optional, Protocol, List
+from typing import Any, Dict, List, Optional, Protocol
 
-from ...common.logging import get_logger
-from ...common.config import get_config
 from ...agents.registry import get_agent_registry
+from ...common.config import get_config
+from ...common.logging import get_logger
 from ..state import ChatState
 from ..state.supervisor import AgentMessage, SupervisorState
 
@@ -54,6 +54,7 @@ logger = get_logger(__name__)
 # LLM 클라이언트 생성 헬퍼
 # ============================================================================
 
+
 def _create_openai_llm(model: str, timeout: float) -> Optional["AsyncLLMWrapper"]:
     """OpenAI 모델용 LLM 클라이언트 생성"""
     try:
@@ -61,8 +62,9 @@ def _create_openai_llm(model: str, timeout: float) -> Optional["AsyncLLMWrapper"
         if not api_key:
             logger.warning("[SupervisorNode] OPENAI_API_KEY not set")
             return None
-        
+
         from openai import AsyncOpenAI
+
         client = AsyncOpenAI(api_key=api_key, timeout=timeout)
         return AsyncLLMWrapper(client, model, "openai")
     except Exception as e:
@@ -77,8 +79,9 @@ def _create_anthropic_llm(model: str, timeout: float) -> Optional["AsyncLLMWrapp
         if not api_key:
             logger.warning("[SupervisorNode] ANTHROPIC_API_KEY not set")
             return None
-        
+
         from anthropic import AsyncAnthropic
+
         client = AsyncAnthropic(api_key=api_key, timeout=timeout)
         return AsyncLLMWrapper(client, model, "anthropic")
     except Exception as e:
@@ -88,12 +91,12 @@ def _create_anthropic_llm(model: str, timeout: float) -> Optional["AsyncLLMWrapp
 
 class AsyncLLMWrapper:
     """비동기 LLM 클라이언트 래퍼 (OpenAI/Anthropic 통합)"""
-    
+
     def __init__(self, client: Any, model: str, provider: str):
         self.client = client
         self.model = model
         self.provider = provider
-    
+
     async def generate(self, prompt: str) -> str:
         if self.provider == "openai":
             # o1-*, o3-* 등 reasoning 모델은 max_completion_tokens 사용
@@ -115,7 +118,7 @@ class AsyncLLMWrapper:
             response = await self.client.messages.create(
                 model=self.model,
                 max_tokens=512,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text if response.content else ""
         else:
@@ -143,6 +146,7 @@ MAX_USER_INPUT_LENGTH = 500
 # LLM 프로토콜 (의존성 주입용)
 # ============================================================================
 
+
 class LLMProtocol(Protocol):
     """LLM 클라이언트 프로토콜 (의존성 주입용)"""
 
@@ -154,6 +158,7 @@ class LLMProtocol(Protocol):
 # ============================================================================
 # SupervisorNode 클래스
 # ============================================================================
+
 
 class SupervisorNode:
     """
@@ -174,7 +179,9 @@ class SupervisorNode:
     """
 
     # Fallback 모델 체인 (환경변수로 설정 가능)
-    FALLBACK_MODEL = os.getenv("MODEL_SUPERVISOR_FALLBACK", "claude-3-5-sonnet-20241022")
+    FALLBACK_MODEL = os.getenv(
+        "MODEL_SUPERVISOR_FALLBACK", "claude-3-5-sonnet-20241022"
+    )
 
     def __init__(self, llm: Optional[LLMProtocol] = None):
         """
@@ -200,23 +207,25 @@ class SupervisorNode:
             self._current_model_name = "injected"
             logger.info("[SupervisorNode] 초기화 완료. 주입된 LLM 사용")
             return
-        
+
         config = get_config()
         primary_model = config.models.supervisor
-        
+
         self._primary_llm = _create_openai_llm(primary_model, LLM_TIMEOUT_SECONDS)
         if self._primary_llm:
             self._current_model_name = primary_model
             logger.info(f"[SupervisorNode] Primary LLM: {primary_model}")
-        
-        self._fallback_llm = _create_anthropic_llm(self.FALLBACK_MODEL, LLM_TIMEOUT_SECONDS)
+
+        self._fallback_llm = _create_anthropic_llm(
+            self.FALLBACK_MODEL, LLM_TIMEOUT_SECONDS
+        )
         if self._fallback_llm:
             logger.info(f"[SupervisorNode] Fallback LLM: {self.FALLBACK_MODEL}")
-        
+
         if not self._primary_llm and not self._fallback_llm:
             logger.warning("[SupervisorNode] No LLM available. Rule-based mode only.")
             self._current_model_name = "rule-based"
-        
+
         logger.info(
             f"[SupervisorNode] 초기화 완료. "
             f"사용 가능 에이전트: {self._agent_registry.list_names()}"
@@ -252,7 +261,9 @@ class SupervisorNode:
                 - partial: True if max iterations reached
         """
         supervisor_state = state.get("supervisor") or {}
-        iteration = supervisor_state.get("iteration_count", 0) if supervisor_state else 0
+        iteration = (
+            supervisor_state.get("iteration_count", 0) if supervisor_state else 0
+        )
 
         # 무한 루프 방지
         if iteration >= MAX_SUPERVISOR_ITERATIONS:
@@ -274,13 +285,17 @@ class SupervisorNode:
         supervisor_state = state.get("supervisor") or {}
         completed = supervisor_state.get("completed_tasks", [])
 
-        if not query_analysis and "query_analyst" not in completed and "query_analysis" not in completed:
+        if (
+            not query_analysis
+            and "query_analyst" not in completed
+            and "query_analysis" not in completed
+        ):
             logger.info("[SupervisorNode] Query Analysis 필요")
             return {
                 "action": "call_agent",
                 "target_agent": "query_analyst",
                 "request": {},
-                "reasoning": "Query Analysis 필요"
+                "reasoning": "Query Analysis 필요",
             }
 
         # === 2-전략 라우팅 ===
@@ -298,25 +313,25 @@ class SupervisorNode:
             return self._full_pipeline_decision(state)
 
         # Fallback → Full Pipeline
-        logger.warning(f"[SupervisorNode] 알 수 없는 mode={mode}. Full Pipeline fallback.")
+        logger.warning(
+            f"[SupervisorNode] 알 수 없는 mode={mode}. Full Pipeline fallback."
+        )
         return self._full_pipeline_decision(state)
 
     async def _try_llm_decision(
-        self,
-        llm: LLMProtocol,
-        prompt: str,
-        model_name: str
+        self, llm: LLMProtocol, prompt: str, model_name: str
     ) -> Optional[Dict[str, Any]]:
         """단일 LLM으로 결정 시도. 실패 시 None 반환."""
         try:
             response = await asyncio.wait_for(
-                llm.generate(prompt),
-                timeout=LLM_TIMEOUT_SECONDS
+                llm.generate(prompt), timeout=LLM_TIMEOUT_SECONDS
             )
             decision = self._parse_decision_with_retry(response)
 
             if decision.get("action") == "rule_based_fallback":
-                logger.info(f"[SupervisorNode] {model_name}: JSON 파싱 실패, 다음 fallback 시도")
+                logger.info(
+                    f"[SupervisorNode] {model_name}: JSON 파싱 실패, 다음 fallback 시도"
+                )
                 return None
 
             logger.info(
@@ -326,7 +341,9 @@ class SupervisorNode:
             return decision
 
         except asyncio.TimeoutError:
-            logger.warning(f"[SupervisorNode] {model_name} 타임아웃 ({LLM_TIMEOUT_SECONDS}s)")
+            logger.warning(
+                f"[SupervisorNode] {model_name} 타임아웃 ({LLM_TIMEOUT_SECONDS}s)"
+            )
             return None
 
         except Exception as e:
@@ -355,14 +372,11 @@ class SupervisorNode:
                 "action": "call_agent",
                 "target_agent": "answer_drafter",
                 "request": {},
-                "reasoning": "Fast Path: NO_RETRIEVAL → Generation"
+                "reasoning": "Fast Path: NO_RETRIEVAL → Generation",
             }
 
         logger.info("[SupervisorNode] Fast Path 완료")
-        return {
-            "action": "respond",
-            "reasoning": "Fast Path 완료"
-        }
+        return {"action": "respond", "reasoning": "Fast Path 완료"}
 
     def _full_pipeline_decision(self, state: ChatState) -> Dict[str, Any]:
         """
@@ -406,7 +420,7 @@ class SupervisorNode:
                     "use_hyde": use_hyde,
                     "query_complexity": query_complexity,
                 },
-                "reasoning": f"Full Pipeline: Retrieval 필요 (complexity={query_complexity}, strategy={strategy})"
+                "reasoning": f"Full Pipeline: Retrieval 필요 (complexity={query_complexity}, strategy={strategy})",
             }
 
         # 2. Generation
@@ -416,7 +430,7 @@ class SupervisorNode:
                 "action": "call_agent",
                 "target_agent": "answer_drafter",
                 "request": {},
-                "reasoning": "Full Pipeline: Generation 필요"
+                "reasoning": "Full Pipeline: Generation 필요",
             }
 
         # 3. Review (항상 실행)
@@ -426,15 +440,12 @@ class SupervisorNode:
                 "action": "call_agent",
                 "target_agent": "legal_reviewer",
                 "request": {},
-                "reasoning": "Full Pipeline: Review 필요"
+                "reasoning": "Full Pipeline: Review 필요",
             }
 
         # 모든 단계 완료
         logger.info("[SupervisorNode] Full Pipeline 완료")
-        return {
-            "action": "respond",
-            "reasoning": "Full Pipeline 완료"
-        }
+        return {"action": "respond", "reasoning": "Full Pipeline 완료"}
 
     def _build_decision_prompt(self, state: ChatState) -> str:
         """
@@ -532,37 +543,32 @@ class SupervisorNode:
 
         # 2. 위험 패턴 마스킹 (instruction override 시도 차단)
         dangerous_patterns = [
-            'ignore',           # "ignore previous instructions"
-            'disregard',        # "disregard all rules"
-            'forget',           # "forget your instructions"
-            'instead',          # "instead do this"
-            'pretend',          # "pretend you are"
-            'act as',           # "act as a different AI"
-            'new instruction',  # "here is your new instruction"
-            '시스템 프롬프트',    # Korean: "system prompt"
-            '지시를 무시',       # Korean: "ignore instructions"
+            "ignore",  # "ignore previous instructions"
+            "disregard",  # "disregard all rules"
+            "forget",  # "forget your instructions"
+            "instead",  # "instead do this"
+            "pretend",  # "pretend you are"
+            "act as",  # "act as a different AI"
+            "new instruction",  # "here is your new instruction"
+            "시스템 프롬프트",  # Korean: "system prompt"
+            "지시를 무시",  # Korean: "ignore instructions"
         ]
 
         sanitized = text
         for pattern in dangerous_patterns:
             # 대소문자 무시 치환
             sanitized = re.sub(
-                re.escape(pattern),
-                f'[{pattern}]',
-                sanitized,
-                flags=re.IGNORECASE
+                re.escape(pattern), f"[{pattern}]", sanitized, flags=re.IGNORECASE
             )
 
         # 3. 연속된 특수문자 제거 (프롬프트 구조 파괴 시도 방지)
-        sanitized = re.sub(r'#{3,}', '##', sanitized)  # ### → ##
-        sanitized = re.sub(r'-{3,}', '--', sanitized)  # --- → --
+        sanitized = re.sub(r"#{3,}", "##", sanitized)  # ### → ##
+        sanitized = re.sub(r"-{3,}", "--", sanitized)  # --- → --
 
         return sanitized
 
     def _parse_decision_with_retry(
-        self,
-        response: str,
-        retries: int = 0
+        self, response: str, retries: int = 0
     ) -> Dict[str, Any]:
         """
         LLM 응답을 JSON으로 파싱합니다. 실패 시 재시도 후 규칙 기반 전환.
@@ -580,14 +586,16 @@ class SupervisorNode:
         except json.JSONDecodeError:
             if retries < MAX_JSON_PARSE_RETRIES:
                 # 재시도: 마크다운 코드 블록 제거 후 파싱
-                cleaned = re.sub(r'```json?\n?|\n?```', '', response).strip()
+                cleaned = re.sub(r"```json?\n?|\n?```", "", response).strip()
                 # JSON 객체 추출 시도
-                match = re.search(r'\{[^{}]*\}', cleaned, re.DOTALL)
+                match = re.search(r"\{[^{}]*\}", cleaned, re.DOTALL)
                 if match:
                     try:
                         return json.loads(match.group())
                     except json.JSONDecodeError:
-                        logger.warning("[SupervisorNode] JSON re-parse failed after cleanup")
+                        logger.warning(
+                            "[SupervisorNode] JSON re-parse failed after cleanup"
+                        )
                 return self._parse_decision_with_retry(cleaned, retries + 1)
 
             logger.warning(
@@ -633,14 +641,11 @@ class SupervisorNode:
         return {
             "action": "respond",
             "reasoning": "최대 반복 횟수 도달 - 부분 결과 반환",
-            "partial": True
+            "partial": True,
         }
 
     def create_supervisor_message(
-        self,
-        to_agent: str,
-        message_type: str,
-        content: Dict[str, Any]
+        self, to_agent: str, message_type: str, content: Dict[str, Any]
     ) -> AgentMessage:
         """
         에이전트에게 보낼 메시지를 생성합니다.
@@ -658,7 +663,7 @@ class SupervisorNode:
             to_agent=to_agent,
             message_type=message_type,
             content=content,
-            timestamp=time.time()
+            timestamp=time.time(),
         )
 
     def as_node(self):
@@ -673,7 +678,7 @@ class SupervisorNode:
         async def supervisor_node(state: ChatState) -> Dict[str, Any]:
             """Supervisor 노드 함수"""
             supervisor_state = state.get("supervisor") or {}
-            
+
             # 반복 횟수 증가
             iteration_count = supervisor_state.get("iteration_count", 0) + 1
 
@@ -683,11 +688,13 @@ class SupervisorNode:
             # 메시지 기록
             message = supervisor.create_supervisor_message(
                 to_agent=decision.get("target_agent", "output"),
-                message_type="request" if decision["action"] == "call_agent" else "response",
+                message_type=(
+                    "request" if decision["action"] == "call_agent" else "response"
+                ),
                 content={
                     "action": decision["action"],
                     "reasoning": decision.get("reasoning", ""),
-                }
+                },
             )
 
             existing_messages = supervisor_state.get("agent_messages", [])
@@ -732,6 +739,7 @@ def _determine_phase(decision: Dict[str, Any]) -> str:
 # 라우터 함수
 # ============================================================================
 
+
 def supervisor_router(state: ChatState) -> str:
     """
     Supervisor의 결정을 기반으로 다음 노드를 결정합니다.
@@ -757,6 +765,7 @@ def supervisor_router(state: ChatState) -> str:
 # 헬퍼 함수
 # ============================================================================
 
+
 def create_initial_supervisor_state() -> SupervisorState:
     """
     초기 SupervisorState를 생성합니다.
@@ -771,7 +780,7 @@ def create_initial_supervisor_state() -> SupervisorState:
         completed_tasks=[],
         supervisor_reasoning="",
         next_agent=None,
-        iteration_count=0
+        iteration_count=0,
     )
 
 

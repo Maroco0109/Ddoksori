@@ -20,13 +20,14 @@
 - 실제 구현을 참고할 때는 위 경로의 파일들을 확인하세요.
 """
 
-from typing import List, Dict, Optional, Literal, Any
-from typing_extensions import TypedDict
+from typing import Any, Dict, List, Literal, Optional
 
+from typing_extensions import TypedDict
 
 # ============================================================
 # 공통 타입 정의
 # ============================================================
+
 
 class OnboardingInfo(TypedDict, total=False):
     """
@@ -59,52 +60,56 @@ class OnboardingInfo(TypedDict, total=False):
         ...     'dispute_details': '환불 거부당함'
         ... }
     """
+
     purchase_date: Optional[str]
     purchase_place: Optional[str]
     purchase_platform: Optional[str]
     purchase_item: Optional[str]
     purchase_amount: Optional[str]
     dispute_details: Optional[str]
-    days_since_purchase: Optional[int]     # 구매 후 경과 일수 (자동 계산)
-    product_category: Optional[str]        # 품목 카테고리 (전자제품, 의류 등)
+    days_since_purchase: Optional[int]  # 구매 후 경과 일수 (자동 계산)
+    product_category: Optional[str]  # 품목 카테고리 (전자제품, 의류 등)
 
 
 # 의도 타입
-IntentType = Literal['general', 'information_search']
+IntentType = Literal["general", "information_search"]
 
 # 라우팅 모드 타입
 RoutingMode = Literal[
-    'NO_RETRIEVAL',              # 단순 인사/시스템 → Fast Path
-    'NEED_RAG',                  # 정보 검색 필요 → Full Pipeline
-    'CACHED_RAG',                # 후속 턴 → 캐시된 Retrieval 사용
-    'RESTRICTED_DOMAIN',         # 전문기관 도메인
-    'META_CONVERSATIONAL',       # 메타 대화 (시스템 질문 등)
-    'FOLLOWUP_WITH_CONTEXT',     # 이전 컨텍스트 기반 후속 질문
+    "NO_RETRIEVAL",  # 단순 인사/시스템 → Fast Path
+    "NEED_RAG",  # 정보 검색 필요 → Full Pipeline
+    "CACHED_RAG",  # 후속 턴 → 캐시된 Retrieval 사용
+    "RESTRICTED_DOMAIN",  # 전문기관 도메인
+    "META_CONVERSATIONAL",  # 메타 대화 (시스템 질문 등)
+    "FOLLOWUP_WITH_CONTEXT",  # 이전 컨텍스트 기반 후속 질문
 ]
 
 # 검색 에이전트 타입 (4개)
-RetrieverType = Literal['law', 'criteria', 'case', 'counsel']
+RetrieverType = Literal["law", "criteria", "case", "counsel"]
 
 # 채팅 타입
-ChatType = Literal['dispute', 'general']
+ChatType = Literal["dispute", "general"]
 
 # 위반 유형
-ViolationType = Literal['hallucination', 'legal_judgment', 'prohibited_expression', 'query_mismatch']
+ViolationType = Literal[
+    "hallucination", "legal_judgment", "prohibited_expression", "query_mismatch"
+]
 
 # 심각도
-SeverityLevel = Literal['critical', 'warning']
+SeverityLevel = Literal["critical", "warning"]
 
 # 사례 카테고리
-CaseCategory = Literal['조정', '해결', '상담']
+CaseCategory = Literal["조정", "해결", "상담"]
 
 # 근거 소스
-EvidenceSource = Literal['law', 'criteria', 'case', 'counsel']
+EvidenceSource = Literal["law", "criteria", "case", "counsel"]
 
 
 # ============================================================
 # 질의분석 에이전트 (Query Analysis Agent)
 # ============================================================
 # Used in: supervisor/nodes/supervisor.py, agents/query_analysis/agent.py
+
 
 class QueryAnalysisInput(TypedDict):
     """
@@ -115,6 +120,7 @@ class QueryAnalysisInput(TypedDict):
         chat_type: 채팅 유형 ('dispute' | 'general')
         onboarding: 온보딩 폼 데이터 (분쟁 상담 시)
     """
+
     user_query: str
     chat_type: ChatType
     onboarding: Optional[OnboardingInfo]
@@ -133,6 +139,7 @@ class QueryAnalysisOutput(TypedDict):
         keywords: 핵심 키워드 목록
         retriever_types: 추천 검색 에이전트 타입 목록
     """
+
     intent: IntentType
     original_query: str
     expanded_queries: List[str]
@@ -144,6 +151,7 @@ class QueryAnalysisOutput(TypedDict):
 # 메타데이터 필터 (Retrieval용)
 # ============================================================
 
+
 class MetadataFilter(TypedDict, total=False):
     """
     검색 메타데이터 필터.
@@ -153,6 +161,7 @@ class MetadataFilter(TypedDict, total=False):
         document_types: 문서 타입 목록 (['법률', '시행령'] or ['행정규칙', '별표'])
         categories: 카테고리 목록 (['조정', '해결'] or ['상담'])
     """
+
     dataset_type: Optional[str]
     document_types: Optional[List[str]]
     categories: Optional[List[str]]
@@ -162,9 +171,11 @@ class MetadataFilter(TypedDict, total=False):
 # Supervisor 관련 타입
 # ============================================================
 
+
 class SupervisorPhase(TypedDict):
     """Supervisor 현재 단계."""
-    current_phase: Literal['analyzing', 'retrieving', 'drafting', 'reviewing', 'done']
+
+    current_phase: Literal["analyzing", "retrieving", "drafting", "reviewing", "done"]
 
 
 class SupervisorState(TypedDict):
@@ -178,7 +189,8 @@ class SupervisorState(TypedDict):
         iteration_count: 반복 횟수
         reasoning: 의사결정 근거
     """
-    current_phase: Literal['analyzing', 'retrieving', 'drafting', 'reviewing', 'done']
+
+    current_phase: Literal["analyzing", "retrieving", "drafting", "reviewing", "done"]
     selected_retrievers: List[RetrieverType]
     agent_keywords: Dict[str, List[str]]
     iteration_count: int
@@ -188,6 +200,7 @@ class SupervisorState(TypedDict):
 # ============================================================
 # 정보검색 에이전트 (Retrieval Agent)
 # ============================================================
+
 
 class RetrievalTaskInput(TypedDict):
     """
@@ -200,6 +213,7 @@ class RetrievalTaskInput(TypedDict):
         top_k: 반환 문서 수
         ignore_threshold: 임계치 무시 여부
     """
+
     expanded_queries: List[str]
     agent_keywords: List[str]
     metadata_filter: MetadataFilter
@@ -220,6 +234,7 @@ class DocumentMetadata(TypedDict, total=False):
         article: 법령 조문 번호
         source_url: 출처 URL
     """
+
     doc_id: str
     title: str
     dataset_type: str
@@ -240,11 +255,12 @@ class RetrievedDocument(TypedDict, total=False):
         similarity: 유사도 점수
         product_relevance: 온보딩 품목 관련성 (0.0~1.0)
     """
+
     chunk_id: str
     content: str
     metadata: DocumentMetadata
     similarity: float
-    product_relevance: Optional[float]     # 온보딩 품목 관련성 (0.0~1.0)
+    product_relevance: Optional[float]  # 온보딩 품목 관련성 (0.0~1.0)
 
 
 # Used in: supervisor/state/agent_results.py
@@ -272,6 +288,7 @@ class IndividualRetrievalResult(TypedDict, total=False):
         ...     'search_time_ms': 150
         ... }
     """
+
     source: str
     documents: List[Dict]
     max_similarity: float
@@ -305,6 +322,7 @@ class MergedRetrievalResult(TypedDict, total=False):
         ...     'avg_similarity': 0.72
         ... }
     """
+
     agency: Dict[str, Any]
     disputes: List[Dict[str, Any]]
     counsels: List[Dict[str, Any]]
@@ -318,6 +336,7 @@ class MergedRetrievalResult(TypedDict, total=False):
 # 답변생성 에이전트 (Answer Generation Agent)
 # ============================================================
 
+
 class RetryContext(TypedDict):
     """
     재생성 컨텍스트.
@@ -329,6 +348,7 @@ class RetryContext(TypedDict):
         previous_draft: 이전 답변
         retry_count: 재시도 횟수 (max 1)
     """
+
     violations: List[str]
     previous_draft: str
     retry_count: int
@@ -344,6 +364,7 @@ class GenerationInput(TypedDict):
         retrieval_results: 모든 검색 결과
         retry_context: 재생성 시 위반사항 정보
     """
+
     user_query: str
     expanded_queries: List[str]
     retrieval_results: List[IndividualRetrievalResult]
@@ -361,6 +382,7 @@ class ClaimEvidence(TypedDict):
         evidence_source: 근거 소스 ('law' | 'criteria' | 'case' | 'counsel')
         grounded: 근거 있음 여부
     """
+
     claim: str
     evidence_chunk_ids: List[str]
     evidence_texts: List[str]
@@ -379,6 +401,7 @@ class CitedCase(TypedDict):
         summary: 사례 요약 (답변에 포함된 내용)
         relevance: 현재 질의와의 관련성 설명
     """
+
     case_id: str
     category: CaseCategory
     title: str
@@ -401,19 +424,21 @@ class GenerationOutput(TypedDict):
         available_details: 미표시 상세 정보 메타
         followup_questions: 제안 후속 질문
     """
+
     draft_answer: str
     claim_evidence_map: List[ClaimEvidence]
     cited_cases: List[CitedCase]
     has_sufficient_evidence: bool
     generation_time_ms: float
-    response_depth: Optional[str]          # "summary" | "detail" | "full"
-    available_details: Optional[Dict]      # 미표시 상세 정보 메타
+    response_depth: Optional[str]  # "summary" | "detail" | "full"
+    available_details: Optional[Dict]  # 미표시 상세 정보 메타
     followup_questions: Optional[List[str]]  # 제안 후속 질문
 
 
 # ============================================================
 # 법률검토 에이전트 (Legal Review Agent)
 # ============================================================
+
 
 class ReviewInput(TypedDict):
     """
@@ -427,6 +452,7 @@ class ReviewInput(TypedDict):
         retrieval_results: 원본 검색 결과 (검증용)
         retry_count: 현재 재시도 횟수
     """
+
     user_query: str
     draft_answer: str
     claim_evidence_map: List[ClaimEvidence]
@@ -446,6 +472,7 @@ class Violation(TypedDict):
         severity: 심각도 ('critical' | 'warning')
         suggestion: 수정 제안
     """
+
     type: ViolationType
     description: str
     location: str
@@ -467,6 +494,7 @@ class ReviewOutput(TypedDict):
         final_answer: 수정된 최종 답변 (passed=True일 때)
         review_time_ms: 검토 소요 시간 (ms)
     """
+
     passed: bool
     violations: List[Violation]
     final_answer: Optional[str]
@@ -477,6 +505,7 @@ class ReviewOutput(TypedDict):
 # 통합 ChatState (참조용 - 실제는 supervisor/state/__init__.py)
 # ============================================================
 
+
 class ProtocolChatState(TypedDict, total=False):
     """
     통합 채팅 상태 (참조용).
@@ -484,6 +513,7 @@ class ProtocolChatState(TypedDict, total=False):
     실제 구현은 supervisor/state/__init__.py의 ChatState입니다.
     모든 에이전트 간 데이터가 저장되는 중앙 상태입니다.
     """
+
     # === 세션 정보 ===
     user_query: str
     chat_type: ChatType
@@ -519,33 +549,59 @@ class ProtocolChatState(TypedDict, total=False):
 # 타입 검증 유틸리티
 # ============================================================
 
+
 def validate_query_analysis_output(output: Dict[str, Any]) -> bool:
     """질의분석 출력이 프로토콜을 만족하는지 검증합니다."""
-    required_keys = {'intent', 'original_query', 'expanded_queries', 'keywords', 'retriever_types'}
+    required_keys = {
+        "intent",
+        "original_query",
+        "expanded_queries",
+        "keywords",
+        "retriever_types",
+    }
     return required_keys.issubset(output.keys())
 
 
 def validate_individual_retrieval_result(output: Dict[str, Any]) -> bool:
     """개별 검색 결과가 프로토콜을 만족하는지 검증합니다."""
-    required_keys = {'source', 'documents', 'max_similarity', 'avg_similarity', 'search_time_ms'}
+    required_keys = {
+        "source",
+        "documents",
+        "max_similarity",
+        "avg_similarity",
+        "search_time_ms",
+    }
     return required_keys.issubset(output.keys())
 
 
 def validate_merged_retrieval_result(output: Dict[str, Any]) -> bool:
     """병합된 검색 결과가 프로토콜을 만족하는지 검증합니다."""
-    required_keys = {'agency', 'disputes', 'counsels', 'laws', 'criteria', 'max_similarity', 'avg_similarity'}
+    required_keys = {
+        "agency",
+        "disputes",
+        "counsels",
+        "laws",
+        "criteria",
+        "max_similarity",
+        "avg_similarity",
+    }
     return required_keys.issubset(output.keys())
 
 
 def validate_generation_output(output: Dict[str, Any]) -> bool:
     """답변생성 출력이 프로토콜을 만족하는지 검증합니다."""
-    required_keys = {'draft_answer', 'claim_evidence_map', 'cited_cases', 'has_sufficient_evidence'}
+    required_keys = {
+        "draft_answer",
+        "claim_evidence_map",
+        "cited_cases",
+        "has_sufficient_evidence",
+    }
     return required_keys.issubset(output.keys())
 
 
 def validate_review_output(output: Dict[str, Any]) -> bool:
     """검토 출력이 프로토콜을 만족하는지 검증합니다."""
-    required_keys = {'passed', 'violations', 'final_answer', 'review_time_ms'}
+    required_keys = {"passed", "violations", "final_answer", "review_time_ms"}
     return required_keys.issubset(output.keys())
 
 
@@ -555,53 +611,45 @@ def validate_review_output(output: Dict[str, Any]) -> bool:
 
 __all__ = [
     # 공통 타입
-    'OnboardingInfo',
-    'IntentType',
-    'RoutingMode',
-    'RetrieverType',
-    'ChatType',
-    'ViolationType',
-    'SeverityLevel',
-    'CaseCategory',
-    'EvidenceSource',
-
+    "OnboardingInfo",
+    "IntentType",
+    "RoutingMode",
+    "RetrieverType",
+    "ChatType",
+    "ViolationType",
+    "SeverityLevel",
+    "CaseCategory",
+    "EvidenceSource",
     # 메타데이터 필터
-    'MetadataFilter',
-
+    "MetadataFilter",
     # Supervisor
-    'SupervisorPhase',
-    'SupervisorState',
-
+    "SupervisorPhase",
+    "SupervisorState",
     # 질의분석 에이전트
-    'QueryAnalysisInput',
-    'QueryAnalysisOutput',
-
+    "QueryAnalysisInput",
+    "QueryAnalysisOutput",
     # 정보검색 에이전트
-    'RetrievalTaskInput',
-    'DocumentMetadata',
-    'RetrievedDocument',
-    'IndividualRetrievalResult',
-    'MergedRetrievalResult',
-
+    "RetrievalTaskInput",
+    "DocumentMetadata",
+    "RetrievedDocument",
+    "IndividualRetrievalResult",
+    "MergedRetrievalResult",
     # 답변생성 에이전트
-    'RetryContext',
-    'GenerationInput',
-    'ClaimEvidence',
-    'CitedCase',
-    'GenerationOutput',
-
+    "RetryContext",
+    "GenerationInput",
+    "ClaimEvidence",
+    "CitedCase",
+    "GenerationOutput",
     # 법률검토 에이전트
-    'ReviewInput',
-    'Violation',
-    'ReviewOutput',
-
+    "ReviewInput",
+    "Violation",
+    "ReviewOutput",
     # 통합 상태
-    'ProtocolChatState',
-
+    "ProtocolChatState",
     # 검증 유틸리티
-    'validate_query_analysis_output',
-    'validate_individual_retrieval_result',
-    'validate_merged_retrieval_result',
-    'validate_generation_output',
-    'validate_review_output',
+    "validate_query_analysis_output",
+    "validate_individual_retrieval_result",
+    "validate_merged_retrieval_result",
+    "validate_generation_output",
+    "validate_review_output",
 ]

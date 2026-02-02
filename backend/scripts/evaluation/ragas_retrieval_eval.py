@@ -14,9 +14,9 @@ import argparse
 import json
 import os
 import random
+import statistics
 from datetime import datetime
 from typing import Dict, List
-import statistics
 
 from datasets import Dataset
 
@@ -26,9 +26,11 @@ except Exception:
     load_dotenv = None
 
 from ragas import evaluate
+
 try:
     # Newer style (if exposed)
     from ragas.metrics import context_relevancy  # type: ignore
+
     _CONTEXT_METRIC = context_relevancy
 except Exception:
     # ragas==0.4.2 uses internal class names
@@ -37,9 +39,11 @@ except Exception:
     _CONTEXT_METRIC = _ContextRelevance()
 try:
     from ragas.llms import LangchainLLM  # type: ignore
+
     _LLM_WRAPPER = "LangchainLLM"
 except Exception:
     from ragas.llms import LangchainLLMWrapper  # type: ignore
+
     _LLM_WRAPPER = "LangchainLLMWrapper"
 from langchain_openai import ChatOpenAI
 

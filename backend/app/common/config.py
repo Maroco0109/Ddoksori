@@ -32,10 +32,10 @@ from typing import Dict, List, Literal, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ============================================================
 # 데이터베이스 설정
 # ============================================================
+
 
 class DatabaseConfig(BaseSettings):
     """
@@ -50,6 +50,7 @@ class DatabaseConfig(BaseSettings):
         DB_USER: 데이터베이스 사용자 (기본값: postgres)
         DB_PASSWORD: 데이터베이스 비밀번호 (기본값: postgres)
     """
+
     model_config = SettingsConfigDict(env_prefix="DB_")
 
     host: str = Field(default="localhost", description="데이터베이스 호스트")
@@ -87,6 +88,7 @@ class DatabaseConfig(BaseSettings):
 # 임베딩 서버 설정
 # ============================================================
 
+
 class EmbeddingConfig(BaseSettings):
     """
     임베딩 서버 설정.
@@ -98,28 +100,30 @@ class EmbeddingConfig(BaseSettings):
         EMBEDDING_MODEL_NAME: 임베딩 모델명 (기본값: nlpai-lab/KURE-v1)
         USE_OPENAI_EMBEDDING: OpenAI 임베딩 사용 여부 (기본값: false)
     """
+
     model_config = SettingsConfigDict(env_prefix="EMBED_")
 
     api_url: str = Field(
         default="http://localhost:8001/embed",
         alias="EMBED_API_URL",
-        description="임베딩 API URL"
+        description="임베딩 API URL",
     )
     model_name: str = Field(
         default="nlpai-lab/KURE-v1",
         alias="EMBEDDING_MODEL_NAME",
-        description="임베딩 모델명"
+        description="임베딩 모델명",
     )
     use_openai: bool = Field(
         default=False,
         alias="USE_OPENAI_EMBEDDING",
-        description="OpenAI 임베딩 사용 여부"
+        description="OpenAI 임베딩 사용 여부",
     )
 
 
 # ============================================================
 # LLM 설정
 # ============================================================
+
 
 class LLMConfig(BaseSettings):
     """
@@ -134,17 +138,18 @@ class LLMConfig(BaseSettings):
         LLM_MAX_TOKENS: 최대 토큰 수 (기본값: 2048)
         LLM_TOOL_TIMEOUT_MS: 도구 호출 타임아웃 (기본값: 5000ms)
     """
+
     model_config = SettingsConfigDict(env_prefix="LLM_")
 
     model: str = Field(default="gpt-4o-mini", description="기본 LLM 모델명")
     openai_api_key: Optional[str] = Field(
-        default=None,
-        alias="OPENAI_API_KEY",
-        description="OpenAI API 키"
+        default=None, alias="OPENAI_API_KEY", description="OpenAI API 키"
     )
     temperature: float = Field(default=0.7, description="생성 온도")
     max_tokens: int = Field(default=2048, description="최대 토큰 수")
-    tool_timeout_ms: int = Field(default=5000, description="도구 호출 타임아웃 (밀리초)")
+    tool_timeout_ms: int = Field(
+        default=5000, description="도구 호출 타임아웃 (밀리초)"
+    )
 
 
 class ExaoneConfig(BaseSettings):
@@ -162,13 +167,13 @@ class ExaoneConfig(BaseSettings):
         EXAONE_TEMPERATURE: 생성 온도 (기본값: 0.3)
         EXAONE_MAX_TOKENS: 최대 토큰 수 (기본값: 1024)
     """
+
     model_config = SettingsConfigDict(env_prefix="EXAONE_")
 
     runpod_url: Optional[str] = Field(default=None, description="RunPod API URL")
     runpod_api_key: str = Field(default="dummy", description="RunPod API 키")
     model: str = Field(
-        default="LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct",
-        description="EXAONE 모델명"
+        default="LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct", description="EXAONE 모델명"
     )
     model_size: str = Field(default="7.8B", description="모델 크기")
     timeout: int = Field(default=10, description="타임아웃 (초)")
@@ -179,6 +184,7 @@ class ExaoneConfig(BaseSettings):
 # ============================================================
 # 모델 아키텍처 설정
 # ============================================================
+
 
 class ModelConfig(BaseSettings):
     """
@@ -192,20 +198,12 @@ class ModelConfig(BaseSettings):
         MODEL_DRAFT_AGENT: Draft 에이전트 모델 (기본값: gpt-4o)
         MODEL_REVIEW_AGENT: Review 에이전트 모델 (기본값: gpt-4o)
     """
+
     model_config = SettingsConfigDict(env_prefix="MODEL_")
 
-    supervisor: str = Field(
-        default="gpt-4o",
-        description="Supervisor 에이전트 모델"
-    )
-    draft_agent: str = Field(
-        default="gpt-4o",
-        description="Draft 에이전트 모델"
-    )
-    review_agent: str = Field(
-        default="gpt-4o",
-        description="Review 에이전트 모델"
-    )
+    supervisor: str = Field(default="gpt-4o", description="Supervisor 에이전트 모델")
+    draft_agent: str = Field(default="gpt-4o", description="Draft 에이전트 모델")
+    review_agent: str = Field(default="gpt-4o", description="Review 에이전트 모델")
 
 
 class PortConfig(BaseSettings):
@@ -217,17 +215,16 @@ class PortConfig(BaseSettings):
     환경변수:
         PORT_EXAONE_VLLM: EXAONE vLLM 서버 포트 (기본값: 19010)
     """
+
     model_config = SettingsConfigDict(env_prefix="PORT_")
 
-    exaone_vllm: int = Field(
-        default=19010,
-        description="EXAONE vLLM 서버 포트"
-    )
+    exaone_vllm: int = Field(default=19010, description="EXAONE vLLM 서버 포트")
 
 
 # ============================================================
 # 에이전트 설정
 # ============================================================
+
 
 class AgentSettings(BaseSettings):
     """
@@ -242,111 +239,100 @@ class AgentSettings(BaseSettings):
         PROHIBITED_VIOLATION_THRESHOLD: 금지 표현 위반 임계값 (기본값: 3)
         MAX_REVIEW_RETRIES: 최대 재검토 횟수 (기본값: 2)
     """
+
     model_config = SettingsConfigDict(env_prefix="")
 
     # 유사도 설정
     similarity_threshold: float = Field(
-        default=0.55,
-        alias="SIMILARITY_THRESHOLD",
-        description="기본 유사도 임계값"
+        default=0.55, alias="SIMILARITY_THRESHOLD", description="기본 유사도 임계값"
     )
     similarity_threshold_dispute: float = Field(
         default=0.55,
         alias="SIMILARITY_THRESHOLD_DISPUTE",
-        description="분쟁 쿼리 유사도 임계값"
+        description="분쟁 쿼리 유사도 임계값",
     )
     similarity_threshold_law: float = Field(
         default=0.60,
         alias="SIMILARITY_THRESHOLD_LAW",
-        description="법령 쿼리 유사도 임계값"
+        description="법령 쿼리 유사도 임계값",
     )
     similarity_threshold_criteria: float = Field(
         default=0.50,
         alias="SIMILARITY_THRESHOLD_CRITERIA",
-        description="기준 쿼리 유사도 임계값"
+        description="기준 쿼리 유사도 임계값",
     )
     similarity_threshold_general: float = Field(
         default=0.45,
         alias="SIMILARITY_THRESHOLD_GENERAL",
-        description="일반 쿼리 유사도 임계값"
+        description="일반 쿼리 유사도 임계값",
     )
 
     # ReAct 설정
     max_react_iterations: int = Field(
-        default=2,
-        alias="MAX_REACT_ITERATIONS",
-        description="ReAct 최대 반복 횟수"
+        default=2, alias="MAX_REACT_ITERATIONS", description="ReAct 최대 반복 횟수"
     )
     react_llm_max_retries: int = Field(
         default=2,
         alias="REACT_LLM_MAX_RETRIES",
-        description="ReAct LLM 최대 재시도 횟수"
+        description="ReAct LLM 최대 재시도 횟수",
     )
     react_llm_retry_delay_ms: int = Field(
         default=100,
         alias="REACT_LLM_RETRY_DELAY_MS",
-        description="ReAct LLM 재시도 지연 (밀리초)"
+        description="ReAct LLM 재시도 지연 (밀리초)",
     )
     react_think_mode: str = Field(
         default="rule",
         alias="REACT_THINK_MODE",
-        description="ReAct 사고 모드 (rule | llm)"
+        description="ReAct 사고 모드 (rule | llm)",
     )
     use_llm_tools: bool = Field(
-        default=False,
-        alias="USE_LLM_TOOLS",
-        description="LLM 도구 사용 여부"
+        default=False, alias="USE_LLM_TOOLS", description="LLM 도구 사용 여부"
     )
 
     # Legal Review 설정
     prohibited_violation_threshold: int = Field(
         default=3,
         alias="PROHIBITED_VIOLATION_THRESHOLD",
-        description="금지 표현 위반 임계값"
+        description="금지 표현 위반 임계값",
     )
     max_review_retries: int = Field(
-        default=2,
-        alias="MAX_REVIEW_RETRIES",
-        description="최대 재검토 횟수"
+        default=2, alias="MAX_REVIEW_RETRIES", description="최대 재검토 횟수"
     )
     enable_llm_review: bool = Field(
-        default=False,
-        alias="ENABLE_LLM_REVIEW",
-        description="LLM 검토 활성화 여부"
+        default=False, alias="ENABLE_LLM_REVIEW", description="LLM 검토 활성화 여부"
     )
 
     # Query Analysis 설정
     enable_fast_path_promotion: bool = Field(
         default=True,
         alias="ENABLE_FAST_PATH_PROMOTION",
-        description="빠른 경로 프로모션 활성화"
+        description="빠른 경로 프로모션 활성화",
     )
     enable_ambiguous_detection: bool = Field(
         default=True,
         alias="ENABLE_AMBIGUOUS_DETECTION",
-        description="모호한 쿼리 감지 활성화"
+        description="모호한 쿼리 감지 활성화",
     )
 
     # Retrieval 설정
     enable_dispute_metadata_extraction: bool = Field(
         default=True,
         alias="ENABLE_DISPUTE_METADATA_EXTRACTION",
-        description="분쟁 메타데이터 추출 활성화"
+        description="분쟁 메타데이터 추출 활성화",
     )
     enable_document_level_similarity: bool = Field(
         default=True,
         alias="ENABLE_DOCUMENT_LEVEL_SIMILARITY",
-        description="문서 레벨 유사도 활성화"
+        description="문서 레벨 유사도 활성화",
     )
     document_similarity_candidate_multiplier: int = Field(
         default=5,
         alias="DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER",
-        description="문서 유사도 후보 배수"
+        description="문서 유사도 후보 배수",
     )
     enable_retrieval_trace: bool = Field(
-        default=False,
-        alias="ENABLE_RETRIEVAL_TRACE",
-        description="검색 추적 활성화"
+        default=False, alias="ENABLE_RETRIEVAL_TRACE", description="검색 추적 활성화"
     )
 
     def get_similarity_threshold(self, query_type: Optional[str] = None) -> float:
@@ -376,6 +362,7 @@ class AgentSettings(BaseSettings):
 # 검색 전략 설정 (Retrieval Strategy)
 # ============================================================
 
+
 class RetrievalSettings(BaseSettings):
     """
     검색 전략 설정.
@@ -398,16 +385,23 @@ class RetrievalSettings(BaseSettings):
         RETRIEVAL_CACHE_OVERFLOW: 오버플로 캐시 활성화 (기본값: true)
         RETRIEVAL_CACHE_TTL: 오버플로 캐시 TTL 초 (기본값: 1800)
     """
+
     model_config = SettingsConfigDict(env_prefix="RETRIEVAL_")
 
     # RRF 파라미터
-    rrf_k: int = Field(default=10, description="SQL 레벨 RRF k 파라미터 (낮을수록 상위 결과 차별화)")
-    rrf_k_python: int = Field(default=60, description="Python 2차 RRF fusion k값 (expanded_queries 병합용)")
+    rrf_k: int = Field(
+        default=10, description="SQL 레벨 RRF k 파라미터 (낮을수록 상위 결과 차별화)"
+    )
+    rrf_k_python: int = Field(
+        default=60, description="Python 2차 RRF fusion k값 (expanded_queries 병합용)"
+    )
     default_top_k: int = Field(default=10, description="에이전트별 기본 검색 수")
 
     # HyDE 설정
     hyde_enabled: bool = Field(default=True, description="HyDE 활성화 여부")
-    hyde_model: str = Field(default="gpt-4o-mini", description="HyDE 가상 답변 생성 모델")
+    hyde_model: str = Field(
+        default="gpt-4o-mini", description="HyDE 가상 답변 생성 모델"
+    )
     hyde_max_tokens: int = Field(default=200, description="HyDE 최대 토큰 수")
 
     # Adaptive RAG 설정
@@ -425,12 +419,15 @@ class RetrievalSettings(BaseSettings):
     cache_ttl: int = Field(default=1800, description="오버플로 캐시 TTL (초)")
 
     # 충분성 최소 품질 점수
-    sufficiency_min_score: float = Field(default=0.01, description="RRF 최소 품질 점수. 이하면 marginal 경고")
+    sufficiency_min_score: float = Field(
+        default=0.01, description="RRF 최소 품질 점수. 이하면 marginal 경고"
+    )
 
 
 # ============================================================
 # Redis 설정
 # ============================================================
+
 
 class RedisConfig(BaseSettings):
     """
@@ -445,20 +442,17 @@ class RedisConfig(BaseSettings):
         ENABLE_ANSWER_CACHE: 답변 캐시 활성화 (기본값: false)
         ANSWER_CACHE_TTL_HOURS: 캐시 TTL (기본값: 24시간)
     """
+
     model_config = SettingsConfigDict(env_prefix="REDIS_")
 
     host: str = Field(default="localhost", description="Redis 호스트")
     port: int = Field(default=6379, description="Redis 포트")
     db: int = Field(default=0, description="Redis 데이터베이스 번호")
     enable_answer_cache: bool = Field(
-        default=False,
-        alias="ENABLE_ANSWER_CACHE",
-        description="답변 캐시 활성화"
+        default=False, alias="ENABLE_ANSWER_CACHE", description="답변 캐시 활성화"
     )
     answer_cache_ttl_hours: int = Field(
-        default=24,
-        alias="ANSWER_CACHE_TTL_HOURS",
-        description="답변 캐시 TTL (시간)"
+        default=24, alias="ANSWER_CACHE_TTL_HOURS", description="답변 캐시 TTL (시간)"
     )
 
 
@@ -466,29 +460,30 @@ class RedisConfig(BaseSettings):
 # Moderation 설정
 # ============================================================
 
+
 class ModerationConfig(BaseSettings):
     """
     콘텐츠 모더레이션 설정.
 
     입출력 가드레일 설정을 관리합니다.
     """
+
     model_config = SettingsConfigDict(env_prefix="MODERATION_")
 
     enabled: bool = Field(
-        default=True,
-        alias="MODERATION_ENABLED",
-        description="모더레이션 활성화"
+        default=True, alias="MODERATION_ENABLED", description="모더레이션 활성화"
     )
     model: str = Field(
         default="omni-moderation-latest",
         alias="MODERATION_MODEL",
-        description="모더레이션 모델"
+        description="모더레이션 모델",
     )
 
 
 # ============================================================
 # 인증 설정 (JWT & OAuth)
 # ============================================================
+
 
 class AuthConfig(BaseSettings):
     """
@@ -507,65 +502,57 @@ class AuthConfig(BaseSettings):
         BACKEND_URL: Backend API URL (기본값: http://localhost:8000)
         FRONTEND_URL: Frontend URL (기본값: http://localhost:5173)
     """
+
     model_config = SettingsConfigDict(env_prefix="")
 
     # JWT 설정
     jwt_secret_key: str = Field(
         default="dev_secret_key_change_in_production",
         alias="JWT_SECRET_KEY",
-        description="JWT 서명 비밀 키"
+        description="JWT 서명 비밀 키",
     )
     jwt_algorithm: str = Field(
-        default="HS256",
-        alias="JWT_ALGORITHM",
-        description="JWT 알고리즘"
+        default="HS256", alias="JWT_ALGORITHM", description="JWT 알고리즘"
     )
     jwt_token_expire_days: int = Field(
-        default=30,
-        alias="JWT_TOKEN_EXPIRE_DAYS",
-        description="JWT 토큰 만료 기간 (일)"
+        default=30, alias="JWT_TOKEN_EXPIRE_DAYS", description="JWT 토큰 만료 기간 (일)"
     )
 
     # Google OAuth
     google_client_id: Optional[str] = Field(
-        default=None,
-        alias="GOOGLE_CLIENT_ID",
-        description="Google OAuth Client ID"
+        default=None, alias="GOOGLE_CLIENT_ID", description="Google OAuth Client ID"
     )
     google_client_secret: Optional[str] = Field(
         default=None,
         alias="GOOGLE_CLIENT_SECRET",
-        description="Google OAuth Client Secret"
+        description="Google OAuth Client Secret",
     )
 
     # Naver OAuth
     naver_client_id: Optional[str] = Field(
-        default=None,
-        alias="NAVER_CLIENT_ID",
-        description="Naver Client ID"
+        default=None, alias="NAVER_CLIENT_ID", description="Naver Client ID"
     )
     naver_client_secret: Optional[str] = Field(
-        default=None,
-        alias="NAVER_CLIENT_SECRET",
-        description="Naver Client Secret"
+        default=None, alias="NAVER_CLIENT_SECRET", description="Naver Client Secret"
     )
 
     # URL 설정
     backend_url: str = Field(
         default="http://localhost:8000",
         alias="BACKEND_URL",
-        description="Backend API URL"
+        description="Backend API URL",
     )
     frontend_url: str = Field(
         default="http://localhost:5173",
         alias="FRONTEND_URL",
-        description="Frontend URL"
+        description="Frontend URL",
     )
 
 
 # ============================================================
 # 대화 메모리 설정
 # ============================================================
+
 
 class MemoryConfig(BaseSettings):
     """
@@ -580,38 +567,36 @@ class MemoryConfig(BaseSettings):
         GUEST_SESSION_TTL_HOURS: 게스트 세션 만료 시간 (기본값: 24시간)
         CLEANUP_INTERVAL_HOURS: Cleanup 서비스 실행 주기 (기본값: 1시간)
     """
+
     model_config = SettingsConfigDict(env_prefix="")
 
     backend: str = Field(
         default="memory",
         alias="CONVERSATION_MEMORY_BACKEND",
-        description="메모리 백엔드 (memory | db)"
+        description="메모리 백엔드 (memory | db)",
     )
     max_turns: int = Field(
-        default=30,
-        alias="MAX_CONVERSATION_TURNS",
-        description="최대 대화 턴 수"
+        default=30, alias="MAX_CONVERSATION_TURNS", description="최대 대화 턴 수"
     )
     sliding_window_size: int = Field(
-        default=10,
-        alias="SLIDING_WINDOW_SIZE",
-        description="슬라이딩 윈도우 크기"
+        default=10, alias="SLIDING_WINDOW_SIZE", description="슬라이딩 윈도우 크기"
     )
     guest_session_ttl_hours: int = Field(
         default=24,
         alias="GUEST_SESSION_TTL_HOURS",
-        description="게스트 세션 만료 시간 (시간)"
+        description="게스트 세션 만료 시간 (시간)",
     )
     cleanup_interval_hours: int = Field(
         default=1,
         alias="CLEANUP_INTERVAL_HOURS",
-        description="Cleanup 서비스 실행 주기 (시간)"
+        description="Cleanup 서비스 실행 주기 (시간)",
     )
 
 
 # ============================================================
 # 대화형 챗봇 기능 플래그
 # ============================================================
+
 
 class ChatbotFeaturesConfig(BaseSettings):
     """
@@ -623,23 +608,25 @@ class ChatbotFeaturesConfig(BaseSettings):
         ANSWER_FORMAT_MODE: 답변 형식 모드 (fixed | flexible, 기본값: fixed)
         ENABLE_FOLLOWUP_QUESTIONS: 후속 질문 생성 활성화 (기본값: false)
     """
+
     model_config = SettingsConfigDict(env_prefix="")
 
     answer_format_mode: str = Field(
         default="fixed",
         alias="ANSWER_FORMAT_MODE",
-        description="답변 형식 모드 (fixed | flexible)"
+        description="답변 형식 모드 (fixed | flexible)",
     )
     enable_followup_questions: bool = Field(
         default=False,
         alias="ENABLE_FOLLOWUP_QUESTIONS",
-        description="후속 질문 생성 활성화"
+        description="후속 질문 생성 활성화",
     )
 
 
 # ============================================================
 # 응답 처리 방식 설정 (Progressive Disclosure)
 # ============================================================
+
 
 class ResponseConfig(BaseSettings):
     """
@@ -653,33 +640,33 @@ class ResponseConfig(BaseSettings):
         FOLLOWUP_SIMILARITY_THRESHOLD: 후속 질문 매칭 임계값 (기본값: 0.8)
         META_QUERY_USE_LLM: 메타 쿼리 LLM 사용 여부 (기본값: false)
     """
+
     model_config = SettingsConfigDict(env_prefix="")
 
     response_mode: Literal["legacy", "minimal", "adaptive"] = Field(
         default="legacy",
         alias="RESPONSE_MODE",
-        description="응답 모드 (legacy | minimal | adaptive)"
+        description="응답 모드 (legacy | minimal | adaptive)",
     )
     summary_max_length: int = Field(
-        default=200,
-        alias="SUMMARY_MAX_LENGTH",
-        description="요약 최대 길이 (자)"
+        default=200, alias="SUMMARY_MAX_LENGTH", description="요약 최대 길이 (자)"
     )
     followup_similarity_threshold: float = Field(
         default=0.8,
         alias="FOLLOWUP_SIMILARITY_THRESHOLD",
-        description="후속 질문 매칭 임계값"
+        description="후속 질문 매칭 임계값",
     )
     meta_query_use_llm: bool = Field(
         default=False,
         alias="META_QUERY_USE_LLM",
-        description="메타 쿼리 응답에 LLM 사용 여부 (adaptive 모드)"
+        description="메타 쿼리 응답에 LLM 사용 여부 (adaptive 모드)",
     )
 
 
 # ============================================================
 # 애플리케이션 전역 설정
 # ============================================================
+
 
 class AppConfig(BaseSettings):
     """
@@ -692,10 +679,9 @@ class AppConfig(BaseSettings):
         CORS_ORIGINS: CORS 허용 오리진 (기본값: http://localhost:5173)
         RETRIEVAL_MODE: 검색 모드 (기본값: dense)
     """
+
     model_config = SettingsConfigDict(
-        env_prefix="",
-        env_nested_delimiter="__",
-        extra="ignore"
+        env_prefix="", env_nested_delimiter="__", extra="ignore"
     )
 
     # 전역 설정
@@ -703,24 +689,20 @@ class AppConfig(BaseSettings):
     cors_origins: str = Field(
         default="http://localhost:5173",
         alias="CORS_ORIGINS",
-        description="CORS 허용 오리진 (쉼표 구분)"
+        description="CORS 허용 오리진 (쉼표 구분)",
     )
     retrieval_mode: str = Field(
         default="dense",
         alias="RETRIEVAL_MODE",
-        description="검색 모드 (dense | hybrid)"
+        description="검색 모드 (dense | hybrid)",
     )
 
     # LangSmith 추적
     langchain_tracing_v2: bool = Field(
-        default=False,
-        alias="LANGCHAIN_TRACING_V2",
-        description="LangSmith 추적 활성화"
+        default=False, alias="LANGCHAIN_TRACING_V2", description="LangSmith 추적 활성화"
     )
     langchain_project: str = Field(
-        default="default",
-        alias="LANGCHAIN_PROJECT",
-        description="LangSmith 프로젝트명"
+        default="default", alias="LANGCHAIN_PROJECT", description="LangSmith 프로젝트명"
     )
 
     # 하위 설정 그룹
@@ -735,7 +717,9 @@ class AppConfig(BaseSettings):
     ports: PortConfig = Field(default_factory=PortConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
-    chatbot_features: ChatbotFeaturesConfig = Field(default_factory=ChatbotFeaturesConfig)
+    chatbot_features: ChatbotFeaturesConfig = Field(
+        default_factory=ChatbotFeaturesConfig
+    )
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     response: ResponseConfig = Field(default_factory=ResponseConfig)
 
@@ -752,6 +736,7 @@ class AppConfig(BaseSettings):
 # ============================================================
 # 싱글톤 인스턴스 관리
 # ============================================================
+
 
 @lru_cache()
 def get_config() -> AppConfig:
@@ -772,6 +757,7 @@ def get_config() -> AppConfig:
         similarity = config.agent.similarity_threshold
     """
     from app.common.secrets import inject_aws_secrets
+
     inject_aws_secrets()
     return AppConfig()
 
@@ -793,6 +779,7 @@ def reload_config() -> AppConfig:
 # ============================================================
 # 하위 호환성을 위한 레거시 클래스
 # ============================================================
+
 
 class _LegacyAgentConfigMeta(type):
     """
@@ -899,11 +886,9 @@ __all__ = [
     "ChatbotFeaturesConfig",  # 대화형 챗봇 기능 플래그
     "RetrievalSettings",  # 검색 전략 설정
     "ResponseConfig",  # 응답 처리 방식 설정
-
     # 설정 접근 함수
     "get_config",
     "reload_config",
-
     # 하위 호환성
     "AgentConfig",  # LegacyAgentConfig 별칭 (클래스 속성 접근)
     "LegacyAgentConfig",

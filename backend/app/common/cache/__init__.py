@@ -7,8 +7,8 @@
 from app.common.cache.base import (
     BaseRedisCache,
     get_redis_client,
-    normalize_query,
     hash_query,
+    normalize_query,
 )
 
 __all__ = [

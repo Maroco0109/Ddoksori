@@ -31,14 +31,15 @@ PostgreSQL users 테이블 접근을 담당합니다.
 """
 
 import asyncio
+import logging
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
-from typing import Dict, Optional, Any
 
-from app.common.config import DatabaseConfig, get_config
-import logging
 from app.auth.models import User
+from app.common.config import DatabaseConfig, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class UserDB:
         provider_user_id: str,
         email: str,
         name: str,
-        avatar_url: Optional[str] = None
+        avatar_url: Optional[str] = None,
     ) -> User:
         """
         사용자를 생성하거나 갱신합니다 (UPSERT).
@@ -138,7 +139,7 @@ class UserDB:
                             last_login_at = NOW()
                         RETURNING *
                         """,
-                        (user_id, email, name, avatar_url, provider, provider_user_id)
+                        (user_id, email, name, avatar_url, provider, provider_user_id),
                     )
                     row = cur.fetchone()
                 conn.commit()
@@ -163,6 +164,7 @@ class UserDB:
         Returns:
             User 모델 인스턴스 (없으면 None)
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -171,7 +173,7 @@ class UserDB:
                         """
                         SELECT * FROM users WHERE user_id = %s
                         """,
-                        (user_id,)
+                        (user_id,),
                     )
                     row = cur.fetchone()
                     return User(**dict(row)) if row else None
@@ -190,6 +192,7 @@ class UserDB:
         Returns:
             User 모델 인스턴스 (없으면 None)
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -198,7 +201,7 @@ class UserDB:
                         """
                         SELECT * FROM users WHERE email = %s
                         """,
-                        (email,)
+                        (email,),
                     )
                     row = cur.fetchone()
                     return User(**dict(row)) if row else None
@@ -208,9 +211,7 @@ class UserDB:
         return await asyncio.to_thread(_get)
 
     async def get_user_by_provider(
-        self,
-        provider: str,
-        provider_user_id: str
+        self, provider: str, provider_user_id: str
     ) -> Optional[User]:
         """
         OAuth 제공자와 제공자 사용자 ID로 사용자를 조회합니다.
@@ -222,6 +223,7 @@ class UserDB:
         Returns:
             User 모델 인스턴스 (없으면 None)
         """
+
         def _get():
             conn = self._get_connection()
             try:
@@ -230,7 +232,7 @@ class UserDB:
                         """
                         SELECT * FROM users WHERE provider = %s AND provider_user_id = %s
                         """,
-                        (provider, provider_user_id)
+                        (provider, provider_user_id),
                     )
                     row = cur.fetchone()
                     return User(**dict(row)) if row else None
@@ -246,6 +248,7 @@ class UserDB:
         Args:
             user_id: 사용자 ID
         """
+
         def _update():
             conn = self._get_connection()
             try:
@@ -256,7 +259,7 @@ class UserDB:
                         SET last_login_at = NOW()
                         WHERE user_id = %s
                         """,
-                        (user_id,)
+                        (user_id,),
                     )
                 conn.commit()
                 logger.info(f"[UserDB] 마지막 로그인 갱신: user_id={user_id}")
@@ -279,28 +282,39 @@ class UserDB:
         Raises:
             psycopg2.Error: DB 오류
         """
+
         def _delete():
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
                     # 1. OAuth 세션 삭제
-                    cur.execute("DELETE FROM oauth_sessions WHERE user_id = %s", (user_id,))
+                    cur.execute(
+                        "DELETE FROM oauth_sessions WHERE user_id = %s", (user_id,)
+                    )
                     # 2. 대화 요약 삭제 (conversation_summaries → conversations FK)
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM conversation_summaries
                         WHERE conversation_id IN (
                             SELECT conversation_id FROM conversations WHERE user_id = %s
                         )
-                    """, (user_id,))
+                    """,
+                        (user_id,),
+                    )
                     # 3. 대화 턴 삭제
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM conversation_turns
                         WHERE conversation_id IN (
                             SELECT conversation_id FROM conversations WHERE user_id = %s
                         )
-                    """, (user_id,))
+                    """,
+                        (user_id,),
+                    )
                     # 4. 대화 삭제
-                    cur.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
+                    cur.execute(
+                        "DELETE FROM conversations WHERE user_id = %s", (user_id,)
+                    )
                     # 5. 사용자 삭제
                     cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
                 conn.commit()

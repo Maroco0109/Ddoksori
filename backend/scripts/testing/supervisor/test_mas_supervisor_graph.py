@@ -6,8 +6,9 @@ MAS Supervisor Graph 단위 테스트 (Phase 5)
 테스트 대상: backend/app/orchestrator/graph.py - create_mas_supervisor_graph()
 """
 
+from typing import Any, Dict
+
 import pytest
-from typing import Dict, Any
 
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)
 pytestmark = pytest.mark.unit
@@ -25,17 +26,17 @@ class TestMasSupervisorGraphCreation:
 
         # 필수 노드 확인 (v2: counsel 제거, memory_save 추가)
         required_nodes = [
-            'input_guardrail',
-            'output_guardrail',
-            'supervisor',
-            'query_analysis',
-            'generation',
-            'review',
-            'retrieval_law',
-            'retrieval_criteria',
-            'retrieval_case',
-            'retrieval_merge',
-            'memory_save',
+            "input_guardrail",
+            "output_guardrail",
+            "supervisor",
+            "query_analysis",
+            "generation",
+            "review",
+            "retrieval_law",
+            "retrieval_criteria",
+            "retrieval_case",
+            "retrieval_merge",
+            "memory_save",
         ]
 
         for node in required_nodes:
@@ -49,7 +50,7 @@ class TestMasSupervisorGraphCreation:
         compiled = get_mas_supervisor_graph()
 
         assert compiled is not None
-        assert hasattr(compiled, 'invoke')
+        assert hasattr(compiled, "invoke")
 
 
 class TestMasRouting:
@@ -60,63 +61,64 @@ class TestMasRouting:
         from app.supervisor.graph_mas import _route_mas_supervisor
 
         state = {
-            'supervisor': {
-                'next_agent': 'query_analyst',
+            "supervisor": {
+                "next_agent": "query_analyst",
             }
         }
 
         result = _route_mas_supervisor(state)
-        assert result == 'query_analysis'
+        assert result == "query_analysis"
 
     def test_route_to_generation(self):
         """answer_drafter → generation 라우팅"""
         from app.supervisor.graph_mas import _route_mas_supervisor
 
         state = {
-            'supervisor': {
-                'next_agent': 'answer_drafter',
+            "supervisor": {
+                "next_agent": "answer_drafter",
             }
         }
 
         result = _route_mas_supervisor(state)
-        assert result == 'generation'
+        assert result == "generation"
 
     def test_route_to_review(self):
         """legal_reviewer → review 라우팅"""
         from app.supervisor.graph_mas import _route_mas_supervisor
 
         state = {
-            'supervisor': {
-                'next_agent': 'legal_reviewer',
+            "supervisor": {
+                "next_agent": "legal_reviewer",
             }
         }
 
         result = _route_mas_supervisor(state)
-        assert result == 'review'
+        assert result == "review"
 
     def test_route_to_output_on_respond(self):
         """respond → output_guardrail 라우팅"""
         from app.supervisor.graph_mas import _route_mas_supervisor
 
         state = {
-            'supervisor': {
-                'next_agent': None,
+            "supervisor": {
+                "next_agent": None,
             }
         }
 
         result = _route_mas_supervisor(state)
-        assert result == 'output_guardrail'
+        assert result == "output_guardrail"
 
     def test_route_fan_out_returns_send_list(self):
         """retrieval_team → List[Send] 반환 (Fan-out, v2: 3개 Agent)"""
-        from app.supervisor.graph_mas import _route_mas_supervisor
         from langgraph.types import Send
 
+        from app.supervisor.graph_mas import _route_mas_supervisor
+
         state = {
-            'supervisor': {
-                'next_agent': 'retrieval_team',
+            "supervisor": {
+                "next_agent": "retrieval_team",
             },
-            'user_query': '노트북 환불',
+            "user_query": "노트북 환불",
         }
 
         result = _route_mas_supervisor(state)
@@ -131,9 +133,9 @@ class TestMasRouting:
 
         # 3개 에이전트 노드로 보내는지 확인
         node_names = [send.node for send in result]
-        assert 'retrieval_law' in node_names
-        assert 'retrieval_criteria' in node_names
-        assert 'retrieval_case' in node_names
+        assert "retrieval_law" in node_names
+        assert "retrieval_criteria" in node_names
+        assert "retrieval_case" in node_names
 
 
 class TestRetrievalAgentNodes:
@@ -143,14 +145,14 @@ class TestRetrievalAgentNodes:
         """Law Retrieval Agent 노드 생성 테스트"""
         from app.supervisor.graph_mas import _create_retrieval_agent_node
 
-        node_fn = _create_retrieval_agent_node('law')
+        node_fn = _create_retrieval_agent_node("law")
         assert callable(node_fn)
 
     def test_create_retrieval_agent_node_criteria(self):
         """Criteria Retrieval Agent 노드 생성 테스트"""
         from app.supervisor.graph_mas import _create_retrieval_agent_node
 
-        node_fn = _create_retrieval_agent_node('criteria')
+        node_fn = _create_retrieval_agent_node("criteria")
         assert callable(node_fn)
 
 
@@ -189,10 +191,10 @@ class TestSupervisorNodeIntegration:
 
         graph = create_mas_supervisor_graph()
 
-        assert 'supervisor' in graph.nodes
+        assert "supervisor" in graph.nodes
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 직접 실행 테스트
     print("=== MAS Supervisor Graph Tests ===")
 

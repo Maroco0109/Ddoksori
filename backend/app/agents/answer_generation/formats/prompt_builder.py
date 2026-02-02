@@ -18,8 +18,8 @@ ResponseFormat에 따라 시스템 프롬프트와 사용자 프롬프트를 생
 """
 
 from typing import Dict, List, Optional
-from .config import ResponseFormat
 
+from .config import ResponseFormat
 
 # 면책 문구
 DISCLAIMER = "본 답변은 정보 제공 목적이며 법률 자문이 아닙니다. 최종 판단·결정은 관련 기관 또는 전문가와 상담하여 진행해 주세요."
@@ -34,24 +34,24 @@ class PromptBuilder:
 
     # format_id → 시스템 프롬프트 빌더 메서드 매핑
     _SYSTEM_PROMPT_BUILDERS = {
-        'law_response': '_build_law_response_system_prompt',
-        'law_onboarding': '_build_law_onboarding_system_prompt',
-        'criteria_response': '_build_criteria_response_system_prompt',
-        'case_response': '_build_case_response_system_prompt',
-        'comprehensive_dispute': '_build_comprehensive_dispute_system_prompt',
-        'general_greeting': '_build_general_greeting_system_prompt',
-        'info_only': '_build_info_only_system_prompt',
+        "law_response": "_build_law_response_system_prompt",
+        "law_onboarding": "_build_law_onboarding_system_prompt",
+        "criteria_response": "_build_criteria_response_system_prompt",
+        "case_response": "_build_case_response_system_prompt",
+        "comprehensive_dispute": "_build_comprehensive_dispute_system_prompt",
+        "general_greeting": "_build_general_greeting_system_prompt",
+        "info_only": "_build_info_only_system_prompt",
     }
 
     # format_id → 사용자 프롬프트 빌더 메서드 매핑
     _USER_PROMPT_BUILDERS = {
-        'law_response': '_build_law_response_user_prompt',
-        'law_onboarding': '_build_law_onboarding_user_prompt',
-        'criteria_response': '_build_criteria_response_user_prompt',
-        'case_response': '_build_case_response_user_prompt',
-        'comprehensive_dispute': '_build_comprehensive_dispute_user_prompt',
-        'general_greeting': '_build_general_greeting_user_prompt',
-        'info_only': '_build_info_only_user_prompt',
+        "law_response": "_build_law_response_user_prompt",
+        "law_onboarding": "_build_law_onboarding_user_prompt",
+        "criteria_response": "_build_criteria_response_user_prompt",
+        "case_response": "_build_case_response_user_prompt",
+        "comprehensive_dispute": "_build_comprehensive_dispute_user_prompt",
+        "general_greeting": "_build_general_greeting_user_prompt",
+        "info_only": "_build_info_only_user_prompt",
     }
 
     def build_system_prompt(self, response_format: ResponseFormat) -> str:
@@ -67,7 +67,7 @@ class PromptBuilder:
         method_name = self._SYSTEM_PROMPT_BUILDERS.get(response_format.format_id)
         if method_name is None:
             # 알 수 없는 format_id → comprehensive_dispute 기본값
-            method_name = '_build_comprehensive_dispute_system_prompt'
+            method_name = "_build_comprehensive_dispute_system_prompt"
 
         builder = getattr(self, method_name)
         return builder(response_format)
@@ -99,31 +99,33 @@ class PromptBuilder:
         """
         method_name = self._USER_PROMPT_BUILDERS.get(response_format.format_id)
         if method_name is None:
-            method_name = '_build_comprehensive_dispute_user_prompt'
+            method_name = "_build_comprehensive_dispute_user_prompt"
 
         builder = getattr(self, method_name)
 
         # 대화 히스토리 섹션 (general_greeting 제외)
         history_section = ""
-        if conversation_history and response_format.format_id != 'general_greeting':
-            history_lines = self._build_conversation_history_section(conversation_history)
+        if conversation_history and response_format.format_id != "general_greeting":
+            history_lines = self._build_conversation_history_section(
+                conversation_history
+            )
             if history_lines:
                 history_section = "\n".join(history_lines) + "\n"
 
         # 각 빌더에 필요한 인자를 전달
-        if response_format.format_id == 'general_greeting':
+        if response_format.format_id == "general_greeting":
             return builder(query)
-        elif response_format.format_id == 'law_response':
+        elif response_format.format_id == "law_response":
             base = builder(query, retrieval)
-        elif response_format.format_id == 'law_onboarding':
+        elif response_format.format_id == "law_onboarding":
             base = builder(query, retrieval, onboarding)
-        elif response_format.format_id == 'criteria_response':
+        elif response_format.format_id == "criteria_response":
             base = builder(query, retrieval)
-        elif response_format.format_id == 'case_response':
+        elif response_format.format_id == "case_response":
             base = builder(query, retrieval)
-        elif response_format.format_id == 'comprehensive_dispute':
+        elif response_format.format_id == "comprehensive_dispute":
             base = builder(query, retrieval, agency_info, onboarding)
-        elif response_format.format_id == 'info_only':
+        elif response_format.format_id == "info_only":
             base = builder(query, retrieval, agency_info, context)
         else:
             # fallback
@@ -134,7 +136,9 @@ class PromptBuilder:
             return history_section + base
         return base
 
-    def _build_conversation_history_section(self, history: List, max_turns: int = 3) -> List[str]:
+    def _build_conversation_history_section(
+        self, history: List, max_turns: int = 3
+    ) -> List[str]:
         """
         최근 대화 히스토리를 프롬프트 섹션으로 변환합니다.
 
@@ -152,11 +156,11 @@ class PromptBuilder:
         lines = ["[이전 대화]"]
         for turn in recent:
             if isinstance(turn, dict):
-                role = turn.get('role', 'user')
-                content = turn.get('content', '')[:200]
+                role = turn.get("role", "user")
+                content = turn.get("content", "")[:200]
             else:
                 continue
-            prefix = "사용자" if role == 'user' else "상담사"
+            prefix = "사용자" if role == "user" else "상담사"
             lines.append(f"{prefix}: {content}")
         lines.append("")
         return lines
@@ -167,7 +171,9 @@ class PromptBuilder:
 
     def _build_law_response_system_prompt(self, response_format: ResponseFormat) -> str:
         """law_response 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 한국 소비자 관련 법령 전문 상담 어시스턴트입니다.
 
@@ -210,9 +216,13 @@ class PromptBuilder:
     # law_onboarding 프롬프트 (사용자 상황 기반 법령 안내)
     # ============================================================
 
-    def _build_law_onboarding_system_prompt(self, response_format: ResponseFormat) -> str:
+    def _build_law_onboarding_system_prompt(
+        self, response_format: ResponseFormat
+    ) -> str:
         """law_onboarding 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 사용자의 구체적인 상황에 맞춰 관련 법령을 안내하는 소비자 분쟁 상담 어시스턴트입니다.
 
@@ -263,9 +273,13 @@ class PromptBuilder:
     # criteria_response 프롬프트 (분쟁해결기준 품목별 안내)
     # ============================================================
 
-    def _build_criteria_response_system_prompt(self, response_format: ResponseFormat) -> str:
+    def _build_criteria_response_system_prompt(
+        self, response_format: ResponseFormat
+    ) -> str:
         """criteria_response 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 소비자 분쟁해결기준 전문 상담 어시스턴트입니다.
 
@@ -302,7 +316,9 @@ class PromptBuilder:
         criteria_lines = self._format_criteria_only_section(retrieval)
         lines.extend(criteria_lines)
 
-        lines.append("\n위 기준을 품질보증기간, 교환/환불 기준, 주의사항으로 구조화하여 안내해 주세요.")
+        lines.append(
+            "\n위 기준을 품질보증기간, 교환/환불 기준, 주의사항으로 구조화하여 안내해 주세요."
+        )
 
         return "\n".join(lines)
 
@@ -310,9 +326,13 @@ class PromptBuilder:
     # case_response 프롬프트 (사례 분석)
     # ============================================================
 
-    def _build_case_response_system_prompt(self, response_format: ResponseFormat) -> str:
+    def _build_case_response_system_prompt(
+        self, response_format: ResponseFormat
+    ) -> str:
         """case_response 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 소비자 분쟁 조정 사례 분석 전문 상담 어시스턴트입니다.
 
@@ -340,17 +360,17 @@ class PromptBuilder:
     def _build_case_response_user_prompt(self, query: str, retrieval: Dict) -> str:
         """case_response 형식의 사용자 프롬프트"""
         lines = [f"사용자 질문: {query}\n"]
-        disputes = retrieval.get('disputes', [])
-        counsels = retrieval.get('counsels', [])
+        disputes = retrieval.get("disputes", [])
+        counsels = retrieval.get("counsels", [])
 
         # 분쟁조정사례
         lines.append("[분쟁조정사례]")
         if disputes:
             for i, case in enumerate(disputes[:3], 1):
-                source_org = case.get('source_org', '알 수 없음')
-                doc_title = case.get('doc_title', '제목 없음')
-                decision_date = case.get('decision_date', '날짜 미상')
-                content = case.get('content', '')[:300]
+                source_org = case.get("source_org", "알 수 없음")
+                doc_title = case.get("doc_title", "제목 없음")
+                decision_date = case.get("decision_date", "날짜 미상")
+                content = case.get("content", "")[:300]
                 lines.append(f"{i}. [{source_org}] {doc_title}")
                 lines.append(f"   결정일: {decision_date}")
                 lines.append(f"   내용: {content}")
@@ -361,14 +381,16 @@ class PromptBuilder:
         lines.append("\n[상담사례]")
         if counsels:
             for i, case in enumerate(counsels[:2], 1):
-                doc_title = case.get('doc_title', '제목 없음')
-                content = case.get('content', '')[:200]
+                doc_title = case.get("doc_title", "제목 없음")
+                content = case.get("content", "")[:200]
                 lines.append(f"{i}. {doc_title}")
                 lines.append(f"   내용: {content}")
         else:
             lines.append("관련 상담사례를 찾지 못했습니다.")
 
-        lines.append("\n위 사례들을 요약하고 시사점을 분석하여 사용자에게 안내해 주세요.")
+        lines.append(
+            "\n위 사례들을 요약하고 시사점을 분석하여 사용자에게 안내해 주세요."
+        )
 
         return "\n".join(lines)
 
@@ -376,9 +398,13 @@ class PromptBuilder:
     # comprehensive_dispute 프롬프트 (종합 분쟁 상담)
     # ============================================================
 
-    def _build_comprehensive_dispute_system_prompt(self, response_format: ResponseFormat) -> str:
+    def _build_comprehensive_dispute_system_prompt(
+        self, response_format: ResponseFormat
+    ) -> str:
         """comprehensive_dispute 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 한국 소비자 분쟁 조정 종합 상담 어시스턴트입니다.
 
@@ -417,14 +443,14 @@ class PromptBuilder:
             lines.append("")
 
         # 법령 정보 (있는 경우)
-        laws = retrieval.get('laws', [])
+        laws = retrieval.get("laws", [])
         if laws:
             lines.append("[관련 법령]")
             lines.extend(self._format_laws_only_section(retrieval))
             lines.append("")
 
         # 분쟁해결기준 (있는 경우)
-        criteria = retrieval.get('criteria', [])
+        criteria = retrieval.get("criteria", [])
         if criteria:
             lines.append("[분쟁해결기준]")
             lines.extend(self._format_criteria_only_section(retrieval))
@@ -442,7 +468,9 @@ class PromptBuilder:
     # general_greeting 프롬프트 (자연스러운 대화)
     # ============================================================
 
-    def _build_general_greeting_system_prompt(self, response_format: ResponseFormat) -> str:
+    def _build_general_greeting_system_prompt(
+        self, response_format: ResponseFormat
+    ) -> str:
         """general_greeting 형식의 시스템 프롬프트"""
         return """당신은 친근하고 도움이 되는 소비자 분쟁 상담 어시스턴트 '똑소리'입니다.
 
@@ -478,7 +506,9 @@ class PromptBuilder:
 
     def _build_info_only_system_prompt(self, response_format: ResponseFormat) -> str:
         """info_only 형식의 시스템 프롬프트"""
-        disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        disclaimer_section = (
+            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
+        )
 
         return f"""당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
 
@@ -503,11 +533,7 @@ class PromptBuilder:
 """
 
     def _build_info_only_user_prompt(
-        self,
-        query: str,
-        retrieval: Dict,
-        agency_info: Dict,
-        context: Dict
+        self, query: str, retrieval: Dict, agency_info: Dict, context: Dict
     ) -> str:
         """info_only 형식의 사용자 프롬프트"""
         lines = [f"사용자 질문: {query}\n"]
@@ -516,7 +542,7 @@ class PromptBuilder:
         lines.append("[담당 기관 정보]")
         lines.extend(self._format_agency_section(agency_info))
 
-        if context.get('has_cases'):
+        if context.get("has_cases"):
             lines.append("\n" + "=" * 50)
             lines.append("[관련 사례 (참고용)]")
             lines.extend(self._format_cases_section(retrieval, max_count=2))
@@ -548,12 +574,12 @@ class PromptBuilder:
         """
         lines = []
 
-        item_name = onboarding.get('item_name', '')
-        purchase_date = onboarding.get('purchase_date', '')
-        dispute_content = onboarding.get('dispute_content', '')
-        purchase_price = onboarding.get('purchase_price', '')
-        purchase_channel = onboarding.get('purchase_channel', '')
-        days_since_purchase = onboarding.get('days_since_purchase')
+        item_name = onboarding.get("item_name", "")
+        purchase_date = onboarding.get("purchase_date", "")
+        dispute_content = onboarding.get("dispute_content", "")
+        purchase_price = onboarding.get("purchase_price", "")
+        purchase_channel = onboarding.get("purchase_channel", "")
+        days_since_purchase = onboarding.get("days_since_purchase")
 
         if item_name:
             lines.append(f"- 품목: {item_name}")
@@ -571,7 +597,9 @@ class PromptBuilder:
             try:
                 days = int(days_since_purchase)
                 if days <= 14:
-                    lines.append(f"- 참고: 구매 후 {days}일 경과 (청약철회 가능 기간 내)")
+                    lines.append(
+                        f"- 참고: 구매 후 {days}일 경과 (청약철회 가능 기간 내)"
+                    )
                 else:
                     lines.append(f"- 참고: 구매 후 {days}일 경과 (청약철회 기간 초과)")
             except (ValueError, TypeError):
@@ -593,14 +621,14 @@ class PromptBuilder:
             포맷팅된 문자열 리스트
         """
         lines = []
-        laws = retrieval.get('laws', [])
+        laws = retrieval.get("laws", [])
 
         if laws:
             for law in laws[:5]:
-                law_name = law.get('law_name', '법령')
-                full_path = law.get('full_path', '')
-                text = law.get('text', law.get('content', ''))[:500]
-                similarity = law.get('similarity', 0)
+                law_name = law.get("law_name", "법령")
+                full_path = law.get("full_path", "")
+                text = law.get("text", law.get("content", ""))[:500]
+                similarity = law.get("similarity", 0)
                 lines.append(f"\n### {law_name} {full_path}")
                 lines.append(f"내용: {text}")
                 lines.append(f"유사도: {similarity:.2%}")
@@ -620,16 +648,20 @@ class PromptBuilder:
             포맷팅된 문자열 리스트
         """
         lines = []
-        criteria = retrieval.get('criteria', [])
+        criteria = retrieval.get("criteria", [])
 
         if criteria:
             for crit in criteria[:5]:
-                source_label = crit.get('source_label', '기준')
-                category = crit.get('category', '')
-                item = crit.get('item', crit.get('item_group', ''))
-                path = f"{category} > {item}" if category and item else category or item or ''
-                unit_text = crit.get('unit_text', crit.get('content', ''))[:500]
-                similarity = crit.get('similarity', 0)
+                source_label = crit.get("source_label", "기준")
+                category = crit.get("category", "")
+                item = crit.get("item", crit.get("item_group", ""))
+                path = (
+                    f"{category} > {item}"
+                    if category and item
+                    else category or item or ""
+                )
+                unit_text = crit.get("unit_text", crit.get("content", ""))[:500]
+                similarity = crit.get("similarity", 0)
 
                 lines.append(f"\n### [{source_label}] {path}")
                 lines.append(f"내용: {unit_text}")
@@ -642,17 +674,19 @@ class PromptBuilder:
     def _format_cases_section(self, retrieval: Dict, max_count: int = 3) -> List[str]:
         """유사 사례 섹션 포맷팅"""
         lines = []
-        disputes = retrieval.get('disputes', [])
-        counsels = retrieval.get('counsels', [])
+        disputes = retrieval.get("disputes", [])
+        counsels = retrieval.get("counsels", [])
 
         lines.append("\n### 분쟁조정사례 (법적 효력 있음)")
         if disputes:
             for i, case in enumerate(disputes[:max_count], 1):
-                lines.append(f"\n{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}")
-                if case.get('decision_date'):
+                lines.append(
+                    f"\n{i}. [{case.get('source_org', '알 수 없음')}] {case.get('doc_title', '제목 없음')}"
+                )
+                if case.get("decision_date"):
                     lines.append(f"   결정일: {case['decision_date']}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
-                content = case.get('content', '')[:300]
+                content = case.get("content", "")[:300]
                 lines.append(f"   내용: {content}...")
         else:
             lines.append("   관련 분쟁조정사례를 찾지 못했습니다.")
@@ -662,7 +696,7 @@ class PromptBuilder:
             for i, case in enumerate(counsels[:max_count], 1):
                 lines.append(f"\n{i}. {case.get('doc_title', '제목 없음')}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
-                content = case.get('content', '')[:200]
+                content = case.get("content", "")[:200]
                 lines.append(f"   내용: {content}...")
         else:
             lines.append("   관련 상담사례를 찾지 못했습니다.")
@@ -672,17 +706,17 @@ class PromptBuilder:
     def _format_legal_section(self, retrieval: Dict) -> List[str]:
         """법령 및 기준 섹션 포맷팅 (comprehensive_dispute 내부용)"""
         lines = []
-        laws = retrieval.get('laws', [])
-        criteria = retrieval.get('criteria', [])
+        laws = retrieval.get("laws", [])
+        criteria = retrieval.get("criteria", [])
 
         lines.append("\n### 관련 법령")
         if laws:
             for i, law in enumerate(laws[:3], 1):
-                law_name = law.get('law_name', '법령')
-                full_path = law.get('full_path', '')
+                law_name = law.get("law_name", "법령")
+                full_path = law.get("full_path", "")
                 lines.append(f"\n{i}. {law_name} {full_path}")
                 lines.append(f"   유사도: {law.get('similarity', 0):.2%}")
-                text = law.get('text', law.get('content', ''))[:300]
+                text = law.get("text", law.get("content", ""))[:300]
                 lines.append(f"   내용: {text}...")
         else:
             lines.append("   관련 법령을 찾지 못했습니다.")
@@ -690,14 +724,18 @@ class PromptBuilder:
         lines.append("\n### 분쟁해결기준")
         if criteria:
             for i, crit in enumerate(criteria[:3], 1):
-                source_label = crit.get('source_label', '기준')
-                category = crit.get('category', '')
-                item = crit.get('item', crit.get('item_group', ''))
-                path = f"{category} > {item}" if category and item else category or item or ''
+                source_label = crit.get("source_label", "기준")
+                category = crit.get("category", "")
+                item = crit.get("item", crit.get("item_group", ""))
+                path = (
+                    f"{category} > {item}"
+                    if category and item
+                    else category or item or ""
+                )
 
                 lines.append(f"\n{i}. [{source_label}] {path}")
                 lines.append(f"   유사도: {crit.get('similarity', 0):.2%}")
-                text = crit.get('unit_text', crit.get('content', ''))[:300]
+                text = crit.get("unit_text", crit.get("content", ""))[:300]
                 lines.append(f"   내용: {text}...")
         else:
             lines.append("   관련 기준을 찾지 못했습니다.")
@@ -707,16 +745,16 @@ class PromptBuilder:
     def _format_agency_section(self, agency_info: Dict) -> List[str]:
         """기관 정보 섹션 포맷팅"""
         lines = []
-        info = agency_info.get('agency_info', {})
+        info = agency_info.get("agency_info", {})
 
         lines.append(f"\n담당 기관: {info.get('full_name', '한국소비자원')}")
         lines.append(f"분쟁 유형: {agency_info.get('dispute_type', '1:N')}")
         lines.append(f"추천 이유: {agency_info.get('reason', '')}")
-        agency_url = info.get('url', '')
+        agency_url = info.get("url", "")
         if agency_url:
             lines.append(f"웹사이트: {agency_url}")
 
         return lines
 
 
-__all__ = ['PromptBuilder', 'DISCLAIMER']
+__all__ = ["PromptBuilder", "DISCLAIMER"]

@@ -3,20 +3,18 @@
 
 소량 데이터로 로드 스크립트를 테스트하고 검증합니다.
 """
-import os
+
 import json
+import os
 import tempfile
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 import psycopg
-from load_cases_to_db import (
-    load_counsel_jsonl,
-    load_dispute_jsonl,
-    conninfo_from_env
-)
+from load_cases_to_db import conninfo_from_env, load_counsel_jsonl, load_dispute_jsonl
 
 
 def create_test_counsel_jsonl(output_path: str, num_cases: int = 3):
@@ -41,8 +39,8 @@ def create_test_counsel_jsonl(output_path: str, num_cases: int = 3):
                 "case_sn": "TEST001",
                 "field": "금융",
                 "item": "신용카드",
-                "views": "100"
-            }
+                "views": "100",
+            },
         },
         {
             "doc_id": "TEST001",
@@ -63,8 +61,8 @@ def create_test_counsel_jsonl(output_path: str, num_cases: int = 3):
                 "case_sn": "TEST001",
                 "field": "금융",
                 "item": "신용카드",
-                "views": "100"
-            }
+                "views": "100",
+            },
         },
         {
             "doc_id": "TEST001",
@@ -85,19 +83,21 @@ def create_test_counsel_jsonl(output_path: str, num_cases: int = 3):
                 "case_sn": "TEST001",
                 "field": "금융",
                 "item": "신용카드",
-                "views": "100"
-            }
-        }
+                "views": "100",
+            },
+        },
     ]
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for item in test_data[:num_cases * 3]:  # 각 케이스당 3개 청크
-            f.write(json.dumps(item, ensure_ascii=False) + '\n')
-    
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        for item in test_data[: num_cases * 3]:  # 각 케이스당 3개 청크
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+
     print(f"테스트 counsel jsonl 파일 생성: {output_path} ({len(test_data)}개 청크)")
 
 
-def create_test_dispute_jsonl(output_path: str, agency: str = "kca", num_cases: int = 2):
+def create_test_dispute_jsonl(
+    output_path: str, agency: str = "kca", num_cases: int = 2
+):
     """테스트용 dispute jsonl 파일 생성"""
     test_data = [
         {
@@ -110,7 +110,7 @@ def create_test_dispute_jsonl(output_path: str, agency: str = "kca", num_cases: 
             "page_start": 1,
             "page_end": 5,
             "chunk_index": 1,
-            "text": "사건개요: 테스트 분쟁조정사례 1의 사실관계입니다."
+            "text": "사건개요: 테스트 분쟁조정사례 1의 사실관계입니다.",
         },
         {
             "agency": agency,
@@ -122,7 +122,7 @@ def create_test_dispute_jsonl(output_path: str, agency: str = "kca", num_cases: 
             "page_start": 5,
             "page_end": 10,
             "chunk_index": 2,
-            "text": "당사자 주장: 신청인과 피신청인의 주장 내용입니다."
+            "text": "당사자 주장: 신청인과 피신청인의 주장 내용입니다.",
         },
         {
             "agency": agency,
@@ -134,27 +134,24 @@ def create_test_dispute_jsonl(output_path: str, agency: str = "kca", num_cases: 
             "page_start": 10,
             "page_end": 15,
             "chunk_index": 3,
-            "text": "조정결과: 양 당사자가 합의하여 조정이 성립되었습니다."
-        }
+            "text": "조정결과: 양 당사자가 합의하여 조정이 성립되었습니다.",
+        },
     ]
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for item in test_data[:num_cases * 3]:  # 각 케이스당 3개 청크
-            f.write(json.dumps(item, ensure_ascii=False) + '\n')
-    
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        for item in test_data[: num_cases * 3]:  # 각 케이스당 3개 청크
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+
     print(f"테스트 dispute jsonl 파일 생성: {output_path} ({len(test_data)}개 청크)")
 
 
 def verify_documents(conn: psycopg.Connection, doc_type: str, expected_count: int):
     """documents 테이블 검증"""
     with conn.cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) FROM documents WHERE doc_type = %s",
-            (doc_type,)
-        )
+        cur.execute("SELECT COUNT(*) FROM documents WHERE doc_type = %s", (doc_type,))
         count = cur.fetchone()[0]
         print(f"  documents 테이블 ({doc_type}): {count}개 (예상: {expected_count}개)")
-        
+
         if count > 0:
             cur.execute(
                 """
@@ -163,13 +160,13 @@ def verify_documents(conn: psycopg.Connection, doc_type: str, expected_count: in
                 WHERE doc_type = %s 
                 LIMIT 5
                 """,
-                (doc_type,)
+                (doc_type,),
             )
             rows = cur.fetchall()
             print("  샘플 문서:")
             for row in rows:
                 print(f"    - {row[0]}: {row[1]} ({row[2]})")
-        
+
         return count == expected_count
 
 
@@ -184,11 +181,11 @@ def verify_chunks(conn: psycopg.Connection, doc_type: str, expected_count: int):
             JOIN documents d ON c.doc_id = d.doc_id
             WHERE d.doc_type = %s
             """,
-            (doc_type,)
+            (doc_type,),
         )
         count = cur.fetchone()[0]
         print(f"  chunks 테이블 ({doc_type}): {count}개 (예상: {expected_count}개)")
-        
+
         if count > 0:
             cur.execute(
                 """
@@ -200,20 +197,22 @@ def verify_chunks(conn: psycopg.Connection, doc_type: str, expected_count: int):
                 ORDER BY c.doc_id, c.chunk_index
                 LIMIT 5
                 """,
-                (doc_type,)
+                (doc_type,),
             )
             rows = cur.fetchall()
             print("  샘플 청크:")
             for row in rows:
-                print(f"    - {row[0]}: {row[2]} (index={row[3]}, total={row[4]}, len={row[5]})")
-        
+                print(
+                    f"    - {row[0]}: {row[2]} (index={row[3]}, total={row[4]}, len={row[5]})"
+                )
+
         return count == expected_count
 
 
 def verify_data_integrity(conn: psycopg.Connection):
     """데이터 무결성 검증"""
     print("\n=== 데이터 무결성 검증 ===")
-    
+
     with conn.cursor() as cur:
         # 1. chunk_total 일관성 검증
         cur.execute("""
@@ -229,7 +228,7 @@ def verify_data_integrity(conn: psycopg.Connection):
                 print(f"    - {row[0]}: chunk_total={row[1]}, 실제={row[2]}")
         else:
             print("  ✓ chunk_total 일관성 확인")
-        
+
         # 2. 외래키 관계 검증
         cur.execute("""
             SELECT COUNT(*) 
@@ -242,7 +241,7 @@ def verify_data_integrity(conn: psycopg.Connection):
             print(f"  경고: 고아 청크 {orphan_chunks}개 발견")
         else:
             print("  ✓ 외래키 관계 확인")
-        
+
         # 3. chunk_index 범위 검증
         cur.execute("""
             SELECT COUNT(*) 
@@ -259,32 +258,36 @@ def verify_data_integrity(conn: psycopg.Connection):
 def test_counsel_loading():
     """Counsel 데이터 로드 테스트"""
     print("\n=== Counsel 데이터 로드 테스트 ===")
-    
+
     # 테스트 파일 생성
-    test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False, encoding='utf-8')
+    test_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
+    )
     test_file.close()
-    
+
     try:
         create_test_counsel_jsonl(test_file.name, num_cases=1)
-        
+
         # 데이터 로드
         conninfo = conninfo_from_env()
         conn = psycopg.connect(conninfo)
-        
+
         try:
-            doc_count, chunk_count = load_counsel_jsonl(test_file.name, batch_size=100, conn=conn)
-            
+            doc_count, chunk_count = load_counsel_jsonl(
+                test_file.name, batch_size=100, conn=conn
+            )
+
             print(f"\n로드 완료: {doc_count}개 문서, {chunk_count}개 청크")
-            
+
             # 검증
             print("\n=== 검증 ===")
-            verify_documents(conn, 'counsel_case', 1)
-            verify_chunks(conn, 'counsel_case', 3)
+            verify_documents(conn, "counsel_case", 1)
+            verify_chunks(conn, "counsel_case", 3)
             verify_data_integrity(conn)
-            
+
         finally:
             conn.close()
-    
+
     finally:
         # 테스트 파일 삭제
         os.unlink(test_file.name)
@@ -293,32 +296,36 @@ def test_counsel_loading():
 def test_dispute_loading():
     """Dispute 데이터 로드 테스트"""
     print("\n=== Dispute 데이터 로드 테스트 ===")
-    
+
     # 테스트 파일 생성
-    test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False, encoding='utf-8')
+    test_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
+    )
     test_file.close()
-    
+
     try:
-        create_test_dispute_jsonl(test_file.name, agency='kca', num_cases=1)
-        
+        create_test_dispute_jsonl(test_file.name, agency="kca", num_cases=1)
+
         # 데이터 로드
         conninfo = conninfo_from_env()
         conn = psycopg.connect(conninfo)
-        
+
         try:
-            doc_count, chunk_count = load_dispute_jsonl(test_file.name, 'kca', batch_size=100, conn=conn)
-            
+            doc_count, chunk_count = load_dispute_jsonl(
+                test_file.name, "kca", batch_size=100, conn=conn
+            )
+
             print(f"\n로드 완료: {doc_count}개 문서, {chunk_count}개 청크")
-            
+
             # 검증
             print("\n=== 검증 ===")
-            verify_documents(conn, 'mediation_case', 1)
-            verify_chunks(conn, 'mediation_case', 3)
+            verify_documents(conn, "mediation_case", 1)
+            verify_chunks(conn, "mediation_case", 3)
             verify_data_integrity(conn)
-            
+
         finally:
             conn.close()
-    
+
     finally:
         # 테스트 파일 삭제
         os.unlink(test_file.name)
@@ -329,23 +336,24 @@ def main():
     print("=" * 60)
     print("데이터 로드 테스트 시작")
     print("=" * 60)
-    
+
     try:
         test_counsel_loading()
         test_dispute_loading()
-        
+
         print("\n" + "=" * 60)
         print("모든 테스트 완료")
         print("=" * 60)
-    
+
     except Exception as e:
         print(f"\n오류 발생: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
-    
+
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())

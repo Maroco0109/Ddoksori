@@ -4,19 +4,15 @@
 특정 사례의 전체 정보를 조회하는 엔드포인트입니다.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from .dependencies import get_retriever
-
 
 router = APIRouter(tags=["Case"])
 
 
 @router.get("/case/{case_uid}")
-async def get_case(
-    case_uid: str,
-    retriever=Depends(get_retriever)
-):
+async def get_case(case_uid: str, retriever=Depends(get_retriever)):
     """
     특정 사례의 전체 정보 조회
 
@@ -39,11 +35,7 @@ async def get_case(
         if not chunks:
             raise HTTPException(status_code=404, detail="사례를 찾을 수 없습니다.")
 
-        return {
-            "case_uid": case_uid,
-            "chunks_count": len(chunks),
-            "chunks": chunks
-        }
+        return {"case_uid": case_uid, "chunks_count": len(chunks), "chunks": chunks}
 
     except HTTPException:
         raise
@@ -51,4 +43,4 @@ async def get_case(
         raise HTTPException(status_code=500, detail=f"사례 조회 중 오류 발생: {str(e)}")
 
 
-__all__ = ['router']
+__all__ = ["router"]

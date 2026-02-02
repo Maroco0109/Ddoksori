@@ -217,10 +217,7 @@ class AgentRegistry:
         Returns:
             {name: description} 딕셔너리
         """
-        return {
-            a.name: a.description
-            for a in self.get_all(enabled_only)
-        }
+        return {a.name: a.description for a in self.get_all(enabled_only)}
 
     def list_names(self, enabled_only: bool = True) -> List[str]:
         """
@@ -351,4 +348,6 @@ def _register_default_agents(registry: AgentRegistry) -> None:
         priority=40,
     )
 
-    logger.info(f"[AgentRegistry] Registered {len(registry.list_names())} default agents")
+    logger.info(
+        f"[AgentRegistry] Registered {len(registry.list_names())} default agents"
+    )

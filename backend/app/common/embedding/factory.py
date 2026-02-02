@@ -24,7 +24,7 @@ import logging
 import os
 from typing import Dict, Optional
 
-from .provider import EmbeddingProvider, BaseEmbeddingProvider
+from .provider import BaseEmbeddingProvider, EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 

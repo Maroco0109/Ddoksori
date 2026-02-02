@@ -19,7 +19,8 @@
 """
 
 from typing import Dict, Optional
-from .config import ResponseFormat, RESPONSE_FORMATS
+
+from .config import RESPONSE_FORMATS, ResponseFormat
 
 
 class FormatSelector:
@@ -62,45 +63,47 @@ class FormatSelector:
             >>> print(format.format_id)
             'law_onboarding'
         """
-        query_type = query_analysis.get('query_type', 'dispute')
+        query_type = query_analysis.get("query_type", "dispute")
         context = self.build_context(retrieval, onboarding)
 
         # Priority-based matching (top-down, first match wins)
 
         # 1. General/Meta/System queries → general_greeting
-        if query_type in ['general', 'system_meta', 'meta_conversational']:
-            return RESPONSE_FORMATS['general_greeting']
+        if query_type in ["general", "system_meta", "meta_conversational"]:
+            return RESPONSE_FORMATS["general_greeting"]
 
         # 2. Restricted domain → info_only
-        if query_type == 'restricted':
-            return RESPONSE_FORMATS['info_only']
+        if query_type == "restricted":
+            return RESPONSE_FORMATS["info_only"]
 
         # 3. Law query + onboarding + has laws → law_onboarding
-        if query_type == 'law' and context['has_onboarding'] and context['has_laws']:
-            return RESPONSE_FORMATS['law_onboarding']
+        if query_type == "law" and context["has_onboarding"] and context["has_laws"]:
+            return RESPONSE_FORMATS["law_onboarding"]
 
         # 4. Law query → law_response
-        if query_type == 'law':
-            return RESPONSE_FORMATS['law_response']
+        if query_type == "law":
+            return RESPONSE_FORMATS["law_response"]
 
         # 5. Criteria query → criteria_response
-        if query_type == 'criteria':
-            return RESPONSE_FORMATS['criteria_response']
+        if query_type == "criteria":
+            return RESPONSE_FORMATS["criteria_response"]
 
         # 6. Dispute + onboarding + (laws OR criteria) → comprehensive_dispute
-        if query_type == 'dispute' and context['has_onboarding']:
-            if context['has_laws'] or context['has_criteria']:
-                return RESPONSE_FORMATS['comprehensive_dispute']
+        if query_type == "dispute" and context["has_onboarding"]:
+            if context["has_laws"] or context["has_criteria"]:
+                return RESPONSE_FORMATS["comprehensive_dispute"]
 
         # 7. Dispute + cases only (no laws, no criteria) → case_response
-        if query_type == 'dispute' and context['has_cases']:
-            if not context['has_laws'] and not context['has_criteria']:
-                return RESPONSE_FORMATS['case_response']
+        if query_type == "dispute" and context["has_cases"]:
+            if not context["has_laws"] and not context["has_criteria"]:
+                return RESPONSE_FORMATS["case_response"]
 
         # 8. Fallback (dispute/procedure/ambiguous/anything else) → comprehensive_dispute
-        return RESPONSE_FORMATS['comprehensive_dispute']
+        return RESPONSE_FORMATS["comprehensive_dispute"]
 
-    def build_context(self, retrieval: Dict, onboarding: Optional[Dict] = None) -> Dict[str, bool]:
+    def build_context(
+        self, retrieval: Dict, onboarding: Optional[Dict] = None
+    ) -> Dict[str, bool]:
         """
         검색 결과와 온보딩 정보를 기반으로 컨텍스트를 생성합니다.
 
@@ -124,19 +127,19 @@ class FormatSelector:
             >>> print(context)
             {'has_cases': True, 'has_laws': False, 'has_criteria': False, 'has_agency': False, 'has_onboarding': True}
         """
-        disputes = retrieval.get('disputes', [])
-        counsels = retrieval.get('counsels', [])
-        laws = retrieval.get('laws', [])
-        criteria = retrieval.get('criteria', [])
-        agency = retrieval.get('agency', {})
+        disputes = retrieval.get("disputes", [])
+        counsels = retrieval.get("counsels", [])
+        laws = retrieval.get("laws", [])
+        criteria = retrieval.get("criteria", [])
+        agency = retrieval.get("agency", {})
 
         return {
-            'has_cases': bool(disputes or counsels),
-            'has_laws': bool(laws),
-            'has_criteria': bool(criteria),
-            'has_agency': bool(agency),
-            'has_onboarding': bool(onboarding and onboarding.get('purchase_item')),
+            "has_cases": bool(disputes or counsels),
+            "has_laws": bool(laws),
+            "has_criteria": bool(criteria),
+            "has_agency": bool(agency),
+            "has_onboarding": bool(onboarding and onboarding.get("purchase_item")),
         }
 
 
-__all__ = ['FormatSelector']
+__all__ = ["FormatSelector"]

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Smoke test for CriteriaRetrievalAgent.process()."""
 
+import json
 import os
-import sys, json
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -19,9 +20,9 @@ def _load_env() -> None:
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        k, v = line.split('=', 1)
+        k, v = line.split("=", 1)
         k = k.strip()
         v = v.strip().strip('"').strip("'")
         os.environ.setdefault(k, v)
@@ -61,19 +62,30 @@ def main() -> int:
     result = agent.process(request)
     if hasattr(result, "__await__"):
         import asyncio
+
         result = asyncio.run(result)
 
     payload = {
         "queries": {
             "user_query": request["context"]["user_query"],
             "expanded_queries": expanded_queries,
-            "agent_keywords": request["context"]["retrieval_task_input"]["agent_keywords"],
+            "agent_keywords": request["context"]["retrieval_task_input"][
+                "agent_keywords"
+            ],
         },
         "result": result,
     }
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = ROOT / "backend" / "logs" / "criteria_agent_log" / f"criteria_agent_test_result_{timestamp}.json"
-    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path = (
+        ROOT
+        / "backend"
+        / "logs"
+        / "criteria_agent_log"
+        / f"criteria_agent_test_result_{timestamp}.json"
+    )
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(str(out_path))
     return 0

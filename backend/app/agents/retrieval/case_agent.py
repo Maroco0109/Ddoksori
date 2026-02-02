@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Dict, Any, List, ClassVar, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from .base_retrieval_agent import BaseRetrievalAgent
 from .tools.retriever import SearchResult
@@ -17,7 +17,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
     """분쟁조정사례(mediation_case) 검색 에이전트 - 법적 효력이 있는 분쟁조정 결과"""
 
     agent_name: ClassVar[str] = "retrieval_case"
-    agent_description: ClassVar[str] = "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
+    agent_description: ClassVar[str] = (
+        "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
+    )
     domain_key: ClassVar[str] = "case"
 
     def _get_search_filters(
@@ -38,34 +40,36 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 # 복수 카테고리는 SQL 함수가 단일 필터만 지원하므로 None (전체 검색)
 
         return filters
-    
+
     def _format_results(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
         formatted: List[Dict[str, Any]] = []
         for r in results:
-            formatted.append({
-                'chunk_id': r.chunk_id,
-                'doc_id': r.doc_id,
-                'chunk_type': r.chunk_type,
-                'content': r.content,
-                'doc_title': r.doc_title,
-                'title': r.doc_title,
-                'source_org': r.source_org,
-                'url': r.url,
-                'decision_date': r.decision_date,
-                'similarity': r.similarity,
-            })
+            formatted.append(
+                {
+                    "chunk_id": r.chunk_id,
+                    "doc_id": r.doc_id,
+                    "chunk_type": r.chunk_type,
+                    "content": r.content,
+                    "doc_title": r.doc_title,
+                    "title": r.doc_title,
+                    "source_org": r.source_org,
+                    "url": r.url,
+                    "decision_date": r.decision_date,
+                    "similarity": r.similarity,
+                }
+            )
         return formatted
-    
+
     def _build_sources(self, results: List[SearchResult]) -> List[Dict[str, Any]]:
         return [
             {
-                'type': 'mediation_case',
-                'index': i + 1,
-                'chunk_id': r.chunk_id,
-                'doc_id': r.doc_id,
-                'doc_title': r.doc_title,
-                'source_org': r.source_org,
-                'similarity': r.similarity,
+                "type": "mediation_case",
+                "index": i + 1,
+                "chunk_id": r.chunk_id,
+                "doc_id": r.doc_id,
+                "doc_title": r.doc_title,
+                "source_org": r.source_org,
+                "similarity": r.similarity,
             }
             for i, r in enumerate(results)
         ]

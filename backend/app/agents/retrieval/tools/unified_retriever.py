@@ -14,7 +14,7 @@ UnifiedRetriever - SQL search_hybrid_rrf() 기반 통합 검색
 import logging
 import os
 import time
-from typing import List, Dict, Optional, Any, cast
+from typing import Any, Dict, List, Optional, cast
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -90,10 +90,13 @@ class UnifiedRetriever:
         embed_text = hyde_query if hyde_query else query
         query_embedding = self._create_embedding(embed_text)
         if hyde_query:
-            logger.info(f"[UnifiedRetriever] HyDE embedding used (length={len(hyde_query)})")
+            logger.info(
+                f"[UnifiedRetriever] HyDE embedding used (length={len(hyde_query)})"
+            )
 
         # rrf_k: config에서 가져오거나 인자로 전달된 값 사용
         from ....common.config import get_config
+
         effective_rrf_k = rrf_k if rrf_k is not None else get_config().retrieval.rrf_k
 
         # 2. SQL search_hybrid_rrf() 호출
@@ -146,7 +149,10 @@ class UnifiedRetriever:
             return self.search(queries[0] if queries else "", top_k=top_k, **filters)
 
         from ....common.config import get_config
-        effective_rrf_k = rrf_k if rrf_k is not None else get_config().retrieval.rrf_k_python
+
+        effective_rrf_k = (
+            rrf_k if rrf_k is not None else get_config().retrieval.rrf_k_python
+        )
 
         per_query_k = max(top_k, 12)
 
@@ -158,7 +164,9 @@ class UnifiedRetriever:
         for results in all_results:
             for rank, result in enumerate(results, start=1):
                 key = result.chunk_id
-                fused_scores[key] = fused_scores.get(key, 0.0) + 1.0 / (effective_rrf_k + rank)
+                fused_scores[key] = fused_scores.get(key, 0.0) + 1.0 / (
+                    effective_rrf_k + rank
+                )
                 if key not in fused_results:
                     fused_results[key] = result
 
@@ -173,6 +181,7 @@ class UnifiedRetriever:
         """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim)"""
         if self._openai_client is None:
             from openai import OpenAI
+
             self._openai_client = OpenAI(api_key=self._openai_api_key)
 
         response = self._openai_client.embeddings.create(
@@ -250,10 +259,16 @@ class UnifiedRetriever:
                 title = metadata.get("title")
             if not title and dataset_type == "law_guide":
                 law_name = row.get("law_name", "")
-                article_no = metadata.get("조문번호", "") if isinstance(metadata, dict) else ""
-                article_title = metadata.get("조문제목", "") if isinstance(metadata, dict) else ""
+                article_no = (
+                    metadata.get("조문번호", "") if isinstance(metadata, dict) else ""
+                )
+                article_title = (
+                    metadata.get("조문제목", "") if isinstance(metadata, dict) else ""
+                )
                 parts = [p for p in [law_name, article_no, article_title] if p]
-                title = " ".join(parts) if parts else (law_name or row.get("chunk_id", ""))
+                title = (
+                    " ".join(parts) if parts else (law_name or row.get("chunk_id", ""))
+                )
 
             # doc_id 결정
             doc_id = row.get("chunk_id", "")
@@ -261,7 +276,9 @@ class UnifiedRetriever:
                 doc_id = str(metadata["number"])
 
             # source 정보
-            url = row.get("source_url") or (metadata.get("url") if isinstance(metadata, dict) else None)
+            url = row.get("source_url") or (
+                metadata.get("url") if isinstance(metadata, dict) else None
+            )
             if dataset_type == "law_guide":
                 source_org = "statute"
             elif isinstance(metadata, dict):
@@ -269,13 +286,19 @@ class UnifiedRetriever:
             else:
                 source_org = None
 
-            decision_date = metadata.get("decision_date") if isinstance(metadata, dict) else None
+            decision_date = (
+                metadata.get("decision_date") if isinstance(metadata, dict) else None
+            )
 
             results.append(
                 SearchResult(
                     chunk_id=row.get("chunk_id", ""),
                     doc_id=doc_id,
-                    chunk_type=metadata.get("chunk_type", "") if isinstance(metadata, dict) else "",
+                    chunk_type=(
+                        metadata.get("chunk_type", "")
+                        if isinstance(metadata, dict)
+                        else ""
+                    ),
                     content=row.get("text", ""),
                     doc_title=title or "",
                     doc_type=doc_type,

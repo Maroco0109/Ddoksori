@@ -11,7 +11,12 @@ L3: Intent Classification 캐싱 (session-agnostic)
 import logging
 from typing import Any, ClassVar, Dict, Optional
 
-from app.common.cache import BaseRedisCache, get_redis_client, normalize_query, hash_query
+from app.common.cache import (
+    BaseRedisCache,
+    get_redis_client,
+    hash_query,
+    normalize_query,
+)
 
 # 하위호환: 기존 테스트에서 _normalize_query 사용
 _normalize_query = normalize_query
@@ -40,12 +45,13 @@ class SupervisorResponseCache(BaseRedisCache):
     def _select_cacheable_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """캐싱할 필드만 선택 (messages 제외 - 너무 큼)."""
         import time
+
         return {
-            'final_answer': data.get('final_answer'),
-            'mode': data.get('mode'),
-            'query_type': data.get('query_analysis', {}).get('query_type'),
-            'citations': data.get('citations', []),
-            '_cached_at': time.time(),
+            "final_answer": data.get("final_answer"),
+            "mode": data.get("mode"),
+            "query_type": data.get("query_analysis", {}).get("query_type"),
+            "citations": data.get("citations", []),
+            "_cached_at": time.time(),
         }
 
 
@@ -69,14 +75,15 @@ class QueryAnalysisCache(BaseRedisCache):
     def _select_cacheable_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Query Analysis 캐싱 필드."""
         import time
+
         return {
-            'mode': data.get('mode'),
-            'query_type': data.get('query_type'),
-            'domain': data.get('domain'),
-            'keywords': data.get('keywords', []),
-            'retriever_types': data.get('retriever_types', []),
-            'search_priority': data.get('search_priority'),
-            '_cached_at': time.time(),
+            "mode": data.get("mode"),
+            "query_type": data.get("query_type"),
+            "domain": data.get("domain"),
+            "keywords": data.get("keywords", []),
+            "retriever_types": data.get("retriever_types", []),
+            "search_priority": data.get("search_priority"),
+            "_cached_at": time.time(),
         }
 
 
@@ -100,14 +107,15 @@ class IntentClassificationCache(BaseRedisCache):
     def _select_cacheable_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Intent Classification 캐싱 필드."""
         import time
+
         return {
-            'query_type': data.get('query_type'),
-            'domain': data.get('domain'),
-            'agency': data.get('agency'),
-            'confidence': data.get('confidence'),
-            'reasoning': data.get('reasoning'),
-            'model_used': data.get('model_used'),
-            '_cached_at': time.time(),
+            "query_type": data.get("query_type"),
+            "domain": data.get("domain"),
+            "agency": data.get("agency"),
+            "confidence": data.get("confidence"),
+            "reasoning": data.get("reasoning"),
+            "model_used": data.get("model_used"),
+            "_cached_at": time.time(),
         }
 
 
@@ -135,15 +143,16 @@ class RetrievalResultCache(BaseRedisCache):
     def _select_cacheable_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Retrieval 결과 캐싱 필드."""
         import time
+
         return {
-            'agency': data.get('agency', {}),
-            'disputes': data.get('disputes', []),
-            'counsels': data.get('counsels', []),
-            'laws': data.get('laws', []),
-            'criteria': data.get('criteria', []),
-            'max_similarity': data.get('max_similarity', 0.0),
-            'avg_similarity': data.get('avg_similarity', 0.0),
-            '_cached_at': time.time(),
+            "agency": data.get("agency", {}),
+            "disputes": data.get("disputes", []),
+            "counsels": data.get("counsels", []),
+            "laws": data.get("laws", []),
+            "criteria": data.get("criteria", []),
+            "max_similarity": data.get("max_similarity", 0.0),
+            "avg_similarity": data.get("avg_similarity", 0.0),
+            "_cached_at": time.time(),
         }
 
     @classmethod
@@ -193,12 +202,13 @@ class RetrievalOverflowCache(BaseRedisCache):
     def _select_cacheable_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Overflow 결과 캐싱 필드."""
         import time
+
         return {
-            'laws': data.get('laws', []),
-            'criteria': data.get('criteria', []),
-            'disputes': data.get('disputes', []),
-            'counsels': data.get('counsels', []),
-            '_cached_at': time.time(),
+            "laws": data.get("laws", []),
+            "criteria": data.get("criteria", []),
+            "disputes": data.get("disputes", []),
+            "counsels": data.get("counsels", []),
+            "_cached_at": time.time(),
         }
 
     @classmethod
@@ -216,6 +226,7 @@ class RetrievalOverflowCache(BaseRedisCache):
         # config에서 TTL 가져오기
         try:
             from app.common.config import get_config
+
             cls.TTL_SECONDS = get_config().retrieval.cache_ttl
         except Exception:
             pass  # 기본 TTL 사용
@@ -237,11 +248,11 @@ class RetrievalOverflowCache(BaseRedisCache):
 def clear_all_supervisor_caches() -> Dict[str, int]:
     """모든 Supervisor 캐시 삭제 (관리용)."""
     results = {
-        'l1_deleted': SupervisorResponseCache.clear_all(),
-        'l2_deleted': QueryAnalysisCache.clear_all(),
-        'l3_deleted': IntentClassificationCache.clear_all(),
-        'l4_deleted': RetrievalResultCache.clear_all(),
-        'l5_deleted': RetrievalOverflowCache.clear_all(),
+        "l1_deleted": SupervisorResponseCache.clear_all(),
+        "l2_deleted": QueryAnalysisCache.clear_all(),
+        "l3_deleted": IntentClassificationCache.clear_all(),
+        "l4_deleted": RetrievalResultCache.clear_all(),
+        "l5_deleted": RetrievalOverflowCache.clear_all(),
     }
     logger.info(f"[SupervisorCache] Cleared: {results}")
     return results
@@ -251,7 +262,7 @@ def get_cache_stats() -> Dict[str, Any]:
     """캐시 통계 조회 (모니터링용)."""
     redis = get_redis_client()
     if not redis:
-        return {'enabled': False, 'error': 'Redis unavailable'}
+        return {"enabled": False, "error": "Redis unavailable"}
 
     try:
         l1_count = SupervisorResponseCache.count()
@@ -262,14 +273,19 @@ def get_cache_stats() -> Dict[str, Any]:
         answer_count = sum(1 for _ in redis.scan_iter(match="answer_cache:*"))
 
         return {
-            'enabled': True,
-            'l1_supervisor_count': l1_count,
-            'l2_query_analysis_count': l2_count,
-            'l3_intent_classification_count': l3_count,
-            'l4_retrieval_result_count': l4_count,
-            'l5_retrieval_overflow_count': l5_count,
-            'answer_count': answer_count,
-            'total': l1_count + l2_count + l3_count + l4_count + l5_count + answer_count,
+            "enabled": True,
+            "l1_supervisor_count": l1_count,
+            "l2_query_analysis_count": l2_count,
+            "l3_intent_classification_count": l3_count,
+            "l4_retrieval_result_count": l4_count,
+            "l5_retrieval_overflow_count": l5_count,
+            "answer_count": answer_count,
+            "total": l1_count
+            + l2_count
+            + l3_count
+            + l4_count
+            + l5_count
+            + answer_count,
         }
     except Exception as e:
-        return {'enabled': True, 'error': str(e)}
+        return {"enabled": True, "error": str(e)}

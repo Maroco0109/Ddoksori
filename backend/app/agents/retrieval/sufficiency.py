@@ -13,12 +13,13 @@ PR-A: 검색 결과 충분성을 정량적으로 평가하여 답변 생성 전 
 
 import os
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 
 @dataclass
 class SufficiencyResult:
     """검색 결과 충분성 평가 결과"""
+
     confidence: float  # 0.0 ~ 1.0
     is_sufficient: bool  # confidence >= MEDIUM_THRESHOLD (0.6)
     level: str  # 'sufficient' | 'partial' | 'insufficient'
@@ -110,7 +111,9 @@ class RetrievalSufficiencyChecker:
         elif level == "partial":
             issues = []
             if max_similarity < self.min_similarity:
-                issues.append(f"유사도(최대 {max_similarity:.2f})가 기준({self.min_similarity})보다 낮음")
+                issues.append(
+                    f"유사도(최대 {max_similarity:.2f})가 기준({self.min_similarity})보다 낮음"
+                )
             if relevant_doc_count < self.min_documents:
                 issues.append(f"관련 문서 수({relevant_doc_count}개)가 부족함")
             if not has_laws and not has_criteria:

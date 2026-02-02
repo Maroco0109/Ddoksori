@@ -7,14 +7,15 @@ Track 3: Memory System Integration
 Integration tests for chat API with DB-based memory.
 """
 
-import pytest
 import os
 from unittest.mock import patch
+
+import pytest
 
 # Skip tests if database is not available
 pytestmark = pytest.mark.skipif(
     os.getenv("SKIP_DB_TESTS", "0") == "1",
-    reason="Database not available or SKIP_DB_TESTS=1"
+    reason="Database not available or SKIP_DB_TESTS=1",
 )
 
 
@@ -30,7 +31,7 @@ class TestChatAPIWithMemoryDB:
             json={
                 "message": "환불 가능한가요?",
                 "chat_type": "dispute",
-            }
+            },
         )
 
         assert response.status_code == 200
@@ -49,7 +50,7 @@ class TestChatAPIWithMemoryDB:
                 "message": "환불 가능한가요?",
                 "chat_type": "dispute",
             },
-            headers={"Authorization": f"Bearer {auth_token}"}
+            headers={"Authorization": f"Bearer {auth_token}"},
         )
 
         assert response.status_code == 200
@@ -65,7 +66,7 @@ class TestChatAPIWithMemoryDB:
             json={
                 "message": "노트북 환불 가능한가요?",
                 "chat_type": "dispute",
-            }
+            },
         )
         assert response1.status_code == 200
         data1 = response1.json()
@@ -78,7 +79,7 @@ class TestChatAPIWithMemoryDB:
                 "message": "언제까지 환불되나요?",
                 "chat_type": "dispute",
                 "session_id": session_id,
-            }
+            },
         )
         assert response2.status_code == 200
         data2 = response2.json()
@@ -91,7 +92,7 @@ class TestChatAPIWithMemoryDB:
                 "message": "환불 절차를 알려주세요",
                 "chat_type": "dispute",
                 "session_id": session_id,
-            }
+            },
         )
         assert response3.status_code == 200
         data3 = response3.json()
@@ -105,7 +106,7 @@ class TestChatAPIWithMemoryDB:
             json={
                 "message": "작년 1월 15일에 온라인몰에서 150만원짜리 노트북을 샀습니다",
                 "chat_type": "dispute",
-            }
+            },
         )
         session_id = response1.json()["session_id"]
 
@@ -116,7 +117,7 @@ class TestChatAPIWithMemoryDB:
                 "message": "환불 가능한가요?",
                 "chat_type": "dispute",
                 "session_id": session_id,
-            }
+            },
         )
         assert response2.status_code == 200
         # Answer should reference the purchase info from first turn
@@ -133,7 +134,7 @@ class TestChatAPIWithMemoryDB:
                     "message": f"노트북 환불 관련 질문 {i}",
                     "chat_type": "dispute",
                     "session_id": session_id,
-                }
+                },
             )
             assert response.status_code == 200
             if session_id is None:
@@ -150,7 +151,7 @@ class TestChatAPIWithMemoryDB:
             json={
                 "message": "안녕하세요",
                 "chat_type": "general",
-            }
+            },
         )
         session_id = response1.json()["session_id"]
 
@@ -161,7 +162,7 @@ class TestChatAPIWithMemoryDB:
                 "message": "제 이름이 뭐였죠?",
                 "chat_type": "general",
                 "session_id": session_id,
-            }
+            },
         )
         assert response2.status_code == 200
         # Should not remember previous context
@@ -179,7 +180,7 @@ class TestChatStreamWithMemoryDB:
             json={
                 "message": "환불 가능한가요?",
                 "chat_type": "dispute",
-            }
+            },
         )
 
         assert response.status_code == 200
@@ -193,7 +194,7 @@ class TestChatStreamWithMemoryDB:
             json={
                 "message": "노트북 환불 가능한가요?",
                 "chat_type": "dispute",
-            }
+            },
         )
         # Extract session_id from SSE events
         # TODO: Parse SSE events to get session_id
@@ -232,10 +233,12 @@ class TestMemoryDBCleanup:
 
 # Fixtures
 
+
 @pytest.fixture
 async def test_client():
     """Create test client"""
     from httpx import AsyncClient
+
     from app.main import app
 
     async with AsyncClient(app=app, base_url="http://test") as client:
@@ -252,7 +255,7 @@ def auth_token():
         user_id="test_user_123",
         email="test@example.com",
         name="Test User",
-        provider="google"
+        provider="google",
     )
 
     token, _ = create_access_token(user)

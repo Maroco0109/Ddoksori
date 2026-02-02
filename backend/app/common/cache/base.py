@@ -41,16 +41,17 @@ def get_redis_client():
 
     _redis_init_attempted = True
 
-    if os.getenv('ENABLE_ANSWER_CACHE', 'false').lower() != 'true':
+    if os.getenv("ENABLE_ANSWER_CACHE", "false").lower() != "true":
         logger.debug("[Redis] Caching disabled (ENABLE_ANSWER_CACHE != true)")
         return None
 
     try:
         import redis
+
         _redis_client = redis.Redis(
-            host=os.getenv('REDIS_HOST', 'localhost'),
-            port=int(os.getenv('REDIS_PORT', '6379')),
-            db=int(os.getenv('REDIS_DB', '0')),
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            db=int(os.getenv("REDIS_DB", "0")),
             decode_responses=True,
             socket_connect_timeout=2,
             socket_timeout=2,
@@ -84,8 +85,8 @@ def normalize_query(query: str) -> str:
     - 끝 문장부호 제거
     """
     normalized = query.lower().strip()
-    normalized = re.sub(r'\s+', ' ', normalized)
-    normalized = re.sub(r'[?!.,。？！，．]$', '', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"[?!.,。？！，．]$", "", normalized)
     return normalized
 
 
@@ -158,11 +159,13 @@ class BaseRedisCache(ABC):
         기본값: 전체 데이터 + 캐싱 타임스탬프.
         """
         result = dict(data)
-        result['_cached_at'] = time.time()
+        result["_cached_at"] = time.time()
         return result
 
     @classmethod
-    def get(cls, key: str, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get(
+        cls, key: str, session_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         캐시 조회.
 
@@ -185,7 +188,7 @@ class BaseRedisCache(ABC):
                 cls._hit_count += 1
                 logger.debug(f"[{cls.PREFIX}] HIT: {cache_key}")
                 result = cls._deserialize(cached)
-                result['_from_cache'] = True
+                result["_from_cache"] = True
                 return result
 
             cls._miss_count += 1
@@ -313,13 +316,13 @@ class BaseRedisCache(ABC):
         hit_rate = cls._hit_count / total if total > 0 else 0.0
 
         return {
-            'prefix': cls.PREFIX,
-            'ttl_seconds': cls.TTL_SECONDS,
-            'hit_count': cls._hit_count,
-            'miss_count': cls._miss_count,
-            'error_count': cls._error_count,
-            'hit_rate': round(hit_rate, 4),
-            'entry_count': cls.count(),
+            "prefix": cls.PREFIX,
+            "ttl_seconds": cls.TTL_SECONDS,
+            "hit_count": cls._hit_count,
+            "miss_count": cls._miss_count,
+            "error_count": cls._error_count,
+            "hit_rate": round(hit_rate, 4),
+            "entry_count": cls.count(),
         }
 
     @classmethod

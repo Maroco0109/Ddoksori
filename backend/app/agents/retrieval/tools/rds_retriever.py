@@ -12,7 +12,6 @@ import requests
 from .rds_internal_retriever import SimilarChunkResult
 
 
-
 class RDSRetriever:
     """Direct SQL client for vector_chunks search."""
 
@@ -81,7 +80,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[SimilarChunkResult], float, float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         embed_start = time.time()
         query_embedding = self.embed_query(query)
@@ -100,7 +101,6 @@ class RDSRetriever:
             for key, value in filter_metadata.items():
                 where_metadata += " AND (vc.metadata ->> %s) = %s"
                 params_metadata.extend([key, str(value)])
-
 
         where_deleted = ""
 
@@ -137,11 +137,16 @@ class RDSRetriever:
                 """,
                 (
                     query_embedding,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_law_name, filter_law_name,
-                    filter_chunk_type, filter_chunk_type,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_law_name,
+                    filter_law_name,
+                    filter_chunk_type,
+                    filter_chunk_type,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     *params_metadata,
                     query_embedding,
@@ -188,7 +193,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         document_types = list(filter_document_type) if filter_document_type else None
         where_doc_type = ""
@@ -203,7 +210,6 @@ class RDSRetriever:
             for key, value in filter_metadata.items():
                 where_metadata += " AND (vc.metadata ->> %s) = %s"
                 params_metadata.extend([key, str(value)])
-
 
         where_deleted = ""
 
@@ -237,11 +243,16 @@ class RDSRetriever:
                     query_text,
                     query_text,
                     query_text,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_law_name, filter_law_name,
-                    filter_chunk_type, filter_chunk_type,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_law_name,
+                    filter_law_name,
+                    filter_chunk_type,
+                    filter_chunk_type,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     *params_metadata,
                     result_limit,
@@ -279,7 +290,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         article_match = re.search(r"(제?\s*\d+\s*조)", query_text)
-        article_token = article_match.group(1).replace(" ", "") if article_match else None
+        article_token = (
+            article_match.group(1).replace(" ", "") if article_match else None
+        )
         main_query = query_text
         if article_match:
             main_query = (query_text.replace(article_match.group(1), " ")).strip()
@@ -357,7 +370,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -374,7 +389,6 @@ class RDSRetriever:
             for key, value in filter_metadata.items():
                 where_metadata += " AND (vc.metadata ->> %s) = %s"
                 params_metadata.extend([key, str(value)])
-
 
         where_deleted = ""
 
@@ -451,20 +465,30 @@ class RDSRetriever:
                     query_text,
                     query_text,
                     query_text,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_law_name, filter_law_name,
-                    filter_chunk_type, filter_chunk_type,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_law_name,
+                    filter_law_name,
+                    filter_chunk_type,
+                    filter_chunk_type,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     *params_metadata,
                     query_embedding,
                     query_embedding,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_law_name, filter_law_name,
-                    filter_chunk_type, filter_chunk_type,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_law_name,
+                    filter_law_name,
+                    filter_chunk_type,
+                    filter_chunk_type,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     *params_metadata,
                     query_embedding,

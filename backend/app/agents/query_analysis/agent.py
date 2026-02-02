@@ -35,26 +35,31 @@ from ...supervisor.state import (
     ChatState,
     QueryAnalysisResult,
 )
+from .classifiers import (
+    classify_mode,
+    classify_query_complexity,
+    classify_query_type,
+    classify_query_type_with_confidence,
+)
 
 # 분할된 모듈에서 import
 from .constants import (
+    DISPUTE_INTENT_KEYWORDS,
     QUERY_TYPE_TO_RETRIEVERS,
     RESTRICTED_DOMAIN_AGENCIES,
-    DISPUTE_INTENT_KEYWORDS,
 )
 from .detectors import detect_restricted_domain
-from .classifiers import classify_query_type, classify_query_type_with_confidence, classify_mode, classify_query_complexity
-from .extractors import (
-    extract_info_from_message,
-    get_missing_fields_description,
-    extract_keywords,
-    normalize_query,
-    check_missing_onboarding_fields,
-    determine_agency_hint,
-)
 from .expanders import (
     expand_query_by_type,
     generate_search_queries,
+)
+from .extractors import (
+    check_missing_onboarding_fields,
+    determine_agency_hint,
+    extract_info_from_message,
+    extract_keywords,
+    get_missing_fields_description,
+    normalize_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,9 +172,7 @@ def query_analysis_node(state: ChatState) -> Dict:
     # 라우팅 모드 결정 (clarification 제거됨)
     mode = classify_mode(query_type, False, user_query)
 
-    logger.info(
-        f"[QueryAnalysis] mode={mode}, query_type={query_type}"
-    )
+    logger.info(f"[QueryAnalysis] mode={mode}, query_type={query_type}")
 
     # v1 호환 결과 구조
     analysis_result: QueryAnalysisResult = {
@@ -188,9 +191,11 @@ def query_analysis_node(state: ChatState) -> Dict:
         # === PR-2: Selective Retrieval 끝 ===
         # === Phase 9: Restricted Domain 정보 ===
         "restricted_domain": restricted_domain,
-        "restricted_agency_info": RESTRICTED_DOMAIN_AGENCIES.get(restricted_domain)
-        if restricted_domain
-        else None,
+        "restricted_agency_info": (
+            RESTRICTED_DOMAIN_AGENCIES.get(restricted_domain)
+            if restricted_domain
+            else None
+        ),
         # === Adaptive RAG: 쿼리 복잡도 ===
         "query_complexity": query_complexity.value,
     }
@@ -211,54 +216,49 @@ def query_analysis_node(state: ChatState) -> Dict:
     }
 
 
+from .classifiers import classify_mode as _classify_mode
+from .classifiers import classify_query_complexity as _classify_query_complexity
+from .classifiers import classify_query_type as _classify_query_type
+from .classifiers import (
+    classify_query_type_with_confidence as _classify_query_type_with_confidence,
+)
+
 # === Backward Compatibility Exports ===
 # 기존 코드와의 호환성을 위해 일부 함수/상수를 re-export
+from .constants import AMBIGUOUS_QUERY_PATTERNS  # backward compat for tests
 from .constants import (
-    QUERY_TYPE_TO_RETRIEVERS,
-    RESTRICTED_DOMAIN_KEYWORDS,
-    RESTRICTED_DOMAIN_AGENCIES,
-    PROCEDURE_KEYWORDS,
+    COMMON_PRODUCTS,
+    CRITERIA_KEYWORDS,
+    DISPUTE_INTENT_KEYWORDS,
+    DISPUTE_VERBS,
     INDIVIDUAL_KEYWORDS,
     LAW_KEYWORDS,
-    CRITERIA_KEYWORDS,
+    PROCEDURE_KEYWORDS,
+    QUERY_TYPE_TO_RETRIEVERS,
+    RESTRICTED_DOMAIN_AGENCIES,
+    RESTRICTED_DOMAIN_KEYWORDS,
     SYSTEM_META_KEYWORDS,
-    COMMON_PRODUCTS,
-    DISPUTE_VERBS,
     VERB_SYNONYMS,
-    DISPUTE_INTENT_KEYWORDS,
-    AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
 )
-
-from .detectors import (
-    is_ambiguous_query as _is_ambiguous_query,
-    is_system_meta_query as _is_system_meta_query,
-    detect_restricted_domain as _detect_restricted_domain,
-    is_procedure_query as _is_procedure_query,
-    should_promote_to_rag as _should_promote_to_rag,
-    is_meta_conversational as _is_meta_conversational,
-)
-
-from .classifiers import (
-    classify_query_type as _classify_query_type,
-    classify_query_type_with_confidence as _classify_query_type_with_confidence,
-    classify_mode as _classify_mode,
-    classify_query_complexity as _classify_query_complexity,
-)
-
+from .detectors import detect_restricted_domain as _detect_restricted_domain
+from .detectors import is_ambiguous_query as _is_ambiguous_query
+from .detectors import is_meta_conversational as _is_meta_conversational
+from .detectors import is_procedure_query as _is_procedure_query
+from .detectors import is_system_meta_query as _is_system_meta_query
+from .detectors import should_promote_to_rag as _should_promote_to_rag
+from .expanders import create_synonym_variant_query as _create_synonym_variant_query
+from .expanders import expand_query_by_type as _expand_query_by_type
+from .expanders import generate_search_queries as _generate_search_queries
 from .extractors import (
-    extract_info_from_message as _extract_info_from_message,
-    extract_keywords as _extract_keywords,
-    normalize_query as _normalize_query,
     check_missing_onboarding_fields as _check_missing_onboarding_fields,
-    determine_agency_hint as _determine_agency_hint,
+)
+from .extractors import determine_agency_hint as _determine_agency_hint
+from .extractors import extract_info_from_message as _extract_info_from_message
+from .extractors import extract_keywords as _extract_keywords
+from .extractors import (
     get_missing_fields_description as _get_missing_fields_description,
 )
-
-from .expanders import (
-    expand_query_by_type as _expand_query_by_type,
-    generate_search_queries as _generate_search_queries,
-    create_synonym_variant_query as _create_synonym_variant_query,
-)
+from .extractors import normalize_query as _normalize_query
 
 
 async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
@@ -325,7 +325,9 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
                         f"[QueryAnalysis v2] Rule-based confidence higher, keeping: {query_type}({rule_confidence:.2f})"
                     )
         except Exception as e:
-            logger.warning(f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}")
+            logger.warning(
+                f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}"
+            )
     else:
         logger.info(
             f"[QueryAnalysis v2] High confidence ({rule_confidence:.2f}), skipping LLM fallback"
@@ -362,11 +364,17 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     )
 
     # Step 5.5: 멀티턴 컨텍스트 보강 (짧은 후속 질문)
-    last_turn = state.get('_last_turn_context') or {}
-    last_query_type = last_turn.get('query_type')
-    last_product = (state.get('onboarding') or {}).get('purchase_item', '') or (state.get('onboarding') or {}).get('item_name', '')
+    last_turn = state.get("_last_turn_context") or {}
+    last_query_type = last_turn.get("query_type")
+    last_product = (state.get("onboarding") or {}).get("purchase_item", "") or (
+        state.get("onboarding") or {}
+    ).get("item_name", "")
 
-    if len(normalized_query) <= 10 and last_query_type in ('dispute', 'criteria', 'law'):
+    if len(normalized_query) <= 10 and last_query_type in (
+        "dispute",
+        "criteria",
+        "law",
+    ):
         if "기준" in normalized_query and last_product:
             query_type = "criteria"
             logger.info(
@@ -395,18 +403,18 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     # onboarding dict을 수정 가능한 dict로 변환
     enriched_onboarding = dict(onboarding) if onboarding else {}
 
-    if enriched_onboarding.get('purchase_date'):
-        days = compute_days_since_purchase(enriched_onboarding['purchase_date'])
+    if enriched_onboarding.get("purchase_date"):
+        days = compute_days_since_purchase(enriched_onboarding["purchase_date"])
         if days is not None:
-            enriched_onboarding['days_since_purchase'] = days
+            enriched_onboarding["days_since_purchase"] = days
             logger.info(
                 f"[QueryAnalysis v2] Computed days_since_purchase: {days} days from {enriched_onboarding['purchase_date']}"
             )
 
-    if enriched_onboarding.get('purchase_item'):
-        category = determine_product_category(enriched_onboarding['purchase_item'])
+    if enriched_onboarding.get("purchase_item"):
+        category = determine_product_category(enriched_onboarding["purchase_item"])
         if category:
-            enriched_onboarding['product_category'] = category
+            enriched_onboarding["product_category"] = category
             logger.info(
                 f"[QueryAnalysis v2] Determined product_category: {category} for {enriched_onboarding['purchase_item']}"
             )
@@ -425,9 +433,7 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         f"[QueryAnalysis v2] Before classify_mode: query_type={query_type}, intent={intent}"
     )
     mode = classify_mode(query_type, needs_clarification, user_query)
-    logger.info(
-        f"[QueryAnalysis v2] After classify_mode: mode={mode}"
-    )
+    logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
     phase_result = {}
 

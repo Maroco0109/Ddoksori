@@ -5,24 +5,28 @@ restricted 도메인에 대한 전문기관 안내 응답 생성을 테스트합
 """
 
 import pytest
+
 from app.agents.answer_generation.agent import (
+    DOMAIN_KOREAN_NAMES,
+    SPECIALIST_AGENCY_RESPONSE_TEMPLATE,
     _build_specialist_agency_response,
     _format_similar_cases_for_specialist,
-    SPECIALIST_AGENCY_RESPONSE_TEMPLATE,
-    DOMAIN_KOREAN_NAMES,
 )
 
 
 class TestSpecialistAgencyResponse:
     """전문기관 안내 응답 생성 테스트"""
 
-    @pytest.mark.parametrize("domain,expected_name", [
-        ("finance", "금융"),
-        ("medical", "의료"),
-        ("privacy", "개인정보"),
-        ("realestate", "부동산 임대차"),
-        ("construction", "건설/건축"),
-    ])
+    @pytest.mark.parametrize(
+        "domain,expected_name",
+        [
+            ("finance", "금융"),
+            ("medical", "의료"),
+            ("privacy", "개인정보"),
+            ("realestate", "부동산 임대차"),
+            ("construction", "건설/건축"),
+        ],
+    )
     def test_domain_korean_names(self, domain, expected_name):
         """도메인별 한국어 명칭 매핑 테스트"""
         assert DOMAIN_KOREAN_NAMES.get(domain) == expected_name
@@ -185,10 +189,7 @@ class TestFormatSimilarCasesForSpecialist:
 
     def test_format_max_three_cases(self):
         """최대 3개 사례만 포함"""
-        cases = [
-            {"doc_title": f"사례 {i}", "source_org": "기관"}
-            for i in range(5)
-        ]
+        cases = [{"doc_title": f"사례 {i}", "source_org": "기관"} for i in range(5)]
 
         result = _format_similar_cases_for_specialist(cases)
 

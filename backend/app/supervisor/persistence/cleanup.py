@@ -46,7 +46,7 @@ class ConversationCleanupService:
     def __init__(
         self,
         db_config: Optional[DatabaseConfig] = None,
-        memory_config: Optional[MemoryConfig] = None
+        memory_config: Optional[MemoryConfig] = None,
     ):
         """
         ConversationCleanupService를 초기화합니다.

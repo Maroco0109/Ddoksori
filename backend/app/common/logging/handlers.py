@@ -21,16 +21,16 @@ from pathlib import Path
 from typing import Optional
 
 from .config import (
-    DEFAULT_LOG_FORMAT,
     CONSOLE_LOG_FORMAT,
     DEFAULT_DATE_FORMAT,
+    DEFAULT_LOG_FORMAT,
     get_log_level,
 )
-
 
 # ============================================================
 # 컬러 포맷터 (콘솔 출력용)
 # ============================================================
+
 
 class ColoredFormatter(logging.Formatter):
     """
@@ -41,10 +41,10 @@ class ColoredFormatter(logging.Formatter):
 
     # ANSI 컬러 코드
     COLORS = {
-        "DEBUG": "\033[36m",     # 시안 (Cyan)
-        "INFO": "\033[32m",      # 초록 (Green)
-        "WARNING": "\033[33m",   # 노랑 (Yellow)
-        "ERROR": "\033[31m",     # 빨강 (Red)
+        "DEBUG": "\033[36m",  # 시안 (Cyan)
+        "INFO": "\033[32m",  # 초록 (Green)
+        "WARNING": "\033[33m",  # 노랑 (Yellow)
+        "ERROR": "\033[31m",  # 빨강 (Red)
         "CRITICAL": "\033[35m",  # 마젠타 (Magenta)
     }
     RESET = "\033[0m"
@@ -90,9 +90,9 @@ class ColoredFormatter(logging.Formatter):
 # 핸들러 생성 함수
 # ============================================================
 
+
 def create_console_handler(
-    level: Optional[str] = None,
-    use_color: bool = True
+    level: Optional[str] = None, use_color: bool = True
 ) -> logging.StreamHandler:
     """
     콘솔 출력 핸들러를 생성합니다.
@@ -110,9 +110,7 @@ def create_console_handler(
     if use_color:
         handler.setFormatter(ColoredFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter(CONSOLE_LOG_FORMAT, DEFAULT_DATE_FORMAT)
-        )
+        handler.setFormatter(logging.Formatter(CONSOLE_LOG_FORMAT, DEFAULT_DATE_FORMAT))
 
     return handler
 
@@ -122,7 +120,7 @@ def create_file_handler(
     filename: str = "app.log",
     level: Optional[str] = None,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
-    backup_count: int = 5
+    backup_count: int = 5,
 ) -> RotatingFileHandler:
     """
     파일 출력 핸들러를 생성합니다 (크기 기반 로테이션).
@@ -144,15 +142,10 @@ def create_file_handler(
     filepath = log_path / filename
 
     handler = RotatingFileHandler(
-        filepath,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8"
+        filepath, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
     )
     handler.setLevel(getattr(logging, level or get_log_level()))
-    handler.setFormatter(
-        logging.Formatter(DEFAULT_LOG_FORMAT, DEFAULT_DATE_FORMAT)
-    )
+    handler.setFormatter(logging.Formatter(DEFAULT_LOG_FORMAT, DEFAULT_DATE_FORMAT))
 
     return handler
 
@@ -161,7 +154,7 @@ def create_daily_file_handler(
     log_dir: str,
     filename: str = "app.log",
     level: Optional[str] = None,
-    backup_count: int = 30  # 30일 보관
+    backup_count: int = 30,  # 30일 보관
 ) -> TimedRotatingFileHandler:
     """
     일별 로테이션 파일 핸들러를 생성합니다.
@@ -186,11 +179,9 @@ def create_daily_file_handler(
         when="midnight",
         interval=1,
         backupCount=backup_count,
-        encoding="utf-8"
+        encoding="utf-8",
     )
     handler.setLevel(getattr(logging, level or get_log_level()))
-    handler.setFormatter(
-        logging.Formatter(DEFAULT_LOG_FORMAT, DEFAULT_DATE_FORMAT)
-    )
+    handler.setFormatter(logging.Formatter(DEFAULT_LOG_FORMAT, DEFAULT_DATE_FORMAT))
 
     return handler

@@ -17,8 +17,8 @@
 7. info_only: 제한 영역 - 기관 안내 + 참고 사례 (정보제공)
 """
 
-from typing import List, Dict, Literal, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Literal, Optional
 
 
 @dataclass
@@ -31,6 +31,7 @@ class SectionConfig:
         required: 필수 섹션 여부
         conditions: 섹션 표시 조건 (예: {'has_cases': True})
     """
+
     section_id: str
     required: bool = True
     conditions: Optional[Dict[str, bool]] = None
@@ -69,11 +70,12 @@ class ResponseFormat:
         tone: 답변 톤 (formal, friendly, informative)
         closing_prompt: 마무리 멘트 (Optional)
     """
+
     format_id: str
     query_types: List[str]
     sections: List[SectionConfig]
     include_disclaimer: bool
-    tone: Literal['formal', 'friendly', 'informative']
+    tone: Literal["formal", "friendly", "informative"]
     closing_prompt: Optional[str] = None
 
 
@@ -82,148 +84,126 @@ class ResponseFormat:
 # ============================================================
 
 RESPONSE_FORMATS: Dict[str, ResponseFormat] = {
-    'law_response': ResponseFormat(
-        format_id='law_response',
-        query_types=['law'],
+    "law_response": ResponseFormat(
+        format_id="law_response",
+        query_types=["law"],
         sections=[
             SectionConfig(
-                section_id='legal_basis',
-                required=True,
-                conditions={'has_laws': True}
+                section_id="legal_basis", required=True, conditions={"has_laws": True}
             ),
         ],
         include_disclaimer=True,
-        tone='formal',
-        closing_prompt="더 자세한 정보를 원하시나요?"
+        tone="formal",
+        closing_prompt="더 자세한 정보를 원하시나요?",
     ),
-
-    'law_onboarding': ResponseFormat(
-        format_id='law_onboarding',
-        query_types=['law', 'dispute'],  # selected via onboarding context, not just query_type
+    "law_onboarding": ResponseFormat(
+        format_id="law_onboarding",
+        query_types=[
+            "law",
+            "dispute",
+        ],  # selected via onboarding context, not just query_type
         sections=[
             SectionConfig(
-                section_id='onboarding_summary',
-                required=True,
-                conditions=None
+                section_id="onboarding_summary", required=True, conditions=None
             ),
             SectionConfig(
-                section_id='applicable_laws',
+                section_id="applicable_laws",
                 required=True,
-                conditions={'has_laws': True}
+                conditions={"has_laws": True},
+            ),
+            SectionConfig(section_id="rationale", required=True, conditions=None),
+        ],
+        include_disclaimer=True,
+        tone="formal",
+        closing_prompt=None,
+    ),
+    "criteria_response": ResponseFormat(
+        format_id="criteria_response",
+        query_types=["criteria"],
+        sections=[
+            SectionConfig(section_id="warranty_period", required=True, conditions=None),
+            SectionConfig(
+                section_id="defect_criteria",
+                required=True,
+                conditions={"has_criteria": True},
             ),
             SectionConfig(
-                section_id='rationale',
-                required=True,
-                conditions=None
+                section_id="caution_procedure", required=True, conditions=None
             ),
         ],
         include_disclaimer=True,
-        tone='formal',
-        closing_prompt=None
+        tone="formal",
+        closing_prompt=None,
     ),
-
-    'criteria_response': ResponseFormat(
-        format_id='criteria_response',
-        query_types=['criteria'],
+    "case_response": ResponseFormat(
+        format_id="case_response",
+        query_types=["dispute"],  # selected via context, not just query_type
         sections=[
             SectionConfig(
-                section_id='warranty_period',
+                section_id="mediation_cases",
                 required=True,
-                conditions=None
+                conditions={"has_cases": True},
             ),
             SectionConfig(
-                section_id='defect_criteria',
-                required=True,
-                conditions={'has_criteria': True}
-            ),
-            SectionConfig(
-                section_id='caution_procedure',
-                required=True,
-                conditions=None
-            ),
-        ],
-        include_disclaimer=True,
-        tone='formal',
-        closing_prompt=None
-    ),
-
-    'case_response': ResponseFormat(
-        format_id='case_response',
-        query_types=['dispute'],  # selected via context, not just query_type
-        sections=[
-            SectionConfig(
-                section_id='mediation_cases',
-                required=True,
-                conditions={'has_cases': True}
-            ),
-            SectionConfig(
-                section_id='counsel_cases',
+                section_id="counsel_cases",
                 required=False,
-                conditions={'has_cases': True}
+                conditions={"has_cases": True},
             ),
-            SectionConfig(
-                section_id='case_analysis',
-                required=True,
-                conditions=None
-            ),
+            SectionConfig(section_id="case_analysis", required=True, conditions=None),
         ],
         include_disclaimer=True,
-        tone='formal',
-        closing_prompt=None
+        tone="formal",
+        closing_prompt=None,
     ),
-
-    'comprehensive_dispute': ResponseFormat(
-        format_id='comprehensive_dispute',
-        query_types=['dispute', 'procedure', 'ambiguous'],
+    "comprehensive_dispute": ResponseFormat(
+        format_id="comprehensive_dispute",
+        query_types=["dispute", "procedure", "ambiguous"],
         sections=[
             SectionConfig(
-                section_id='applicable_laws',
+                section_id="applicable_laws",
                 required=True,
-                conditions={'has_laws': True}
+                conditions={"has_laws": True},
             ),
             SectionConfig(
-                section_id='criteria_detail',
+                section_id="criteria_detail",
                 required=True,
-                conditions={'has_criteria': True}
+                conditions={"has_criteria": True},
             ),
-            SectionConfig(
-                section_id='next_steps',
-                required=False,
-                conditions=None
-            ),
+            SectionConfig(section_id="next_steps", required=False, conditions=None),
         ],
         include_disclaimer=True,
-        tone='formal',
-        closing_prompt="유사한 사례에 대해 궁금하신가요?"
+        tone="formal",
+        closing_prompt="유사한 사례에 대해 궁금하신가요?",
     ),
-
-    'general_greeting': ResponseFormat(
-        format_id='general_greeting',
-        query_types=['general', 'greeting', 'thanks', 'system_meta', 'meta_conversational', 'ambiguous'],
+    "general_greeting": ResponseFormat(
+        format_id="general_greeting",
+        query_types=[
+            "general",
+            "greeting",
+            "thanks",
+            "system_meta",
+            "meta_conversational",
+            "ambiguous",
+        ],
         sections=[],
         include_disclaimer=False,
-        tone='friendly',
-        closing_prompt=None  # handled in prompt
+        tone="friendly",
+        closing_prompt=None,  # handled in prompt
     ),
-
-    'info_only': ResponseFormat(
-        format_id='info_only',
-        query_types=['restricted'],
+    "info_only": ResponseFormat(
+        format_id="info_only",
+        query_types=["restricted"],
         sections=[
+            SectionConfig(section_id="agency_referral", required=True, conditions=None),
             SectionConfig(
-                section_id='agency_referral',
-                required=True,
-                conditions=None
-            ),
-            SectionConfig(
-                section_id='related_cases',
+                section_id="related_cases",
                 required=False,
-                conditions={'has_cases': True}
+                conditions={"has_cases": True},
             ),
         ],
         include_disclaimer=True,
-        tone='informative',
-        closing_prompt=None
+        tone="informative",
+        closing_prompt=None,
     ),
 }
 
@@ -258,9 +238,9 @@ def get_format_by_query_type(query_type: str) -> Optional[ResponseFormat]:
 
 
 __all__ = [
-    'SectionConfig',
-    'ResponseFormat',
-    'RESPONSE_FORMATS',
-    'get_format_by_id',
-    'get_format_by_query_type',
+    "SectionConfig",
+    "ResponseFormat",
+    "RESPONSE_FORMATS",
+    "get_format_by_id",
+    "get_format_by_query_type",
 ]

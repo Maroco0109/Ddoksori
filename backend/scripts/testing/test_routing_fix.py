@@ -6,14 +6,16 @@ Tests:
 2. "노트북 관련 기준 있어?" → should be classified as "criteria" → NEED_RAG
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from app.agents.query_analysis.classifiers import (
-    classify_query_type_with_confidence,
     classify_mode,
+    classify_query_type_with_confidence,
 )
+
 
 def test_routing():
     """Test routing bug fixes"""
@@ -63,6 +65,7 @@ def test_routing():
         mode = classify_mode(query_type, False, query)
         status = "✓" if query_type == "criteria" and mode == "NEED_RAG" else "✗"
         print(f"{status} '{query}' → {query_type} ({confidence:.2f}) → {mode}")
+
 
 if __name__ == "__main__":
     test_routing()

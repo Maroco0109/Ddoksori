@@ -12,13 +12,14 @@ Phase 8: 모든 Retrieval Agent가 동일한 UnifiedRetriever (SQL search_hybrid
     - OPENAI_API_KEY: OpenAI API 키 (text-embedding-3-large)
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ============================================================
 # Suite 1: UnifiedRetriever 직접 검증 (RDS + OpenAI 필요)
 # ============================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.llm
@@ -65,8 +66,12 @@ class TestUnifiedRetrieverDirect:
             dataset_filter="case",
         )
         for r in results:
-            assert r.doc_type in ("mediation_case", "counsel_case", "criteria", "case"), \
-                f"Expected case type, got '{r.doc_type}'"
+            assert r.doc_type in (
+                "mediation_case",
+                "counsel_case",
+                "criteria",
+                "case",
+            ), f"Expected case type, got '{r.doc_type}'"
 
     def test_category_filter(self, unified_retriever):
         """category_filter 필터링 동작 - SQL 레벨 필터 전달 확인"""
@@ -87,8 +92,9 @@ class TestUnifiedRetrieverDirect:
             filtered_ids = {r.chunk_id for r in results_filtered}
             unfiltered_ids = {r.chunk_id for r in results_unfiltered}
             # 필터링된 결과가 전체 결과의 부분집합이거나 다르면 정상
-            assert filtered_ids != unfiltered_ids or len(results_filtered) <= len(results_unfiltered), \
-                "category_filter가 검색 결과에 영향을 미치지 않음"
+            assert filtered_ids != unfiltered_ids or len(results_filtered) <= len(
+                results_unfiltered
+            ), "category_filter가 검색 결과에 영향을 미치지 않음"
 
     def test_results_sorted_by_rrf_score(self, unified_retriever):
         """결과가 RRF 점수 내림차순으로 정렬되는지"""
@@ -99,13 +105,15 @@ class TestUnifiedRetrieverDirect:
         if len(results) >= 2:
             scores = [r.similarity for r in results]
             for i in range(len(scores) - 1):
-                assert scores[i] >= scores[i + 1], \
-                    f"Not sorted: {scores[i]} < {scores[i+1]}"
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Not sorted: {scores[i]} < {scores[i+1]}"
 
 
 # ============================================================
 # Suite 2: Retrieval Agent → UnifiedRetriever 경로 검증 (Mock)
 # ============================================================
+
 
 @pytest.mark.unit
 class TestAgentUnifiedRetrieverIntegration:
@@ -115,6 +123,7 @@ class TestAgentUnifiedRetrieverIntegration:
     async def test_law_agent_uses_unified_retriever(self):
         """LawRetrievalAgent가 UnifiedRetriever를 호출하고 dataset_filter='law_guide' 전달"""
         from app.agents.retrieval.tools.retriever import SearchResult
+
         mock_result = SearchResult(
             chunk_id="test_law_001",
             doc_id="test_law_001",
@@ -134,18 +143,22 @@ class TestAgentUnifiedRetrieverIntegration:
             MockRetriever.return_value = mock_instance
 
             from app.agents.retrieval.law_agent import LawRetrievalAgent
+
             agent = LawRetrievalAgent()
-            result = await agent.process({
-                "context": {"user_query": "소비자 권리"},
-                "params": {"top_k": 3},
-            })
+            result = await agent.process(
+                {
+                    "context": {"user_query": "소비자 권리"},
+                    "params": {"top_k": 3},
+                }
+            )
 
             # UnifiedRetriever.search가 호출되었는지
             mock_instance.search.assert_called_once()
             call_kwargs = mock_instance.search.call_args
             # dataset_filter='law_guide' 전달 확인
-            assert call_kwargs.kwargs.get("dataset_filter") == "law_guide" or \
-                   (len(call_kwargs.args) > 0 or "dataset_filter" in str(call_kwargs))
+            assert call_kwargs.kwargs.get("dataset_filter") == "law_guide" or (
+                len(call_kwargs.args) > 0 or "dataset_filter" in str(call_kwargs)
+            )
 
             assert result["status"] == "success"
             assert len(result["result"]["results"]) == 1
@@ -154,6 +167,7 @@ class TestAgentUnifiedRetrieverIntegration:
     async def test_criteria_agent_uses_unified_retriever(self):
         """CriteriaRetrievalAgent가 dataset_filter='law_guide', document_type_filter='별표' 전달"""
         from app.agents.retrieval.tools.retriever import SearchResult
+
         mock_result = SearchResult(
             chunk_id="test_criteria_001",
             doc_id="test_criteria_001",
@@ -173,11 +187,14 @@ class TestAgentUnifiedRetrieverIntegration:
             MockRetriever.return_value = mock_instance
 
             from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
+
             agent = CriteriaRetrievalAgent()
-            result = await agent.process({
-                "context": {"user_query": "가전제품 환불"},
-                "params": {"top_k": 3},
-            })
+            result = await agent.process(
+                {
+                    "context": {"user_query": "가전제품 환불"},
+                    "params": {"top_k": 3},
+                }
+            )
 
             mock_instance.search.assert_called_once()
             call_kwargs = mock_instance.search.call_args
@@ -188,6 +205,7 @@ class TestAgentUnifiedRetrieverIntegration:
     async def test_case_agent_uses_unified_retriever(self):
         """CaseRetrievalAgent가 dataset_filter='case' 전달"""
         from app.agents.retrieval.tools.retriever import SearchResult
+
         mock_result = SearchResult(
             chunk_id="test_case_001",
             doc_id="test_case_001",
@@ -207,11 +225,14 @@ class TestAgentUnifiedRetrieverIntegration:
             MockRetriever.return_value = mock_instance
 
             from app.agents.retrieval.case_agent import CaseRetrievalAgent
+
             agent = CaseRetrievalAgent()
-            result = await agent.process({
-                "context": {"user_query": "배송 지연"},
-                "params": {"top_k": 3},
-            })
+            result = await agent.process(
+                {
+                    "context": {"user_query": "배송 지연"},
+                    "params": {"top_k": 3},
+                }
+            )
 
             mock_instance.search.assert_called_once()
             call_kwargs = mock_instance.search.call_args
@@ -221,22 +242,27 @@ class TestAgentUnifiedRetrieverIntegration:
     @pytest.mark.asyncio
     async def test_all_agents_share_same_search_method(self):
         """모든 에이전트가 동일한 BaseRetrievalAgent._execute_search를 사용하는지"""
-        from app.agents.retrieval.law_agent import LawRetrievalAgent
-        from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
-        from app.agents.retrieval.case_agent import CaseRetrievalAgent
         from app.agents.retrieval.base_retrieval_agent import BaseRetrievalAgent
+        from app.agents.retrieval.case_agent import CaseRetrievalAgent
+        from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
+        from app.agents.retrieval.law_agent import LawRetrievalAgent
 
         # _execute_search가 BaseRetrievalAgent에서 정의된 것과 동일한지
-        for AgentClass in [LawRetrievalAgent, CriteriaRetrievalAgent, CaseRetrievalAgent]:
-            assert AgentClass._execute_search is BaseRetrievalAgent._execute_search, \
-                f"{AgentClass.__name__} overrides _execute_search (should not)"
+        for AgentClass in [
+            LawRetrievalAgent,
+            CriteriaRetrievalAgent,
+            CaseRetrievalAgent,
+        ]:
+            assert (
+                AgentClass._execute_search is BaseRetrievalAgent._execute_search
+            ), f"{AgentClass.__name__} overrides _execute_search (should not)"
 
     @pytest.mark.asyncio
     async def test_agents_have_different_filters(self):
         """각 에이전트가 다른 필터를 반환하는지"""
-        from app.agents.retrieval.law_agent import LawRetrievalAgent
-        from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
         from app.agents.retrieval.case_agent import CaseRetrievalAgent
+        from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
+        from app.agents.retrieval.law_agent import LawRetrievalAgent
 
         law_filters = LawRetrievalAgent()._get_search_filters()
         criteria_filters = CriteriaRetrievalAgent()._get_search_filters()
@@ -255,6 +281,7 @@ class TestAgentUnifiedRetrieverIntegration:
 # Suite 3: Legacy 코드 비활성화 검증
 # ============================================================
 
+
 @pytest.mark.unit
 class TestLegacyCodeMarking:
     """Legacy 코드가 올바르게 표기되었는지 검증"""
@@ -262,29 +289,35 @@ class TestLegacyCodeMarking:
     def test_hybrid_retriever_marked_legacy(self):
         """HybridRetriever 모듈에 [LEGACY] 표기"""
         import app.agents.retrieval.tools.hybrid_retriever as mod
+
         assert "[LEGACY]" in (mod.__doc__ or "")
 
     def test_retriever_marked_legacy(self):
         """retriever 모듈에 [LEGACY] 표기"""
         import app.agents.retrieval.tools.retriever as mod
+
         assert "[LEGACY]" in (mod.__doc__ or "")
 
     def test_base_retriever_marked_legacy(self):
         """base 모듈에 [LEGACY] 표기"""
         import app.agents.retrieval.tools.base as mod
+
         assert "[LEGACY]" in (mod.__doc__ or "")
 
     def test_agents_do_not_import_hybrid_retriever(self):
         """에이전트 모듈이 HybridRetriever를 직접 import하지 않는지"""
         import inspect
-        from app.agents.retrieval import law_agent, criteria_agent, case_agent
+
+        from app.agents.retrieval import case_agent, criteria_agent, law_agent
 
         for mod in [law_agent, criteria_agent, case_agent]:
             source = inspect.getsource(mod)
-            assert "HybridRetriever" not in source, \
-                f"{mod.__name__} still imports HybridRetriever"
+            assert (
+                "HybridRetriever" not in source
+            ), f"{mod.__name__} still imports HybridRetriever"
 
     def test_unified_retriever_exists(self):
         """UnifiedRetriever 모듈이 정상 import 가능"""
         from app.agents.retrieval.tools.unified_retriever import UnifiedRetriever
+
         assert UnifiedRetriever is not None

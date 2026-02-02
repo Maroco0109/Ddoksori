@@ -23,6 +23,7 @@ from typing import Optional
 
 class LogLevel(str, Enum):
     """로그 레벨 열거형"""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -43,9 +44,7 @@ DEFAULT_LOG_FORMAT: str = (
 )
 
 # 간결한 로그 포맷 (콘솔용)
-CONSOLE_LOG_FORMAT: str = (
-    "%(asctime)s | %(levelname)-8s | %(message)s"
-)
+CONSOLE_LOG_FORMAT: str = "%(asctime)s | %(levelname)-8s | %(message)s"
 
 # JSON 로그 포맷 (구조화된 로그용)
 JSON_LOG_FORMAT: str = (

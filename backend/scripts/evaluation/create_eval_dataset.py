@@ -19,36 +19,78 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
-import hashlib
+from typing import Dict, List, Optional
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
 # 카테고리 키워드 매핑
 CATEGORY_KEYWORDS = {
-    '전자상거래_환불': ['환불', '반품', '청약철회', '구매취소', '결제취소', '인터넷', '온라인', '쇼핑몰'],
-    '가전제품_하자': ['고장', '하자', '수리', 'A/S', 'AS', '불량', '가전', '냉장고', '세탁기', '에어컨', 'TV'],
-    '콘텐츠_결제': ['게임', '앱', '인앱결제', '구독', 'OTT', '스트리밍', '콘텐츠', '다운로드'],
-    '개인간거래': ['중고', '당근', '번개장터', '중고나라', '직거래', '개인거래'],
-    '품질보증기간': ['보증기간', '품질보증', '무상수리', '유상수리', '내용연수'],
-    '배송_지연취소': ['배송', '지연', '배달', '택배', '미배송'],
+    "전자상거래_환불": [
+        "환불",
+        "반품",
+        "청약철회",
+        "구매취소",
+        "결제취소",
+        "인터넷",
+        "온라인",
+        "쇼핑몰",
+    ],
+    "가전제품_하자": [
+        "고장",
+        "하자",
+        "수리",
+        "A/S",
+        "AS",
+        "불량",
+        "가전",
+        "냉장고",
+        "세탁기",
+        "에어컨",
+        "TV",
+    ],
+    "콘텐츠_결제": [
+        "게임",
+        "앱",
+        "인앱결제",
+        "구독",
+        "OTT",
+        "스트리밍",
+        "콘텐츠",
+        "다운로드",
+    ],
+    "개인간거래": ["중고", "당근", "번개장터", "중고나라", "직거래", "개인거래"],
+    "품질보증기간": ["보증기간", "품질보증", "무상수리", "유상수리", "내용연수"],
+    "배송_지연취소": ["배송", "지연", "배달", "택배", "미배송"],
 }
 
 # 기관 키워드 매핑
 AGENCY_KEYWORDS = {
-    'KCDRC': ['게임', '영화', '콘텐츠', '앱', '음악', '웹툰', '스트리밍', 'OTT', '인앱', '디지털'],
-    'ECMC': ['중고', '직거래', '당근', '번개장터', '중고나라', '개인간', '개인거래'],
-    'KCA': []  # default
+    "KCDRC": [
+        "게임",
+        "영화",
+        "콘텐츠",
+        "앱",
+        "음악",
+        "웹툰",
+        "스트리밍",
+        "OTT",
+        "인앱",
+        "디지털",
+    ],
+    "ECMC": ["중고", "직거래", "당근", "번개장터", "중고나라", "개인간", "개인거래"],
+    "KCA": [],  # default
 }
 
 
@@ -61,7 +103,7 @@ def classify_category(query: str) -> str:
             if kw in query_lower:
                 return category
 
-    return '기타_일반'
+    return "기타_일반"
 
 
 def classify_agency(query: str) -> str:
@@ -73,7 +115,7 @@ def classify_agency(query: str) -> str:
             if kw in query_lower:
                 return agency
 
-    return 'KCA'
+    return "KCA"
 
 
 def generate_item_id(query: str, index: int) -> str:
@@ -87,20 +129,26 @@ def load_rag_logs(log_dir: str) -> List[Dict]:
     log_path = Path(log_dir)
     logs = []
 
-    for log_file in sorted(log_path.rglob('*.json')):
+    for log_file in sorted(log_path.rglob("*.json")):
         try:
-            with open(log_file, 'r', encoding='utf-8') as f:
+            with open(log_file, "r", encoding="utf-8") as f:
                 log_data = json.load(f)
 
                 # 유효한 로그만 추가
-                if log_data.get('query') and log_data.get('retrieval', {}).get('chunks'):
-                    logs.append({
-                        'file': str(log_file),
-                        'timestamp': log_data.get('timestamp', ''),
-                        'query': log_data['query'],
-                        'chunks': log_data['retrieval']['chunks'],
-                        'retrieval_mode': log_data['retrieval'].get('mode', 'hybrid')
-                    })
+                if log_data.get("query") and log_data.get("retrieval", {}).get(
+                    "chunks"
+                ):
+                    logs.append(
+                        {
+                            "file": str(log_file),
+                            "timestamp": log_data.get("timestamp", ""),
+                            "query": log_data["query"],
+                            "chunks": log_data["retrieval"]["chunks"],
+                            "retrieval_mode": log_data["retrieval"].get(
+                                "mode", "hybrid"
+                            ),
+                        }
+                    )
         except Exception as e:
             print(f"Warning: Failed to load {log_file}: {e}")
 
@@ -112,37 +160,36 @@ def extract_context_candidates(chunks: List[Dict]) -> List[Dict]:
     candidates = []
 
     for chunk in chunks:
-        doc_type = chunk.get('doc_type', '')
-        doc_id = chunk.get('doc_id', '')
-        chunk_id = chunk.get('chunk_id', '')
+        doc_type = chunk.get("doc_type", "")
+        doc_id = chunk.get("doc_id", "")
+        chunk_id = chunk.get("chunk_id", "")
 
         # doc_type 정규화
-        if doc_type in ('counsel_case', 'mediation_case'):
-            normalized_type = 'case'
-        elif 'law' in doc_type.lower():
-            normalized_type = 'law'
-        elif 'criteria' in doc_type.lower():
-            normalized_type = 'criteria'
+        if doc_type in ("counsel_case", "mediation_case"):
+            normalized_type = "case"
+        elif "law" in doc_type.lower():
+            normalized_type = "law"
+        elif "criteria" in doc_type.lower():
+            normalized_type = "criteria"
         else:
             normalized_type = doc_type
 
-        candidates.append({
-            'doc_type': normalized_type,
-            'doc_id': doc_id or chunk_id,
-            'doc_title': chunk.get('doc_title', ''),
-            'similarity': chunk.get('similarity', 0.0),
-            'content_preview': chunk.get('content_preview', '')[:100],
-            'relevance': 'supporting'  # 기본값, 수동 검토 필요
-        })
+        candidates.append(
+            {
+                "doc_type": normalized_type,
+                "doc_id": doc_id or chunk_id,
+                "doc_title": chunk.get("doc_title", ""),
+                "similarity": chunk.get("similarity", 0.0),
+                "content_preview": chunk.get("content_preview", "")[:100],
+                "relevance": "supporting",  # 기본값, 수동 검토 필요
+            }
+        )
 
     return candidates
 
 
 def create_eval_item(
-    query: str,
-    index: int,
-    chunks: List[Dict],
-    timestamp: str = ''
+    query: str, index: int, chunks: List[Dict], timestamp: str = ""
 ) -> Dict:
     """단일 평가 항목 생성"""
     item_id = generate_item_id(query, index)
@@ -151,16 +198,16 @@ def create_eval_item(
     context_candidates = extract_context_candidates(chunks)
 
     return {
-        'id': item_id,
-        'question': query,
-        'expected_contexts': context_candidates,
-        'expected_agency': expected_agency,
-        'category': category,
-        '_metadata': {
-            'source_timestamp': timestamp,
-            'auto_generated': True,
-            'needs_review': True
-        }
+        "id": item_id,
+        "question": query,
+        "expected_contexts": context_candidates,
+        "expected_agency": expected_agency,
+        "category": category,
+        "_metadata": {
+            "source_timestamp": timestamp,
+            "auto_generated": True,
+            "needs_review": True,
+        },
     }
 
 
@@ -171,7 +218,7 @@ def deduplicate_queries(logs: List[Dict]) -> List[Dict]:
 
     for log in logs:
         # 질문 정규화 (공백 제거, 소문자)
-        normalized = log['query'].strip().lower()
+        normalized = log["query"].strip().lower()
 
         if normalized not in seen_queries:
             seen_queries.add(normalized)
@@ -186,9 +233,9 @@ def save_dataset(items: List[Dict], output_path: str):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for item in items:
-            f.write(json.dumps(item, ensure_ascii=False) + '\n')
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     print(f"Saved {len(items)} items to {output_path}")
 
@@ -197,7 +244,7 @@ def interactive_review(input_path: str, output_path: str):
     """대화형 모드로 context relevance 레이블링"""
     items = []
 
-    with open(input_path, 'r', encoding='utf-8') as f:
+    with open(input_path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 items.append(json.loads(line))
@@ -216,30 +263,30 @@ def interactive_review(input_path: str, output_path: str):
         print(f"\nContexts ({len(item['expected_contexts'])}):")
 
         new_contexts = []
-        for j, ctx in enumerate(item['expected_contexts']):
+        for j, ctx in enumerate(item["expected_contexts"]):
             print(f"\n  [{j+1}] {ctx['doc_type']}: {ctx['doc_id']}")
             print(f"      Title: {ctx.get('doc_title', 'N/A')[:50]}")
             print(f"      Similarity: {ctx.get('similarity', 0):.4f}")
 
             cmd = input("      Relevance? (e/s/r/n/q): ").strip().lower()
 
-            if cmd == 'q':
+            if cmd == "q":
                 save_dataset(reviewed_items, output_path)
                 print("Review interrupted. Progress saved.")
                 return
-            elif cmd == 'e':
-                ctx['relevance'] = 'essential'
+            elif cmd == "e":
+                ctx["relevance"] = "essential"
                 new_contexts.append(ctx)
-            elif cmd == 's':
-                ctx['relevance'] = 'supporting'
+            elif cmd == "s":
+                ctx["relevance"] = "supporting"
                 new_contexts.append(ctx)
-            elif cmd == 'r':
+            elif cmd == "r":
                 continue  # remove
             else:  # 'n' or anything else
                 new_contexts.append(ctx)  # keep as-is
 
-        item['expected_contexts'] = new_contexts
-        item['_metadata']['needs_review'] = False
+        item["expected_contexts"] = new_contexts
+        item["_metadata"]["needs_review"] = False
         reviewed_items.append(item)
 
         # 10개마다 자동 저장
@@ -252,13 +299,16 @@ def interactive_review(input_path: str, output_path: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='평가 데이터셋 생성 도구')
-    parser.add_argument('--log-dir', default='logs/rag', help='RAG 로그 디렉토리')
-    parser.add_argument('--output', default='data/evaluation/eval_dataset_draft.jsonl',
-                        help='출력 파일 경로')
-    parser.add_argument('--max-items', type=int, default=50, help='최대 항목 수')
-    parser.add_argument('--interactive', action='store_true', help='대화형 검토 모드')
-    parser.add_argument('--input', help='대화형 모드 입력 파일')
+    parser = argparse.ArgumentParser(description="평가 데이터셋 생성 도구")
+    parser.add_argument("--log-dir", default="logs/rag", help="RAG 로그 디렉토리")
+    parser.add_argument(
+        "--output",
+        default="data/evaluation/eval_dataset_draft.jsonl",
+        help="출력 파일 경로",
+    )
+    parser.add_argument("--max-items", type=int, default=50, help="최대 항목 수")
+    parser.add_argument("--interactive", action="store_true", help="대화형 검토 모드")
+    parser.add_argument("--input", help="대화형 모드 입력 파일")
 
     args = parser.parse_args()
 
@@ -280,19 +330,19 @@ def main():
 
     # 평가 항목 생성
     items = []
-    for i, log in enumerate(unique_logs[:args.max_items]):
+    for i, log in enumerate(unique_logs[: args.max_items]):
         item = create_eval_item(
-            query=log['query'],
+            query=log["query"],
             index=i + 1,
-            chunks=log['chunks'],
-            timestamp=log['timestamp']
+            chunks=log["chunks"],
+            timestamp=log["timestamp"],
         )
         items.append(item)
 
     # 카테고리별 분포 출력
     category_counts = {}
     for item in items:
-        cat = item['category']
+        cat = item["category"]
         category_counts[cat] = category_counts.get(cat, 0) + 1
 
     print(f"\nCategory distribution:")

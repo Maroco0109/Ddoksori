@@ -17,17 +17,17 @@ Usage:
     sparse = result.sparse  # BGE-M3만 지원
 """
 
-from app.common.embedding.provider import (
-    EmbeddingProvider,
-    BaseEmbeddingProvider,
-    EmbeddingResult,
-    BatchEmbeddingResult,
-)
 from app.common.embedding.factory import (
     EmbeddingProviderFactory,
-    get_embedding_provider,
     get_embedding_dimensions,
+    get_embedding_provider,
     reset_embedding_providers,
+)
+from app.common.embedding.provider import (
+    BaseEmbeddingProvider,
+    BatchEmbeddingResult,
+    EmbeddingProvider,
+    EmbeddingResult,
 )
 
 __all__ = [

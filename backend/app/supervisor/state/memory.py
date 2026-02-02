@@ -6,8 +6,9 @@
 """
 
 import os
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Any
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional
+
 from typing_extensions import TypedDict
 
 
@@ -37,6 +38,7 @@ class ConversationTurn(TypedDict, total=False):
         ...     'turn': 1
         ... }
     """
+
     role: str
     content: str
     turn: int
@@ -71,6 +73,7 @@ class CompactSummary(TypedDict, total=False):
         ...     'key_facts': ['품목: 헬스장 회원권', '금액: 50만원']
         ... }
     """
+
     summary: str
     turns_compacted: int
     created_at: Optional[str]
@@ -115,26 +118,28 @@ class MemoryState(TypedDict, total=False):
         ...     'total_turn_count': 6
         ... }
     """
+
     conversation_history: List[Dict[str, Any]]
     compact_summary: Optional[Dict[str, Any]]
     total_turn_count: int
 
 
 __all__ = [
-    'ConversationTurn',
-    'CompactSummary',
-    'MemoryState',
-    'RAGConversationMemory',
-    'RAGTurn',
+    "ConversationTurn",
+    "CompactSummary",
+    "MemoryState",
+    "RAGConversationMemory",
+    "RAGTurn",
 ]
 
 
 @dataclass
 class RAGTurn:
     """NEED_RAG 대화 턴 1개"""
+
     user_query: str
     answer_summary: str  # final_answer의 앞 200자
-    mode: str = 'NEED_RAG'
+    mode: str = "NEED_RAG"
 
 
 class RAGConversationMemory:
@@ -155,10 +160,12 @@ class RAGConversationMemory:
 
     def __init__(self, turns: List[RAGTurn] = None, window_size: int = None):
         self.turns: List[RAGTurn] = turns or []
-        self.window_size = window_size or int(os.environ.get('CONVERSATION_MEMORY_WINDOW', self.WINDOW_SIZE_DEFAULT))
+        self.window_size = window_size or int(
+            os.environ.get("CONVERSATION_MEMORY_WINDOW", self.WINDOW_SIZE_DEFAULT)
+        )
 
     @classmethod
-    def from_state(cls, state_list: Optional[List[Dict]]) -> 'RAGConversationMemory':
+    def from_state(cls, state_list: Optional[List[Dict]]) -> "RAGConversationMemory":
         """ChatState의 rag_conversation_memory 필드(List[Dict])에서 복원"""
         if not state_list:
             return cls()
@@ -177,19 +184,17 @@ class RAGConversationMemory:
         Returns:
             True if 저장됨 (NEED_RAG), False if 스킵됨 (기타 모드)
         """
-        if mode != 'NEED_RAG':
+        if mode != "NEED_RAG":
             return False
 
         # 요약 길이 제한
-        truncated = answer_summary[:self.ANSWER_SUMMARY_MAX_LENGTH]
+        truncated = answer_summary[: self.ANSWER_SUMMARY_MAX_LENGTH]
         if len(answer_summary) > self.ANSWER_SUMMARY_MAX_LENGTH:
-            truncated = truncated.rstrip() + '...'
+            truncated = truncated.rstrip() + "..."
 
-        self.turns.append(RAGTurn(
-            user_query=query,
-            answer_summary=truncated,
-            mode=mode
-        ))
+        self.turns.append(
+            RAGTurn(user_query=query, answer_summary=truncated, mode=mode)
+        )
 
         # 윈도우 초과 시 오래된 턴 제거
         while len(self.turns) > self.window_size:

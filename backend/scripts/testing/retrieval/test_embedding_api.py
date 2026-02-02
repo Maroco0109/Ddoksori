@@ -4,6 +4,7 @@ OpenAI Embedding API 테스트
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -12,7 +13,7 @@ backend_path = Path(__file__).parent.parent.parent.parent
 env_path = backend_path / ".env"
 load_dotenv(dotenv_path=env_path)
 
-api_key = os.getenv('OPENAI_API_KEY')
+api_key = os.getenv("OPENAI_API_KEY")
 print("=" * 80)
 print("OPENAI EMBEDDING API TEST")
 print("=" * 80)
@@ -34,7 +35,7 @@ try:
     response = client.embeddings.create(
         model="text-embedding-3-large",
         input=test_query,
-        dimensions=1024  # Matryoshka embedding
+        dimensions=1024,  # Matryoshka embedding
     )
 
     embedding = response.data[0].embedding

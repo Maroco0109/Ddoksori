@@ -5,10 +5,11 @@ Unit tests for ConversationDB
 설명: ConversationDB 단위 테스트 (모킹 사용, DB 접근 없음)
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
+
+import pytest
 
 from app.supervisor.persistence.db import ConversationDB
 
@@ -19,14 +20,14 @@ async def test_create_conversation():
     """대화 생성 테스트 (모킹)"""
     mock_uuid = uuid4()
 
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = mock_uuid
 
         db = ConversationDB()
         conv_id = await db.create_conversation(
-            session_id="sess_123",
-            chat_type="dispute",
-            user_id="user_456"
+            session_id="sess_123", chat_type="dispute", user_id="user_456"
         )
 
         assert conv_id == mock_uuid
@@ -41,9 +42,7 @@ async def test_create_conversation_invalid_chat_type():
 
     with pytest.raises(ValueError) as exc_info:
         await db.create_conversation(
-            session_id="sess_123",
-            chat_type="invalid",
-            user_id="user_456"
+            session_id="sess_123", chat_type="invalid", user_id="user_456"
         )
 
     assert "Invalid chat_type" in str(exc_info.value)
@@ -63,10 +62,12 @@ async def test_get_conversation_by_session():
         "last_compaction_at": 0,
         "created_at": datetime.now(),
         "updated_at": datetime.now(),
-        "expires_at": None
+        "expires_at": None,
     }
 
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = mock_conv
 
         db = ConversationDB()
@@ -83,14 +84,14 @@ async def test_add_turn():
     mock_turn_id = uuid4()
     conv_id = uuid4()
 
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = mock_turn_id
 
         db = ConversationDB()
         turn_id = await db.add_turn(
-            conversation_id=conv_id,
-            role="user",
-            content="테스트 메시지"
+            conversation_id=conv_id, role="user", content="테스트 메시지"
         )
 
         assert turn_id == mock_turn_id
@@ -106,9 +107,7 @@ async def test_add_turn_invalid_role():
 
     with pytest.raises(ValueError) as exc_info:
         await db.add_turn(
-            conversation_id=conv_id,
-            role="invalid",
-            content="테스트 메시지"
+            conversation_id=conv_id, role="invalid", content="테스트 메시지"
         )
 
     assert "Invalid role" in str(exc_info.value)
@@ -125,7 +124,7 @@ async def test_get_conversation_history():
             "role": "assistant",
             "content": "답변입니다",
             "metadata": {},
-            "created_at": datetime.now()
+            "created_at": datetime.now(),
         },
         {
             "turn_id": uuid4(),
@@ -133,11 +132,13 @@ async def test_get_conversation_history():
             "role": "user",
             "content": "질문입니다",
             "metadata": {},
-            "created_at": datetime.now()
-        }
+            "created_at": datetime.now(),
+        },
     ]
 
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = mock_history
 
         db = ConversationDB()
@@ -162,17 +163,17 @@ async def test_save_summary():
         "dispute_type": "환불",
         "dispute_details": "불량품",
         "desired_resolution": "전액 환불",
-        "key_facts": {"fact1": "value1"}
+        "key_facts": {"fact1": "value1"},
     }
 
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = mock_summary_id
 
         db = ConversationDB()
         summary_id = await db.save_summary(
-            conversation_id=conv_id,
-            summary_data=summary_data,
-            compacted_turn_count=10
+            conversation_id=conv_id, summary_data=summary_data, compacted_turn_count=10
         )
 
         assert summary_id == mock_summary_id
@@ -183,7 +184,9 @@ async def test_save_summary():
 @pytest.mark.asyncio
 async def test_cleanup_expired_sessions():
     """만료된 세션 정리 테스트 (모킹)"""
-    with patch('app.supervisor.persistence.db.asyncio.to_thread', new_callable=AsyncMock) as mock_to_thread:
+    with patch(
+        "app.supervisor.persistence.db.asyncio.to_thread", new_callable=AsyncMock
+    ) as mock_to_thread:
         mock_to_thread.return_value = 3  # 3개 삭제됨
 
         db = ConversationDB()

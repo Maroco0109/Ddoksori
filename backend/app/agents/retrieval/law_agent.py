@@ -4,12 +4,11 @@ import asyncio
 import logging
 import os
 import re
-from typing import Dict, Any, List, ClassVar, TypedDict
+from typing import Any, ClassVar, Dict, List, TypedDict
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
-from .tools.specialized_retrievers import LawRetriever
 from .tools.rds_internal_retriever import SimilarChunkResult
-
+from .tools.specialized_retrievers import LawRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +22,11 @@ class LawDocument(TypedDict):
 
 class LawRetrievalAgent(BaseRetrievalAgent):
     """법령(소비자보호법, 전자상거래법 등) 검색 에이전트"""
-    
-    agent_name: ClassVar[str] = "retrieval_law"
-    agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
 
+    agent_name: ClassVar[str] = "retrieval_law"
+    agent_description: ClassVar[str] = (
+        "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
+    )
 
     async def _execute_search(
         self,
@@ -47,10 +47,10 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         if task_input:
             metadata_filter = task_input.get("metadata_filter") or {}
             document_types = metadata_filter.get("document_types") or None
-        
+
         retriever = LawRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
             per_query_k = max(top_k, 12)
             all_results: List[List[SimilarChunkResult]] = []
@@ -66,12 +66,15 @@ class LawRetrievalAgent(BaseRetrievalAgent):
             fused_scores: Dict[str, float] = {}
             fused_results: Dict[str, SimilarChunkResult] = {}
             from app.common.config import get_config
+
             rrf_k = get_config().retrieval.rrf_k_python
 
             for results in all_results:
                 for rank, result in enumerate(results, start=1):
                     chunk_id = result.chunk_id
-                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rrf_k + rank))
+                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (
+                        1.0 / (rrf_k + rank)
+                    )
                     if chunk_id not in fused_results:
                         fused_results[chunk_id] = result
 
@@ -109,7 +112,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
             return filtered
         finally:
             retriever.close()
-    
+
     def _format_results(self, results: List[SimilarChunkResult]) -> List[LawDocument]:
         formatted: List[LawDocument] = []
         for r in results:
@@ -135,7 +138,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
             )
 
         return formatted
-    
+
     def _build_sources(self, results: List[SimilarChunkResult]) -> List[Dict[str, Any]]:
         return [
             {

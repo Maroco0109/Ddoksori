@@ -34,33 +34,32 @@ import logging
 from typing import Optional
 
 from .config import (
-    get_log_level,
-    DEFAULT_LOG_FORMAT,
     DEFAULT_DATE_FORMAT,
+    DEFAULT_LOG_FORMAT,
     LOGGER_LEVELS,
     LogLevel,
-    is_rag_logging_enabled,
+    get_log_level,
     get_rag_log_dir,
+    is_rag_logging_enabled,
 )
 from .handlers import (
-    create_console_handler,
-    create_file_handler,
-    create_daily_file_handler,
     ColoredFormatter,
+    create_console_handler,
+    create_daily_file_handler,
+    create_file_handler,
 )
 from .rag_logger import (
-    RAGLogger,
-    get_rag_logger,
-    RAGLogEntry,
     ChunkLog,
-    RetrievalLog,
-    LLMLog,
-    ResponseSummary,
-    StructuredRetrievalLog,
-    NodeTimingLog,
     InputLog,
+    LLMLog,
+    NodeTimingLog,
+    RAGLogEntry,
+    RAGLogger,
+    ResponseSummary,
+    RetrievalLog,
+    StructuredRetrievalLog,
+    get_rag_logger,
 )
-
 
 # ============================================================
 # 로깅 시스템 초기화 상태
@@ -73,7 +72,7 @@ def setup_logging(
     level: Optional[str] = None,
     use_color: bool = True,
     log_to_file: bool = False,
-    log_dir: Optional[str] = None
+    log_dir: Optional[str] = None,
 ) -> None:
     """
     로깅 시스템을 초기화합니다.
@@ -154,6 +153,7 @@ def get_logger(name: str) -> logging.Logger:
 # 편의 함수
 # ============================================================
 
+
 def log_debug(message: str, *args, **kwargs) -> None:
     """디버그 레벨 로그를 기록합니다."""
     get_logger("app").debug(message, *args, **kwargs)
@@ -188,18 +188,15 @@ __all__ = [
     "get_logger",
     "get_rag_logger",
     "setup_logging",
-
     # 설정
     "LogLevel",
     "get_log_level",
     "is_rag_logging_enabled",
-
     # 핸들러
     "create_console_handler",
     "create_file_handler",
     "create_daily_file_handler",
     "ColoredFormatter",
-
     # RAG 로거 클래스
     "RAGLogger",
     "RAGLogEntry",
@@ -210,7 +207,6 @@ __all__ = [
     "StructuredRetrievalLog",
     "NodeTimingLog",
     "InputLog",
-
     # 편의 함수
     "log_debug",
     "log_info",

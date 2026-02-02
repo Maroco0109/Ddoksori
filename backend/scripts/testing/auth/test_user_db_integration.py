@@ -7,11 +7,12 @@ Integration tests for UserDB
 ⚠️ 주의: DB가 READ_ONLY이거나 테이블이 없으면 SKIP됩니다.
 """
 
-import pytest
 from datetime import datetime
 
-from app.auth.user_db import UserDB
+import pytest
+
 from app.auth.models import User
+from app.auth.user_db import UserDB
 
 
 @pytest.fixture
@@ -24,6 +25,7 @@ async def user_db():
 async def check_db_available(user_db):
     """DB 테이블 존재 여부 확인"""
     import psycopg2
+
     try:
         conn = user_db._get_connection()
         with conn.cursor() as cur:
@@ -31,7 +33,9 @@ async def check_db_available(user_db):
         conn.close()
         return True
     except (psycopg2.Error, Exception):
-        pytest.skip("DB 테이블이 없거나 READ_ONLY입니다. 수동으로 마이그레이션을 실행하세요.")
+        pytest.skip(
+            "DB 테이블이 없거나 READ_ONLY입니다. 수동으로 마이그레이션을 실행하세요."
+        )
 
 
 @pytest.mark.integration
@@ -47,7 +51,7 @@ async def test_upsert_user_integration(user_db, check_db_available):
         provider_user_id=provider_user_id,
         email=f"{provider_user_id}@test.com",
         name="Test User",
-        avatar_url="https://example.com/avatar.jpg"
+        avatar_url="https://example.com/avatar.jpg",
     )
 
     assert isinstance(user, User)
@@ -60,7 +64,7 @@ async def test_upsert_user_integration(user_db, check_db_available):
         provider_user_id=provider_user_id,
         email=f"{provider_user_id}@test.com",
         name="Updated Name",
-        avatar_url="https://example.com/avatar2.jpg"
+        avatar_url="https://example.com/avatar2.jpg",
     )
 
     assert user_updated.user_id == user.user_id
@@ -79,7 +83,7 @@ async def test_get_user_by_id_integration(user_db, check_db_available):
         provider="naver",
         provider_user_id=provider_user_id,
         email=f"{provider_user_id}@test.com",
-        name="Naver User"
+        name="Naver User",
     )
 
     # ID로 조회
@@ -102,7 +106,7 @@ async def test_get_user_by_email_integration(user_db, check_db_available):
         provider="naver",
         provider_user_id=provider_user_id,
         email=email,
-        name="Naver User"
+        name="Naver User",
     )
 
     # 이메일로 조회
@@ -124,7 +128,7 @@ async def test_update_last_login_integration(user_db, check_db_available):
         provider="google",
         provider_user_id=provider_user_id,
         email=f"{provider_user_id}@test.com",
-        name="Test User"
+        name="Test User",
     )
 
     initial_login = user.last_login_at

@@ -5,13 +5,14 @@
 """
 
 import asyncio
+import logging
+import math
+from typing import Any, Dict, List, Optional
+
 import psycopg2
 import psycopg2.extras
-import math
-from typing import Dict, List, Optional, Any
 
 from app.common.config import DatabaseConfig, get_config
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class BoardDB:
         self, user_id: str, page: int = 1, limit: int = 10
     ) -> Dict[str, Any]:
         """사용자의 게시글 목록을 조회합니다."""
+
         def _query():
             conn = self._get_connection()
             try:
@@ -57,14 +59,14 @@ class BoardDB:
                         ORDER BY p.created_at DESC
                         LIMIT %s OFFSET %s
                         """,
-                        (user_id, limit, offset)
+                        (user_id, limit, offset),
                     )
                     posts = [dict(row) for row in cur.fetchall()]
 
                     # 총 개수
                     cur.execute(
                         "SELECT COUNT(*) FROM posts WHERE user_id = %s AND is_deleted = false",
-                        (user_id,)
+                        (user_id,),
                     )
                     total = cur.fetchone()["count"]
 
@@ -72,7 +74,7 @@ class BoardDB:
                         "posts": posts,
                         "total": total,
                         "page": page,
-                        "totalPages": math.ceil(total / limit) if total > 0 else 0
+                        "totalPages": math.ceil(total / limit) if total > 0 else 0,
                     }
             finally:
                 conn.close()
@@ -83,6 +85,7 @@ class BoardDB:
         self, user_id: str, page: int = 1, limit: int = 10
     ) -> Dict[str, Any]:
         """사용자가 댓글을 단 게시글 목록을 조회합니다."""
+
         def _query():
             conn = self._get_connection()
             try:
@@ -107,7 +110,7 @@ class BoardDB:
                         ORDER BY p.id, c.created_at DESC
                         LIMIT %s OFFSET %s
                         """,
-                        (user_id, limit, offset)
+                        (user_id, limit, offset),
                     )
                     posts = [dict(row) for row in cur.fetchall()]
 
@@ -118,7 +121,7 @@ class BoardDB:
                         INNER JOIN comments c ON p.id = c.post_id
                         WHERE c.user_id = %s AND p.is_deleted = false AND c.is_deleted = false
                         """,
-                        (user_id,)
+                        (user_id,),
                     )
                     total = cur.fetchone()["count"]
 
@@ -126,7 +129,7 @@ class BoardDB:
                         "posts": posts,
                         "total": total,
                         "page": page,
-                        "totalPages": math.ceil(total / limit) if total > 0 else 0
+                        "totalPages": math.ceil(total / limit) if total > 0 else 0,
                     }
             finally:
                 conn.close()

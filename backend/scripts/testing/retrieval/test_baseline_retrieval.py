@@ -10,7 +10,8 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 from dotenv import load_dotenv
 
 # Add backend to path
@@ -21,29 +22,25 @@ sys.path.insert(0, backend_path)
 env_path = Path(backend_path) / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from app.agents.retrieval.law_agent import law_retrieval_agent
-from app.agents.retrieval.criteria_agent import criteria_retrieval_agent
+from app.agents.query_analysis.agent import query_analysis_node
 from app.agents.retrieval.case_agent import case_retrieval_agent
 from app.agents.retrieval.counsel_agent import counsel_retrieval_agent
-from app.agents.query_analysis.agent import query_analysis_node
+from app.agents.retrieval.criteria_agent import criteria_retrieval_agent
+from app.agents.retrieval.law_agent import law_retrieval_agent
 from app.supervisor.state import ChatState
-
 
 # 테스트 쿼리 세트
 TEST_QUERIES = [
     # 원본 쿼리
     "노트북을 구매했는데 화면이 깨져서 도착했어요. 환불 가능한가요?",
-
     # 유사 제품 쿼리
     "노트북 구매 3일만에 액정 불량 환불 요청",
     "스마트폰 화면 깨짐 교환 가능한가요?",
     "태블릿 액정 파손 반품하고 싶어요",
-
     # 다른 제품 쿼리
     "냉장고 소음 불량 수리 거부",
     "세탁기 구매 후 바로 고장났어요",
     "에어컨 냉방 안 돼요 환불 받을 수 있나요?",
-
     # 법령 관련 쿼리
     "전자제품 하자 환불 기준 알려줘",
     "청약철회 기간이 언제까지인가요?",
@@ -72,7 +69,7 @@ async def test_single_query(query: str, agent, agent_name: str) -> Dict[str, Any
             },
             "params": {
                 "top_k": 5,
-            }
+            },
         }
 
         result = await agent.process(request)
@@ -138,10 +135,12 @@ async def run_baseline_tests() -> Dict[str, Any]:
             all_results.append(result)
 
             status_icon = "✓" if result["has_results"] else "✗"
-            print(f"  {status_icon} {agent_name:10s}: "
-                  f"{result['num_results']} results, "
-                  f"max_sim={result['max_similarity']:.3f}, "
-                  f"avg_sim={result['avg_similarity']:.3f}")
+            print(
+                f"  {status_icon} {agent_name:10s}: "
+                f"{result['num_results']} results, "
+                f"max_sim={result['max_similarity']:.3f}, "
+                f"avg_sim={result['avg_similarity']:.3f}"
+            )
 
     # 집계 통계
     print("\n" + "=" * 80)
@@ -156,19 +155,27 @@ async def run_baseline_tests() -> Dict[str, Any]:
         agent_results = [r for r in all_results if r["agent"] == agent_name]
         agent_success = sum(1 for r in agent_results if r["has_results"])
         agent_recall = agent_success / len(agent_results) if agent_results else 0
-        agent_avg_sim = sum(r["avg_similarity"] for r in agent_results) / len(agent_results) if agent_results else 0
+        agent_avg_sim = (
+            sum(r["avg_similarity"] for r in agent_results) / len(agent_results)
+            if agent_results
+            else 0
+        )
 
         print(f"\n[{agent_name.upper()}]")
         print(f"  Recall: {agent_success}/{len(agent_results)} = {agent_recall:.2%}")
         print(f"  Avg Similarity: {agent_avg_sim:.3f}")
-        print(f"  Avg Results: {sum(r['num_results'] for r in agent_results) / len(agent_results):.1f}")
+        print(
+            f"  Avg Results: {sum(r['num_results'] for r in agent_results) / len(agent_results):.1f}"
+        )
 
     # 전체 통계
     print(f"\n[OVERALL]")
     print(f"  Total Tests: {total_tests}")
     print(f"  Success Tests: {success_tests}")
     print(f"  Recall Rate: {success_tests / total_tests:.2%}")
-    print(f"  Avg Similarity (all): {sum(r['avg_similarity'] for r in all_results) / total_tests:.3f}")
+    print(
+        f"  Avg Similarity (all): {sum(r['avg_similarity'] for r in all_results) / total_tests:.3f}"
+    )
 
     # Query별 성공률
     print(f"\n[PER-QUERY ANALYSIS]")
@@ -186,7 +193,7 @@ async def run_baseline_tests() -> Dict[str, Any]:
         "total_tests": total_tests,
         "success_tests": success_tests,
         "recall_rate": success_tests / total_tests,
-        "avg_similarity": sum(r['avg_similarity'] for r in all_results) / total_tests,
+        "avg_similarity": sum(r["avg_similarity"] for r in all_results) / total_tests,
         "agent_stats": {},
         "query_results": [],
     }
@@ -197,19 +204,29 @@ async def run_baseline_tests() -> Dict[str, Any]:
         agent_success = sum(1 for r in agent_results if r["has_results"])
         summary["agent_stats"][agent_name] = {
             "recall": agent_success / len(agent_results) if agent_results else 0,
-            "avg_similarity": sum(r["avg_similarity"] for r in agent_results) / len(agent_results) if agent_results else 0,
-            "avg_results": sum(r["num_results"] for r in agent_results) / len(agent_results) if agent_results else 0,
+            "avg_similarity": (
+                sum(r["avg_similarity"] for r in agent_results) / len(agent_results)
+                if agent_results
+                else 0
+            ),
+            "avg_results": (
+                sum(r["num_results"] for r in agent_results) / len(agent_results)
+                if agent_results
+                else 0
+            ),
         }
 
     # Query별 결과 추가
     for query in TEST_QUERIES:
         query_results = [r for r in all_results if r["query"] == query]
         query_success = sum(1 for r in query_results if r["has_results"])
-        summary["query_results"].append({
-            "query": query,
-            "agents_with_results": query_success,
-            "results": query_results,
-        })
+        summary["query_results"].append(
+            {
+                "query": query,
+                "agents_with_results": query_success,
+                "results": query_results,
+            }
+        )
 
     return summary
 

@@ -1,14 +1,15 @@
 """관리자 데이터베이스 접근 계층"""
 
 import asyncio
+import logging
 import math
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
+
 import psycopg2
 import psycopg2.extras
-from typing import Dict, Optional, Any, List
-from datetime import datetime, date
 
 from app.common.config import DatabaseConfig, get_config
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class AdminDB:
                     return dict(row) if row else None
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def update_admin_last_login(self, admin_id: str) -> None:
@@ -48,10 +50,14 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE admins SET last_login_at = NOW() WHERE id = %s", (admin_id,))
+                    cur.execute(
+                        "UPDATE admins SET last_login_at = NOW() WHERE id = %s",
+                        (admin_id,),
+                    )
                 conn.commit()
             finally:
                 conn.close()
+
         await asyncio.to_thread(_update)
 
     # ============================================================
@@ -68,25 +74,42 @@ class AdminDB:
                     cur.execute("SELECT COUNT(*) as count FROM users")
                     total_users = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM posts WHERE is_deleted = false")
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM posts WHERE is_deleted = false"
+                    )
                     total_posts = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM comments WHERE is_deleted = false")
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM comments WHERE is_deleted = false"
+                    )
                     total_comments = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM reports WHERE status = 'pending'")
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM reports WHERE status = 'pending'"
+                    )
                     pending_reports = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM users WHERE status = 'suspended'")
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM users WHERE status = 'suspended'"
+                    )
                     suspended_users = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM users WHERE created_at::date = %s", (today,))
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM users WHERE created_at::date = %s",
+                        (today,),
+                    )
                     today_new_users = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM posts WHERE created_at::date = %s AND is_deleted = false", (today,))
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM posts WHERE created_at::date = %s AND is_deleted = false",
+                        (today,),
+                    )
                     today_new_posts = cur.fetchone()["count"]
 
-                    cur.execute("SELECT COUNT(*) as count FROM comments WHERE created_at::date = %s AND is_deleted = false", (today,))
+                    cur.execute(
+                        "SELECT COUNT(*) as count FROM comments WHERE created_at::date = %s AND is_deleted = false",
+                        (today,),
+                    )
                     today_new_comments = cur.fetchone()["count"]
 
                     return {
@@ -101,6 +124,7 @@ class AdminDB:
                     }
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     # ============================================================
@@ -108,9 +132,13 @@ class AdminDB:
     # ============================================================
 
     async def get_posts(
-        self, page: int = 1, limit: int = 20,
-        search_type: Optional[str] = None, search_keyword: Optional[str] = None,
-        category: Optional[str] = None, is_public: Optional[bool] = None
+        self,
+        page: int = 1,
+        limit: int = 20,
+        search_type: Optional[str] = None,
+        search_keyword: Optional[str] = None,
+        category: Optional[str] = None,
+        is_public: Optional[bool] = None,
     ) -> Dict[str, Any]:
         def _query():
             conn = self._get_connection()
@@ -134,15 +162,22 @@ class AdminDB:
                             params.append(f"%{search_keyword}%")
                         elif search_type == "title_author":
                             conditions.append("(p.title ILIKE %s OR u.name ILIKE %s)")
-                            params.extend([f"%{search_keyword}%", f"%{search_keyword}%"])
+                            params.extend(
+                                [f"%{search_keyword}%", f"%{search_keyword}%"]
+                            )
                         elif search_type == "keyword":
-                            conditions.append("(p.title ILIKE %s OR p.content ILIKE %s)")
-                            params.extend([f"%{search_keyword}%", f"%{search_keyword}%"])
+                            conditions.append(
+                                "(p.title ILIKE %s OR p.content ILIKE %s)"
+                            )
+                            params.extend(
+                                [f"%{search_keyword}%", f"%{search_keyword}%"]
+                            )
 
                     where = " AND ".join(conditions)
                     offset = (page - 1) * limit
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             p.id, p.category, p.title, p.content,
                             u.name AS author, p.user_id AS "authorId",
@@ -154,14 +189,19 @@ class AdminDB:
                         WHERE {where}
                         ORDER BY p.is_pinned DESC, p.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, params + [limit, offset])
+                    """,
+                        params + [limit, offset],
+                    )
                     data = [dict(row) for row in cur.fetchall()]
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT COUNT(*) FROM posts p
                         LEFT JOIN users u ON p.user_id = u.user_id
                         WHERE {where}
-                    """, params)
+                    """,
+                        params,
+                    )
                     total = cur.fetchone()["count"]
 
                     return {
@@ -171,10 +211,11 @@ class AdminDB:
                             "totalPages": math.ceil(total / limit) if total > 0 else 0,
                             "totalItems": total,
                             "itemsPerPage": limit,
-                        }
+                        },
                     }
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def get_post_by_id(self, post_id: int) -> Optional[Dict]:
@@ -182,17 +223,21 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT p.*, u.name AS author,
                             (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.is_deleted = false) AS "commentsCount"
                         FROM posts p
                         LEFT JOIN users u ON p.user_id = u.user_id
                         WHERE p.id = %s
-                    """, (post_id,))
+                    """,
+                        (post_id,),
+                    )
                     row = cur.fetchone()
                     return dict(row) if row else None
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def update_post_visibility(self, post_id: int, is_public: bool) -> bool:
@@ -200,7 +245,10 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE posts SET is_public = %s WHERE id = %s", (is_public, post_id))
+                    cur.execute(
+                        "UPDATE posts SET is_public = %s WHERE id = %s",
+                        (is_public, post_id),
+                    )
                     affected = cur.rowcount
                 conn.commit()
                 return affected > 0
@@ -209,6 +257,7 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_update)
 
     async def soft_delete_post(self, post_id: int) -> bool:
@@ -216,7 +265,9 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE posts SET is_deleted = true WHERE id = %s", (post_id,))
+                    cur.execute(
+                        "UPDATE posts SET is_deleted = true WHERE id = %s", (post_id,)
+                    )
                     affected = cur.rowcount
                 conn.commit()
                 return affected > 0
@@ -225,19 +276,26 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_delete)
 
-    async def create_notice(self, admin_user_id: str, title: str, content: str, is_pinned: bool = False) -> int:
+    async def create_notice(
+        self, admin_user_id: str, title: str, content: str, is_pinned: bool = False
+    ) -> int:
         """공지사항을 작성합니다. admin_user_id는 관리자의 users 테이블 user_id입니다."""
+
         def _create():
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO posts (user_id, category, title, content, is_notice, is_pinned)
                         VALUES (%s, '공지사항', %s, %s, true, %s)
                         RETURNING id
-                    """, (admin_user_id, title, content, is_pinned))
+                    """,
+                        (admin_user_id, title, content, is_pinned),
+                    )
                     post_id = cur.fetchone()[0]
                 conn.commit()
                 return post_id
@@ -246,6 +304,7 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_create)
 
     # ============================================================
@@ -268,7 +327,8 @@ class AdminDB:
                     where = " AND ".join(conditions)
                     offset = (page - 1) * limit
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             c.id, c.post_id AS "postId", c.content,
                             u.name AS author, c.user_id AS "authorId",
@@ -279,10 +339,14 @@ class AdminDB:
                         WHERE {where}
                         ORDER BY c.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, params + [limit, offset])
+                    """,
+                        params + [limit, offset],
+                    )
                     data = [dict(row) for row in cur.fetchall()]
 
-                    cur.execute(f"SELECT COUNT(*) FROM comments c WHERE {where}", params)
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM comments c WHERE {where}", params
+                    )
                     total = cur.fetchone()["count"]
 
                     return {
@@ -292,10 +356,11 @@ class AdminDB:
                             "totalPages": math.ceil(total / limit) if total > 0 else 0,
                             "totalItems": total,
                             "itemsPerPage": limit,
-                        }
+                        },
                     }
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def update_comment_visibility(self, comment_id: int, is_public: bool) -> bool:
@@ -303,7 +368,10 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE comments SET is_public = %s WHERE id = %s", (is_public, comment_id))
+                    cur.execute(
+                        "UPDATE comments SET is_public = %s WHERE id = %s",
+                        (is_public, comment_id),
+                    )
                     affected = cur.rowcount
                 conn.commit()
                 return affected > 0
@@ -312,6 +380,7 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_update)
 
     async def soft_delete_comment(self, comment_id: int) -> bool:
@@ -319,7 +388,10 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE comments SET is_deleted = true WHERE id = %s", (comment_id,))
+                    cur.execute(
+                        "UPDATE comments SET is_deleted = true WHERE id = %s",
+                        (comment_id,),
+                    )
                     affected = cur.rowcount
                 conn.commit()
                 return affected > 0
@@ -328,6 +400,7 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_delete)
 
     # ============================================================
@@ -335,10 +408,12 @@ class AdminDB:
     # ============================================================
 
     async def get_users(
-        self, page: int = 1, limit: int = 20,
+        self,
+        page: int = 1,
+        limit: int = 20,
         search_keyword: Optional[str] = None,
         status: Optional[str] = None,
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
     ) -> Dict[str, Any]:
         def _query():
             conn = self._get_connection()
@@ -360,7 +435,8 @@ class AdminDB:
                     where = " AND ".join(conditions) if conditions else "TRUE"
                     offset = (page - 1) * limit
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             u.user_id AS id, u.name, u.email, u.provider,
                             u.created_at AS "createdAt", u.last_login_at AS "lastLoginAt",
@@ -372,7 +448,9 @@ class AdminDB:
                         WHERE {where}
                         ORDER BY u.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, params + [limit, offset])
+                    """,
+                        params + [limit, offset],
+                    )
                     data = [dict(row) for row in cur.fetchall()]
 
                     cur.execute(f"SELECT COUNT(*) FROM users u WHERE {where}", params)
@@ -385,10 +463,11 @@ class AdminDB:
                             "totalPages": math.ceil(total / limit) if total > 0 else 0,
                             "totalItems": total,
                             "itemsPerPage": limit,
-                        }
+                        },
                     }
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def get_user_by_id(self, user_id: str) -> Optional[Dict]:
@@ -396,7 +475,8 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             u.user_id AS id, u.name, u.email, u.provider,
                             u.created_at AS "createdAt", u.last_login_at AS "lastLoginAt",
@@ -406,11 +486,14 @@ class AdminDB:
                             (SELECT COUNT(*) FROM reports r WHERE r.reporter_id = u.user_id) AS "reportCount"
                         FROM users u
                         WHERE u.user_id = %s
-                    """, (user_id,))
+                    """,
+                        (user_id,),
+                    )
                     row = cur.fetchone()
                     return dict(row) if row else None
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def update_user_status(self, user_id: str, new_status: str) -> bool:
@@ -418,7 +501,10 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE users SET status = %s WHERE user_id = %s", (new_status, user_id))
+                    cur.execute(
+                        "UPDATE users SET status = %s WHERE user_id = %s",
+                        (new_status, user_id),
+                    )
                     affected = cur.rowcount
                 conn.commit()
                 return affected > 0
@@ -427,6 +513,7 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_update)
 
     # ============================================================
@@ -434,9 +521,11 @@ class AdminDB:
     # ============================================================
 
     async def get_reports(
-        self, page: int = 1, limit: int = 20,
+        self,
+        page: int = 1,
+        limit: int = 20,
         report_type: Optional[str] = None,
-        status: Optional[str] = None
+        status: Optional[str] = None,
     ) -> Dict[str, Any]:
         def _query():
             conn = self._get_connection()
@@ -454,7 +543,8 @@ class AdminDB:
                     where = " AND ".join(conditions) if conditions else "TRUE"
                     offset = (page - 1) * limit
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             r.id, r.type, r.target_id AS "targetId",
                             CASE
@@ -475,7 +565,9 @@ class AdminDB:
                         WHERE {where}
                         ORDER BY r.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, params + [limit, offset])
+                    """,
+                        params + [limit, offset],
+                    )
                     data = [dict(row) for row in cur.fetchall()]
 
                     cur.execute(f"SELECT COUNT(*) FROM reports r WHERE {where}", params)
@@ -488,10 +580,11 @@ class AdminDB:
                             "totalPages": math.ceil(total / limit) if total > 0 else 0,
                             "totalItems": total,
                             "itemsPerPage": limit,
-                        }
+                        },
                     }
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
     async def get_report_by_id(self, report_id: int) -> Optional[Dict]:
@@ -499,7 +592,8 @@ class AdminDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             r.id, r.type, r.target_id AS "targetId",
                             CASE
@@ -518,21 +612,26 @@ class AdminDB:
                         FROM reports r
                         LEFT JOIN users u ON r.reporter_id = u.user_id
                         WHERE r.id = %s
-                    """, (report_id,))
+                    """,
+                        (report_id,),
+                    )
                     row = cur.fetchone()
                     return dict(row) if row else None
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_query)
 
-    async def update_report_status(self, report_id: int, new_status: str, admin_note: Optional[str] = None) -> bool:
+    async def update_report_status(
+        self, report_id: int, new_status: str, admin_note: Optional[str] = None
+    ) -> bool:
         def _update():
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
                     cur.execute(
                         "UPDATE reports SET status = %s, admin_note = %s WHERE id = %s",
-                        (new_status, admin_note, report_id)
+                        (new_status, admin_note, report_id),
                     )
                     affected = cur.rowcount
                 conn.commit()
@@ -542,26 +641,37 @@ class AdminDB:
                 raise
             finally:
                 conn.close()
+
         return await asyncio.to_thread(_update)
 
     # ============================================================
     # Audit Log
     # ============================================================
 
-    async def log_action(self, admin_id: str, action_type: str, target_type: Optional[str] = None,
-                         target_id: Optional[int] = None, reason: Optional[str] = None) -> None:
+    async def log_action(
+        self,
+        admin_id: str,
+        action_type: str,
+        target_type: Optional[str] = None,
+        target_id: Optional[int] = None,
+        reason: Optional[str] = None,
+    ) -> None:
         def _log():
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO audit_logs (admin_id, action_type, target_type, target_id, reason)
                         VALUES (%s, %s, %s, %s, %s)
-                    """, (admin_id, action_type, target_type, target_id, reason))
+                    """,
+                        (admin_id, action_type, target_type, target_id, reason),
+                    )
                 conn.commit()
             except Exception:
                 conn.rollback()
                 raise
             finally:
                 conn.close()
+
         await asyncio.to_thread(_log)

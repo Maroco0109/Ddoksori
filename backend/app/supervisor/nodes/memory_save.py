@@ -10,7 +10,7 @@ NO_RETRIEVAL(인사, 시스템 질문) 턴은 저장하지 않습니다.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -34,56 +34,61 @@ def memory_save_node(state: Dict[str, Any]) -> Dict[str, Any]:
         Dict with 'rag_conversation_memory' and/or '_last_turn_context' keys (변경 시)
         또는 빈 Dict (스킵 시)
     """
-    mode = state.get('mode', '')
+    mode = state.get("mode", "")
     updates = {}
 
     # Save RAG conversation memory (NEED_RAG only)
-    if mode == 'NEED_RAG':
-        user_query = state.get('user_query', '')
-        final_answer = state.get('final_answer', '')
+    if mode == "NEED_RAG":
+        user_query = state.get("user_query", "")
+        final_answer = state.get("final_answer", "")
 
         if user_query and final_answer:
             # 기존 메모리 복원
             from app.supervisor.state.memory import RAGConversationMemory
 
-            existing = state.get('rag_conversation_memory', [])
+            existing = state.get("rag_conversation_memory", [])
             memory = RAGConversationMemory.from_state(existing)
 
             # 턴 추가
             saved = memory.add_turn(
-                mode=mode,
-                query=user_query,
-                answer_summary=final_answer
+                mode=mode, query=user_query, answer_summary=final_answer
             )
 
             if saved:
-                logger.info(f"[memory_save] 저장 완료: 총 {len(memory)}턴 (query={user_query[:30]}...)")
+                logger.info(
+                    f"[memory_save] 저장 완료: 총 {len(memory)}턴 (query={user_query[:30]}...)"
+                )
 
-            updates['rag_conversation_memory'] = memory.to_state()
+            updates["rag_conversation_memory"] = memory.to_state()
 
     # Phase D: Save last turn context for FOLLOWUP_WITH_CONTEXT
     # Save for NEED_RAG and FOLLOWUP_WITH_CONTEXT modes (both have useful context)
-    if mode in ('NEED_RAG', 'FOLLOWUP_WITH_CONTEXT'):
-        followup_questions = state.get('followup_questions', [])
-        available_details = state.get('available_details')
-        retrieval = state.get('retrieval')
+    if mode in ("NEED_RAG", "FOLLOWUP_WITH_CONTEXT"):
+        followup_questions = state.get("followup_questions", [])
+        available_details = state.get("available_details")
+        retrieval = state.get("retrieval")
 
         if followup_questions or available_details or retrieval:
             last_turn_context = {
-                'followup_questions': followup_questions,
-                'available_details': available_details,
-                'retrieval': retrieval,
+                "followup_questions": followup_questions,
+                "available_details": available_details,
+                "retrieval": retrieval,
             }
-            updates['_last_turn_context'] = last_turn_context
-            logger.info(f"[memory_save] Phase D context saved: followups={len(followup_questions)}, details={'yes' if available_details else 'no'}, retrieval={'yes' if retrieval else 'no'}")
+            updates["_last_turn_context"] = last_turn_context
+            logger.info(
+                f"[memory_save] Phase D context saved: followups={len(followup_questions)}, details={'yes' if available_details else 'no'}, retrieval={'yes' if retrieval else 'no'}"
+            )
 
             # Phase 3-C: Also save to L4 RetrievalResultCache for cross-turn persistence
-            session_id = state.get('session_id')
+            session_id = state.get("session_id")
             if session_id and retrieval:
                 try:
                     from app.supervisor.cache import RetrievalResultCache
+
                     RetrievalResultCache.set_by_session(session_id, retrieval)
-                    logger.info(f"[memory_save] L4 RetrievalResultCache saved for session={session_id[:8]}")
+                    logger.info(
+                        f"[memory_save] L4 RetrievalResultCache saved for session={session_id[:8]}"
+                    )
                 except Exception as e:
                     logger.warning(f"[memory_save] L4 cache save failed: {e}")
 
@@ -93,4 +98,4 @@ def memory_save_node(state: Dict[str, Any]) -> Dict[str, Any]:
     return updates
 
 
-__all__ = ['memory_save_node']
+__all__ = ["memory_save_node"]

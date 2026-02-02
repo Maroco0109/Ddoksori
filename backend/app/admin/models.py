@@ -1,7 +1,8 @@
 """관리자 시스템 Pydantic 모델"""
 
 from datetime import datetime
-from typing import Optional, Literal, List
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 

@@ -30,26 +30,26 @@ def build_chat_response_data(
     Returns:
         프론트엔드 SSECompleteData 호환 dict
     """
-    retrieval = final_state.get('retrieval') or {}
-    agency_info = retrieval.get('agency', {})
-    disputes = retrieval.get('disputes', [])
-    counsels = retrieval.get('counsels', [])
-    laws = retrieval.get('laws', [])
-    criteria = retrieval.get('criteria', [])
+    retrieval = final_state.get("retrieval") or {}
+    agency_info = retrieval.get("agency", {})
+    disputes = retrieval.get("disputes", [])
+    counsels = retrieval.get("counsels", [])
+    laws = retrieval.get("laws", [])
+    criteria = retrieval.get("criteria", [])
 
-    answer = final_state.get('final_answer') or ''
+    answer = final_state.get("final_answer") or ""
 
     return {
-        'session_id': session_id,
-        'answer': answer,
-        'sources': _build_sources(disputes, counsels, laws, criteria),
-        'clarifying_questions': final_state.get('clarifying_questions', []),
-        'followup_questions': final_state.get('followup_questions', []),
-        'has_sufficient_evidence': final_state.get('has_sufficient_evidence', True),
-        'domain': _build_domain(agency_info),
-        'similar_cases': _build_similar_cases(disputes, counsels),
-        'related_laws': _build_related_laws(laws),
-        'related_criteria': _build_related_criteria(criteria),
+        "session_id": session_id,
+        "answer": answer,
+        "sources": _build_sources(disputes, counsels, laws, criteria),
+        "clarifying_questions": final_state.get("clarifying_questions", []),
+        "followup_questions": final_state.get("followup_questions", []),
+        "has_sufficient_evidence": final_state.get("has_sufficient_evidence", True),
+        "domain": _build_domain(agency_info),
+        "similar_cases": _build_similar_cases(disputes, counsels),
+        "related_laws": _build_related_laws(laws),
+        "related_criteria": _build_related_criteria(criteria),
     }
 
 
@@ -63,42 +63,50 @@ def _build_sources(
     sources: List[Dict[str, Any]] = []
 
     for d in disputes[:_MAX_SOURCES_PER_SECTION]:
-        sources.append({
-            'type': 'dispute',
-            'title': d.get('doc_title', ''),
-            'source_org': d.get('source_org', ''),
-            'similarity': d.get('similarity', 0),
-            'content': d.get('content', ''),
-            'case_uid': d.get('case_uid'),
-            'product_name': d.get('product_name'),
-        })
+        sources.append(
+            {
+                "type": "dispute",
+                "title": d.get("doc_title", ""),
+                "source_org": d.get("source_org", ""),
+                "similarity": d.get("similarity", 0),
+                "content": d.get("content", ""),
+                "case_uid": d.get("case_uid"),
+                "product_name": d.get("product_name"),
+            }
+        )
 
     for c in counsels[:_MAX_SOURCES_PER_SECTION]:
-        sources.append({
-            'type': 'counsel',
-            'title': c.get('doc_title', ''),
-            'source_org': c.get('source_org', ''),
-            'similarity': c.get('similarity', 0),
-            'content': c.get('content', ''),
-        })
+        sources.append(
+            {
+                "type": "counsel",
+                "title": c.get("doc_title", ""),
+                "source_org": c.get("source_org", ""),
+                "similarity": c.get("similarity", 0),
+                "content": c.get("content", ""),
+            }
+        )
 
     for law in laws[:_MAX_SOURCES_PER_SECTION]:
-        sources.append({
-            'type': 'law',
-            'title': f"{law.get('law_name', '')} {law.get('full_path', '')}".strip(),
-            'similarity': law.get('similarity', 0),
-            'content': law.get('content', ''),
-            'law_name': law.get('law_name'),
-            'article': law.get('article'),
-        })
+        sources.append(
+            {
+                "type": "law",
+                "title": f"{law.get('law_name', '')} {law.get('full_path', '')}".strip(),
+                "similarity": law.get("similarity", 0),
+                "content": law.get("content", ""),
+                "law_name": law.get("law_name"),
+                "article": law.get("article"),
+            }
+        )
 
     for c in criteria[:_MAX_SOURCES_PER_SECTION]:
-        sources.append({
-            'type': 'criteria',
-            'title': c.get('title', c.get('source_label', '')),
-            'similarity': c.get('similarity', 0),
-            'content': c.get('content', ''),
-        })
+        sources.append(
+            {
+                "type": "criteria",
+                "title": c.get("title", c.get("source_label", "")),
+                "similarity": c.get("similarity", 0),
+                "content": c.get("content", ""),
+            }
+        )
 
     return sources
 
@@ -115,22 +123,22 @@ def _build_domain(agency_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     return {
-        'agency': agency_info.get('domain', agency_info.get('agency', '')),
-        'agency_info': {
-            'name': agency_info.get('name', ''),
-            'organization': agency_info.get('organization', ''),
-            'url': agency_info.get('url', ''),
-            'phone': agency_info.get('phone', ''),
+        "agency": agency_info.get("domain", agency_info.get("agency", "")),
+        "agency_info": {
+            "name": agency_info.get("name", ""),
+            "organization": agency_info.get("organization", ""),
+            "url": agency_info.get("url", ""),
+            "phone": agency_info.get("phone", ""),
         },
-        'dispute_type': agency_info.get('dispute_type', ''),
-        'reason': agency_info.get('reason', ''),
-        'confidence': agency_info.get('confidence', 0.7),
-        'is_restricted': agency_info.get('is_restricted', False),
-        'full_name': agency_info.get('name', ''),
-        'description': agency_info.get('organization', ''),
-        'url': agency_info.get('url', ''),
-        'agency_code': agency_info.get('domain', agency_info.get('agency', '')),
-        'restriction_reason': agency_info.get('restriction_reason', ''),
+        "dispute_type": agency_info.get("dispute_type", ""),
+        "reason": agency_info.get("reason", ""),
+        "confidence": agency_info.get("confidence", 0.7),
+        "is_restricted": agency_info.get("is_restricted", False),
+        "full_name": agency_info.get("name", ""),
+        "description": agency_info.get("organization", ""),
+        "url": agency_info.get("url", ""),
+        "agency_code": agency_info.get("domain", agency_info.get("agency", "")),
+        "restriction_reason": agency_info.get("restriction_reason", ""),
     }
 
 
@@ -143,19 +151,19 @@ def _build_similar_cases(
         return None
 
     return {
-        'disputes': [
+        "disputes": [
             {
-                'doc_title': d.get('doc_title'),
-                'source_org': d.get('source_org'),
-                'similarity': d.get('similarity', 0),
+                "doc_title": d.get("doc_title"),
+                "source_org": d.get("source_org"),
+                "similarity": d.get("similarity", 0),
             }
             for d in disputes
         ],
-        'counsels': [
+        "counsels": [
             {
-                'doc_title': c.get('doc_title'),
-                'source_org': c.get('source_org'),
-                'similarity': c.get('similarity', 0),
+                "doc_title": c.get("doc_title"),
+                "source_org": c.get("source_org"),
+                "similarity": c.get("similarity", 0),
             }
             for c in counsels
         ],
@@ -169,10 +177,10 @@ def _build_related_laws(laws: List[Dict]) -> Optional[List[Dict[str, Any]]]:
 
     return [
         {
-            'law_name': law.get('law_name'),
-            'article': law.get('article'),
-            'full_path': law.get('full_path'),
-            'similarity': law.get('similarity', 0),
+            "law_name": law.get("law_name"),
+            "article": law.get("article"),
+            "full_path": law.get("full_path"),
+            "similarity": law.get("similarity", 0),
         }
         for law in laws
     ]
@@ -185,9 +193,9 @@ def _build_related_criteria(criteria: List[Dict]) -> Optional[List[Dict[str, Any
 
     return [
         {
-            'title': c.get('title', c.get('source_label', '')),
-            'category': c.get('category'),
-            'similarity': c.get('similarity', 0),
+            "title": c.get("title", c.get("source_label", "")),
+            "category": c.get("category"),
+            "similarity": c.get("similarity", 0),
         }
         for c in criteria
     ]

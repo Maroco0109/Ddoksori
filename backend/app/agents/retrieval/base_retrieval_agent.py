@@ -16,10 +16,10 @@ import logging
 import os
 import time
 from abc import abstractmethod
-from typing import Dict, Any, List, ClassVar, Mapping, Optional, Sequence
+from typing import Any, ClassVar, Dict, List, Mapping, Optional, Sequence
 
-from ..base import BaseAgent
 from ...common.config import get_config
+from ..base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +32,25 @@ def _get_db_config() -> Dict[str, str]:
     config = get_config().database
     conn = config.get_connection_dict()
     # psycopg2는 'dbname' 키를 사용하지만 get_connection_dict()는 'database'를 반환
-    if 'database' in conn and 'dbname' not in conn:
-        conn['dbname'] = conn.pop('database')
+    if "database" in conn and "dbname" not in conn:
+        conn["dbname"] = conn.pop("database")
     return conn
 
 
 def _get_embed_api_url() -> str:
-    return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
+    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
 class BaseRetrievalAgent(BaseAgent):
     """Retrieval Agent 공통 베이스 - 검색 결과 포맷팅 및 에러 처리 공유"""
 
     required_inputs: ClassVar[List[str]] = ["user_query"]
-    provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
+    provided_outputs: ClassVar[List[str]] = [
+        "results",
+        "sources",
+        "max_similarity",
+        "avg_similarity",
+    ]
 
     default_top_k: ClassVar[int] = 10
 
@@ -55,7 +60,9 @@ class BaseRetrievalAgent(BaseAgent):
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
         if error:
-            return self.report_to_supervisor(status="failure", result=None, message=error)
+            return self.report_to_supervisor(
+                status="failure", result=None, message=error
+            )
 
         context = request.get("context") or {}
         user_query = context.get("user_query") or ""
@@ -68,7 +75,7 @@ class BaseRetrievalAgent(BaseAgent):
             return self.report_to_supervisor(
                 status="failure",
                 result=None,
-                message=f"{self.agent_name}: retrieval_task_input missing."
+                message=f"{self.agent_name}: retrieval_task_input missing.",
             )
 
         search_query = user_query
@@ -91,14 +98,21 @@ class BaseRetrievalAgent(BaseAgent):
                         "sources": [],
                         "search_time_ms": search_time_ms,
                     },
-                    message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
+                    message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장.",
                 )
 
             formatted_results = self._format_results(results)
             sources = self._build_sources(results)
 
-            max_sim = max((r.get("similarity", 0) for r in formatted_results), default=0)
-            avg_sim = sum(r.get("similarity", 0) for r in formatted_results) / len(formatted_results) if formatted_results else 0
+            max_sim = max(
+                (r.get("similarity", 0) for r in formatted_results), default=0
+            )
+            avg_sim = (
+                sum(r.get("similarity", 0) for r in formatted_results)
+                / len(formatted_results)
+                if formatted_results
+                else 0
+            )
 
             return self.report_to_supervisor(
                 status="success",
@@ -109,17 +123,19 @@ class BaseRetrievalAgent(BaseAgent):
                     "avg_similarity": avg_sim,
                     "search_time_ms": search_time_ms,
                 },
-                message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
+                message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})",
             )
 
         except Exception as e:
             return self.report_to_supervisor(
                 status="failure",
                 result=None,
-                message=f"{self.agent_name} 검색 오류: {str(e)}"
+                message=f"{self.agent_name} 검색 오류: {str(e)}",
             )
-    
-    def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
+
+    def _build_search_query(
+        self, user_query: str, query_analysis: Dict[str, Any]
+    ) -> str:
         rewritten = query_analysis.get("rewritten_query")
         if rewritten and rewritten != user_query:
             return rewritten
@@ -162,7 +178,7 @@ class BaseRetrievalAgent(BaseAgent):
             filters = self._get_search_filters(metadata_filter)
 
             # expanded_queries가 있으면 search_multi() 사용
-            expanded_queries = (task_input or {}).get('expanded_queries', [])
+            expanded_queries = (task_input or {}).get("expanded_queries", [])
             if expanded_queries and len(expanded_queries) > 1:
                 results = await asyncio.to_thread(
                     retriever.search_multi,

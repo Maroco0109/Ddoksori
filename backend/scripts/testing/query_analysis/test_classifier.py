@@ -5,10 +5,11 @@ HybridIntentClassifier의 Fast Path 및 LLM 분류를 테스트합니다.
 """
 
 import pytest
+
 from app.agents.query_analysis.classifier import (
-    IntentClassifier,
     HybridIntentClassifier,
     IntentClassificationResult,
+    IntentClassifier,
 )
 
 
@@ -19,20 +20,23 @@ class TestHybridIntentClassifierFastPath:
     def classifier(self):
         return HybridIntentClassifier(use_llm=False)
 
-    @pytest.mark.parametrize("query,expected_type", [
-        # system_meta 패턴
-        ("너 누구야?", "system_meta"),
-        ("어떤 모델이야?", "system_meta"),
-        ("뭘 할 수 있어?", "system_meta"),
-        ("누가 만들었어?", "system_meta"),
-        # general (인사) 패턴 - 짧은 쿼리만
-        ("안녕", "general"),
-        ("감사합니다", "general"),
-        # law 패턴 (법률명)
-        ("소비자기본법 알려줘", "law"),
-        ("전자상거래법 내용", "law"),
-        ("할부거래법 조항", "law"),
-    ])
+    @pytest.mark.parametrize(
+        "query,expected_type",
+        [
+            # system_meta 패턴
+            ("너 누구야?", "system_meta"),
+            ("어떤 모델이야?", "system_meta"),
+            ("뭘 할 수 있어?", "system_meta"),
+            ("누가 만들었어?", "system_meta"),
+            # general (인사) 패턴 - 짧은 쿼리만
+            ("안녕", "general"),
+            ("감사합니다", "general"),
+            # law 패턴 (법률명)
+            ("소비자기본법 알려줘", "law"),
+            ("전자상거래법 내용", "law"),
+            ("할부거래법 조항", "law"),
+        ],
+    )
     def test_fast_path_classification(self, classifier, query, expected_type):
         """Fast Path 패턴 매칭 테스트"""
         result = classifier.classify(query)
@@ -111,12 +115,13 @@ class TestIntentClassifier:
 
     @pytest.mark.skipif(
         not pytest.importorskip("openai", reason="openai package not installed"),
-        reason="OpenAI package required"
+        reason="OpenAI package required",
     )
     @pytest.mark.llm
     def test_classify_requires_api_key(self):
         """API 키 없이 분류 시도 시 graceful failure"""
         import os
+
         old_key = os.environ.pop("OPENAI_API_KEY", None)
         try:
             classifier = IntentClassifier()
@@ -134,11 +139,12 @@ class TestHybridIntentClassifierWithLLM:
     @pytest.mark.llm
     @pytest.mark.skipif(
         not pytest.importorskip("openai", reason="openai package not installed"),
-        reason="OpenAI package required"
+        reason="OpenAI package required",
     )
     def test_llm_fallback_for_complex_queries(self):
         """복잡한 쿼리는 LLM으로 분류"""
         import os
+
         if not os.getenv("OPENAI_API_KEY"):
             pytest.skip("OPENAI_API_KEY not set")
 

@@ -7,12 +7,14 @@ Integration tests for ConversationDB
 ⚠️ 주의: DB가 READ_ONLY이거나 테이블이 없으면 SKIP됩니다.
 """
 
-import pytest
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from app.supervisor.persistence.db import ConversationDB
+import pytest
+
 from app.common.config import get_config
+from app.supervisor.persistence.db import ConversationDB
+
 
 # DB 연결 확인용 픽스처
 @pytest.fixture
@@ -26,6 +28,7 @@ async def db():
 async def check_db_available(db):
     """DB 테이블 존재 여부 확인"""
     import psycopg2
+
     try:
         conn = db._get_connection()
         with conn.cursor() as cur:
@@ -33,7 +36,9 @@ async def check_db_available(db):
         conn.close()
         return True
     except (psycopg2.Error, Exception):
-        pytest.skip("DB 테이블이 없거나 READ_ONLY입니다. 수동으로 마이그레이션을 실행하세요.")
+        pytest.skip(
+            "DB 테이블이 없거나 READ_ONLY입니다. 수동으로 마이그레이션을 실행하세요."
+        )
 
 
 @pytest.mark.integration
@@ -45,9 +50,7 @@ async def test_create_and_get_conversation_integration(db, check_db_available):
 
     # 대화 생성
     conv_id = await db.create_conversation(
-        session_id=session_id,
-        chat_type="dispute",
-        user_id="test_user"
+        session_id=session_id, chat_type="dispute", user_id="test_user"
     )
 
     assert isinstance(conv_id, UUID)
@@ -68,23 +71,16 @@ async def test_add_turn_integration(db, check_db_available):
     session_id = f"test_sess_{datetime.now().timestamp()}"
 
     # 대화 생성
-    conv_id = await db.create_conversation(
-        session_id=session_id,
-        chat_type="dispute"
-    )
+    conv_id = await db.create_conversation(session_id=session_id, chat_type="dispute")
 
     # 턴 추가
     turn_id1 = await db.add_turn(
-        conversation_id=conv_id,
-        role="user",
-        content="첫 번째 메시지"
+        conversation_id=conv_id, role="user", content="첫 번째 메시지"
     )
     assert isinstance(turn_id1, UUID)
 
     turn_id2 = await db.add_turn(
-        conversation_id=conv_id,
-        role="assistant",
-        content="두 번째 메시지"
+        conversation_id=conv_id, role="assistant", content="두 번째 메시지"
     )
     assert isinstance(turn_id2, UUID)
 
@@ -103,23 +99,18 @@ async def test_save_summary_integration(db, check_db_available):
     session_id = f"test_sess_{datetime.now().timestamp()}"
 
     # 대화 생성
-    conv_id = await db.create_conversation(
-        session_id=session_id,
-        chat_type="dispute"
-    )
+    conv_id = await db.create_conversation(session_id=session_id, chat_type="dispute")
 
     # 요약 저장
     summary_data = {
         "purchase_item": "테스트 상품",
         "purchase_date": "2026-01-28",
         "dispute_type": "환불",
-        "key_facts": {"test": "data"}
+        "key_facts": {"test": "data"},
     }
 
     summary_id = await db.save_summary(
-        conversation_id=conv_id,
-        summary_data=summary_data,
-        compacted_turn_count=5
+        conversation_id=conv_id, summary_data=summary_data, compacted_turn_count=5
     )
 
     assert isinstance(summary_id, UUID)
@@ -143,7 +134,7 @@ async def test_cleanup_expired_sessions_integration(db, check_db_available):
         session_id=session_id,
         chat_type="dispute",
         user_id=None,  # 게스트
-        expires_at=expires_at
+        expires_at=expires_at,
     )
 
     # Cleanup 실행

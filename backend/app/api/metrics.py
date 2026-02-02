@@ -5,8 +5,8 @@
 """
 
 from typing import Optional
-from fastapi import APIRouter
 
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/metrics", tags=["Metrics"])
 
@@ -23,6 +23,7 @@ async def get_agent_metrics(agent_name: Optional[str] = None):
         성능 통계 (count, success_rate, avg/min/max/p95 duration)
     """
     from app.common.metrics import AgentMetrics
+
     return AgentMetrics.get_stats(agent_name)
 
 
@@ -35,6 +36,7 @@ async def get_agent_metrics_summary():
         모든 에이전트의 성능 요약 정보
     """
     from app.common.metrics import AgentMetrics
+
     return AgentMetrics.get_summary()
 
 
@@ -51,7 +53,8 @@ async def get_recent_metrics(agent_name: Optional[str] = None, limit: int = 100)
         최근 메트릭 레코드 리스트
     """
     from app.common.metrics import AgentMetrics
+
     return AgentMetrics.get_recent_records(agent_name, limit)
 
 
-__all__ = ['router']
+__all__ = ["router"]

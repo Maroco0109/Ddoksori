@@ -16,67 +16,67 @@ query_analysis agent module
 # Main entry point
 from .agent import query_analysis_node
 
-# Constants (commonly used)
-from .constants import (
-    QUERY_TYPE_TO_RETRIEVERS,
-    RESTRICTED_DOMAIN_KEYWORDS,
-    RESTRICTED_DOMAIN_AGENCIES,
-    PROCEDURE_KEYWORDS,
-    INDIVIDUAL_KEYWORDS,
-    LAW_KEYWORDS,
-    CRITERIA_KEYWORDS,
-    SYSTEM_META_KEYWORDS,
-    COMMON_PRODUCTS,
-    DISPUTE_VERBS,
-    VERB_SYNONYMS,
-    DISPUTE_INTENT_KEYWORDS,
-    AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
-    META_CONVERSATIONAL_PATTERNS,
-    META_CONVERSATIONAL_KEYWORDS,
-)
-
-# Detectors
-from .detectors import (
-    is_ambiguous_query,
-    is_system_meta_query,
-    detect_restricted_domain,
-    is_procedure_query,
-    should_promote_to_rag,
-    is_meta_conversational,
+# LLM-based Intent Classifier
+from .classifier import (
+    HybridIntentClassifier,
+    IntentClassificationResult,
+    IntentClassifier,
+    classify_intent,
+    get_intent_classifier,
 )
 
 # Classifiers
 from .classifiers import (
+    QueryType,
+    classify_mode,
     classify_query_type,
     classify_query_type_with_confidence,
-    classify_mode,
-    QueryType,
 )
 
-# Extractors
-from .extractors import (
-    extract_info_from_message,
-    extract_keywords,
-    normalize_query,
-    check_missing_onboarding_fields,
-    determine_agency_hint,
-    get_missing_fields_description,
+# Constants (commonly used)
+from .constants import AMBIGUOUS_QUERY_PATTERNS  # backward compat for tests
+from .constants import (
+    COMMON_PRODUCTS,
+    CRITERIA_KEYWORDS,
+    DISPUTE_INTENT_KEYWORDS,
+    DISPUTE_VERBS,
+    INDIVIDUAL_KEYWORDS,
+    LAW_KEYWORDS,
+    META_CONVERSATIONAL_KEYWORDS,
+    META_CONVERSATIONAL_PATTERNS,
+    PROCEDURE_KEYWORDS,
+    QUERY_TYPE_TO_RETRIEVERS,
+    RESTRICTED_DOMAIN_AGENCIES,
+    RESTRICTED_DOMAIN_KEYWORDS,
+    SYSTEM_META_KEYWORDS,
+    VERB_SYNONYMS,
+)
+
+# Detectors
+from .detectors import (
+    detect_restricted_domain,
+    is_ambiguous_query,
+    is_meta_conversational,
+    is_procedure_query,
+    is_system_meta_query,
+    should_promote_to_rag,
 )
 
 # Expanders
 from .expanders import (
+    create_synonym_variant_query,
     expand_query_by_type,
     generate_search_queries,
-    create_synonym_variant_query,
 )
 
-# LLM-based Intent Classifier
-from .classifier import (
-    IntentClassifier,
-    HybridIntentClassifier,
-    IntentClassificationResult,
-    classify_intent,
-    get_intent_classifier,
+# Extractors
+from .extractors import (
+    check_missing_onboarding_fields,
+    determine_agency_hint,
+    extract_info_from_message,
+    extract_keywords,
+    get_missing_fields_description,
+    normalize_query,
 )
 
 # LLM Fallback Classifier (Issue #3: Hybrid Intent Classification)

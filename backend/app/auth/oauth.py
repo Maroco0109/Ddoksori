@@ -31,14 +31,15 @@ OAuth 2.0 소셜 로그인을 위한 제공자 클래스를 정의합니다.
     user_info = await google.get_user_info(token_data["access_token"])
 """
 
-import httpx
-from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional
-from urllib.parse import urlencode
+import logging
 import secrets
+from abc import ABC, abstractmethod
+from typing import Dict, Optional, Tuple
+from urllib.parse import urlencode
+
+import httpx
 
 from app.common.config import AuthConfig, get_config
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -158,11 +159,13 @@ class GoogleOAuth(OAuthProvider):
             "scope": self.SCOPES,
             "state": state,
             "access_type": "offline",
-            "prompt": "consent"
+            "prompt": "consent",
         }
 
         auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
-        logger.info(f"[GoogleOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}...")
+        logger.info(
+            f"[GoogleOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}..."
+        )
         return auth_url, state
 
     async def exchange_code_for_token(self, code: str) -> Dict:
@@ -185,7 +188,7 @@ class GoogleOAuth(OAuthProvider):
             "client_id": self.auth_config.google_client_id,
             "client_secret": self.auth_config.google_client_secret,
             "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code"
+            "grant_type": "authorization_code",
         }
 
         logger.info(f"[GoogleOAuth] 토큰 교환 시도: redirect_uri={redirect_uri}")
@@ -223,7 +226,7 @@ class GoogleOAuth(OAuthProvider):
                 "provider_user_id": user_data["id"],
                 "email": user_data["email"],
                 "name": user_data.get("name", user_data["email"]),
-                "avatar_url": user_data.get("picture")
+                "avatar_url": user_data.get("picture"),
             }
 
             logger.info(f"[GoogleOAuth] 사용자 정보 조회 성공: {user_info['email']}")
@@ -263,11 +266,13 @@ class NaverOAuth(OAuthProvider):
             "client_id": self.auth_config.naver_client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
-            "state": state
+            "state": state,
         }
 
         auth_url = f"{self.AUTH_URL}?{urlencode(params)}"
-        logger.info(f"[NaverOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}...")
+        logger.info(
+            f"[NaverOAuth] 인증 URL 생성: redirect_uri={redirect_uri}, state={state[:8]}..."
+        )
         return auth_url, state
 
     async def exchange_code_for_token(self, code: str) -> Dict:
@@ -286,13 +291,15 @@ class NaverOAuth(OAuthProvider):
         # Note: Naver doesn't require redirect_uri in token exchange
         # but log for consistency
         redirect_uri = f"{self.auth_config.backend_url}/auth/naver/callback"
-        logger.info(f"[NaverOAuth] 토큰 교환 시도: redirect_uri={redirect_uri} (not sent to Naver)")
+        logger.info(
+            f"[NaverOAuth] 토큰 교환 시도: redirect_uri={redirect_uri} (not sent to Naver)"
+        )
 
         params = {
             "code": code,
             "client_id": self.auth_config.naver_client_id,
             "client_secret": self.auth_config.naver_client_secret,
-            "grant_type": "authorization_code"
+            "grant_type": "authorization_code",
         }
 
         try:
@@ -329,9 +336,13 @@ class NaverOAuth(OAuthProvider):
 
             user_info = {
                 "provider_user_id": response_data["id"],
-                "email": response_data.get("email", f"naver_{response_data['id']}@naver.local"),
-                "name": response_data.get("name", response_data.get("nickname", "Naver User")),
-                "avatar_url": response_data.get("profile_image")
+                "email": response_data.get(
+                    "email", f"naver_{response_data['id']}@naver.local"
+                ),
+                "name": response_data.get(
+                    "name", response_data.get("nickname", "Naver User")
+                ),
+                "avatar_url": response_data.get("profile_image"),
             }
 
             logger.info(f"[NaverOAuth] 사용자 정보 조회 성공: {user_info['email']}")

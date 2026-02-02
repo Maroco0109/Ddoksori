@@ -5,7 +5,8 @@
 대화 유형(일반/분쟁)과 온보딩 폼 데이터를 포함합니다.
 """
 
-from typing import Optional, Literal
+from typing import Literal, Optional
+
 from typing_extensions import TypedDict
 
 
@@ -30,18 +31,19 @@ class OnboardingInfo(TypedDict, total=False):
         ...     'dispute_details': '환불 거부당함'
         ... }
     """
+
     purchase_date: Optional[str]
     purchase_place: Optional[str]
     purchase_platform: Optional[str]
     purchase_item: Optional[str]
     purchase_amount: Optional[str]
     dispute_details: Optional[str]
-    days_since_purchase: Optional[int]     # 구매 후 경과 일수 (자동 계산)
-    product_category: Optional[str]        # 품목 카테고리 (전자제품, 의류 등)
+    days_since_purchase: Optional[int]  # 구매 후 경과 일수 (자동 계산)
+    product_category: Optional[str]  # 품목 카테고리 (전자제품, 의류 등)
 
 
 # 대화 유형 타입 정의
-ChatType = Literal['dispute', 'general']
+ChatType = Literal["dispute", "general"]
 
 
 class SessionState(TypedDict, total=False):
@@ -56,13 +58,14 @@ class SessionState(TypedDict, total=False):
         onboarding: 온보딩 폼 데이터 (분쟁 상담 시 필수 정보)
         user_query: 현재 턴의 사용자 질문
     """
+
     chat_type: ChatType
     onboarding: Optional[OnboardingInfo]
     user_query: str
 
 
 __all__ = [
-    'OnboardingInfo',
-    'ChatType',
-    'SessionState',
+    "OnboardingInfo",
+    "ChatType",
+    "SessionState",
 ]

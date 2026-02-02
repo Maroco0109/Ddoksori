@@ -15,7 +15,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ class ConfidenceScoreResult:
         grade: 등급 (A/B/C/D/F)
         is_reliable: 신뢰 가능 여부 (0.6 이상)
     """
+
     total_score: float
     source_coverage_score: float
     relevance_score: float
@@ -63,11 +64,11 @@ class ConfidenceScorer:
 
     # 등급 기준
     GRADE_THRESHOLDS = {
-        'A': 0.85,
-        'B': 0.70,
-        'C': 0.55,
-        'D': 0.40,
-        'F': 0.0,
+        "A": 0.85,
+        "B": 0.70,
+        "C": 0.55,
+        "D": 0.40,
+        "F": 0.0,
     }
 
     # 신뢰 가능 임계값
@@ -78,7 +79,7 @@ class ConfidenceScorer:
         answer: str,
         sources: List[Dict],
         relevance_score: float = 0.5,
-        citation_accuracy: float = 0.5
+        citation_accuracy: float = 0.5,
     ) -> ConfidenceScoreResult:
         """
         종합 신뢰도 점수 계산
@@ -97,9 +98,9 @@ class ConfidenceScorer:
 
         # 종합 점수 계산
         total_score = (
-            source_coverage * self.WEIGHT_SOURCE_COVERAGE +
-            relevance_score * self.WEIGHT_RELEVANCE +
-            citation_accuracy * self.WEIGHT_CITATION_ACCURACY
+            source_coverage * self.WEIGHT_SOURCE_COVERAGE
+            + relevance_score * self.WEIGHT_RELEVANCE
+            + citation_accuracy * self.WEIGHT_CITATION_ACCURACY
         )
 
         # 범위 제한
@@ -126,11 +127,7 @@ class ConfidenceScorer:
             is_reliable=is_reliable,
         )
 
-    def _calculate_source_coverage(
-        self,
-        answer: str,
-        sources: List[Dict]
-    ) -> float:
+    def _calculate_source_coverage(self, answer: str, sources: List[Dict]) -> float:
         """
         출처 커버리지 점수 계산
 
@@ -152,7 +149,7 @@ class ConfidenceScorer:
         # 출처 총 길이
         source_total_length = 0
         for source in sources:
-            content = source.get('content', '') or source.get('text', '')
+            content = source.get("content", "") or source.get("text", "")
             source_total_length += len(content)
 
         if source_total_length == 0:
@@ -185,7 +182,7 @@ class ConfidenceScorer:
         for grade, threshold in self.GRADE_THRESHOLDS.items():
             if score >= threshold:
                 return grade
-        return 'F'
+        return "F"
 
 
 # 싱글톤 인스턴스
@@ -206,7 +203,7 @@ def get_confidence_scorer() -> ConfidenceScorer:
 
 
 __all__ = [
-    'ConfidenceScoreResult',
-    'ConfidenceScorer',
-    'get_confidence_scorer',
+    "ConfidenceScoreResult",
+    "ConfidenceScorer",
+    "get_confidence_scorer",
 ]

@@ -11,7 +11,7 @@ import time
 from typing import Any, ClassVar, Dict, Optional
 
 from app.common.cache import BaseRedisCache, get_redis_client, hash_query
-from app.common.metrics import PROM_CACHE_HITS, PROM_CACHE_MISSES, PROM_CACHE_ERRORS
+from app.common.metrics import PROM_CACHE_ERRORS, PROM_CACHE_HITS, PROM_CACHE_MISSES
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,8 @@ class AnswerCache:
     PREFIX = "answer_cache"
 
     def __init__(self):
-        self.enabled = os.getenv('ENABLE_ANSWER_CACHE', 'false').lower() == 'true'
-        self.ttl = int(os.getenv('ANSWER_CACHE_TTL_HOURS', '24')) * 3600
+        self.enabled = os.getenv("ENABLE_ANSWER_CACHE", "false").lower() == "true"
+        self.ttl = int(os.getenv("ANSWER_CACHE_TTL_HOURS", "24")) * 3600
         self._redis = None
         self._hit_count = 0
         self._miss_count = 0
@@ -43,10 +43,11 @@ class AnswerCache:
     def _init_redis(self) -> None:
         try:
             import redis
+
             self._redis = redis.Redis(
-                host=os.getenv('REDIS_HOST', 'localhost'),
-                port=int(os.getenv('REDIS_PORT', '6379')),
-                db=int(os.getenv('REDIS_DB', '0')),
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                db=int(os.getenv("REDIS_DB", "0")),
                 decode_responses=True,
                 socket_connect_timeout=2,
                 socket_timeout=2,
@@ -54,11 +55,15 @@ class AnswerCache:
             self._redis.ping()
             logger.info("[AnswerCache] Redis connection established")
         except ImportError:
-            logger.warning("[AnswerCache] redis package not installed, caching disabled")
+            logger.warning(
+                "[AnswerCache] redis package not installed, caching disabled"
+            )
             self.enabled = False
             self._redis = None
         except Exception as e:
-            logger.warning(f"[AnswerCache] Redis connection failed: {e}, caching disabled")
+            logger.warning(
+                f"[AnswerCache] Redis connection failed: {e}, caching disabled"
+            )
             self.enabled = False
             self._redis = None
 
@@ -91,6 +96,7 @@ class AnswerCache:
                 PROM_CACHE_HITS.inc()
                 logger.debug(f"[AnswerCache] Cache HIT: {key}")
                 import json
+
                 return json.loads(cached)
 
             self._miss_count += 1
@@ -122,6 +128,7 @@ class AnswerCache:
         try:
             key = self._generate_cache_key(query, query_type)
             import json
+
             serialized = json.dumps(answer_data, ensure_ascii=False)
             self._redis.setex(key, self.ttl, serialized)
             logger.debug(f"[AnswerCache] Cache SET: {key}, TTL={self.ttl}s")
@@ -184,13 +191,13 @@ class AnswerCache:
         hit_rate = self._hit_count / total if total > 0 else 0.0
 
         return {
-            'enabled': self.enabled,
-            'connected': self._redis is not None,
-            'hit_count': self._hit_count,
-            'miss_count': self._miss_count,
-            'error_count': self._error_count,
-            'hit_rate': round(hit_rate, 4),
-            'ttl_hours': self.ttl // 3600,
+            "enabled": self.enabled,
+            "connected": self._redis is not None,
+            "hit_count": self._hit_count,
+            "miss_count": self._miss_count,
+            "error_count": self._error_count,
+            "hit_rate": round(hit_rate, 4),
+            "ttl_hours": self.ttl // 3600,
         }
 
     def reset_metrics(self) -> None:

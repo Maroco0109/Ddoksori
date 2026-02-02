@@ -80,8 +80,7 @@ async def expand_query_with_llm(
         client = AsyncOpenAI(api_key=config.openai_api_key)
 
         user_prompt = QUERY_EXPANSION_USER_PROMPT.format(
-            query=query,
-            keywords=", ".join(keywords) if keywords else "없음"
+            query=query, keywords=", ".join(keywords) if keywords else "없음"
         )
 
         response = await asyncio.wait_for(
@@ -89,18 +88,19 @@ async def expand_query_with_llm(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": QUERY_EXPANSION_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.3,
                 max_tokens=200,
             ),
-            timeout=timeout
+            timeout=timeout,
         )
 
         content = response.choices[0].message.content.strip()
 
         # JSON 파싱
         import json
+
         expanded_queries = json.loads(content)
 
         if isinstance(expanded_queries, list):
@@ -112,14 +112,18 @@ async def expand_query_with_llm(
                 if len(result) >= max_queries:
                     break
 
-            logger.info(f"[LLM Expander] Expanded '{query[:30]}...' to {len(result)} queries")
+            logger.info(
+                f"[LLM Expander] Expanded '{query[:30]}...' to {len(result)} queries"
+            )
             return result
 
         logger.warning(f"[LLM Expander] Invalid response format: {content}")
         return None
 
     except asyncio.TimeoutError:
-        logger.warning(f"[LLM Expander] Timeout after {timeout}s for query: {query[:30]}...")
+        logger.warning(
+            f"[LLM Expander] Timeout after {timeout}s for query: {query[:30]}..."
+        )
         return None
 
     except Exception as e:
@@ -143,10 +147,11 @@ def expand_query_with_llm_sync(
         if loop.is_running():
             # 이미 이벤트 루프가 실행 중인 경우 (FastAPI 등)
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
                     asyncio.run,
-                    expand_query_with_llm(query, keywords, max_queries, timeout)
+                    expand_query_with_llm(query, keywords, max_queries, timeout),
                 )
                 return future.result(timeout=timeout + 1)
         else:

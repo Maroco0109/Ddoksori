@@ -4,11 +4,11 @@ import asyncio
 import logging
 import os
 import re
-from typing import Dict, Any, List, ClassVar, TypedDict
+from typing import Any, ClassVar, Dict, List, TypedDict
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
-from .tools.specialized_retrievers import CriteriaRetriever
 from .tools.rds_internal_retriever import SimilarChunkResult
+from .tools.specialized_retrievers import CriteriaRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,11 @@ class CriteriaDocument(TypedDict):
 
 class CriteriaRetrievalAgent(BaseRetrievalAgent):
     """분쟁조정기준(공정위 고시, 품목별 기준) 검색 에이전트"""
-    
-    agent_name: ClassVar[str] = "retrieval_criteria"
-    agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
 
+    agent_name: ClassVar[str] = "retrieval_criteria"
+    agent_description: ClassVar[str] = (
+        "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
+    )
 
     async def _execute_search(
         self,
@@ -46,10 +47,10 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         if task_input:
             metadata_filter = task_input.get("metadata_filter") or {}
             document_types = metadata_filter.get("document_types") or None
-        
+
         retriever = CriteriaRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
             all_results: List[List[SimilarChunkResult]] = []
             for q in expanded_queries:
@@ -64,12 +65,15 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             fused_scores: Dict[str, float] = {}
             fused_results: Dict[str, SimilarChunkResult] = {}
             from app.common.config import get_config
+
             rrf_k = get_config().retrieval.rrf_k_python
 
             for results in all_results:
                 for rank, result in enumerate(results, start=1):
                     chunk_id = result.chunk_id
-                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (1.0 / (rrf_k + rank))
+                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (
+                        1.0 / (rrf_k + rank)
+                    )
                     if chunk_id not in fused_results:
                         fused_results[chunk_id] = result
 
@@ -94,7 +98,9 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 last = parts[-1]
                 second_last = parts[-2]
 
-                is_grandchild = bool(re.match(r"^조건\d+_하위\d+$", f"{second_last}_{last}"))
+                is_grandchild = bool(
+                    re.match(r"^조건\d+_하위\d+$", f"{second_last}_{last}")
+                )
                 is_child = bool(re.match(r"^조건\d+$", last))
 
                 if is_grandchild:
@@ -116,7 +122,9 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 last = parts[-1]
                 second_last = parts[-2]
 
-                is_grandchild = bool(re.match(r"^조건\d+_하위\d+$", f"{second_last}_{last}"))
+                is_grandchild = bool(
+                    re.match(r"^조건\d+_하위\d+$", f"{second_last}_{last}")
+                )
                 is_child = bool(re.match(r"^조건\d+$", last))
 
                 if not (is_grandchild or is_child):
@@ -140,16 +148,28 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                     used = len(parent_trim) + len(child_trim) + len(grand_trim)
                     remaining = max_total - used
                     if remaining > 0:
-                        extra = min(remaining, max(0, len(grand_text) - len(grand_trim)))
-                        grand_trim += grand_text[len(grand_trim):len(grand_trim) + extra]
+                        extra = min(
+                            remaining, max(0, len(grand_text) - len(grand_trim))
+                        )
+                        grand_trim += grand_text[
+                            len(grand_trim) : len(grand_trim) + extra
+                        ]
                         remaining -= extra
                     if remaining > 0:
-                        extra = min(remaining, max(0, len(child_text) - len(child_trim)))
-                        child_trim += child_text[len(child_trim):len(child_trim) + extra]
+                        extra = min(
+                            remaining, max(0, len(child_text) - len(child_trim))
+                        )
+                        child_trim += child_text[
+                            len(child_trim) : len(child_trim) + extra
+                        ]
                         remaining -= extra
                     if remaining > 0:
-                        extra = min(remaining, max(0, len(parent_text) - len(parent_trim)))
-                        parent_trim += parent_text[len(parent_trim):len(parent_trim) + extra]
+                        extra = min(
+                            remaining, max(0, len(parent_text) - len(parent_trim))
+                        )
+                        parent_trim += parent_text[
+                            len(parent_trim) : len(parent_trim) + extra
+                        ]
 
                     composed = "\n".join(
                         [
@@ -176,12 +196,20 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                     used = len(parent_trim) + len(child_trim)
                     remaining = max_total - used
                     if remaining > 0:
-                        extra = min(remaining, max(0, len(child_text) - len(child_trim)))
-                        child_trim += child_text[len(child_trim):len(child_trim) + extra]
+                        extra = min(
+                            remaining, max(0, len(child_text) - len(child_trim))
+                        )
+                        child_trim += child_text[
+                            len(child_trim) : len(child_trim) + extra
+                        ]
                         remaining -= extra
                     if remaining > 0:
-                        extra = min(remaining, max(0, len(parent_text) - len(parent_trim)))
-                        parent_trim += parent_text[len(parent_trim):len(parent_trim) + extra]
+                        extra = min(
+                            remaining, max(0, len(parent_text) - len(parent_trim))
+                        )
+                        parent_trim += parent_text[
+                            len(parent_trim) : len(parent_trim) + extra
+                        ]
 
                     composed = "\n".join(
                         [
@@ -198,8 +226,10 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             return final_results
         finally:
             retriever.close()
-    
-    def _format_results(self, results: List[SimilarChunkResult]) -> List[CriteriaDocument]:
+
+    def _format_results(
+        self, results: List[SimilarChunkResult]
+    ) -> List[CriteriaDocument]:
         formatted: List[CriteriaDocument] = []
         for r in results:
             raw_meta = r.metadata if isinstance(r.metadata, dict) else {}
@@ -225,7 +255,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             )
 
         return formatted
-    
+
     def _build_sources(self, results: List[SimilarChunkResult]) -> List[Dict[str, Any]]:
         return [
             {

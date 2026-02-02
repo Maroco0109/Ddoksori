@@ -5,7 +5,8 @@
 노드 간 데이터 전달의 중심 역할을 합니다.
 """
 
-from typing import List, Dict, Optional, Literal
+from typing import Dict, List, Literal, Optional
+
 from typing_extensions import TypedDict
 
 
@@ -47,7 +48,17 @@ class QueryAnalysisResult(TypedDict, total=False):
         ...     'search_queries': ['헬스장 환불', '피트니스 중도해지']
         ... }
     """
-    query_type: Literal['dispute', 'general', 'law', 'criteria', 'procedure', 'restricted', 'system_meta', 'ambiguous']
+
+    query_type: Literal[
+        "dispute",
+        "general",
+        "law",
+        "criteria",
+        "procedure",
+        "restricted",
+        "system_meta",
+        "ambiguous",
+    ]
     keywords: List[str]
     agency_hint: Optional[str]
     needs_clarification: bool
@@ -63,7 +74,9 @@ class QueryAnalysisResult(TypedDict, total=False):
     # === PR-2: Selective Retrieval 끝 ===
 
     # === Phase 9: Restricted Domain 정보 ===
-    restricted_domain: Optional[str]  # finance, medical, privacy, realestate, construction
+    restricted_domain: Optional[
+        str
+    ]  # finance, medical, privacy, realestate, construction
     restricted_agency_info: Optional[Dict[str, str]]  # {name, organization, url, phone}
 
 
@@ -90,6 +103,7 @@ class RetrievalResult(TypedDict, total=False):
         ...     'avg_similarity': 0.72
         ... }
     """
+
     agency: Dict
     disputes: List[Dict]
     counsels: List[Dict]
@@ -122,6 +136,7 @@ class IndividualRetrievalResult(TypedDict, total=False):
         ...     'search_time_ms': 150
         ... }
     """
+
     source: str
     documents: List[Dict]
     max_similarity: float
@@ -141,6 +156,7 @@ class HallucinationCheckResult(TypedDict, total=False):
         unverified_refs: 확인되지 않은 인용 (Hallucination 의심)
         accuracy: 인용 정확도 (0.0 ~ 1.0)
     """
+
     passed: bool
     cited_refs: List[str]
     verified_refs: List[str]
@@ -159,6 +175,7 @@ class RelevanceCheckResult(TypedDict, total=False):
         answer_source_score: Answer-Source 관련성 점수
         message: 실패 시 상세 메시지
     """
+
     passed: bool
     query_answer_score: float
     query_retrieval_score: float
@@ -176,9 +193,10 @@ class LegalJudgmentCheckResult(TypedDict, total=False):
         severity: 심각도 ('low', 'medium', 'high')
         llm_verified: LLM 2차 검증 수행 여부
     """
+
     passed: bool
     detected_judgments: List[str]
-    severity: Literal['low', 'medium', 'high']
+    severity: Literal["low", "medium", "high"]
     llm_verified: bool
 
 
@@ -222,6 +240,7 @@ class ReviewResult(TypedDict, total=False):
         ...     'confidence_score': 0.75
         ... }
     """
+
     passed: bool
     violations: List[str]
     filtered_answer: Optional[str]
@@ -245,6 +264,7 @@ class AgentResultsState(TypedDict, total=False):
         draft_answer: LLM 생성 초안
         review: 검토 결과
     """
+
     query_analysis: Optional[QueryAnalysisResult]
     retrieval: Optional[RetrievalResult]
     draft_answer: Optional[str]
@@ -254,6 +274,7 @@ class AgentResultsState(TypedDict, total=False):
 # =============================================================================
 # MAS v2 타입 정의
 # =============================================================================
+
 
 class CitedCase(TypedDict):
     """
@@ -268,8 +289,9 @@ class CitedCase(TypedDict):
         summary: 사례 요약
         relevance: 사용자 질문과의 관련성 설명
     """
+
     case_id: str
-    category: Literal['조정', '해결', '상담']
+    category: Literal["조정", "해결", "상담"]
     title: str
     summary: str
     relevance: str
@@ -292,10 +314,13 @@ class ViolationV2(TypedDict, total=False):
         severity: 심각도 ('critical', 'warning')
         suggestion: 수정 제안 (optional)
     """
-    type: Literal['hallucination', 'legal_judgment', 'prohibited_expression', 'query_mismatch']
+
+    type: Literal[
+        "hallucination", "legal_judgment", "prohibited_expression", "query_mismatch"
+    ]
     description: str
     location: str
-    severity: Literal['critical', 'warning']
+    severity: Literal["critical", "warning"]
     suggestion: Optional[str]
 
 
@@ -310,22 +335,23 @@ class RetryContext(TypedDict):
         previous_draft: 이전 생성 답변
         retry_count: 현재 재시도 횟수 (max 1)
     """
+
     violations: List[str]
     previous_draft: str
     retry_count: int
 
 
 __all__ = [
-    'QueryAnalysisResult',
-    'RetrievalResult',
-    'IndividualRetrievalResult',
-    'HallucinationCheckResult',
-    'RelevanceCheckResult',
-    'LegalJudgmentCheckResult',
-    'ReviewResult',
-    'AgentResultsState',
+    "QueryAnalysisResult",
+    "RetrievalResult",
+    "IndividualRetrievalResult",
+    "HallucinationCheckResult",
+    "RelevanceCheckResult",
+    "LegalJudgmentCheckResult",
+    "ReviewResult",
+    "AgentResultsState",
     # v2 타입
-    'CitedCase',
-    'ViolationV2',
-    'RetryContext',
+    "CitedCase",
+    "ViolationV2",
+    "RetryContext",
 ]
