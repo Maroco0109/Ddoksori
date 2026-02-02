@@ -73,7 +73,9 @@ def main():
     print()
 
     # Test 3: FTS search with dataset_type filter
-    print("[Test 3] FTS search for '노트북 화면 깨짐' filtered by dataset_type='law_guide'")
+    print(
+        "[Test 3] FTS search for '노트북 화면 깨짐' filtered by dataset_type='law_guide'"
+    )
     cur.execute(
         """
         SELECT chunk_id, dataset_type, category, chunk_type,
