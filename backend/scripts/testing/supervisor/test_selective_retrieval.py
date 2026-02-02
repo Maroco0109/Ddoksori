@@ -69,9 +69,9 @@ class TestRetrieverTypesInQueryAnalysis:
         query_analysis = result.get("query_analysis", {})
 
         # retriever_types 필드 존재
-        assert (
-            "retriever_types" in query_analysis
-        ), "query_analysis should have 'retriever_types' field"
+        assert "retriever_types" in query_analysis, (
+            "query_analysis should have 'retriever_types' field"
+        )
 
 
 class TestSelectiveFanOut:
@@ -101,9 +101,9 @@ class TestSelectiveFanOut:
         retriever_types = query_analysis.get("retriever_types", [])
 
         for expected in expected_contains:
-            assert (
-                expected in retriever_types
-            ), f"Query '{query}' should use '{expected}' retriever, got {retriever_types}"
+            assert expected in retriever_types, (
+                f"Query '{query}' should use '{expected}' retriever, got {retriever_types}"
+            )
 
         print(f"✓ '{query}' → retriever_types={retriever_types}")
 

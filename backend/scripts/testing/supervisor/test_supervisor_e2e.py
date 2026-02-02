@@ -91,7 +91,6 @@ class TestSupervisorGraphStructure:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestHappyPathDispute:
-
     def test_dispute_query_analysis_completes(self, compiled_graph):
         """분쟁 질의에 대해 query_analysis가 정상 완료되는지 확인 (MAS Supervisor)"""
         state = create_initial_state(
@@ -112,7 +111,6 @@ class TestHappyPathDispute:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestAskClarificationBranch:
-
     def test_minimal_info_triggers_clarification(self, compiled_graph):
         state = create_initial_state(
             user_query="환불해줘", chat_type="dispute", onboarding=None
@@ -138,7 +136,6 @@ class TestAskClarificationBranch:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestLowSimilarityBranch:
-
     def test_unusual_product_query_analysis(self, compiled_graph):
         """특이한 제품 질의도 query_analysis 노드를 정상 통과하는지 확인"""
         state = create_initial_state(
@@ -158,7 +155,6 @@ class TestLowSimilarityBranch:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestGeneralConversation:
-
     def test_general_chat_path(self, compiled_graph):
         state = create_initial_state(
             user_query="안녕하세요", chat_type="general", onboarding=None
@@ -176,7 +172,6 @@ class TestGeneralConversation:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestNodeTimings:
-
     def test_node_timings_recorded(self, compiled_graph):
         state = create_initial_state(
             user_query="안녕하세요", chat_type="general", onboarding=None
@@ -209,7 +204,6 @@ class TestNodeTimings:
 
 
 class TestStateTransitions:
-
     def test_initial_state_fields(self):
         """Unit test - no graph invocation needed"""
         state = create_initial_state(
@@ -254,7 +248,6 @@ class TestStateTransitions:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestMultiTurnSession:
-
     def test_same_thread_id_shares_state(self, compiled_graph):
         thread_id = "test-multi-turn"
         config = {"configurable": {"thread_id": thread_id}}
@@ -294,7 +287,6 @@ class TestMultiTurnSession:
     reason="MAS Supervisor uses async nodes - requires ainvoke() and LLM API"
 )
 class TestQueryRewritingIntegration:
-
     def test_query_rewriting_fields_populated(self, compiled_graph):
         state = create_initial_state(
             user_query="노트북 환불받고 싶어요",

@@ -79,9 +79,9 @@ class TestV2GraphCreation:
         # 노드 수 확인 (14개: cache_check, cache_response, input/output_guardrail,
         # supervisor, query_analysis, generation, review,
         # retrieval_law/criteria/case, retrieval_merge, memory_save, inject_cached_retrieval)
-        assert (
-            len(graph.nodes) == 14
-        ), f"Expected 14 nodes, got {len(graph.nodes)}: {sorted(graph.nodes.keys())}"
+        assert len(graph.nodes) == 14, (
+            f"Expected 14 nodes, got {len(graph.nodes)}: {sorted(graph.nodes.keys())}"
+        )
 
         # 필수 노드 확인
         required_nodes = [

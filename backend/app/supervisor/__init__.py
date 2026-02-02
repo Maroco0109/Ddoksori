@@ -10,8 +10,6 @@ from .checkpointer import (
     get_checkpointer,
     get_checkpointer_mode,
 )
-from .state import ReActStep  # [DEPRECATED] 하위 호환성 유지용
-from .state import UnifiedState  # ChatState 별칭
 from .state import (  # Phase 5: MAS Supervisor
     AgentMessage,
     ChatState,
@@ -19,10 +17,12 @@ from .state import (  # Phase 5: MAS Supervisor
     IndividualRetrievalResult,
     OnboardingInfo,
     QueryAnalysisResult,
+    ReActStep,  # [DEPRECATED] 하위 호환성 유지용
     RetrievalResult,
     ReviewResult,
     RoutingMode,
     SupervisorState,
+    UnifiedState,  # ChatState 별칭
     create_initial_state,
 )
 

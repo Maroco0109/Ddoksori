@@ -27,7 +27,6 @@ def reset_config_cache():
 
 
 class TestHybridLegalReviewerInit:
-
     def test_init_default_llm_disabled(self):
         with patch.dict(os.environ, {"ENABLE_LLM_REVIEW": "false"}, clear=False):
             reload_config()
@@ -52,7 +51,6 @@ class TestHybridLegalReviewerInit:
 
 
 class TestRuleBasedReview:
-
     @pytest.fixture
     def reviewer(self):
         return HybridLegalReviewer(enable_llm=False)
@@ -126,7 +124,6 @@ class TestRuleBasedReview:
 
 
 class TestLLMBasedReview:
-
     @pytest.fixture
     def reviewer_with_llm(self):
         return HybridLegalReviewer(enable_llm=True)
@@ -243,7 +240,6 @@ class TestLLMBasedReview:
 
 
 class TestMetrics:
-
     def test_metrics_tracking(self):
         reviewer = HybridLegalReviewer(enable_llm=True)
 
@@ -289,7 +285,6 @@ class TestMetrics:
 
 
 class TestNodeFunctions:
-
     def test_hybrid_review_node(self):
         state: ChatState = {
             "query": "안녕하세요",
@@ -331,7 +326,6 @@ class TestNodeFunctions:
 
 
 class TestLLMReviewSystemPrompt:
-
     def test_prompt_contains_required_sections(self):
         assert "법적 판단" in LLM_REVIEW_SYSTEM_PROMPT
         assert "전문가 사칭" in LLM_REVIEW_SYSTEM_PROMPT
@@ -341,7 +335,6 @@ class TestLLMReviewSystemPrompt:
 
 
 class TestGetReviewer:
-
     def test_singleton_pattern(self):
         import app.agents.legal_review.llm_reviewer as module
 

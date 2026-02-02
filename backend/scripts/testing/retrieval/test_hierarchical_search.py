@@ -56,9 +56,9 @@ class TestHybridRetrieverChunkTypeFilter:
 
             # 모든 결과가 조_전체여야 함
             for r in results:
-                assert (
-                    r.chunk_type == "조_전체"
-                ), f"Expected chunk_type='조_전체', got '{r.chunk_type}'"
+                assert r.chunk_type == "조_전체", (
+                    f"Expected chunk_type='조_전체', got '{r.chunk_type}'"
+                )
 
         finally:
             retriever.close()
@@ -79,9 +79,9 @@ class TestHybridRetrieverChunkTypeFilter:
             # 모든 결과가 항_분할 또는 호_분할이어야 함
             allowed_types = {"항_분할", "호_분할"}
             for r in results:
-                assert (
-                    r.chunk_type in allowed_types
-                ), f"Expected chunk_type in {allowed_types}, got '{r.chunk_type}'"
+                assert r.chunk_type in allowed_types, (
+                    f"Expected chunk_type in {allowed_types}, got '{r.chunk_type}'"
+                )
 
         finally:
             retriever.close()
@@ -101,9 +101,9 @@ class TestHybridRetrieverChunkTypeFilter:
 
             # 모든 결과가 별표1_품목매핑이어야 함
             for r in results:
-                assert (
-                    r.chunk_type == "별표1_품목매핑"
-                ), f"Expected '별표1_품목매핑', got '{r.chunk_type}'"
+                assert r.chunk_type == "별표1_품목매핑", (
+                    f"Expected '별표1_품목매핑', got '{r.chunk_type}'"
+                )
 
         finally:
             retriever.close()
@@ -134,9 +134,9 @@ class TestLawAgentHierarchicalSearch:
 
         if detailed_indices and article_indices:
             # 상세 결과가 조 결과보다 앞에 있어야 함
-            assert min(detailed_indices) < min(
-                article_indices
-            ), "Detailed (항/호) results should come before article (조) results"
+            assert min(detailed_indices) < min(article_indices), (
+                "Detailed (항/호) results should come before article (조) results"
+            )
 
         print(f"✓ 결과 순서: {[r.chunk_type for r in results[:5]]}")
 
@@ -148,9 +148,9 @@ class TestLawAgentHierarchicalSearch:
         results = await agent._execute_search("소비자 보호", top_k=10)
 
         chunk_ids = [r.chunk_id for r in results]
-        assert len(chunk_ids) == len(
-            set(chunk_ids)
-        ), "Should not have duplicate chunk_ids"
+        assert len(chunk_ids) == len(set(chunk_ids)), (
+            "Should not have duplicate chunk_ids"
+        )
 
 
 class TestCriteriaAgentHierarchicalSearch:

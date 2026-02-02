@@ -15,7 +15,6 @@ from app.supervisor.state import create_initial_state
 
 
 class TestAnswerGenerationFallback:
-
     @pytest.fixture
     def sample_retrieval(self) -> Dict[str, Any]:
         return {
@@ -172,7 +171,6 @@ class TestAnswerGenerationFallback:
     reason="generation_node removed, replaced by async generation_node_v2"
 )
 class TestGenerationNodeWithFallback:
-
     @pytest.fixture
     def state_with_retrieval(self) -> Dict[str, Any]:
         state = create_initial_state(

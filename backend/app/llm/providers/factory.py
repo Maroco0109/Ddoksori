@@ -162,7 +162,11 @@ class LLMProviderFactory:
     @classmethod
     def reset_all(cls) -> None:
         """모든 클라이언트 리셋 (테스트용)."""
-        global _openai_client, _anthropic_client, _shared_exaone_client, _domain_exaone_clients
+        global \
+            _openai_client, \
+            _anthropic_client, \
+            _shared_exaone_client, \
+            _domain_exaone_clients
         _openai_client = None
         _anthropic_client = None
         _shared_exaone_client = None

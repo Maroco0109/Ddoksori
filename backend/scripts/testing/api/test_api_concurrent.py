@@ -44,9 +44,9 @@ class TestConcurrency:
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # All requests should succeed
-        assert all(
-            status == 200 for status in results
-        ), f"Some requests failed: {results}"
+        assert all(status == 200 for status in results), (
+            f"Some requests failed: {results}"
+        )
 
     @pytest.mark.slow
     def test_no_connection_pool_exhaustion(self, api_client):
@@ -54,8 +54,8 @@ class TestConcurrency:
         # Send 50 rapid sequential requests
         for i in range(50):
             resp = api_client.post("/search", json={"query": f"테스트 {i}", "top_k": 3})
-            assert (
-                resp.status_code == 200
-            ), f"Request {i} failed with status {resp.status_code}"
+            assert resp.status_code == 200, (
+                f"Request {i} failed with status {resp.status_code}"
+            )
 
         # No connection errors should occur

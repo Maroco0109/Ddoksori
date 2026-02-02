@@ -54,9 +54,9 @@ class TestMASGraphRetrieval:
         }
 
         for node in expected_retrieval_nodes:
-            assert (
-                node in node_names
-            ), f"Retrieval node '{node}' not found in graph nodes: {node_names}"
+            assert node in node_names, (
+                f"Retrieval node '{node}' not found in graph nodes: {node_names}"
+            )
 
     def test_retrieval_merge_node_exists(self):
         """retrieval_merge 노드가 존재하는지 확인"""
@@ -69,9 +69,9 @@ class TestMASGraphRetrieval:
         graph = create_mas_supervisor_graph()
         node_names = set(graph.nodes.keys())
 
-        assert (
-            "retrieval_merge" in node_names
-        ), "retrieval_merge node not found in graph"
+        assert "retrieval_merge" in node_names, (
+            "retrieval_merge node not found in graph"
+        )
 
     def test_graph_compiles_successfully(self):
         """그래프가 오류 없이 컴파일되는지 확인"""
@@ -129,9 +129,9 @@ class TestSimilarChunkResult:
             "metadata",
         }
 
-        assert expected_fields.issubset(
-            field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields.issubset(field_names), (
+            f"Missing fields: {expected_fields - field_names}"
+        )
 
     def test_similar_chunk_result_instantiation(self):
         """SimilarChunkResult가 올바르게 인스턴스화되는지 확인"""
@@ -195,9 +195,9 @@ class TestSearchResult:
             "similarity",
         }
 
-        assert expected_fields.issubset(
-            field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields.issubset(field_names), (
+            f"Missing fields: {expected_fields - field_names}"
+        )
 
 
 # ============================================================
@@ -310,9 +310,9 @@ class TestHybridSearchMethods:
 
         source = inspect.getsource(LawRetrievalAgent._execute_search)
 
-        assert (
-            "hybrid_search" in source
-        ), "LawRetrievalAgent._execute_search must use hybrid_search method"
+        assert "hybrid_search" in source, (
+            "LawRetrievalAgent._execute_search must use hybrid_search method"
+        )
 
     def test_criteria_agent_uses_hybrid_search(self):
         """CriteriaRetrievalAgent가 hybrid_search를 사용하는지 확인"""
@@ -322,9 +322,9 @@ class TestHybridSearchMethods:
 
         source = inspect.getsource(CriteriaRetrievalAgent._execute_search)
 
-        assert (
-            "hybrid_search" in source
-        ), "CriteriaRetrievalAgent._execute_search must use hybrid_search method"
+        assert "hybrid_search" in source, (
+            "CriteriaRetrievalAgent._execute_search must use hybrid_search method"
+        )
 
 
 # ============================================================
@@ -346,12 +346,12 @@ class TestRRFFusion:
         source = inspect.getsource(LawRetrievalAgent._execute_search)
 
         # RRF 관련 키워드 확인
-        assert (
-            "rrf_k" in source
-        ), "LawRetrievalAgent must implement RRF with rrf_k parameter"
-        assert (
-            "fused_scores" in source or "fused" in source
-        ), "LawRetrievalAgent must implement score fusion"
+        assert "rrf_k" in source, (
+            "LawRetrievalAgent must implement RRF with rrf_k parameter"
+        )
+        assert "fused_scores" in source or "fused" in source, (
+            "LawRetrievalAgent must implement score fusion"
+        )
 
     def test_criteria_agent_implements_rrf(self):
         """CriteriaRetrievalAgent가 RRF를 구현하는지 확인"""
@@ -362,12 +362,12 @@ class TestRRFFusion:
         source = inspect.getsource(CriteriaRetrievalAgent._execute_search)
 
         # RRF 관련 키워드 확인
-        assert (
-            "rrf_k" in source
-        ), "CriteriaRetrievalAgent must implement RRF with rrf_k parameter"
-        assert (
-            "fused_scores" in source or "fused" in source
-        ), "CriteriaRetrievalAgent must implement score fusion"
+        assert "rrf_k" in source, (
+            "CriteriaRetrievalAgent must implement RRF with rrf_k parameter"
+        )
+        assert "fused_scores" in source or "fused" in source, (
+            "CriteriaRetrievalAgent must implement score fusion"
+        )
 
 
 # ============================================================
@@ -384,9 +384,9 @@ class TestBaseAgentProcess:
         """BaseRetrievalAgent가 process 메서드를 가지고 있는지 확인"""
         from app.agents.retrieval.base_retrieval_agent import BaseRetrievalAgent
 
-        assert hasattr(
-            BaseRetrievalAgent, "process"
-        ), "BaseRetrievalAgent must have process method"
+        assert hasattr(BaseRetrievalAgent, "process"), (
+            "BaseRetrievalAgent must have process method"
+        )
 
         method = getattr(BaseRetrievalAgent, "process")
         assert callable(method), "BaseRetrievalAgent.process must be callable"
@@ -406,9 +406,9 @@ class TestBaseAgentProcess:
         ]
 
         for agent_cls in agent_classes:
-            assert hasattr(
-                agent_cls, "process"
-            ), f"{agent_cls.__name__} must have process method"
+            assert hasattr(agent_cls, "process"), (
+                f"{agent_cls.__name__} must have process method"
+            )
 
             method = getattr(agent_cls, "process")
             assert callable(method), f"{agent_cls.__name__}.process must be callable"

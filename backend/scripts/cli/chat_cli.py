@@ -25,9 +25,8 @@ from typing import Any, Dict, List
 # 상대 임포트 지원
 sys.path.insert(0, str(Path(__file__).parent))
 
-from formatter import OutputFormatter
-
 from client import ChatClient
+from formatter import OutputFormatter
 
 
 class ChatCLI:

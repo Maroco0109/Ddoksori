@@ -15,7 +15,6 @@ from app.agents.answer_generation.cache import (
 
 
 class TestAnswerCacheInit:
-
     def test_init_disabled_by_default(self):
         with patch.dict(os.environ, {"ENABLE_ANSWER_CACHE": "false"}):
             cache = AnswerCache()
@@ -33,7 +32,6 @@ class TestAnswerCacheInit:
 
 
 class TestCacheKey:
-
     def test_generate_cache_key_consistency(self):
         cache = AnswerCache()
 
@@ -62,7 +60,6 @@ class TestCacheKey:
 
 
 class TestCacheOperationsDisabled:
-
     def test_get_returns_none_when_disabled(self):
         cache = AnswerCache()
         cache.enabled = False
@@ -89,7 +86,6 @@ class TestCacheOperationsDisabled:
 
 
 class TestCacheOperationsWithMockRedis:
-
     @pytest.fixture
     def cache_with_mock_redis(self):
         cache = AnswerCache()
@@ -166,7 +162,6 @@ class TestCacheOperationsWithMockRedis:
 
 
 class TestMetrics:
-
     def test_get_metrics_returns_stats(self):
         cache = AnswerCache()
         cache._hit_count = 10
@@ -201,7 +196,6 @@ class TestMetrics:
 
 
 class TestSingleton:
-
     def test_get_answer_cache_returns_singleton(self):
         reset_cache_instance()
 

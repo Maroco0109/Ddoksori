@@ -133,7 +133,7 @@ def print_summary_table(rows: List[Dict[str, Any]]):
     total = pass_count + fail_count
 
     print(
-        f"\nOverall: {pass_count}/{total} metrics passed ({100*pass_count/total:.1f}%)"
+        f"\nOverall: {pass_count}/{total} metrics passed ({100 * pass_count / total:.1f}%)"
         if total > 0
         else "\nNo metrics evaluated"
     )

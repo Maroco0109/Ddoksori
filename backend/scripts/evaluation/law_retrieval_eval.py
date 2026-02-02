@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Evaluate hybrid RRF retrieval against golden JSONL queries."""
 
 import argparse

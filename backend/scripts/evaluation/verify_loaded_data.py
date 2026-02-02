@@ -18,11 +18,11 @@ import psycopg
 def conninfo_from_env() -> str:
     """환경 변수에서 PostgreSQL 연결 정보 생성"""
     return (
-        f"host={os.environ.get('PGHOST','localhost')} "
-        f"port={os.environ.get('PGPORT','5432')} "
-        f"dbname={os.environ.get('PGDATABASE','ddoksori')} "
-        f"user={os.environ.get('PGUSER','postgres')} "
-        f"password={os.environ.get('PGPASSWORD','postgres')}"
+        f"host={os.environ.get('PGHOST', 'localhost')} "
+        f"port={os.environ.get('PGPORT', '5432')} "
+        f"dbname={os.environ.get('PGDATABASE', 'ddoksori')} "
+        f"user={os.environ.get('PGUSER', 'postgres')} "
+        f"password={os.environ.get('PGPASSWORD', 'postgres')}"
     )
 
 
@@ -118,7 +118,7 @@ def verify_chunks(conn: psycopg.Connection):
         print("\n샘플 청크 (최근 5개):")
         for row in cur.fetchall():
             print(
-                f"  - {row[0]}: {row[2]} (index={row[3]}/{row[4]-1}, len={row[5]}) - {row[6][:30]}..."
+                f"  - {row[0]}: {row[2]} (index={row[3]}/{row[4] - 1}, len={row[5]}) - {row[6][:30]}..."
             )
 
 

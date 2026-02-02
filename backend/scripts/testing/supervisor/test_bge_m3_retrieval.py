@@ -179,7 +179,7 @@ class TestHybridRetriever3Way:
         print(f"Query: {query}")
         print(f"Results: {len(results)}")
         for i, r in enumerate(results):
-            print(f"  {i+1}. [{r.doc_type}] {r.chunk_id}: score={r.similarity:.4f}")
+            print(f"  {i + 1}. [{r.doc_type}] {r.chunk_id}: score={r.similarity:.4f}")
 
     def test_3way_rrf_fusion(self, retriever):
         """Test 3-way RRF fusion produces valid results"""
@@ -328,7 +328,9 @@ class TestDatabaseBGEM3:
         print(f"  Not encoded: {not_encoded:,}")
         print(f"  Total: {total:,}")
         print(
-            f"  Progress: {encoded/total*100:.1f}%" if total > 0 else "  Progress: 0%"
+            f"  Progress: {encoded / total * 100:.1f}%"
+            if total > 0
+            else "  Progress: 0%"
         )
 
 

@@ -43,9 +43,9 @@ class TestDeterministicRouting:
         iteration_count = supervisor_state.get("iteration_count", 0)
 
         # NO_RETRIEVAL은 최대 3 iterations
-        assert (
-            iteration_count <= 3
-        ), f"NO_RETRIEVAL should have ≤3 iterations, got {iteration_count}"
+        assert iteration_count <= 3, (
+            f"NO_RETRIEVAL should have ≤3 iterations, got {iteration_count}"
+        )
 
         print(f"✓ NO_RETRIEVAL iterations: {iteration_count}")
 
@@ -64,9 +64,9 @@ class TestDeterministicRouting:
         iteration_count = supervisor_state.get("iteration_count", 0)
 
         # LAW 쿼리는 최대 4 iterations
-        assert (
-            iteration_count <= 4
-        ), f"LAW query should have ≤4 iterations, got {iteration_count}"
+        assert iteration_count <= 4, (
+            f"LAW query should have ≤4 iterations, got {iteration_count}"
+        )
 
         print(f"✓ LAW query iterations: {iteration_count}")
 
@@ -85,9 +85,9 @@ class TestDeterministicRouting:
         iteration_count = supervisor_state.get("iteration_count", 0)
 
         # CRITERIA 쿼리는 최대 4 iterations
-        assert (
-            iteration_count <= 4
-        ), f"CRITERIA query should have ≤4 iterations, got {iteration_count}"
+        assert iteration_count <= 4, (
+            f"CRITERIA query should have ≤4 iterations, got {iteration_count}"
+        )
 
         print(f"✓ CRITERIA query iterations: {iteration_count}")
 
@@ -141,9 +141,9 @@ class TestLLMPath:
         iteration_count = supervisor_state.get("iteration_count", 0)
 
         # DISPUTE 쿼리는 4-6 iterations (Review 포함)
-        assert (
-            iteration_count >= 4
-        ), f"DISPUTE query should have ≥4 iterations, got {iteration_count}"
+        assert iteration_count >= 4, (
+            f"DISPUTE query should have ≥4 iterations, got {iteration_count}"
+        )
 
         print(f"✓ DISPUTE query iterations: {iteration_count}")
 
@@ -175,9 +175,9 @@ class TestIterationReduction:
         supervisor_state = result.get("supervisor", {})
         iteration_count = supervisor_state.get("iteration_count", 0)
 
-        assert (
-            iteration_count <= max_iterations
-        ), f"Query '{query}' exceeded {max_iterations} iterations (got {iteration_count})"
+        assert iteration_count <= max_iterations, (
+            f"Query '{query}' exceeded {max_iterations} iterations (got {iteration_count})"
+        )
 
         print(f"✓ '{query}' → {iteration_count} iterations (max: {max_iterations})")
 

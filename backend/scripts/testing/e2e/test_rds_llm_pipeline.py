@@ -61,7 +61,6 @@ def _run_mas_graph(
 @pytest.mark.e2e
 @pytest.mark.needs_db
 class TestLawRetrieval:
-
     def test_law_retrieval_returns_results(self, hybrid_retriever):
         """법령 에이전트가 vector_chunks에서 결과를 반환하는지 확인"""
         results = hybrid_retriever.search(
@@ -91,7 +90,6 @@ class TestLawRetrieval:
 @pytest.mark.e2e
 @pytest.mark.needs_db
 class TestCriteriaRetrieval:
-
     def test_criteria_retrieval_returns_results(self, hybrid_retriever):
         """분쟁해결기준 에이전트가 결과를 반환하는지 확인"""
         results = hybrid_retriever.search(
@@ -112,9 +110,9 @@ class TestCriteriaRetrieval:
         )
         if results:
             chunk_ids = [r.chunk_id for r in results]
-            assert len(chunk_ids) == len(
-                set(chunk_ids)
-            ), f"중복 chunk_id 발견: {[c for c in chunk_ids if chunk_ids.count(c) > 1]}"
+            assert len(chunk_ids) == len(set(chunk_ids)), (
+                f"중복 chunk_id 발견: {[c for c in chunk_ids if chunk_ids.count(c) > 1]}"
+            )
 
 
 # ============================================================
@@ -125,7 +123,6 @@ class TestCriteriaRetrieval:
 @pytest.mark.e2e
 @pytest.mark.needs_db
 class TestCaseRetrieval:
-
     def test_case_retrieval_returns_results(self, hybrid_retriever):
         """분쟁사례 에이전트가 결과를 반환하는지 확인"""
         results = hybrid_retriever.search(
@@ -144,7 +141,6 @@ class TestCaseRetrieval:
 @pytest.mark.e2e
 @pytest.mark.needs_db
 class TestHybridRRFFusion:
-
     def test_hybrid_rrf_returns_results(self, hybrid_retriever):
         """Dense + Lexical RRF 결과가 정상 병합되는지 확인"""
         results = hybrid_retriever.search(query="환불", top_k=5)
@@ -167,7 +163,6 @@ class TestHybridRRFFusion:
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestDisputeFullPipeline:
-
     def test_dispute_pipeline_produces_answer(self, compiled_mas_graph, openai_api_key):
         """분쟁 쿼리의 전체 파이프라인이 답변을 생성하는지 확인"""
         result = _run_mas_graph(
@@ -220,7 +215,6 @@ class TestDisputeFullPipeline:
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestLawQueryPipeline:
-
     def test_law_pipeline_produces_answer(self, compiled_mas_graph, openai_api_key):
         """법령 쿼리의 전체 파이프라인이 답변을 생성하는지 확인"""
         result = _run_mas_graph(
@@ -242,7 +236,6 @@ class TestLawQueryPipeline:
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestCriteriaQueryPipeline:
-
     def test_criteria_pipeline_produces_answer(
         self, compiled_mas_graph, openai_api_key
     ):
@@ -265,7 +258,6 @@ class TestCriteriaQueryPipeline:
 @pytest.mark.e2e
 @pytest.mark.llm
 class TestGeneralQueryFastPath:
-
     def test_general_query_produces_answer(self, compiled_mas_graph, openai_api_key):
         """일반 질문이 답변을 생성하는지 확인"""
         result = _run_mas_graph(
@@ -288,9 +280,9 @@ class TestGeneralQueryFastPath:
         individual = result.get("individual_retrieval_results", [])
         if individual:
             total_docs = sum(len(ir.get("documents", [])) for ir in individual)
-            assert (
-                total_docs == 0
-            ), f"general 쿼리인데 retrieval 결과가 {total_docs}건 존재합니다"
+            assert total_docs == 0, (
+                f"general 쿼리인데 retrieval 결과가 {total_docs}건 존재합니다"
+            )
 
 
 # ============================================================
@@ -302,7 +294,6 @@ class TestGeneralQueryFastPath:
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestAnswerQuality:
-
     def test_multiple_dispute_queries_no_prohibited(
         self, compiled_mas_graph, openai_api_key
     ):
@@ -324,9 +315,9 @@ class TestAnswerQuality:
             final_answer = result.get("final_answer", "")
             if final_answer:
                 violations = _check_prohibited_expressions(final_answer)
-                assert (
-                    len(violations) == 0
-                ), f"쿼리 '{query[:20]}...'의 답변에 금지 표현 발견: {violations}"
+                assert len(violations) == 0, (
+                    f"쿼리 '{query[:20]}...'의 답변에 금지 표현 발견: {violations}"
+                )
 
 
 # ============================================================
@@ -338,7 +329,6 @@ class TestAnswerQuality:
 @pytest.mark.llm
 @pytest.mark.needs_db
 class TestAnswerCitations:
-
     def test_dispute_answer_has_sources(self, compiled_mas_graph, openai_api_key):
         """dispute 답변에 출처 정보가 포함되는지 확인"""
         result = _run_mas_graph(
@@ -358,9 +348,9 @@ class TestAnswerCitations:
             has_citation_in_text = any(
                 re.search(p, final_answer) for p in CITATION_PATTERNS
             )
-            assert (
-                has_citation_in_text
-            ), "dispute 답변에 sources도 없고, 텍스트 내 인용 패턴도 없습니다"
+            assert has_citation_in_text, (
+                "dispute 답변에 sources도 없고, 텍스트 내 인용 패턴도 없습니다"
+            )
 
 
 # ============================================================
@@ -371,7 +361,6 @@ class TestAnswerCitations:
 @pytest.mark.e2e
 @pytest.mark.unit
 class TestDomainThresholdFiltering:
-
     def test_threshold_code_defaults(self):
         """각 도메인별 threshold 코드 기본값 확인"""
         from app.common.config import AgentSettings
@@ -388,12 +377,12 @@ class TestDomainThresholdFiltering:
         source = inspect.getsource(BaseRetrievalAgent.process)
 
         # 현재 아키텍처: BaseRetrievalAgent.process()는 max_similarity/avg_similarity를 계산
-        assert (
-            "max_sim" in source
-        ), "BaseRetrievalAgent.process()에 max_sim 계산 로직이 없습니다"
-        assert (
-            "avg_sim" in source
-        ), "BaseRetrievalAgent.process()에 avg_sim 계산 로직이 없습니다"
-        assert (
-            "_execute_search" in source
-        ), "BaseRetrievalAgent.process()에 _execute_search 호출이 없습니다"
+        assert "max_sim" in source, (
+            "BaseRetrievalAgent.process()에 max_sim 계산 로직이 없습니다"
+        )
+        assert "avg_sim" in source, (
+            "BaseRetrievalAgent.process()에 avg_sim 계산 로직이 없습니다"
+        )
+        assert "_execute_search" in source, (
+            "BaseRetrievalAgent.process()에 _execute_search 호출이 없습니다"
+        )

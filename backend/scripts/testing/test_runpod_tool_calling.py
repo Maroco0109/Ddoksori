@@ -409,8 +409,7 @@ class TestEndToEndToolCalling:
         for step in steps:
             status_emoji = "✅" if step["status"] == "SUCCESS" else "❌"
             logger.info(
-                f"{status_emoji} Step {step['step']}: {step['name']} "
-                f"({step['reason']})"
+                f"{status_emoji} Step {step['step']}: {step['name']} ({step['reason']})"
             )
 
         logger.info("✅ E2E rule-based fallback successful")

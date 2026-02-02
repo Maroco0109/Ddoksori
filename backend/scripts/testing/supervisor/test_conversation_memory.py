@@ -150,7 +150,7 @@ class TestRAGConversationMemory:
         # 6개 턴 추가
         for i in range(6):
             memory.add_turn(
-                mode="NEED_RAG", query=f"질문 {i+1}", answer_summary=f"답변 {i+1}"
+                mode="NEED_RAG", query=f"질문 {i + 1}", answer_summary=f"답변 {i + 1}"
             )
 
         # 윈도우 크기만큼만 유지
@@ -238,7 +238,7 @@ class TestRAGConversationMemory:
         # 4개 턴 추가
         for i in range(4):
             memory.add_turn(
-                mode="NEED_RAG", query=f"질문 {i+1}", answer_summary=f"답변 {i+1}"
+                mode="NEED_RAG", query=f"질문 {i + 1}", answer_summary=f"답변 {i + 1}"
             )
 
         # 환경변수에서 설정한 3으로 제한
@@ -447,7 +447,9 @@ class TestEdgeCases:
 
         # 3개 추가
         for i in range(3):
-            memory.add_turn(mode="NEED_RAG", query=f"Q{i+1}", answer_summary=f"A{i+1}")
+            memory.add_turn(
+                mode="NEED_RAG", query=f"Q{i + 1}", answer_summary=f"A{i + 1}"
+            )
 
         # 윈도우 크기 2 유지
         assert len(memory) == 2

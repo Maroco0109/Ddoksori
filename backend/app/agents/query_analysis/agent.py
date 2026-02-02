@@ -225,8 +225,8 @@ from .classifiers import (
 
 # === Backward Compatibility Exports ===
 # 기존 코드와의 호환성을 위해 일부 함수/상수를 re-export
-from .constants import AMBIGUOUS_QUERY_PATTERNS  # backward compat for tests
 from .constants import (
+    AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
     COMMON_PRODUCTS,
     CRITERIA_KEYWORDS,
     DISPUTE_INTENT_KEYWORDS,

@@ -10,7 +10,6 @@ from scripts.testing.domain.golden_set import GOLDEN_SET
 
 
 class TestDomainClassification:
-
     def test_accuracy_above_threshold(self):
         threshold = 0.75
         correct = 0
@@ -33,10 +32,10 @@ class TestDomainClassification:
 
         accuracy = correct / total
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Domain Classification Accuracy: {accuracy:.2%} ({correct}/{total})")
         print(f"Threshold: {threshold:.0%}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         if failures:
             print(f"\nFailed cases ({len(failures)}):")
@@ -53,9 +52,9 @@ class TestDomainClassification:
 
         for item in fss_cases:
             result = classify_domain(item["query"])
-            assert (
-                result.agency == "FSS"
-            ), f"Query '{item['query']}' should be FSS, got {result.agency}"
+            assert result.agency == "FSS", (
+                f"Query '{item['query']}' should be FSS, got {result.agency}"
+            )
             assert result.is_restricted is True
 
     def test_k_medi_classification(self):
@@ -65,9 +64,9 @@ class TestDomainClassification:
 
         for item in k_medi_cases:
             result = classify_domain(item["query"])
-            assert (
-                result.agency == "K_MEDI"
-            ), f"Query '{item['query']}' should be K_MEDI, got {result.agency}"
+            assert result.agency == "K_MEDI", (
+                f"Query '{item['query']}' should be K_MEDI, got {result.agency}"
+            )
             assert result.is_restricted is True
 
     def test_non_restricted_agencies(self):
@@ -75,9 +74,9 @@ class TestDomainClassification:
 
         for item in non_restricted:
             result = classify_domain(item["query"])
-            assert (
-                result.is_restricted is False
-            ), f"Query '{item['query']}' should not be restricted"
+            assert result.is_restricted is False, (
+                f"Query '{item['query']}' should not be restricted"
+            )
 
     def test_agency_info_has_required_fields(self):
         required_fields = ["name", "full_name", "description", "url"]
@@ -89,9 +88,9 @@ class TestDomainClassification:
     def test_restricted_agencies_have_restriction_reason(self):
         for code, info in AGENCY_INFO.items():
             if info.get("is_restricted"):
-                assert (
-                    "restriction_reason" in info
-                ), f"Restricted agency {code} missing restriction_reason"
+                assert "restriction_reason" in info, (
+                    f"Restricted agency {code} missing restriction_reason"
+                )
                 assert len(info["restriction_reason"]) > 0
 
 

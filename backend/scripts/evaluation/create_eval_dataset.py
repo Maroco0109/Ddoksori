@@ -256,7 +256,7 @@ def interactive_review(input_path: str, output_path: str):
     reviewed_items = []
 
     for i, item in enumerate(items):
-        print(f"\n[{i+1}/{len(items)}] ID: {item['id']}")
+        print(f"\n[{i + 1}/{len(items)}] ID: {item['id']}")
         print(f"Question: {item['question'][:100]}...")
         print(f"Category: {item['category']}")
         print(f"Expected Agency: {item['expected_agency']}")
@@ -264,7 +264,7 @@ def interactive_review(input_path: str, output_path: str):
 
         new_contexts = []
         for j, ctx in enumerate(item["expected_contexts"]):
-            print(f"\n  [{j+1}] {ctx['doc_type']}: {ctx['doc_id']}")
+            print(f"\n  [{j + 1}] {ctx['doc_type']}: {ctx['doc_id']}")
             print(f"      Title: {ctx.get('doc_title', 'N/A')[:50]}")
             print(f"      Similarity: {ctx.get('similarity', 0):.4f}")
 
@@ -292,7 +292,7 @@ def interactive_review(input_path: str, output_path: str):
         # 10개마다 자동 저장
         if (i + 1) % 10 == 0:
             save_dataset(reviewed_items, output_path)
-            print(f"\nAuto-saved progress ({i+1} items)")
+            print(f"\nAuto-saved progress ({i + 1} items)")
 
     save_dataset(reviewed_items, output_path)
     print(f"\nReview complete! Saved {len(reviewed_items)} items.")

@@ -105,9 +105,9 @@ class TestUnifiedRetrieverDirect:
         if len(results) >= 2:
             scores = [r.similarity for r in results]
             for i in range(len(scores) - 1):
-                assert (
-                    scores[i] >= scores[i + 1]
-                ), f"Not sorted: {scores[i]} < {scores[i+1]}"
+                assert scores[i] >= scores[i + 1], (
+                    f"Not sorted: {scores[i]} < {scores[i + 1]}"
+                )
 
 
 # ============================================================
@@ -322,9 +322,9 @@ class TestLegacyCodeMarking:
 
         for mod in [law_agent, criteria_agent, case_agent]:
             source = inspect.getsource(mod)
-            assert (
-                "HybridRetriever" not in source
-            ), f"{mod.__name__} still imports HybridRetriever"
+            assert "HybridRetriever" not in source, (
+                f"{mod.__name__} still imports HybridRetriever"
+            )
 
     def test_unified_retriever_exists(self):
         """UnifiedRetriever 모듈이 정상 import 가능"""

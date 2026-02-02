@@ -10,7 +10,6 @@ from app.common.metrics import AgentMetrics, MetricRecord
 
 
 class TestMeasureContextManager:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -44,7 +43,6 @@ class TestMeasureContextManager:
 
 
 class TestRecordManual:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -63,7 +61,6 @@ class TestRecordManual:
 
 
 class TestGetStats:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -104,7 +101,6 @@ class TestGetStats:
 
 
 class TestGetStatsByOperation:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -123,7 +119,6 @@ class TestGetStatsByOperation:
 
 
 class TestGetAllAgents:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -143,7 +138,6 @@ class TestGetAllAgents:
 
 
 class TestGetRecentRecords:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -167,7 +161,6 @@ class TestGetRecentRecords:
 
 
 class TestClear:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -192,7 +185,6 @@ class TestClear:
 
 
 class TestMaxRecordsLimit:
-
     def setup_method(self):
         AgentMetrics.clear()
 
@@ -212,7 +204,6 @@ class TestMaxRecordsLimit:
 
 
 class TestGetSummary:
-
     def setup_method(self):
         AgentMetrics.clear()
 

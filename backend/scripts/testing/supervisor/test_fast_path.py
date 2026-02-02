@@ -48,15 +48,15 @@ class TestNoRetrievalFastPath:
         result, elapsed = asyncio.run(run_test())
 
         # 검증 1: mode 확인
-        assert (
-            result.get("mode") == "NO_RETRIEVAL"
-        ), f"Expected mode='NO_RETRIEVAL', got '{result.get('mode')}'"
+        assert result.get("mode") == "NO_RETRIEVAL", (
+            f"Expected mode='NO_RETRIEVAL', got '{result.get('mode')}'"
+        )
 
         # 검증 2: retrieval이 실행되지 않음
         retrieval = result.get("retrieval")
-        assert (
-            retrieval is None or retrieval == {} or not retrieval
-        ), f"Retrieval should be skipped, but got: {retrieval}"
+        assert retrieval is None or retrieval == {} or not retrieval, (
+            f"Retrieval should be skipped, but got: {retrieval}"
+        )
 
         # 검증 3: 응답 시간
         assert elapsed < 10.0, f"Response time {elapsed:.2f}s exceeds 10s limit"
@@ -90,9 +90,9 @@ class TestNoRetrievalFastPath:
         results = asyncio.run(run_test())
 
         for query, result, elapsed in results:
-            assert (
-                result.get("mode") == "NO_RETRIEVAL"
-            ), f"Query '{query}' should be NO_RETRIEVAL, got '{result.get('mode')}'"
+            assert result.get("mode") == "NO_RETRIEVAL", (
+                f"Query '{query}' should be NO_RETRIEVAL, got '{result.get('mode')}'"
+            )
 
             print(f"✓ '{query}' → {elapsed:.2f}초")
 
@@ -114,15 +114,15 @@ class TestNoRetrievalFastPath:
         result = asyncio.run(run_test())
 
         # NEED_RAG여야 함
-        assert (
-            result.get("mode") == "NEED_RAG"
-        ), f"Expected NEED_RAG, got '{result.get('mode')}'"
+        assert result.get("mode") == "NEED_RAG", (
+            f"Expected NEED_RAG, got '{result.get('mode')}'"
+        )
 
         # retrieval 결과가 있어야 함
         retrieval = result.get("retrieval")
-        assert (
-            retrieval is not None and retrieval != {}
-        ), "NEED_RAG query should have retrieval results"
+        assert retrieval is not None and retrieval != {}, (
+            "NEED_RAG query should have retrieval results"
+        )
 
         print(f"✓ 법령 쿼리는 retrieval 실행됨")
 
@@ -152,9 +152,9 @@ class TestNoRetrievalFastPath:
         result = asyncio.run(run_test())
 
         actual_mode = result.get("mode")
-        assert (
-            actual_mode == expected_mode
-        ), f"Query '{query}': expected {expected_mode}, got {actual_mode}"
+        assert actual_mode == expected_mode, (
+            f"Query '{query}': expected {expected_mode}, got {actual_mode}"
+        )
 
 
 class TestFastPathPerformance:
@@ -189,9 +189,9 @@ class TestFastPathPerformance:
         results = asyncio.run(run_test())
 
         for query, avg_time in results:
-            assert (
-                avg_time < 5.0
-            ), f"Query '{query}' avg time {avg_time:.2f}s exceeds 5s"
+            assert avg_time < 5.0, (
+                f"Query '{query}' avg time {avg_time:.2f}s exceeds 5s"
+            )
 
             print(f"✓ '{query}' 평균 응답 시간: {avg_time:.2f}초")
 

@@ -85,9 +85,9 @@ class TestHybridRetrieverCategoryFilter:
             allowed_categories = {"해결", "조정"}
             for r in results:
                 category = get_category(r)
-                assert (
-                    category in allowed_categories
-                ), f"Expected category in {allowed_categories}, got '{category}'"
+                assert category in allowed_categories, (
+                    f"Expected category in {allowed_categories}, got '{category}'"
+                )
 
             print(f"✓ 해결+조정 사례 {len(results)}건 검색됨")
 
@@ -145,9 +145,9 @@ class TestCaseAgentPrioritySearch:
 
         if primary_indices and counsel_indices:
             # 해결/조정 사례가 상담 사례보다 앞에 있어야 함
-            assert min(primary_indices) < min(
-                counsel_indices
-            ), "Primary (해결/조정) results should come before counsel (상담) results"
+            assert min(primary_indices) < min(counsel_indices), (
+                "Primary (해결/조정) results should come before counsel (상담) results"
+            )
 
         # 결과 분포 출력
         categories = [get_category(r) for r in results]
@@ -161,9 +161,9 @@ class TestCaseAgentPrioritySearch:
         results = await agent._execute_search("노트북 환불", top_k=10)
 
         chunk_ids = [r.chunk_id for r in results]
-        assert len(chunk_ids) == len(
-            set(chunk_ids)
-        ), "Should not have duplicate chunk_ids"
+        assert len(chunk_ids) == len(set(chunk_ids)), (
+            "Should not have duplicate chunk_ids"
+        )
 
     @pytest.mark.asyncio
     async def test_counsel_supplement_when_primary_insufficient(self):

@@ -41,8 +41,8 @@ class OutputFormatter:
         """요청 정보 포맷"""
         return f"""[요청 정보]
   세션 ID: {session_id}
-  질문: {request.get('message', '')}
-  상담 유형: {request.get('chat_type', 'general')}
+  질문: {request.get("message", "")}
+  상담 유형: {request.get("chat_type", "general")}
 """
 
     def _format_node_timings(self, timings: Optional[List[Dict[str, Any]]]) -> str:
@@ -67,7 +67,7 @@ class OutputFormatter:
             )
 
         lines.append(header)
-        lines.append(f"  총 소요시간: {total_ms/1000:.2f}초\n")
+        lines.append(f"  총 소요시간: {total_ms / 1000:.2f}초\n")
         return "\n".join(lines)
 
     def _format_time(self, iso_time: str) -> str:

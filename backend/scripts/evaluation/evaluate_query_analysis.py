@@ -18,15 +18,14 @@ from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from rag.evaluation import (
-    QueryAnalysisMetrics,
-    aggregate_query_analysis_results,
-)
-
 from app.supervisor.nodes.query_analysis import (
     _classify_query_type,
     _determine_agency_hint,
     _extract_keywords,
+)
+from rag.evaluation import (
+    QueryAnalysisMetrics,
+    aggregate_query_analysis_results,
 )
 
 

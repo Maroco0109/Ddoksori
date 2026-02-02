@@ -25,9 +25,9 @@ def test_trace_entry_fields():
     }
     hints = get_type_hints(TraceEntry)
     actual_fields = set(hints.keys())
-    assert (
-        actual_fields == expected_fields
-    ), f"Expected {expected_fields}, got {actual_fields}"
+    assert actual_fields == expected_fields, (
+        f"Expected {expected_fields}, got {actual_fields}"
+    )
 
     entry: TraceEntry = {
         "node_name": "test_node",

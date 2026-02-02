@@ -119,14 +119,14 @@ async def create_embedding(request: EmbeddingRequest):
             embeddings = model.encode(request.texts, convert_to_numpy=True).tolist()
             elapsed = time.time() - start_time
             print(
-                f"📊 Batch embedding: {batch_size} texts in {elapsed:.3f}s ({elapsed/batch_size*1000:.1f}ms per text)"
+                f"📊 Batch embedding: {batch_size} texts in {elapsed:.3f}s ({elapsed / batch_size * 1000:.1f}ms per text)"
             )
             return {"embeddings": embeddings}
         elif request.text:
             # Single mode
             embedding = model.encode(request.text, convert_to_numpy=True).tolist()
             elapsed = time.time() - start_time
-            print(f"📊 Single embedding: {elapsed*1000:.1f}ms")
+            print(f"📊 Single embedding: {elapsed * 1000:.1f}ms")
             return {"embedding": embedding}
         else:
             raise HTTPException(

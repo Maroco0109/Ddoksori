@@ -34,8 +34,8 @@ from .classifiers import (
 )
 
 # Constants (commonly used)
-from .constants import AMBIGUOUS_QUERY_PATTERNS  # backward compat for tests
 from .constants import (
+    AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
     COMMON_PRODUCTS,
     CRITERIA_KEYWORDS,
     DISPUTE_INTENT_KEYWORDS,

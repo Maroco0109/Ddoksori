@@ -150,9 +150,9 @@ class TestFastPathDetailed:
         """Fast path에서 review가 실행되지 않는지 확인."""
         result = _run_graph(compiled_mas_graph, "감사합니다", "general")
         timings = result.get("_node_timings", {})
-        assert (
-            "review" not in timings
-        ), f"Fast path에서 review가 실행됨: {list(timings.keys())}"
+        assert "review" not in timings, (
+            f"Fast path에서 review가 실행됨: {list(timings.keys())}"
+        )
 
 
 # ============================================================
@@ -223,9 +223,9 @@ class TestProtocolComplianceReal:
         individual = result.get("individual_retrieval_results", [])
         for ir in individual:
             max_sim = ir.get("max_similarity", 0)
-            assert (
-                max_sim > 0
-            ), f"retrieval_{ir.get('source')}의 max_similarity가 0 이하: {max_sim}"
+            assert max_sim > 0, (
+                f"retrieval_{ir.get('source')}의 max_similarity가 0 이하: {max_sim}"
+            )
 
 
 # ============================================================
@@ -251,8 +251,7 @@ class TestNodeTimings:
 
         missing = expected_nodes - actual_nodes
         assert not missing, (
-            f"분쟁 쿼리에서 누락된 노드: {missing}. "
-            f"실행된 노드: {sorted(actual_nodes)}"
+            f"분쟁 쿼리에서 누락된 노드: {missing}. 실행된 노드: {sorted(actual_nodes)}"
         )
 
     def test_node_timings_have_duration(self, compiled_mas_graph, openai_api_key):

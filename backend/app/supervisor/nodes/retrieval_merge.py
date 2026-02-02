@@ -405,7 +405,7 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
 
     elapsed = time.time() - start_time
     logger.info(
-        f"[RetrievalMerge] Completed in {elapsed*1000:.1f}ms: "
+        f"[RetrievalMerge] Completed in {elapsed * 1000:.1f}ms: "
         f"laws={len(merged['laws'])}, criteria={len(merged['criteria'])}, "
         f"disputes={len(merged['disputes'])}, counsels={len(merged['counsels'])}"
     )

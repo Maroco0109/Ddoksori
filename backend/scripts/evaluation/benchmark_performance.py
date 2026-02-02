@@ -161,11 +161,11 @@ def print_results(label: str, results: Dict[str, float], target_p95: float = Non
         results: Performance metrics
         target_p95: Target p95 latency for pass/fail
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"📊 {label} Performance Results")
-    print(f"{'='*60}")
-    print(f"  p50: {results['p50']*1000:7.1f} ms")
-    print(f"  p95: {results['p95']*1000:7.1f} ms", end="")
+    print(f"{'=' * 60}")
+    print(f"  p50: {results['p50'] * 1000:7.1f} ms")
+    print(f"  p95: {results['p95'] * 1000:7.1f} ms", end="")
 
     if target_p95:
         target_ms = target_p95 * 1000
@@ -174,12 +174,12 @@ def print_results(label: str, results: Dict[str, float], target_p95: float = Non
     else:
         print()
 
-    print(f"  p99: {results['p99']*1000:7.1f} ms")
-    print(f"  mean: {results['mean']*1000:6.1f} ms")
-    print(f"  min: {results['min']*1000:7.1f} ms")
-    print(f"  max: {results['max']*1000:7.1f} ms")
+    print(f"  p99: {results['p99'] * 1000:7.1f} ms")
+    print(f"  mean: {results['mean'] * 1000:6.1f} ms")
+    print(f"  min: {results['min'] * 1000:7.1f} ms")
+    print(f"  max: {results['max'] * 1000:7.1f} ms")
     print(f"  throughput: {results['throughput']:5.1f} req/s")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def main():

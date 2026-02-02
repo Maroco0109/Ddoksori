@@ -159,8 +159,7 @@ logger = logging.getLogger(__name__)
 
 
 # === Progressive Disclosure 메타 쿼리 응답 템플릿 ===
-META_CONVERSATIONAL_TEMPLATE = (
-    """안녕하세요, 똑소리입니다! 소비자 분쟁 상담을 도와드립니다.
+META_CONVERSATIONAL_TEMPLATE = """안녕하세요, 똑소리입니다! 소비자 분쟁 상담을 도와드립니다.
 
 다음과 같은 정보를 알려주시면 맞춤 상담을 해드릴 수 있어요:
 
@@ -172,7 +171,6 @@ META_CONVERSATIONAL_TEMPLATE = (
 > 예시: "쿠팡에서 산 노트북이 불량인데 환불을 거부당했어요"
 
 편하게 말씀해 주세요!""".strip()
-)
 
 META_CONVERSATIONAL_ONBOARDING_TEMPLATE = """안녕하세요, 똑소리입니다!
 

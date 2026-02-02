@@ -14,7 +14,6 @@ from app.supervisor.state import ChatState, OnboardingInfo, create_initial_state
 
 
 class TestQueryAnalysisFunctions:
-
     def test_extract_info_from_message(self):
         query = "노트북 150만원에 샀는데 환불하고 싶어요."
         info = _extract_info_from_message(query)
@@ -49,7 +48,6 @@ class TestQueryAnalysisFunctions:
 
 
 class TestLegalReviewFunctions:
-
     def test_check_prohibited_expressions(self):
         text = "이 소송은 반드시 승소합니다."
         violations = _check_prohibited_expressions(text)
@@ -128,7 +126,6 @@ class TestLegalReviewFunctions:
 
 
 class TestAnswerGenerationFunctions:
-
     def test_build_general_response(self):
         resp = _build_general_response("안녕하세요")
         assert "안녕하세요" in resp
