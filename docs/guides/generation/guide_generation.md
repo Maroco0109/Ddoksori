@@ -239,14 +239,16 @@ python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationN
 
 ### 6.2 API 엔드포인트 테스트
 ```bash
+# Note: test_api_endpoints.py was removed in test refactoring (branch refactor/47-test-refactor)
+# Use E2E supervisor tests for validation instead:
 cd backend
-python -m pytest scripts/testing/api/test_api_endpoints.py -v -p no:asyncio
+python -m pytest scripts/testing/supervisor/test_e2e_queries.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
-- `/chat` 엔드포인트 정상 응답
-- 4섹션 구조 반환 확인
-- 스트리밍 응답 확인
+- E2E 질의 응답 검증
+- 답변 생성 파이프라인 테스트
+- Supervisor 통합 테스트
 
 ### 6.3 대화식 테스트
 ```bash
@@ -406,8 +408,8 @@ conda activate dsr
 cd backend
 python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestGenerationNode -v -p no:asyncio
 
-# API 테스트
-python -m pytest scripts/testing/api/test_api_endpoints.py -v -p no:asyncio
+# E2E Supervisor 테스트 (test_api_endpoints.py was removed in test refactoring)
+python -m pytest scripts/testing/supervisor/test_e2e_queries.py -v -p no:asyncio
 
 # 대화식 테스트
 python backend/scripts/evaluation/interactive_rag_test.py

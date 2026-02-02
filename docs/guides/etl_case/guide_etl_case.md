@@ -330,14 +330,15 @@ python backend/scripts/testing/validate_hybrid_retrieval.py
 
 ### 4.2 동시성 테스트
 ```bash
+# Note: test_api_concurrent.py was removed in test refactoring (branch refactor/47-test-refactor)
+# Use the following E2E tests for validation instead:
 cd backend
-python -m pytest scripts/testing/api/test_api_concurrent.py -v -p no:asyncio
+python -m pytest scripts/testing/e2e/test_merged_graph.py -v -p no:asyncio
 ```
 
 **테스트 항목**:
-- 동시 요청 처리 (10, 50, 100개)
-- 응답 시간 분포
-- 에러율
+- E2E 시스템 통합 테스트
+- 검색 및 답변 생성 파이프라인 검증
 
 ### 4.3 전체 데이터 로딩 테스트
 ```bash
@@ -495,9 +496,10 @@ python backend/scripts/testing/validate_hybrid_retrieval.py
 # 성능 벤치마크
 python -m scripts.evaluation.benchmark_performance --url http://localhost:8000
 
-# 동시성 테스트 (backend 디렉토리에서)
+# E2E 테스트 (backend 디렉토리에서)
+# Note: test_api_concurrent.py was removed in test refactoring
 cd backend
-python -m pytest scripts/testing/api/test_api_concurrent.py -v -p no:asyncio
+python -m pytest scripts/testing/e2e/test_merged_graph.py -v -p no:asyncio
 
 # DB 확인 (임베딩 현황)
 docker exec -it ddoksori_db psql -U postgres -d ddoksori -c \

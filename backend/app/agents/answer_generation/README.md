@@ -101,46 +101,33 @@ safe_fallback (최종 안전 메시지)
 답변 생성 테스트는 LLM 호출을 모킹(Mocking)하여 Fallback 체인, 규칙 기반 생성, 안전 장치 동작을 검증합니다.
 
 ### 주요 테스트 스크립트
-- **`backend/scripts/testing/generation/test_generation.py`**: 답변 생성 Fallback 체인 및 generation_node 단위 테스트 (12개 테스트).
+- **`backend/scripts/testing/answer_generation/`**: 답변 생성 관련 테스트
+  - `test_followup.py`: 후속 질문 생성 테스트
+  - `test_formats.py`: 답변 포맷 테스트
+  - `test_specialist_agency.py`: 전문 기관 안내 테스트
 
 ### 테스트 항목 상세
 
-#### TestAnswerGenerationFallback (7개 테스트)
+답변 생성 관련 테스트는 다음 영역을 다룹니다:
 
-| 테스트 | 설명 | 검증 내용 |
-|--------|------|-----------|
-| `test_rule_based_generation_contains_required_sections` | 규칙 기반 생성 필수 섹션 포함 | 추천 기관, 관련 사례, 법령, 기준, 다음 단계 섹션 및 면책 문구 포함 여부 |
-| `test_rule_based_generation_empty_retrieval` | 빈 검색 결과 처리 | 검색 결과 없을 때 추천 기관과 다음 단계만 표시, 사례/법령/기준 섹션 미표시 |
-| `test_safe_fallback_message_contains_contact_info` | 안전 폴백 메시지 연락처 포함 | 1372 번호, consumer.go.kr URL, 오류 안내 문구 포함 |
-| `test_fallback_chain_order` | Fallback 체인 순서 검증 | gpt-4o-mini → claude-3-haiku → rule_based 순서 확인 |
-| `test_fallback_to_rule_based_on_llm_failure` | LLM 실패 시 규칙 기반 폴백 | 모든 LLM 실패 시 rule_based로 전환, 정상 응답 반환 |
-| `test_fallback_to_safe_message_on_total_failure` | 전체 실패 시 안전 메시지 | LLM + 규칙 기반 모두 실패 시 SAFE_FALLBACK_MESSAGE 반환 |
-| `test_primary_llm_success_skips_fallback` | 1차 LLM 성공 시 폴백 건너뛰기 | gpt-4o-mini 성공 시 다른 모델 호출 없음 |
+#### test_followup.py
+- 사용자 대화 맥락 기반 후속 질문 생성
+- 온보딩 정보 슬롯 미충족 시 추가 질문 유도
 
-#### TestGenerationNodeWithFallback (5개 테스트)
+#### test_formats.py
+- 답변 포맷 검증 (구조화된 응답)
+- 근거 인용(Citation) 형식 검증
 
-| 테스트 | 설명 | 검증 내용 |
-|--------|------|-----------|
-| `test_generation_node_uses_fallback_chain` | generation_node Fallback 체인 사용 | Fallback 호출 여부, draft_answer 및 generation_model_used 필드 설정 |
-| `test_generation_node_marks_low_evidence_for_fallback_models` | 폴백 모델 사용 시 낮은 근거 표시 | rule_based 사용 시 has_sufficient_evidence=False 설정 |
-| `test_generation_node_safe_fallback_evidence_flag` | 안전 폴백 근거 플래그 | safe_fallback 사용 시 has_sufficient_evidence=False 설정 |
-| `test_generation_node_no_retrieval_returns_clarifying_questions` | 검색 결과 없을 때 추가 질문 반환 | retrieval=None 시 clarifying_questions 생성 |
-| `test_generation_node_general_query_bypasses_fallback` | 일반 질의 폴백 우회 | query_type='general' 시 인사말 규칙 기반 응답, Fallback 체인 미사용 |
+#### test_specialist_agency.py
+- 제한된 영역(금융/의료) 감지 시 전문 기관 안내
+- 안전한 템플릿 응답 생성
 
 ### 실행 방법
 ```bash
 conda activate dsr
 cd backend
-pytest scripts/testing/generation/test_generation.py -v
+pytest scripts/testing/answer_generation/ -v
 ```
-
-### 최신 테스트 결과 (2026-01-22)
-```
-12 passed in 0.00s
-```
-
-모든 테스트 통과:
-- **PASSED**: 12개 (Fallback 체인 동작, 규칙 기반 생성, 안전 장치, generation_node 통합 모두 정상)
 
 ---
 

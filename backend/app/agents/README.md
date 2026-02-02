@@ -111,10 +111,10 @@ from app.agents.protocols import (
 conda run -n dsr pytest backend/scripts/testing/
 
 # 특정 에이전트 테스트
-conda run -n dsr pytest backend/scripts/testing/agents/test_query_analysis.py
-conda run -n dsr pytest backend/scripts/testing/agents/test_retrieval.py
-conda run -n dsr pytest backend/scripts/testing/agents/test_generation.py
-conda run -n dsr pytest backend/scripts/testing/agents/test_review.py
+conda run -n dsr pytest backend/scripts/testing/query_analysis/
+conda run -n dsr pytest backend/scripts/testing/retrieval/
+conda run -n dsr pytest backend/scripts/testing/answer_generation/
+conda run -n dsr pytest backend/scripts/testing/review/
 
 # 단위 테스트만 (DB 불필요)
 conda run -n dsr pytest -m unit
