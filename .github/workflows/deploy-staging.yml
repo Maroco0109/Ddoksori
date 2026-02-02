@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: ap-northeast-2
-  EC2_HOST: staging.ddoksori.com
+  EC2_HOST: 13.209.245.44
 
 jobs:
   deploy:
