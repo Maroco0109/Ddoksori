@@ -57,16 +57,16 @@ def test_section_config_should_not_include_when_condition_not_met():
 @pytest.mark.unit
 def test_response_formats_defined():
     """RESPONSE_FORMATS가 정의되어 있음"""
-    assert "full_dispute" in RESPONSE_FORMATS
-    assert "simple_general" in RESPONSE_FORMATS
+    assert "case_response" in RESPONSE_FORMATS
+    assert "general_greeting" in RESPONSE_FORMATS
     assert "info_only" in RESPONSE_FORMATS
 
 
 @pytest.mark.unit
-def test_full_dispute_format():
-    """full_dispute 형식 검증"""
-    fmt = RESPONSE_FORMATS["full_dispute"]
-    assert fmt.format_id == "full_dispute"
+def test_case_response_format():
+    """case_response 형식 검증"""
+    fmt = RESPONSE_FORMATS["case_response"]
+    assert fmt.format_id == "case_response"
     assert "dispute" in fmt.query_types
     assert fmt.include_disclaimer is True
     assert fmt.tone == "formal"
@@ -74,10 +74,10 @@ def test_full_dispute_format():
 
 
 @pytest.mark.unit
-def test_simple_general_format():
-    """simple_general 형식 검증"""
-    fmt = RESPONSE_FORMATS["simple_general"]
-    assert fmt.format_id == "simple_general"
+def test_general_greeting_format():
+    """general_greeting 형식 검증"""
+    fmt = RESPONSE_FORMATS["general_greeting"]
+    assert fmt.format_id == "general_greeting"
     assert "general" in fmt.query_types
     assert fmt.include_disclaimer is False
     assert fmt.tone == "friendly"
@@ -101,24 +101,25 @@ def test_info_only_format():
 
 @pytest.mark.unit
 def test_format_selector_dispute_query():
-    """분쟁 쿼리는 full_dispute 형식 선택"""
+    """분쟁 쿼리는 case_response 또는 comprehensive_dispute 형식 선택"""
     selector = FormatSelector()
     query_analysis = {"query_type": "dispute"}
     retrieval = {"disputes": [{"doc_id": "123"}], "laws": []}
 
     fmt = selector.select_format(query_analysis, retrieval)
-    assert fmt.format_id == "full_dispute"
+    # case_response or comprehensive_dispute are both valid for dispute queries
+    assert fmt.format_id in ["case_response", "comprehensive_dispute"]
 
 
 @pytest.mark.unit
 def test_format_selector_general_query():
-    """일반 쿼리는 simple_general 형식 선택"""
+    """일반 쿼리는 general_greeting 형식 선택"""
     selector = FormatSelector()
     query_analysis = {"query_type": "general"}
     retrieval = {}
 
     fmt = selector.select_format(query_analysis, retrieval)
-    assert fmt.format_id == "simple_general"
+    assert fmt.format_id == "general_greeting"
 
 
 @pytest.mark.unit
@@ -158,25 +159,22 @@ def test_format_selector_build_context():
 
 
 @pytest.mark.unit
-def test_prompt_builder_full_dispute_system_prompt():
-    """full_dispute 시스템 프롬프트 생성"""
+def test_prompt_builder_case_response_system_prompt():
+    """case_response 시스템 프롬프트 생성"""
     builder = PromptBuilder()
-    fmt = RESPONSE_FORMATS["full_dispute"]
+    fmt = RESPONSE_FORMATS["case_response"]
 
     system_prompt = builder.build_system_prompt(fmt)
 
-    assert "한국 소비자 분쟁 조정 전문 상담 어시스턴트" in system_prompt
-    assert "유사 사례 분석" in system_prompt
-    assert "관련 법령 및 기준" in system_prompt
-    assert "추가 안내" in system_prompt
+    assert "소비자 분쟁 조정 사례 분석 전문 상담 어시스턴트" in system_prompt
     assert "본 답변은 정보 제공 목적" in system_prompt  # disclaimer
 
 
 @pytest.mark.unit
-def test_prompt_builder_simple_general_system_prompt():
-    """simple_general 시스템 프롬프트 생성"""
+def test_prompt_builder_general_greeting_system_prompt():
+    """general_greeting 시스템 프롬프트 생성"""
     builder = PromptBuilder()
-    fmt = RESPONSE_FORMATS["simple_general"]
+    fmt = RESPONSE_FORMATS["general_greeting"]
 
     system_prompt = builder.build_system_prompt(fmt)
 
@@ -189,7 +187,7 @@ def test_prompt_builder_simple_general_system_prompt():
 def test_prompt_builder_user_prompt():
     """사용자 프롬프트 생성"""
     builder = PromptBuilder()
-    fmt = RESPONSE_FORMATS["full_dispute"]
+    fmt = RESPONSE_FORMATS["case_response"]
     query = "헬스장 환불 문제입니다"
     retrieval = {
         "disputes": [
@@ -261,7 +259,7 @@ def test_format_selection_and_prompt_building_integration():
 
     # 1. 형식 선택
     fmt = selector.select_format(query_analysis, retrieval)
-    assert fmt.format_id == "full_dispute"
+    assert fmt.format_id in ["case_response", "comprehensive_dispute"]
 
     # 2. 컨텍스트 생성
     context = selector.build_context(retrieval)

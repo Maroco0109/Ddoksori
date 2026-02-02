@@ -105,8 +105,8 @@ class TestAmbiguousQueryPatternMatching:
             ("요약", "NEED_RAG"),  # ambiguous → NEED_RAG
             (
                 "도와줘",
-                "NO_RETRIEVAL",
-            ),  # meta_conversational → NO_RETRIEVAL (legacy mode)
+                "META_CONVERSATIONAL",
+            ),  # meta_conversational → META_CONVERSATIONAL (minimal mode)
             ("뭐", "NEED_RAG"),  # ambiguous → NEED_RAG
             ("?", "NEED_RAG"),  # ambiguous → NEED_RAG
         ],

@@ -3,6 +3,8 @@ PR-5: Supervisor 최적화 테스트
 
 실행 방법:
     /home/maroco/miniconda3/envs/dsr/bin/python -m pytest backend/scripts/testing/supervisor/test_supervisor_optimization.py -v
+
+Note: 모든 테스트가 실제 LLM + DB를 사용하므로 llm 마커가 필요합니다.
 """
 
 import asyncio
@@ -12,6 +14,8 @@ from typing import Any, Dict
 import pytest
 
 from app.supervisor.graph import get_graph_for_chat_type
+
+pytestmark = pytest.mark.llm
 
 
 @pytest.fixture

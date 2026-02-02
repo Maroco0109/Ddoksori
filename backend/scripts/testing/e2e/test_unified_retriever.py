@@ -117,29 +117,28 @@ class TestUnifiedRetrieverDirect:
 
 @pytest.mark.unit
 class TestAgentUnifiedRetrieverIntegration:
-    """Agent가 UnifiedRetriever를 올바르게 호출하는지 Mock 기반 검증"""
+    """Agent가 올바르게 검색을 수행하는지 Mock 기반 검증
+
+    Note: LawRetrievalAgent와 CriteriaRetrievalAgent는 _execute_search를 오버라이드하여
+    specialized_retrievers(LawRetriever, CriteriaRetriever)를 직접 사용합니다.
+    CaseRetrievalAgent만 BaseRetrievalAgent._execute_search → UnifiedRetriever를 사용합니다.
+    """
 
     @pytest.mark.asyncio
-    async def test_law_agent_uses_unified_retriever(self):
-        """LawRetrievalAgent가 UnifiedRetriever를 호출하고 dataset_filter='law_guide' 전달"""
-        from app.agents.retrieval.tools.retriever import SearchResult
+    async def test_law_agent_uses_specialized_retriever(self):
+        """LawRetrievalAgent가 LawRetriever를 사용하여 법령을 검색"""
+        mock_result = MagicMock()
+        mock_result.chunk_id = "test_law_001"
+        mock_result.text = "제16조(소비자의 권리)"
+        mock_result.similarity = 0.032
+        mock_result.metadata = {}
+        mock_result.law_name = "소비자기본법"
+        mock_result.document_type = "법률"
+        mock_result.dataset_type = "law_guide"
 
-        mock_result = SearchResult(
-            chunk_id="test_law_001",
-            doc_id="test_law_001",
-            chunk_type="조_전체",
-            content="제16조(소비자의 권리)",
-            doc_title="소비자기본법 제16조",
-            doc_type="law",
-            category_path=[],
-            similarity=0.032,
-        )
-
-        with patch(
-            "app.agents.retrieval.tools.unified_retriever.UnifiedRetriever"
-        ) as MockRetriever:
+        with patch("app.agents.retrieval.law_agent.LawRetriever") as MockRetriever:
             mock_instance = MagicMock()
-            mock_instance.search.return_value = [mock_result]
+            mock_instance.hybrid_search.return_value = [mock_result]
             MockRetriever.return_value = mock_instance
 
             from app.agents.retrieval.law_agent import LawRetrievalAgent
@@ -147,43 +146,43 @@ class TestAgentUnifiedRetrieverIntegration:
             agent = LawRetrievalAgent()
             result = await agent.process(
                 {
-                    "context": {"user_query": "소비자 권리"},
-                    "params": {"top_k": 3},
+                    "context": {
+                        "user_query": "소비자 권리",
+                        "query_analysis": {},
+                        "retrieval_task_input": {
+                            "expanded_queries": ["소비자 권리"],
+                            "top_k": 3,
+                            "metadata_filter": {
+                                "dataset_type": "law_guide",
+                                "document_types": ["법률"],
+                            },
+                        },
+                    },
                 }
             )
 
-            # UnifiedRetriever.search가 호출되었는지
-            mock_instance.search.assert_called_once()
-            call_kwargs = mock_instance.search.call_args
-            # dataset_filter='law_guide' 전달 확인
-            assert call_kwargs.kwargs.get("dataset_filter") == "law_guide" or (
-                len(call_kwargs.args) > 0 or "dataset_filter" in str(call_kwargs)
-            )
-
+            mock_instance.hybrid_search.assert_called_once()
             assert result["status"] == "success"
             assert len(result["result"]["results"]) == 1
 
     @pytest.mark.asyncio
-    async def test_criteria_agent_uses_unified_retriever(self):
-        """CriteriaRetrievalAgent가 dataset_filter='law_guide', document_type_filter='별표' 전달"""
-        from app.agents.retrieval.tools.retriever import SearchResult
-
-        mock_result = SearchResult(
-            chunk_id="test_criteria_001",
-            doc_id="test_criteria_001",
-            chunk_type="별표1_품목매핑",
-            content="가전제품 환불 기준",
-            doc_title="분쟁해결기준 별표1",
-            doc_type="law",
-            category_path=[],
-            similarity=0.028,
-        )
+    async def test_criteria_agent_uses_specialized_retriever(self):
+        """CriteriaRetrievalAgent가 CriteriaRetriever를 사용하여 기준을 검색"""
+        mock_result = MagicMock()
+        mock_result.chunk_id = "test_criteria_001"
+        mock_result.text = "가전제품 환불 기준"
+        mock_result.similarity = 0.028
+        mock_result.metadata = {}
+        mock_result.category = "가전"
+        mock_result.document_type = "별표"
+        mock_result.dataset_type = "law_guide"
 
         with patch(
-            "app.agents.retrieval.tools.unified_retriever.UnifiedRetriever"
+            "app.agents.retrieval.criteria_agent.CriteriaRetriever"
         ) as MockRetriever:
             mock_instance = MagicMock()
-            mock_instance.search.return_value = [mock_result]
+            mock_instance.hybrid_search.return_value = [mock_result]
+            mock_instance.fetch_chunk_texts.return_value = {}
             MockRetriever.return_value = mock_instance
 
             from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
@@ -191,19 +190,27 @@ class TestAgentUnifiedRetrieverIntegration:
             agent = CriteriaRetrievalAgent()
             result = await agent.process(
                 {
-                    "context": {"user_query": "가전제품 환불"},
-                    "params": {"top_k": 3},
+                    "context": {
+                        "user_query": "가전제품 환불",
+                        "query_analysis": {},
+                        "retrieval_task_input": {
+                            "expanded_queries": ["가전제품 환불"],
+                            "top_k": 3,
+                            "metadata_filter": {
+                                "dataset_type": "law_guide",
+                                "document_types": ["별표"],
+                            },
+                        },
+                    },
                 }
             )
 
-            mock_instance.search.assert_called_once()
-            call_kwargs = mock_instance.search.call_args
-            assert "law_guide" in str(call_kwargs)
+            mock_instance.hybrid_search.assert_called_once()
             assert result["status"] == "success"
 
     @pytest.mark.asyncio
     async def test_case_agent_uses_unified_retriever(self):
-        """CaseRetrievalAgent가 dataset_filter='case' 전달"""
+        """CaseRetrievalAgent가 UnifiedRetriever의 dataset_filter='case' 전달"""
         from app.agents.retrieval.tools.retriever import SearchResult
 
         mock_result = SearchResult(
@@ -229,8 +236,15 @@ class TestAgentUnifiedRetrieverIntegration:
             agent = CaseRetrievalAgent()
             result = await agent.process(
                 {
-                    "context": {"user_query": "배송 지연"},
-                    "params": {"top_k": 3},
+                    "context": {
+                        "user_query": "배송 지연",
+                        "query_analysis": {},
+                        "retrieval_task_input": {
+                            "expanded_queries": [],
+                            "top_k": 3,
+                            "metadata_filter": {},
+                        },
+                    },
                 }
             )
 
@@ -240,40 +254,36 @@ class TestAgentUnifiedRetrieverIntegration:
             assert result["status"] == "success"
 
     @pytest.mark.asyncio
-    async def test_all_agents_share_same_search_method(self):
-        """모든 에이전트가 동일한 BaseRetrievalAgent._execute_search를 사용하는지"""
+    async def test_agent_search_method_architecture(self):
+        """에이전트 검색 아키텍처 확인:
+        - CaseRetrievalAgent는 Base의 _execute_search 사용 (UnifiedRetriever)
+        - LawRetrievalAgent, CriteriaRetrievalAgent는 _execute_search 오버라이드 (specialized_retrievers)
+        """
         from app.agents.retrieval.base_retrieval_agent import BaseRetrievalAgent
         from app.agents.retrieval.case_agent import CaseRetrievalAgent
         from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
         from app.agents.retrieval.law_agent import LawRetrievalAgent
 
-        # _execute_search가 BaseRetrievalAgent에서 정의된 것과 동일한지
-        for AgentClass in [
-            LawRetrievalAgent,
-            CriteriaRetrievalAgent,
-            CaseRetrievalAgent,
-        ]:
-            assert (
-                AgentClass._execute_search is BaseRetrievalAgent._execute_search
-            ), f"{AgentClass.__name__} overrides _execute_search (should not)"
+        # CaseRetrievalAgent는 Base의 _execute_search를 사용
+        assert (
+            CaseRetrievalAgent._execute_search is BaseRetrievalAgent._execute_search
+        ), "CaseRetrievalAgent should use BaseRetrievalAgent._execute_search"
+
+        # LawRetrievalAgent와 CriteriaRetrievalAgent는 오버라이드
+        assert (
+            LawRetrievalAgent._execute_search is not BaseRetrievalAgent._execute_search
+        ), "LawRetrievalAgent should override _execute_search"
+        assert (
+            CriteriaRetrievalAgent._execute_search
+            is not BaseRetrievalAgent._execute_search
+        ), "CriteriaRetrievalAgent should override _execute_search"
 
     @pytest.mark.asyncio
-    async def test_agents_have_different_filters(self):
-        """각 에이전트가 다른 필터를 반환하는지"""
+    async def test_case_agent_has_dataset_filter(self):
+        """CaseRetrievalAgent가 _get_search_filters에서 dataset_filter='case'를 반환하는지"""
         from app.agents.retrieval.case_agent import CaseRetrievalAgent
-        from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
-        from app.agents.retrieval.law_agent import LawRetrievalAgent
 
-        law_filters = LawRetrievalAgent()._get_search_filters()
-        criteria_filters = CriteriaRetrievalAgent()._get_search_filters()
         case_filters = CaseRetrievalAgent()._get_search_filters()
-
-        assert law_filters["dataset_filter"] == "law_guide"
-        assert "document_type_filter" not in law_filters
-
-        assert criteria_filters["dataset_filter"] == "law_guide"
-        assert criteria_filters["document_type_filter"] == "별표"
-
         assert case_filters["dataset_filter"] == "case"
 
 

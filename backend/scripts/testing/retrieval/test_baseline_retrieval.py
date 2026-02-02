@@ -2,6 +2,9 @@
 Baseline Retrieval Test - 개선 전 정량적 지표 측정
 
 이 스크립트는 검색 개선 전/후를 비교하기 위한 기준선 테스트입니다.
+
+NOTE: This is a standalone script, not a pytest test file.
+Run directly: python backend/scripts/testing/retrieval/test_baseline_retrieval.py
 """
 
 import asyncio
@@ -12,7 +15,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+import pytest
 from dotenv import load_dotenv
+
+# Mark entire module to skip in pytest collection
+# This is a standalone script, not a pytest test
+pytestmark = pytest.mark.skip(reason="Standalone script - run directly, not via pytest")
 
 # Add backend to path
 backend_path = str(Path(__file__).parent.parent.parent.parent)
@@ -48,8 +56,8 @@ TEST_QUERIES = [
 ]
 
 
-async def test_single_query(query: str, agent, agent_name: str) -> Dict[str, Any]:
-    """단일 쿼리 테스트"""
+async def run_single_query(query: str, agent, agent_name: str) -> Dict[str, Any]:
+    """단일 쿼리 테스트 (helper function, not a pytest test)"""
     try:
         # query_analysis_node로 쿼리 분석
         state = ChatState(
@@ -131,7 +139,7 @@ async def run_baseline_tests() -> Dict[str, Any]:
         print("-" * 80)
 
         for agent, agent_name in agents:
-            result = await test_single_query(query, agent, agent_name)
+            result = await run_single_query(query, agent, agent_name)
             all_results.append(result)
 
             status_icon = "✓" if result["has_results"] else "✗"

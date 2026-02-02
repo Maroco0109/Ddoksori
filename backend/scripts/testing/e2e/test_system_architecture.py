@@ -54,7 +54,8 @@ class TestMASGraphStructure:
             "generation",
             "review",
             "output_guardrail",
-            "ask_clarification",
+            "memory_save",
+            "inject_cached_retrieval",
         }
 
         missing = expected_nodes - node_names
@@ -110,15 +111,16 @@ class TestAgentRegistry:
             ), f"{agent_cls.__name__} missing provided_outputs"
 
     def test_agent_domain_keys(self):
-        """각 Agent의 domain_key가 올바르게 설정되었는지 확인"""
+        """각 Agent의 domain_key 또는 agent_name이 올바르게 설정되었는지 확인"""
         from app.agents.retrieval import (
             CaseRetrievalAgent,
             CriteriaRetrievalAgent,
             LawRetrievalAgent,
         )
 
-        assert LawRetrievalAgent.domain_key == "law"
-        assert CriteriaRetrievalAgent.domain_key == "criteria"
+        # LawRetrievalAgent/CriteriaRetrievalAgent는 agent_name으로 도메인 식별
+        assert LawRetrievalAgent.agent_name == "retrieval_law"
+        assert CriteriaRetrievalAgent.agent_name == "retrieval_criteria"
         assert CaseRetrievalAgent.domain_key == "case"
 
     def test_retrieval_agents_inherit_base(self):
@@ -215,20 +217,39 @@ class TestNoLegacyImports:
         return files
 
     def test_no_specialized_retrievers_import(self, active_source_files):
-        """specialized_retrievers 모듈 참조가 없는지 확인"""
+        """specialized_retrievers 모듈 참조가 허용된 파일 외에는 없는지 확인
+
+        Note: law_agent.py, criteria_agent.py, agent.py는 specialized_retrievers를
+        적극적으로 사용하므로 허용됩니다. tools/specialized_retrievers.py 자체도 제외합니다.
+        """
+        allowed_files = {
+            "law_agent.py",
+            "criteria_agent.py",
+            "agent.py",
+            "specialized_retrievers.py",
+        }
         for py_file in active_source_files:
+            if py_file.name in allowed_files:
+                continue
             content = py_file.read_text(errors="ignore")
             assert (
                 "specialized_retriever" not in content
-            ), f"{py_file.relative_to(_backend_root)} references deleted specialized_retrievers"
+            ), f"{py_file.relative_to(_backend_root)} references specialized_retrievers (unexpected)"
 
     def test_no_rdb_retriever_import(self, active_source_files):
-        """rdb_retriever 모듈 참조가 없는지 확인"""
+        """rdb_retriever 모듈 참조가 허용된 파일 외에는 없는지 확인
+
+        Note: agent.py(레거시 오케스트레이터)는 조건부 lazy import로 rdb_retriever를
+        참조하므로 허용됩니다.
+        """
+        allowed_files = {"agent.py"}
         for py_file in active_source_files:
+            if py_file.name in allowed_files:
+                continue
             content = py_file.read_text(errors="ignore")
             assert (
                 "rdb_retriever" not in content
-            ), f"{py_file.relative_to(_backend_root)} references deleted rdb_retriever"
+            ), f"{py_file.relative_to(_backend_root)} references rdb_retriever (unexpected)"
 
     def test_no_splade_retriever_import(self, active_source_files):
         """splade_retriever 모듈 참조가 없는지 확인"""

@@ -312,31 +312,12 @@ class TestToolCallingIntegration:
 class TestHybridToolExecutorFallback:
     """HybridToolExecutor 폴백 메커니즘 테스트"""
 
+    @pytest.mark.skip(
+        reason="HybridToolExecutor removed, replaced by new tool calling architecture"
+    )
     def test_fallback_to_rule_based_on_timeout(self):
         """타임아웃 시 규칙 기반으로 폴백 테스트"""
-        from app.agents.react.react_act import HybridToolExecutor
-        from app.supervisor.state import ChatState
-
-        with patch.dict(os.environ, {"USE_LLM_TOOLS": "true"}):
-            with patch("requests.get") as mock_get:
-                # health_check 성공
-                mock_response = Mock()
-                mock_response.status_code = 200
-                mock_get.return_value = mock_response
-
-                # Tool calling timeout 시뮬레이션
-                with patch("langchain_openai.ChatOpenAI") as mock_openai:
-                    mock_llm = Mock()
-                    mock_llm.invoke.side_effect = TimeoutError("Tool calling timeout")
-                    mock_llm.bind_tools.return_value = mock_llm
-                    mock_openai.return_value = mock_llm
-
-                    executor = HybridToolExecutor(use_llm_tools=True)
-                    state = ChatState(messages=[], query_analysis={})
-
-                    # execute 호출 시 폴백 작동 확인
-                    # (실제 구현에서 폴백 로직이 있을 것으로 가정)
-                    logger.info("✅ Fallback mechanism verified (mock)")
+        pass
 
 
 class TestToolCallingAccuracyMeasurement:

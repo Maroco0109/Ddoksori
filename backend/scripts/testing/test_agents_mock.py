@@ -38,10 +38,7 @@ class TestQueryAnalysisFunctions:
     def test_classify_query_type_law(self, mock_meta, mock_ambiguous):
         assert _classify_query_type("전자상거래법 제17조 알려줘") == "law"
 
-    @patch("app.agents.query_analysis.agent.get_query_rewriter")
-    def test_query_analysis_node_general(self, mock_get_rewriter):
-        mock_get_rewriter.return_value = None
-
+    def test_query_analysis_node_general(self):
         state = create_initial_state(user_query="안녕하세요", chat_type="general")
 
         result = query_analysis_node(state)
@@ -66,8 +63,22 @@ class TestLegalReviewFunctions:
             "관련 사례(KCA-2024-001)에 따르면 환불이 가능할 수 있습니다. 전자상거래법 제17조를 참고하세요."
         )
         state["query_analysis"] = {"query_type": "dispute"}
-        state["sources"] = [{"doc_id": "1", "uid": "KCA-2024-001"}]
-        state["retrieval"] = {"disputes": [{"doc_id": "1", "uid": "KCA-2024-001"}]}
+        state["sources"] = [
+            {
+                "doc_id": "1",
+                "uid": "KCA-2024-001",
+                "content": "전자상거래법 제17조에 따라 청약철회가 가능합니다.",
+            }
+        ]
+        state["retrieval"] = {
+            "disputes": [
+                {
+                    "doc_id": "1",
+                    "uid": "KCA-2024-001",
+                    "content": "전자상거래법 제17조에 따라 청약철회가 가능합니다.",
+                }
+            ]
+        }
 
         # AgentSettings mock (Pydantic Settings 클래스)
         mock_agent_settings = MagicMock()
@@ -78,11 +89,15 @@ class TestLegalReviewFunctions:
         mock_config.agent = mock_agent_settings
 
         with patch("app.common.config.get_config", return_value=mock_config):
-            result = review_node(state)
-            review_res = result["review"]
+            with patch(
+                "app.agents.legal_review.agent._check_evidence_sufficiency",
+                return_value=True,
+            ):
+                result = review_node(state)
+                review_res = result["review"]
 
-            assert review_res["passed"] is True
-            assert "final_answer" in result
+                assert review_res["passed"] is True
+                assert "final_answer" in result
 
     def test_review_node_fail_retry(self):
         bad_answer = "반드시 승소합니다. 무조건 이깁니다. 100% 보장합니다."
@@ -101,11 +116,15 @@ class TestLegalReviewFunctions:
         mock_config.agent = mock_agent_settings
 
         with patch("app.common.config.get_config", return_value=mock_config):
-            result = review_node(state)
-            review_res = result["review"]
+            with patch(
+                "app.agents.legal_review.agent._check_evidence_sufficiency",
+                return_value=False,
+            ):
+                result = review_node(state)
+                review_res = result["review"]
 
-            assert review_res["passed"] is False
-            assert result["retry_count"] == 1
+                assert review_res["passed"] is False
+                assert result["retry_count"] == 1
 
 
 class TestAnswerGenerationFunctions:

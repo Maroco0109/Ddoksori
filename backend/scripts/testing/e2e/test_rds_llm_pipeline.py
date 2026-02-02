@@ -381,15 +381,19 @@ class TestDomainThresholdFiltering:
         assert fields["similarity_threshold_criteria"].default == 0.50
         assert fields["similarity_threshold_dispute"].default == 0.55
 
-    def test_base_agent_applies_threshold(self):
-        """BaseRetrievalAgent.process()에 threshold 필터링 로직이 있는지 확인"""
+    def test_base_agent_process_computes_similarity(self):
+        """BaseRetrievalAgent.process()에 유사도 계산 로직이 있는지 확인"""
         from app.agents.retrieval.base_retrieval_agent import BaseRetrievalAgent
 
         source = inspect.getsource(BaseRetrievalAgent.process)
 
+        # 현재 아키텍처: BaseRetrievalAgent.process()는 max_similarity/avg_similarity를 계산
         assert (
-            "get_similarity_threshold" in source
-        ), "BaseRetrievalAgent.process()에 threshold 필터링 로직이 없습니다"
+            "max_sim" in source
+        ), "BaseRetrievalAgent.process()에 max_sim 계산 로직이 없습니다"
         assert (
-            "filtered_results" in source
-        ), "BaseRetrievalAgent.process()에 filtered_results 변수가 없습니다"
+            "avg_sim" in source
+        ), "BaseRetrievalAgent.process()에 avg_sim 계산 로직이 없습니다"
+        assert (
+            "_execute_search" in source
+        ), "BaseRetrievalAgent.process()에 _execute_search 호출이 없습니다"

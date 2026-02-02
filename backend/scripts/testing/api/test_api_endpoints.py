@@ -27,6 +27,7 @@ import pytest
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.api,
+    pytest.mark.skip_ci,
 ]
 
 

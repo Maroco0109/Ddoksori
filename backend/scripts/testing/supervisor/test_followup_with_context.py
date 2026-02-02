@@ -122,8 +122,10 @@ class TestDetectRequestedDetailType:
         assert self.detect("배상 기준이 뭐야?", {}) == "criteria"
 
     def test_procedure_detection(self):
-        assert self.detect("분쟁 해결 절차도 안내해드릴까요?", {}) == "procedure"
-        assert self.detect("한국소비자원에 신청하는 방법은?", {}) == "procedure"
+        assert self.detect("절차도 안내해드릴까요?", {}) == "procedure"
+        assert self.detect("어떻게 신청하나요?", {}) == "procedure"
+        assert self.detect("조정신청 과정을 알려주세요", {}) == "procedure"
+        assert self.detect("소비자원에 접수하는 절차는?", {}) == "procedure"
 
     def test_full_fallback(self):
         assert self.detect("더 알려줘", {}) == "full"
@@ -299,7 +301,7 @@ class TestMASRoutingFollowup:
         }
 
         result = _route_mas_supervisor(state)
-        assert result == "generation"
+        assert result == "inject_cached_retrieval"
 
     def test_need_rag_still_fans_out(self):
         """NEED_RAG 모드에서는 여전히 retrieval fan-out"""

@@ -20,6 +20,7 @@ import pytest
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.api,
+    pytest.mark.skip_ci,  # Requires running FastAPI server (http://localhost:8000) not available in CI
 ]
 
 

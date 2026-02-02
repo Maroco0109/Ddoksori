@@ -20,6 +20,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.needs_db,
     pytest.mark.needs_data,
+    pytest.mark.skip_ci,  # Requires local DB with seed data not available in CI
 ]
 
 

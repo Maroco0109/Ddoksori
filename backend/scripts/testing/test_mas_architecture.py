@@ -76,12 +76,17 @@ class TestV2GraphCreation:
 
         graph = create_mas_supervisor_graph()
 
-        # 노드 수 확인
-        assert len(graph.nodes) == 13, f"Expected 13 nodes, got {len(graph.nodes)}"
+        # 노드 수 확인 (14개: cache_check, cache_response, input/output_guardrail,
+        # supervisor, query_analysis, generation, review,
+        # retrieval_law/criteria/case, retrieval_merge, memory_save, inject_cached_retrieval)
+        assert (
+            len(graph.nodes) == 14
+        ), f"Expected 14 nodes, got {len(graph.nodes)}: {sorted(graph.nodes.keys())}"
 
         # 필수 노드 확인
         required_nodes = [
             "cache_check",
+            "cache_response",
             "input_guardrail",
             "output_guardrail",
             "supervisor",
@@ -92,13 +97,16 @@ class TestV2GraphCreation:
             "retrieval_criteria",
             "retrieval_case",
             "retrieval_merge",
+            "memory_save",
+            "inject_cached_retrieval",
         ]
         for node in required_nodes:
             assert node in graph.nodes, f"Missing node: {node}"
 
 
+@pytest.mark.llm
 class TestQueryAnalysisV2:
-    """쿼리 분석 v2 테스트"""
+    """쿼리 분석 v2 테스트 (LLM 호출 필요: expand_query_with_llm_v2)"""
 
     def test_query_analysis_node_v2_dispute(self):
         """분쟁 쿼리 분석 테스트"""

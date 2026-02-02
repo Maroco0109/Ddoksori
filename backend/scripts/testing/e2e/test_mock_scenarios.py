@@ -686,8 +686,9 @@ class TestProtocolKeysPresence:
         qa = final_state.get("query_analysis", {})
         assert qa, "query_analysis가 비어있습니다"
 
-        # 프로토콜 필수 키 (protocols.py QueryAnalysisOutput 기반)
-        required_keys = {"keywords", "retriever_types", "needs_clarification"}
+        # 프로토콜 필수 키 (query_analysis_node_v2 출력 기반)
+        # Note: needs_clarification은 clarification 기능 제거로 v2 출력에서 제외됨
+        required_keys = {"keywords", "retriever_types", "query_type"}
         actual_keys = set(qa.keys())
         missing = required_keys - actual_keys
         assert not missing, f"query_analysis 필수 키 누락: {missing}"

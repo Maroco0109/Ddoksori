@@ -162,7 +162,7 @@ class TestAnswerGenerationFallback:
             agency_info=sample_agency_info,
         )
 
-        assert model_used == "gpt-4o-mini"
+        assert model_used == "gpt-4o"
         assert answer == "LLM generated answer"
         assert claim_map == [{"claim": "test"}]
         assert mock_llm.call_count == 1

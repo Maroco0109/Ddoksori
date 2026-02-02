@@ -22,6 +22,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.api,
     pytest.mark.slow,
+    pytest.mark.skip_ci,
 ]
 
 

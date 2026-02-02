@@ -83,7 +83,7 @@ class TestIntentClassificationCacheIntegration:
 
     def test_cache_get_miss(self, mock_redis):
         """캐시 미스 시 None 반환"""
-        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
+        with patch("app.common.cache.base.get_redis_client", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             mock_redis.get.return_value = None
@@ -103,7 +103,7 @@ class TestIntentClassificationCacheIntegration:
             "model_used": "gpt-4o-mini",
         }
 
-        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
+        with patch("app.common.cache.base.get_redis_client", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             mock_redis.get.return_value = json.dumps(cached_data)
@@ -111,11 +111,13 @@ class TestIntentClassificationCacheIntegration:
 
             assert result is not None
             assert result["query_type"] == "dispute"
-            assert result["from_cache"] is True  # get()에서 추가됨
+            assert (
+                result["_from_cache"] is True
+            )  # BaseRedisCache.get() adds _from_cache
 
     def test_cache_set(self, mock_redis):
         """캐시 저장 테스트"""
-        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
+        with patch("app.common.cache.base.get_redis_client", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             classification = {
@@ -133,7 +135,7 @@ class TestIntentClassificationCacheIntegration:
 
     def test_cache_ttl(self, mock_redis):
         """캐시 TTL 설정 확인"""
-        with patch("app.supervisor.cache._get_redis", return_value=mock_redis):
+        with patch("app.common.cache.base.get_redis_client", return_value=mock_redis):
             from app.supervisor.cache import IntentClassificationCache
 
             classification = {

@@ -226,7 +226,7 @@ class TestEnhancedLLMReview:
     @pytest.fixture
     def mock_openai(self):
         """OpenAI Mock"""
-        with patch("app.agents.legal_review.llm_reviewer.OpenAI") as mock_class:
+        with patch("openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
             mock_response.choices = [MagicMock()]
@@ -245,14 +245,14 @@ class TestEnhancedLLMReview:
             yield mock_client
 
     def test_hybrid_review_with_no_violations(self, mock_openai):
-        """위반 없는 경우"""
+        """위반 없는 경우 (general query skips review)"""
         from app.agents.legal_review.llm_reviewer import HybridLegalReviewer
 
         reviewer = HybridLegalReviewer(enable_llm=False)
 
         state = {
             "draft_answer": "일반적으로 환불이 가능할 수 있습니다.",
-            "query_analysis": {"query_type": "dispute"},
+            "query_analysis": {"query_type": "general"},
             "sources": [],
             "retry_count": 0,
         }

@@ -11,6 +11,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
 
 # Skip tests if database is not available
 pytestmark = pytest.mark.skipif(
@@ -234,14 +235,15 @@ class TestMemoryDBCleanup:
 # Fixtures
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_client():
     """Create test client"""
-    from httpx import AsyncClient
+    from httpx import ASGITransport, AsyncClient
 
     from app.main import app
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
 
@@ -256,6 +258,7 @@ def auth_token():
         email="test@example.com",
         name="Test User",
         provider="google",
+        provider_user_id="google_test_123",
     )
 
     token, _ = create_access_token(user)

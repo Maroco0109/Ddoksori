@@ -11,20 +11,24 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 import pytest
+import pytest_asyncio
 
 from app.common.config import get_config
 from app.supervisor.persistence.db import ConversationDB
 
+# 모든 테스트는 실제 DB 연결이 필요하므로 CI에서 제외
+pytestmark = pytest.mark.skip_ci
+
 
 # DB 연결 확인용 픽스처
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db():
     """ConversationDB 인스턴스 생성"""
     db_instance = ConversationDB()
     yield db_instance
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def check_db_available(db):
     """DB 테이블 존재 여부 확인"""
     import psycopg2

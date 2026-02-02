@@ -255,18 +255,15 @@ class TestEmbeddingModelSwitch:
         from utils.embedding_connection import (
             RRF_WEIGHT_DENSE,
             RRF_WEIGHT_LEXICAL,
-            RRF_WEIGHT_SPARSE,
         )
 
         print(f"RRF Weights:")
         print(f"  Dense: {RRF_WEIGHT_DENSE}")
         print(f"  Lexical: {RRF_WEIGHT_LEXICAL}")
-        print(f"  Sparse: {RRF_WEIGHT_SPARSE}")
 
         # Weights should be positive
         assert RRF_WEIGHT_DENSE >= 0
         assert RRF_WEIGHT_LEXICAL >= 0
-        assert RRF_WEIGHT_SPARSE >= 0
 
 
 class TestDatabaseBGEM3:

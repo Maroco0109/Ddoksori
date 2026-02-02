@@ -10,18 +10,22 @@ Integration tests for UserDB
 from datetime import datetime
 
 import pytest
+import pytest_asyncio
 
 from app.auth.models import User
 from app.auth.user_db import UserDB
 
+# 모든 테스트는 실제 DB 연결이 필요하므로 CI에서 제외
+pytestmark = pytest.mark.skip_ci
 
-@pytest.fixture
+
+@pytest_asyncio.fixture
 async def user_db():
     """UserDB 인스턴스 생성"""
     return UserDB()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def check_db_available(user_db):
     """DB 테이블 존재 여부 확인"""
     import psycopg2

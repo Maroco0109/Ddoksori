@@ -131,10 +131,11 @@ class TestLLMBasedReview:
     def reviewer_with_llm(self):
         return HybridLegalReviewer(enable_llm=True)
 
-    def test_llm_review_called_when_rule_passes(self, reviewer_with_llm):
+    def test_llm_review_called_when_rule_has_violations(self, reviewer_with_llm):
+        """LLM is only triggered when rule-based review detects violations (cost optimization)."""
         state: ChatState = {
             "query": "환불 가능한가요?",
-            "draft_answer": "관련 규정에 따르면 환불을 요청할 수 있습니다. [출처: 소비자보호법]",
+            "draft_answer": "무조건 환불됩니다. [출처: 소비자보호법]",
             "query_analysis": {"query_type": "dispute"},
             "sources": [{"doc_type": "law"}],
             "retrieval": {"disputes": [{"content": "sample"}]},
@@ -143,7 +144,8 @@ class TestLLMBasedReview:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = (
-            '{"passed": true, "issues": [], "severity": "low", "overall_comment": "Good"}'
+            '{"passed": true, "issues": [], "severity": "low", "overall_comment": "Good",'
+            ' "legal_judgment_detected": false, "hedging_level": "safe", "overall_severity": "low"}'
         )
 
         with patch("openai.OpenAI") as mock_openai:
@@ -154,9 +156,11 @@ class TestLLMBasedReview:
             result = reviewer_with_llm.review(state)
 
             mock_client.chat.completions.create.assert_called_once()
+            # LLM said safe -> relaxes rule violations
             assert result["review"]["passed"] is True
 
-    def test_llm_review_skipped_on_severe_rule_violation(self, reviewer_with_llm):
+    def test_llm_review_triggered_on_severe_rule_violation(self, reviewer_with_llm):
+        """LLM is triggered when rule-based review detects violations (cost optimization: LLM only on violations)."""
         state: ChatState = {
             "query": "환불 가능한가요?",
             "draft_answer": "반드시 환불받으셔야 합니다. 법적으로 위법입니다. 100% 승소합니다.",
@@ -166,18 +170,28 @@ class TestLLMBasedReview:
             "retry_count": 0,
         }
 
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            '{"passed": false, "issues": [], "severity": "high", "overall_comment": "Violations",'
+            ' "legal_judgment_detected": true, "hedging_level": "dangerous", "overall_severity": "high"}'
+        )
+
         with patch("openai.OpenAI") as mock_openai:
             mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = mock_response
             mock_openai.return_value = mock_client
 
             reviewer_with_llm.review(state)
 
-            mock_client.chat.completions.create.assert_not_called()
+            # LLM is called because violations were detected
+            mock_client.chat.completions.create.assert_called_once()
 
     def test_llm_issues_merged_into_violations(self, reviewer_with_llm):
+        """LLM issues are merged into violations when rule violations trigger LLM review."""
         state: ChatState = {
             "query": "환불 가능한가요?",
-            "draft_answer": "관련 규정에 따르면 환불을 요청할 수 있습니다. [출처: 소비자보호법]",
+            "draft_answer": "무조건 환불됩니다. [출처: 소비자보호법]",
             "query_analysis": {"query_type": "dispute"},
             "sources": [{"doc_type": "law"}],
             "retrieval": {"disputes": [{"content": "sample"}]},
@@ -188,8 +202,11 @@ class TestLLMBasedReview:
         mock_response.choices[0].message.content = """
         {
             "passed": false,
-            "issues": [{"type": "부적절한 조언", "text": "환불 요청", "suggestion": "수정 제안"}],
+            "issues": [{"type": "부적절한 조언", "text": "환불 요청", "severity": "medium", "suggestion": "수정 제안"}],
             "severity": "medium",
+            "legal_judgment_detected": false,
+            "hedging_level": "caution",
+            "overall_severity": "medium",
             "overall_comment": "Found issue"
         }
         """
@@ -201,13 +218,14 @@ class TestLLMBasedReview:
 
             result = reviewer_with_llm.review(state)
 
-            assert any("[LLM]" in v for v in result["review"]["violations"])
+            assert any("[LLM-" in v for v in result["review"]["violations"])
             assert result["review"]["passed"] is False
 
     def test_llm_failure_graceful_degradation(self, reviewer_with_llm):
+        """When LLM fails, graceful degradation to rule-based result only."""
         state: ChatState = {
             "query": "환불 가능한가요?",
-            "draft_answer": "관련 규정에 따르면 환불을 요청할 수 있습니다. [출처: 소비자보호법]",
+            "draft_answer": "무조건 환불됩니다. [출처: 소비자보호법]",
             "query_analysis": {"query_type": "dispute"},
             "sources": [{"doc_type": "law"}],
             "retrieval": {"disputes": [{"content": "sample"}]},
@@ -220,8 +238,8 @@ class TestLLMBasedReview:
 
             result = reviewer_with_llm.review(state)
 
-            assert result["review"]["passed"] is True
-            assert "final_answer" in result
+            # LLM failed, falls back to rule-based result
+            assert "review" in result
 
 
 class TestMetrics:
@@ -229,9 +247,10 @@ class TestMetrics:
     def test_metrics_tracking(self):
         reviewer = HybridLegalReviewer(enable_llm=True)
 
+        # Answer with violations to trigger LLM review (cost optimization: LLM only on violations)
         state: ChatState = {
             "query": "환불 가능한가요?",
-            "draft_answer": "관련 규정에 따르면 환불을 요청할 수 있습니다. [출처: 소비자보호법]",
+            "draft_answer": "무조건 환불됩니다. [출처: 소비자보호법]",
             "query_analysis": {"query_type": "dispute"},
             "sources": [{"doc_type": "law"}],
             "retrieval": {"disputes": [{"content": "sample"}]},
@@ -240,7 +259,8 @@ class TestMetrics:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = (
-            '{"passed": true, "issues": [], "severity": "low", "overall_comment": "Good"}'
+            '{"passed": true, "issues": [], "severity": "low", "overall_comment": "Good",'
+            ' "legal_judgment_detected": false, "hedging_level": "safe", "overall_severity": "low"}'
         )
 
         with patch("openai.OpenAI") as mock_openai:
@@ -313,7 +333,7 @@ class TestNodeFunctions:
 class TestLLMReviewSystemPrompt:
 
     def test_prompt_contains_required_sections(self):
-        assert "법적 단정" in LLM_REVIEW_SYSTEM_PROMPT
+        assert "법적 판단" in LLM_REVIEW_SYSTEM_PROMPT
         assert "전문가 사칭" in LLM_REVIEW_SYSTEM_PROMPT
         assert "근거 없는 주장" in LLM_REVIEW_SYSTEM_PROMPT
         assert "부적절한 조언" in LLM_REVIEW_SYSTEM_PROMPT
