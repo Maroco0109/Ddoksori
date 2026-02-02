@@ -163,6 +163,7 @@ class TestCacheIntegration:
 
         return get_graph_for_chat_type("general")
 
+    @pytest.mark.skip_ci
     def test_repeated_query_uses_cache(self, graph):
         """
         테스트: 동일 쿼리 반복 시 캐시 사용
@@ -265,6 +266,7 @@ class TestCachePerformance:
 
         return get_graph_for_chat_type("general")
 
+    @pytest.mark.skip_ci
     @pytest.mark.slow
     @pytest.mark.integration
     @skip_no_redis

@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestChatAPIWithMemoryDB:

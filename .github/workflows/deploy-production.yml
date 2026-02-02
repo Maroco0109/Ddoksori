@@ -6,7 +6,7 @@ on:
 
 env:
   AWS_REGION: ap-northeast-2
-  EC2_HOST: ddoksori.com
+  EC2_HOST: 13.209.245.44
 
 jobs:
   # Wait for build to complete first
@@ -28,6 +28,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,10 +52,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.EC2_HOST }}
-          username: ec2-user
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ddoksori
+            cd /home/ubuntu/ddoksori
 
             # Backup current deployment
             echo "Creating backup..."
@@ -98,7 +100,7 @@ jobs:
           curl -f http://${{ env.EC2_HOST }}:8000/health || exit 1
 
       - name: Discord Notification - Success
-        if: success()
+        if: success() && env.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -114,7 +116,7 @@ jobs:
             Production deployment completed successfully!
 
       - name: Discord Notification - Failure
-        if: failure()
+        if: failure() && env.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -138,6 +140,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
     steps:
       - name: Configure AWS credentials
@@ -154,10 +158,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.EC2_HOST }}
-          username: ec2-user
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ddoksori
+            cd /home/ubuntu/ddoksori
 
             # ECR Login
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
@@ -172,6 +176,7 @@ jobs:
             docker compose -f docker-compose.prod.yml ps
 
       - name: Discord Notification - Rollback
+        if: env.DISCORD_WEBHOOK != ''
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}

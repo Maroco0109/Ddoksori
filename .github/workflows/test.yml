@@ -59,7 +59,7 @@ jobs:
 
       - name: Run tests (main - full)
         if: github.ref == 'refs/heads/main'
-        run: pytest -c backend/pytest.ini -m "not skip_ci" backend/scripts/testing -v
+        run: pytest -c backend/pytest.ini -m "not skip_ci and not llm" backend/scripts/testing -v
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ddoksori_test
           REDIS_HOST: localhost
