@@ -19,22 +19,35 @@ const NaverIcon = () => (
   </svg>
 );
 
-// Kakao 로고 SVG
-const KakaoIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path fillRule="evenodd" clipRule="evenodd" d="M10 0C4.477 0 0 3.51 0 7.837C0 10.45 1.654 12.74 4.175 14.092L3.233 17.788C3.137 18.147 3.548 18.419 3.853 18.208L8.214 15.316C8.805 15.4 9.399 15.673 10 15.673C15.523 15.673 20 12.163 20 7.837C20 3.51 15.523 0 10 0Z" fill="#181600"/>
-  </svg>
-);
-
 export default function LoginModal() {
   const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
   const login = useAuthStore((state) => state.login);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
 
-  // OAuth 로그인 핸들러
-  const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-    window.location.href = `${backendUrl}/auth/${provider}/login`;
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
+  const handleGoogleLogin = () => {
+    window.location.href = `${BACKEND_URL}/auth/google`;
+  };
+
+  const handleNaverLogin = () => {
+    window.location.href = `${BACKEND_URL}/auth/naver`;
+  };
+
+  // 개발 환경에서만 사용할 테스트 로그인 함수
+  const handleTestLogin = () => {
+    const dummyUser = {
+      id: 'test-user-123',
+      email: 'test@example.com',
+      name: '테스트 사용자',
+      avatar: 'https://via.placeholder.com/100',
+      provider: 'google' as const,
+    };
+    const dummyToken = 'test-jwt-token-12345';
+
+    login(dummyUser, dummyToken);
+    loadChatSessions(true);
+    setIsAuthModalOpen(false);
   };
 
   return (
@@ -67,7 +80,7 @@ export default function LoginModal() {
           {/* Google 로그인 */}
           <button
             type="button"
-            onClick={() => handleSocialLogin('google')}
+            onClick={handleGoogleLogin}
             className="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <GoogleIcon />
@@ -77,22 +90,33 @@ export default function LoginModal() {
           {/* 네이버 로그인 */}
           <button
             type="button"
-            onClick={() => handleSocialLogin('naver')}
+            onClick={handleNaverLogin}
             className="w-full rounded-lg bg-[#03C75A] text-white px-4 py-3 text-sm font-semibold hover:bg-[#02B350] transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <NaverIcon />
             <span>네이버로 계속하기</span>
           </button>
 
-          {/* 카카오 로그인 */}
-          <button
-            type="button"
-            onClick={() => handleSocialLogin('kakao')}
-            className="w-full rounded-lg bg-[#FEE500] text-[#000000] px-4 py-3 text-sm font-semibold hover:bg-[#FDD835] transition-all flex items-center justify-center gap-3 shadow-sm"
-          >
-            <KakaoIcon />
-            <span>카카오로 계속하기</span>
-          </button>
+          {/* 개발 환경에서만 보이는 테스트 로그인 버튼 */}
+          {import.meta.env.DEV && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2 text-gray-500">개발 전용</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestLogin}
+                className="w-full rounded-lg border-2 border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+              >
+                <span>🧪 테스트 로그인</span>
+              </button>
+            </>
+          )}
         </div>
 
         <p className="text-[11px] text-gray-500 mt-5 leading-relaxed">

@@ -3,7 +3,7 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
-  provider: 'google' | 'kakao' | 'naver';
+  provider: 'google' | 'naver';
 }
 
 export interface AuthState {
@@ -13,7 +13,7 @@ export interface AuthState {
 }
 
 export interface LoginCredentials {
-  provider: 'google' | 'kakao' | 'naver';
+  provider: 'google' | 'naver';
   token: string;
 }
 

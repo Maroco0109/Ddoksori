@@ -3,7 +3,6 @@
  * Displays full source metadata when citation footnote is clicked
  */
 
-import React from 'react';
 import type { SourceMetadata } from '@/shared/types';
 
 interface CitationModalProps {

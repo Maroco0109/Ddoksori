@@ -40,6 +40,7 @@ export interface Reply {
 
 export interface PostFormData {
   category: PostCategory;
+  subCategory?: string;
   title: string;
   content: string;
 }

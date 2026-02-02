@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
-import { CATEGORY_LABELS, POST_CATEGORIES } from '@/shared/config/categories';
 import type { BoardPostForm } from '../board.types';
+import type { PostCategory } from '@/shared/types';
 
 interface WritePostProps {
   onBack: () => void;
@@ -11,6 +11,7 @@ interface WritePostProps {
 
 type WritePostFormState = {
   category: BoardPostForm['category'] | '';
+  subCategory: string;
   title: string;
   content: string;
 };
@@ -18,6 +19,7 @@ type WritePostFormState = {
 export default function WritePost({ onBack, onSubmit }: WritePostProps) {
   const [formData, setFormData] = useState<WritePostFormState>({
     category: '',
+    subCategory: '',
     title: '',
     content: ''
   });
@@ -28,16 +30,37 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
     { id: 'tips', name: '소비자 꿀팁/노하우' }
   ];
 
+  const subCategories = [
+    { id: 'before-mediation', name: '조정 이전 단계에서 해결' },
+    { id: 'through-mediation', name: '조정을 통한 해결' }
+  ];
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formData.category || !formData.title.trim() || !formData.content.trim()) {
       alert('모든 필드를 입력해주세요.');
       return;
     }
+
+    // 분쟁해결사례 공유 카테고리인 경우 서브 카테고리 필수
+    if (formData.category === 'case-sharing' && !formData.subCategory) {
+      alert('분쟁해결사례 공유의 세부 카테고리를 선택해주세요.');
+      return;
+    }
+
     onSubmit({
-      category: formData.category as BoardPostForm['category'],
+      category: formData.category as PostCategory,
+      subCategory: formData.subCategory || undefined,
       title: formData.title,
       content: formData.content,
+    });
+  };
+
+  const handleCategoryChange = (categoryId: string) => {
+    setFormData({
+      ...formData,
+      category: categoryId as PostCategory,
+      subCategory: '' // 카테고리 변경 시 서브 카테고리 초기화
     });
   };
 
@@ -69,15 +92,64 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
                 className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
                   formData.category === cat.id
                     ? 'bg-deep-teal text-white'
-                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-lavender'
+                    : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-deep-teal'
                 }`}
-                onClick={() => setFormData({ ...formData, category: cat.id })}
+                onClick={() => handleCategoryChange(cat.id)}
               >
                 {cat.name}
               </button>
             ))}
           </div>
         </div>
+
+        {/* Sub-Category Selection (분쟁해결사례 공유 선택 시) */}
+        {formData.category === 'case-sharing' && (
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              세부 카테고리 <span className="text-red-500">*</span>
+            </label>
+            <div className="flex flex-wrap gap-3">
+              {subCategories.map(subCat => (
+                <button
+                  key={subCat.id}
+                  type="button"
+                  className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
+                    formData.subCategory === subCat.id
+                      ? 'text-white'
+                      : 'bg-white border-2 border-gray-200 text-gray-700'
+                  }`}
+                  style={
+                    formData.subCategory === subCat.id
+                      ? { backgroundColor: '#2b2d42' }
+                      : {}
+                  }
+                  onMouseEnter={(e) => {
+                    if (formData.subCategory !== subCat.id) {
+                      e.currentTarget.style.borderColor = '#2b2d42';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (formData.subCategory !== subCat.id) {
+                      e.currentTarget.style.borderColor = '';
+                    }
+                  }}
+                  onClick={() => setFormData({ ...formData, subCategory: subCat.id })}
+                >
+                  {subCat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Notice for case-sharing category */}
+        {formData.category === 'case-sharing' && (
+          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg">
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold text-amber-700">안내:</span> &lt;분쟁해결사례 공유&gt;에 게시된 내용은 개인정보나 상호명 등 민감한 정보를 마스킹한 채 <span className="font-bold">필요한 정보(분쟁 상황과 해결)만을 추출</span>하여 AI 상담을 위한 데이터에 활용될 수 있습니다.
+            </p>
+          </div>
+        )}
 
         {/* Title Input */}
         <div className="mb-6">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import type { MessageWithCitations } from '@/shared/types';
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer';
@@ -7,13 +7,11 @@ import { CitationModal } from './CitationModal';
 interface MessageBubbleProps {
   message: MessageWithCitations;
   chatType?: 'dispute' | 'general';
-  onFollowupClick?: (question: string) => void;
 }
 
 export function MessageBubble({
   message,
   chatType = 'dispute',
-  onFollowupClick,
 }: MessageBubbleProps) {
   const [selectedCitationId, setSelectedCitationId] = useState<number | null>(
     null
@@ -98,14 +96,10 @@ export function MessageBubble({
           }`}
         >
           {isAI ? (
-            message.content ? (
-              <MarkdownRenderer
-                content={message.content}
-                onCitationClick={setSelectedCitationId}
-              />
-            ) : (
-              <span className="text-gray-400 animate-pulse">답변 생성 중...</span>
-            )
+            <MarkdownRenderer
+              content={message.content}
+              onCitationClick={setSelectedCitationId}
+            />
           ) : (
             message.content
           )}
@@ -117,24 +111,6 @@ export function MessageBubble({
             minute: '2-digit',
           })}
         </div>
-
-        {/* Follow-up questions */}
-        {isAI && message.followupQuestions && message.followupQuestions.length > 0 && (
-          <div className="mt-4 max-w-[85%] sm:max-w-[75%] md:max-w-[70%]">
-            <p className="text-sm text-gray-600 mb-2 font-medium px-2">💡 이런 질문도 해보세요:</p>
-            <div className="flex flex-col gap-2">
-              {message.followupQuestions.map((question, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => onFollowupClick?.(question)}
-                  className="text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors border border-gray-200"
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {selectedCitation && (

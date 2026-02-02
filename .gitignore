@@ -81,6 +81,7 @@ frontend/test-results
 frontend/e2e
 frontend/playwright-report
 frontend/vitest.config.ts
+backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
 
 # Agents
 .agent

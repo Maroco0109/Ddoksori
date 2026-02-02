@@ -5,7 +5,6 @@ import { useChatStore } from '@/features/chat/chat.store';
 
 import procedure1 from '@/shared/assets/icons/procedure-1.png';
 import procedure2 from '@/shared/assets/icons/procedure-2.png';
-import procedure3 from '@/shared/assets/icons/procedure-3.png';
 type Committee = {
   title: string;
   subtitle: string;
@@ -20,7 +19,7 @@ export default function ProcedurePage() {
     {
       step: 1,
       title: '분쟁 유형 확인',
-      description: '일반적 소비자 거래, 개인 간의 중고 거래, 콘텐츠 거래, 그 외 특수분야 거래 중 해당 유형을 파악합니다.',
+      description: '일반적 소비자 거래, 개인 간의 중고 거래, 그 외 특수분야 거래 중 해당 유형을 파악합니다.',
       details: ['상품/서비스 내용 확인', '피해 내역 정리']
     },
     {
@@ -33,7 +32,7 @@ export default function ProcedurePage() {
       step: 3,
       title: '조정 신청 제출',
       description: '해당 분쟁조정위원회에 온라인으로 신청합니다.',
-      details: ['소비자분쟁조정위원회', '전자거래분쟁조정위원회', '콘텐츠분쟁조정위원회', '그 외 기타 분쟁조정위원회']
+      details: ['소비자분쟁조정위원회', '전자거래분쟁조정위원회', '그 외 기타 분쟁조정위원회']
     },
     {
       step: 4,
@@ -59,11 +58,6 @@ export default function ProcedurePage() {
       title: '한국인터넷진흥원',
       subtitle: '전자거래분쟁조정위원회',
       image: procedure2
-    },
-    {
-      title: '한국콘텐츠진흥원',
-      subtitle: '콘텐츠분쟁조정위원회',
-      image: procedure3
     }
   ];
 
@@ -135,12 +129,16 @@ export default function ProcedurePage() {
                     똑소리는 소비자가 겪는 소액 분쟁에 특화된 서비스입니다.
                   </p>
                   <p className="text-sm sm:text-base text-gray-600 mb-3 md:mb-4">
-                    위 3가지의 분쟁조정위원회 외에도 다양한 기관의 분쟁조정위원회가 존재하고 있습니다.
+                    위 2가지의 분쟁조정위원회 외에도 다양한 기관의 분쟁조정위원회가 존재하고 있습니다.
                     아래에 해당하는 좀 더 복잡하고 고도화된 분쟁은 관련 외부전문가의 상담을 받아보시길 바랍니다.
                   </p>
                   <div className="bg-white/60 rounded-xl p-3 sm:p-4 md:p-5">
                     <p className="text-xs sm:text-sm text-gray-500 mb-2 md:mb-3 font-medium">기타 분쟁조정위원회</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0"></span>
+                        <span className="text-xs sm:text-sm text-gray-700">한국콘텐츠진흥원 · <span className="text-amber-700 font-medium">콘텐츠분쟁조정위원회</span></span>
+                      </div>
                       <div className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0"></span>
                         <span className="text-xs sm:text-sm text-gray-700">금융감독원 · <span className="text-amber-700 font-medium">금융분쟁조정위원회</span></span>
@@ -157,7 +155,7 @@ export default function ProcedurePage() {
                         <span className="w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0"></span>
                         <span className="text-xs sm:text-sm text-gray-700">한국부동산원 · <span className="text-amber-700 font-medium">임대차분쟁조정위원회</span></span>
                       </div>
-                      <div className="flex items-center gap-2 sm:col-span-2">
+                      <div className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0"></span>
                         <span className="text-xs sm:text-sm text-gray-700">국토교통부 · <span className="text-amber-700 font-medium">건설/건축분쟁조정위원회</span> 등</span>
                       </div>
@@ -183,7 +181,7 @@ export default function ProcedurePage() {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
           {committees.map((committee, index) => (
             <div
               key={index}
@@ -211,7 +209,7 @@ export default function ProcedurePage() {
       <div className="bg-gradient-to-br from-lavender/20 to-mint-green/15 p-6 sm:p-8 md:p-10 rounded-2xl text-center">
         <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 md:mb-4 text-dark-navy">도움이 필요하신가요?</h3>
         <p className="text-sm sm:text-base text-gray-purple mb-4 md:mb-6">
-          AI 상담 챗봇에게 물어보시면 맞춤형 안내를 받으실 수 있습니다
+          AI 상담봇에게 물어보시면 맞춤형 안내를 받으실 수 있습니다
         </p>
         <button
           className="bg-deep-teal text-white px-6 sm:px-8 md:px-10 py-3 md:py-4 rounded-full text-sm sm:text-base font-semibold hover:bg-mint-green transform hover:-translate-y-1 transition-all"

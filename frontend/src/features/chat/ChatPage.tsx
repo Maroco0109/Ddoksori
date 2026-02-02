@@ -1,15 +1,29 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
-import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
+import type { AgencyInfo, ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations, SSESourceInfo, SourceMetadata } from '@/shared/types';
 import { Send } from 'lucide-react';
 import { useChatStore } from '@/features/chat/chat.store';
-import { useChatMutation } from './hooks/useChatMutation';
+import { useAuthStore } from '@/features/auth/auth.store';
 import { useStreamingChat } from './hooks/useStreamingChat';
 import { extractCitations } from '@/shared/lib/citation';
 import { simulateStreaming } from '@/shared/lib/streaming';
 import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
 import { StatusIndicator } from './components/StatusIndicator';
+
+/** Map SSESourceInfo[] to SourceMetadata[] for citation extraction */
+const mapSources = (sources: SSESourceInfo[]): SourceMetadata[] =>
+  sources.map((s) => ({
+    doc_id: '',
+    chunk_id: '',
+    chunk_type: s.type,
+    source_org: s.source_org || '',
+    url: null,
+    decision_date: null,
+    collected_at: null,
+    doc_title: s.title,
+    similarity: s.similarity,
+  }));
 
 interface ChatPageProps {
   currentSessionId?: string | null;
@@ -18,6 +32,7 @@ interface ChatPageProps {
 
 export default function ChatPage({ currentSessionId = null, onSessionCreate }: ChatPageProps) {
   const storeSessionId = useChatStore((state) => state.currentSessionId);
+  const storeActiveChatType = useChatStore((state) => state.activeChatType);
   const setStoreSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setStoreChatType = useChatStore((state) => state.setActiveChatType);
   const setChatSessions = useChatStore((state) => state.setChatSessions);
@@ -28,15 +43,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   // 현재 세션 ID
   const [sessionId, setSessionId] = useState<string | null>(resolvedSessionId);
 
-  // React Query mutation for API calls (fallback)
-  const chatMutation = useChatMutation();
-
   const messageIdCounterRef = useRef(1); // 초기 AI 인사 메시지 id=1
   const prevSessionIdRef = useRef<string | null>(resolvedSessionId);
 
   // PR-7: SSE Streaming hook for real-time agent status
   const { streamingState: disputeStreamingState, startStream: startDisputeStream, cancelStream: cancelDisputeStream } = useStreamingChat({
-    onFallback: (model, message) => {
+    onFallback: (_model: string, message: string) => {
       setFallbackNotice(message);
       setTimeout(() => setFallbackNotice(null), 3000);
     },
@@ -65,8 +77,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   ]);
   const [generalInputValue, setGeneralInputValue] = useState('');
-  const [isGeneralLoading, setIsGeneralLoading] = useState(false);
-
   // Phase 4: messageIdCounterRef를 현재 메시지의 최대 ID와 동기화
   // 세션 복원, HMR 등으로 메시지 배열이 변경되면 counter가 자동 동기화되어 ID 충돌 방지
   useEffect(() => {
@@ -98,7 +108,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
 
   // 로그인 여부 확인
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
 
   // 컴포넌트 마운트 시 스크롤 최상단으로 이동 (한 번만 실행)
   useEffect(() => {
@@ -147,15 +157,16 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
         try {
           const sessions = JSON.parse(storage.getItem(storageKey) || '[]');
-          const session = sessions.find(s => s.id === resolvedSessionId);
+          const session = sessions.find((s: ChatSession) => s.id === resolvedSessionId);
 
           if (session) {
-            const restoredMessages = session.messages.map(msg => ({
+            const restoredMessages = session.messages.map((msg: MessageWithCitations) => ({
               ...msg,
               timestamp: new Date(msg.timestamp)
             }));
 
-            if (session.type === 'dispute') {
+            const chatType = storeActiveChatType || session.type;
+            if (chatType === 'dispute') {
               setDisputeMessages(restoredMessages);
               setActiveChatType('dispute');
               setIsFormSubmitted(true);
@@ -170,6 +181,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
               setTimeout(() => {
                 generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
               }, 200);
+            }
+          } else if (storeActiveChatType) {
+            setActiveChatType(storeActiveChatType);
+            if (storeActiveChatType === 'dispute') {
+              setIsFormSubmitted(false);
             }
           }
         } catch (e) {
@@ -218,7 +234,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, cancelDisputeStream, cancelGeneralStream, setBackendSessionId, setDisputeFormData]);
+  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, cancelDisputeStream, cancelGeneralStream, setBackendSessionId, setDisputeFormData, storeActiveChatType]);
 
   // Cancel streams on unmount only
   useEffect(() => {
@@ -230,7 +246,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   }, []);
 
   // 채팅 세션 저장 함수
-  const saveChatSession = (type: ChatType, messages: Message[]) => {
+  const saveChatSession = (type: ChatType, messages: MessageWithCitations[]) => {
     const storage = isLoggedIn ? localStorage : sessionStorage;
     const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
 
@@ -255,17 +271,18 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     // 비로그인 사용자는 1일(86400000ms) 만료 시간 설정
     const expiresAt = !isLoggedIn ? now + 86400000 : null;
 
-    const sessionData = {
+    const sessionData: ChatSession = {
       id: newSessionId,
       type,
       title,
       createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
+      lastMessageAt: new Date(),
       expiresAt: sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
       lastUpdated: now,
       messages: messages.map(msg => ({
         ...msg,
-        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp
-      }))
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : (msg.timestamp as unknown as number)
+      })) as unknown as MessageWithCitations[],
     };
 
     if (sessionIndex >= 0) {
@@ -378,7 +395,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           setBackendSessionId(response.session_id);
         }
 
-        const citations = extractCitations(response.answer, response.sources);
+        const citations = extractCitations(response.answer, mapSources(response.sources));
 
         // simulateStreaming으로 텍스트 출력 (일반 채팅과 동일 패턴)
         let streamedText = '';
@@ -406,7 +423,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   clarifyingQuestions: response.clarifying_questions,
                   isRestricted: response.domain?.is_restricted,
                   agencyCode: response.domain?.agency_code,
-                  agencyInfo: response.domain,
+                  agencyInfo: response.domain as unknown as AgencyInfo,
                 }
               : msg
           )
@@ -469,7 +486,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           setBackendSessionId(response.session_id);
         }
 
-        const citations = extractCitations(response.answer, response.sources);
+        const citations = extractCitations(response.answer, mapSources(response.sources));
 
         // simulateStreaming으로 텍스트 출력 (일반 채팅과 동일 패턴)
         let streamedText = '';
@@ -497,7 +514,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                   clarifyingQuestions: response.clarifying_questions,
                   isRestricted: response.domain?.is_restricted,
                   agencyCode: response.domain?.agency_code,
-                  agencyInfo: response.domain,
+                  agencyInfo: response.domain as unknown as AgencyInfo,
                 }
               : msg
           )
@@ -560,7 +577,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       });
 
       if (response) {
-        const citations = extractCitations(response.answer, response.sources);
+        const citations = extractCitations(response.answer, mapSources(response.sources));
 
         // Word-by-word streaming 애니메이션
         let streamedText = '';
@@ -587,7 +604,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           )
         );
 
-        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
+        if (response.clarifying_questions && response.clarifying_questions.length > 0) {
           const warningMsgId = ++messageIdCounterRef.current;
           const warningMessage: MessageWithCitations = {
             id: warningMsgId,
@@ -620,143 +637,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const formatNumber = (value: string) => {
     const number = value.replace(/[^0-9]/g, '');
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  };
-
-  // Follow-up question handlers
-  const handleDisputeFollowupClick = async (question: string) => {
-    if (disputeStreamingState.isStreaming) return;
-
-    const userMsgId = ++messageIdCounterRef.current;
-    const aiPlaceholderId = ++messageIdCounterRef.current;
-
-    setDisputeMessages((prev) => [
-      ...prev,
-      { id: userMsgId, type: 'user' as const, content: question, timestamp: new Date() },
-      { id: aiPlaceholderId, type: 'ai' as const, content: '', timestamp: new Date() },
-    ]);
-
-    try {
-      const response = await startDisputeStream({
-        message: question,
-        chat_type: 'dispute',
-        top_k: 5,
-      });
-
-      if (response) {
-        if (response.session_id) {
-          setBackendSessionId(response.session_id);
-        }
-
-        const citations = extractCitations(response.answer, response.sources);
-
-        let streamedText = '';
-        await simulateStreaming(response.answer, (chunk) => {
-          streamedText += chunk;
-          setDisputeMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiPlaceholderId ? { ...msg, content: streamedText } : msg
-            )
-          );
-        });
-
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiPlaceholderId
-              ? {
-                  ...msg,
-                  content: response.answer,
-                  citations,
-                  followupQuestions: response.followup_questions,
-                  hasSafetyWarning: !response.has_sufficient_evidence
-                    && Array.isArray(response.clarifying_questions)
-                    && response.clarifying_questions.length > 0,
-                  clarifyingQuestions: response.clarifying_questions,
-                  isRestricted: response.domain?.is_restricted,
-                  agencyCode: response.domain?.agency_code,
-                  agencyInfo: response.domain,
-                }
-              : msg
-          )
-        );
-      } else {
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiPlaceholderId
-              ? { ...msg, content: '죄송합니다. 서버 응답 시간이 초과되었습니다. 다시 시도해주세요.' }
-              : msg
-          )
-        );
-      }
-    } catch (error) {
-      console.error('Chat API error:', error);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiPlaceholderId
-            ? { ...msg, content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' }
-            : msg
-        )
-      );
-    }
-  };
-
-  const handleGeneralFollowupClick = async (question: string) => {
-    if (generalStreamingState.isStreaming) return;
-
-    const userMsgId = ++messageIdCounterRef.current;
-    const aiPlaceholderId = ++messageIdCounterRef.current;
-
-    setGeneralMessages((prev) => [
-      ...prev,
-      { id: userMsgId, type: 'user' as const, content: question, timestamp: new Date() },
-      { id: aiPlaceholderId, type: 'ai' as const, content: '', timestamp: new Date() },
-    ]);
-
-    try {
-      const response = await startGeneralStream({
-        message: question,
-        chat_type: 'general',
-        top_k: 5,
-      });
-
-      if (response) {
-        const citations = extractCitations(response.answer, response.sources);
-
-        let streamedText = '';
-        await simulateStreaming(response.answer, (chunk) => {
-          streamedText += chunk;
-          setGeneralMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiPlaceholderId ? { ...msg, content: streamedText } : msg
-            )
-          );
-        });
-
-        setGeneralMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiPlaceholderId
-              ? {
-                  ...msg,
-                  content: response.answer,
-                  citations,
-                  followupQuestions: response.followup_questions,
-                }
-              : msg
-          )
-        );
-      }
-    } catch (error) {
-      console.error('Chat API error:', error);
-      setGeneralMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiPlaceholderId
-            ? {
-                ...msg,
-                content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
-    }
   };
 
   // 폼 입력 핸들러
@@ -924,7 +804,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                     value={disputeForm.disputeDetail}
                     onChange={handleFormChange}
                     placeholder="분쟁 상황을 자세히 설명해주세요"
-                    rows="4"
+                    rows={4}
                     className="w-full px-4 py-3 border-2 border-ivory rounded-lg outline-none focus:border-deep-teal transition-all resize-none"
                     required
                   />
@@ -950,7 +830,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                     <MessageBubble
                       message={msg}
                       chatType="dispute"
-                      onFollowupClick={handleDisputeFollowupClick}
                     />
                     {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
                       <SafetyWarning
@@ -1012,7 +891,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                 <MessageBubble
                   message={msg}
                   chatType="general"
-                  onFollowupClick={handleGeneralFollowupClick}
                 />
                 {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
                   <SafetyWarning
