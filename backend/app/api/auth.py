@@ -36,11 +36,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.auth.dependencies import decode_access_token, get_current_user
-from app.middleware.rate_limiter import limiter, RateLimits
 from app.auth.models import User
 from app.auth.service import AuthService
 from app.auth.user_db import UserDB
 from app.common.config import get_config
+from app.middleware.rate_limiter import RateLimits, limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])

@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import get_current_user_optional
-from app.middleware.rate_limiter import limiter, RateLimits
 from app.auth.models import User
 from app.common.config import get_config
 from app.common.logger import get_rag_logger
+from app.middleware.rate_limiter import RateLimits, limiter
 from app.supervisor import create_initial_state, get_graph_for_chat_type
 from app.supervisor.memory import ConversationMemory, should_use_memory
 
