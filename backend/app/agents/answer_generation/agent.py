@@ -32,10 +32,10 @@ from ...domain import AGENCY_INFO, classify_domain
 from ...supervisor.state import ChatState
 from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 from .cache import get_answer_cache
-from .fallback import AnswerGenerationFallback
-from .template_router import TemplateRouter
-from .template_loader import TemplateLoader
 from .context_builder import ContextBuilder
+from .fallback import AnswerGenerationFallback
+from .template_loader import TemplateLoader
+from .template_router import TemplateRouter
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
 # 법적 책임 회피를 위해 LLM 생성 대신 미리 정의된 안전한 문구를 사용합니다.
