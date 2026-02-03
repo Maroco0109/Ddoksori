@@ -16,13 +16,16 @@ jobs:
       github.event.pull_request.author_association == 'OWNER' ||
       github.event.pull_request.author_association == 'MEMBER' ||
       github.event.pull_request.author_association == 'COLLABORATOR' ||
-      github.event.pull_request.author_association == 'CONTRIBUTOR'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write  # gh pr comment에 필수
       issues: read
       id-token: write
+
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -45,6 +48,17 @@ jobs:
             - Performance considerations
             - Security concerns
             - Test coverage
+
+            **For documentation changes:**
+            - Distinguish between actual file deletions and content reorganization
+            - Before claiming something is "deleted", verify it doesn't exist in other files
+            - Cross-reference with actual workflow files in .github/workflows/ before commenting on CI/CD
+            - Check if referenced files/sections actually exist before flagging broken links
+
+            **Important guidelines:**
+            - Use `gh pr diff ${{ github.event.pull_request.number }}` to see actual changes
+            - Use `ls` and `cat` to verify file existence before making claims
+            - Be precise about what was deleted vs moved vs reorganized
 
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
