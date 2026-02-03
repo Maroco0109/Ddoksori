@@ -17,7 +17,6 @@ import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # ============================================================
@@ -124,9 +123,6 @@ class E2ETraceLogger:
         2. individual_retrieval_results → retrieval_law, retrieval_criteria, retrieval_case
         3. supervisor → Supervisor 결정 내역
         """
-        import time
-
-        start = time.time()
 
         self._capture_node_timings(final_state)
         self._capture_retrieval_results(final_state)

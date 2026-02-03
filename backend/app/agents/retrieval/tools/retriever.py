@@ -591,7 +591,7 @@ class RAGRetriever:
     ) -> List[SearchResult]:
         """LIKE 기반 키워드 검색 (폴백용)"""
         # 한국어 키워드 추출 (간단한 토큰화)
-        keywords = self._extract_keywords(query)
+        self._extract_keywords(query)
 
         assert self.conn is not None
         with self.conn.cursor() as cur:

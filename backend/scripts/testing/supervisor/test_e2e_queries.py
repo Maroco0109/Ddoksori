@@ -17,11 +17,8 @@ Phase 6: E2E 통합 테스트 - 전체 워크플로우 검증
     pytest scripts/testing/orchestrator/test_e2e_queries.py -m unit -v
 """
 
-import os
 import sys
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
 
 backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
@@ -243,8 +240,6 @@ class TestE2ERetrievalParallelExecution:
             "keywords": ["노트북", "환불"],
             "retriever_types": ["law", "criteria", "case"],
         }
-
-        from langgraph.types import Send
 
         from app.supervisor.graph_mas import _route_mas_supervisor
 

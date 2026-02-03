@@ -8,7 +8,6 @@ import pytest
 
 from app.agents.answer_generation.agent import (
     DOMAIN_KOREAN_NAMES,
-    SPECIALIST_AGENCY_RESPONSE_TEMPLATE,
     _build_specialist_agency_response,
     _format_similar_cases_for_specialist,
 )

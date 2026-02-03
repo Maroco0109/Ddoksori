@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional
 
-from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 

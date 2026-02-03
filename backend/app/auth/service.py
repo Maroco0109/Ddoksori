@@ -26,7 +26,7 @@ import logging
 from typing import Optional, Tuple
 
 from app.auth.dependencies import create_access_token
-from app.auth.models import AuthResponse, User
+from app.auth.models import AuthResponse
 from app.auth.oauth import GoogleOAuth, NaverOAuth
 from app.auth.user_db import UserDB
 from app.common.config import get_config

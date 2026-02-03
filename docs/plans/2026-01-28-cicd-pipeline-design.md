@@ -1666,6 +1666,531 @@ GitHub Repository → Settings → Secrets and variables → Actions
 
 ---
 
+## Step 6: 도메인 + HTTPS 적용
+
+> **Status**: 도메인 구매 전 검토 완료 (2026-02-03)
+>
+> **결론**: EC2 + Nginx + Let's Encrypt 방식으로 진행 (ALB 불필요)
+
+### 6.0 ALB 도입 검토
+
+| 항목 | ALB 방식 | EC2 직접 (Nginx + Let's Encrypt) |
+|------|---------|-------------------------------|
+| SSL 인증서 | ACM 무료 (자동갱신) | Let's Encrypt 무료 (90일 자동갱신) |
+| 로드밸런서 | **~$24-38/월** (고정비) | **$0** (Nginx가 대신) |
+| EC2 | ~$15/월 | ~$15/월 |
+| **월 총액** | **~$59-73/월** | **~$35/월** |
+
+**판단: 현재 단계에서 ALB 불필요**
+
+- EC2 1대 → 로드밸런싱 대상 없음
+- ALB 고정비 ~$24/월 → 예산($30-70/월)의 절반 소진
+- SSE 스트리밍 시 ALB idle timeout 추가 설정 필요 (기본 60초로 끊김)
+- ALB 도입 시점: EC2 2대+, 동시접속 1,000+, 월 $100+ 예산
+
+### 6.1 도메인 구매 (AWS Route 53 권장)
+
+**Route 53 권장 이유**: DNS 레코드를 AWS 콘솔에서 직접 관리, 네임서버 변경 불필요
+
+```
+1. AWS Console → Route 53 → Registered domains → Register Domain
+2. 도메인 검색 (예: ddoksori.com) → 선택 → 결제 (~$13/년)
+   - Privacy Protection: "Enable" (WHOIS 비공개)
+   - 등록 완료까지 보통 15분~1시간 (최대 3일)
+3. 이메일 인증 링크 클릭 (15일 내 미확인 시 도메인 정지)
+4. Hosted Zone (자동 생성됨) → Create Record:
+   - A 레코드: (비워둠) → 13.209.245.44 (탄력적 IP)
+   - CNAME: www → ddoksori.com
+5. DNS 전파 확인: nslookup ddoksori.com → 13.209.245.44 나오면 성공
+```
+
+> **Note**: 탄력적 IP는 그대로 유지. 도메인은 탄력적 IP를 가리키는 별칭일 뿐.
+> 향후 서버 분리 시: `staging.ddoksori.com` → staging IP, `ddoksori.com` → production IP
+
+### 6.2 EC2 보안 그룹 변경
+
+443 포트 추가 필요:
+
+```
+EC2 Console → 인스턴스 → Security 탭 → 보안 그룹 클릭
+  → Edit inbound rules → Add rule:
+    Type: HTTPS, Port: 443, Source: 0.0.0.0/0
+```
+
+최종 인바운드:
+
+| 포트 | 소스 | 용도 |
+|------|------|------|
+| 22 | My IP | SSH |
+| 80 | 0.0.0.0/0 | HTTP → HTTPS 리다이렉트 |
+| **443** | **0.0.0.0/0** | **HTTPS** |
+
+### 6.3 HTTPS 적용 (Let's Encrypt + Certbot)
+
+**아키텍처 변경:**
+
+```
+변경 전: 사용자 → http://<IP>:80 → Nginx → Backend:8000
+변경 후: 사용자 → https://ddoksori.com:443 → Nginx (SSL 종료) → Backend:8000
+                  http://ddoksori.com:80  → 301 리다이렉트 → https://...
+```
+
+#### docker-compose.prod.yml 변경
+
+```yaml
+services:
+  frontend:
+    # ... 기존 설정 유지 ...
+    ports:
+      - "80:80"
+      - "443:443"    # 추가
+    volumes:
+      - certbot-etc:/etc/letsencrypt        # 추가
+      - certbot-var:/var/lib/letsencrypt    # 추가
+      - certbot-www:/var/www/certbot        # 추가
+
+  certbot:    # 새 서비스
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'"
+    networks:
+      - ddoksori-net
+
+volumes:
+  redis-data:
+  certbot-etc:    # 추가
+  certbot-var:    # 추가
+  certbot-www:    # 추가
+```
+
+#### frontend/nginx.conf 변경
+
+HTTP→HTTPS 리다이렉트 + SSL 서버 블록 추가:
+
+```nginx
+# HTTP → HTTPS 리다이렉트
+server {
+    listen 80;
+    server_name ddoksori.com www.ddoksori.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS 메인 서버
+server {
+    listen 443 ssl;
+    server_name ddoksori.com www.ddoksori.com;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    ssl_certificate /etc/letsencrypt/live/ddoksori.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ddoksori.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    add_header Strict-Transport-Security "max-age=15768000; includeSubDomains" always;
+
+    # 기존 gzip, SPA routing, API proxy, SSE streaming, static caching 설정 동일
+    # SSE에 proxy_read_timeout 3600s 추가
+}
+```
+
+#### frontend/Dockerfile.prod 변경
+
+```dockerfile
+# Production stage에 추가:
+RUN mkdir -p /var/www/certbot
+EXPOSE 80 443    # 443 추가
+```
+
+#### 최초 인증서 발급 (EC2에서 1회 수동)
+
+DNS 전파 확인 후 EC2에서 실행:
+
+```bash
+# 1) 기존 컨테이너 중지
+cd /home/ubuntu/ddoksori
+docker compose -f docker-compose.prod.yml down
+
+# 2) certbot standalone으로 인증서 발급
+docker run --rm -p 80:80 \
+  -v certbot-etc:/etc/letsencrypt \
+  -v certbot-var:/var/lib/letsencrypt \
+  certbot/certbot certonly --standalone \
+    --email <이메일> --agree-tos --no-eff-email \
+    -d ddoksori.com -d www.ddoksori.com
+
+# 3) 발급 확인
+docker run --rm -v certbot-etc:/etc/letsencrypt \
+  alpine ls /etc/letsencrypt/live/ddoksori.com/
+# → fullchain.pem, privkey.pem 등 확인
+
+# 4) 전체 서비스 시작
+export ECR_REGISTRY=<ECR URL>
+docker compose -f docker-compose.prod.yml up -d
+```
+
+#### 인증서 자동 갱신
+
+certbot 컨테이너가 12시간마다 갱신 시도. EC2 crontab에 nginx 리로드 추가:
+
+```bash
+# 매월 1일, 15일 자정에 nginx 리로드
+0 0 1,15 * * cd /home/ubuntu/ddoksori && docker compose -f docker-compose.prod.yml exec -T frontend nginx -s reload 2>/dev/null
+```
+
+### 6.4 CI/CD 워크플로우 변경
+
+**deploy-staging.yml / deploy-production.yml 공통:**
+
+```yaml
+# 변경 전:
+env:
+  EC2_HOST: 13.209.245.44
+
+# 변경 후:
+env:
+  EC2_HOST: ddoksori.com
+
+# 헬스체크 변경:
+#   http://${{ env.EC2_HOST }}:8000/health
+# → https://${{ env.EC2_HOST }}/health
+```
+
+> Nginx가 443에서 SSL 처리 후 backend:8000으로 프록시하므로 외부에서는 443(https 기본)으로 접근.
+
+### 6.5 OAuth 콜백 URL 업데이트
+
+| 서비스 | 변경 전 | 변경 후 |
+|--------|---------|---------|
+| Google OAuth | `http://13.209.245.44/auth/google/callback` | `https://ddoksori.com/auth/google/callback` |
+| Naver OAuth | `http://13.209.245.44/auth/naver/callback` | `https://ddoksori.com/auth/naver/callback` |
+
+### 6.6 적합성 검토 결과: 적합
+
+| 항목 | 탄력적 IP만 | 도메인 + HTTPS |
+|------|------------|---------------|
+| 사용자 접근성 | IP 직접 입력 | ddoksori.com |
+| HTTPS | 자체서명만 가능 | Let's Encrypt 무료 |
+| OAuth 콜백 | 일부 제공자 제한 | 표준 지원 |
+| 브라우저 경고 | "안전하지 않음" 표시 | 자물쇠 아이콘 |
+| 서버 이전 | IP 변경 시 전체 수정 | DNS만 변경 |
+| 비용 | 무료 | ~$13/년 |
+
+### 6.7 구현 순서
+
+| Phase | 작업 | 위치 |
+|-------|------|------|
+| **1. 도메인** | Route 53 구매 → A/CNAME 레코드 → DNS 전파 확인 | AWS 콘솔 |
+| **2. 보안+코드** | 443 포트 추가, docker-compose/nginx/Dockerfile 수정 | AWS 콘솔 + 코드 |
+| **3. 인증서** | 코드 배포 → EC2에서 certbot 인증서 발급 | EC2 |
+| **4. CI/CD** | deploy-staging/production.yml EC2_HOST, 헬스체크 변경 | 코드 |
+| **5. OAuth+검증** | Google/Naver 콜백 URL 변경 → 전체 테스트 | 외부 + 브라우저 |
+
+### 6.8 변경 대상 파일
+
+| 파일 | 변경 유형 |
+|------|----------|
+| `docker-compose.prod.yml` | certbot 서비스/볼륨, frontend 443 포트 |
+| `frontend/nginx.conf` | HTTPS 서버 블록, HTTP 리다이렉트, SSL |
+| `frontend/Dockerfile.prod` | EXPOSE 443, /var/www/certbot |
+| `.github/workflows/deploy-staging.yml` | EC2_HOST → 도메인, 헬스체크 https |
+| `.github/workflows/deploy-production.yml` | EC2_HOST → 도메인, 헬스체크 https |
+
+## Step 7: AWS 리소스 정리 (서비스 해제)
+
+> **Status**: 가이드 작성 완료 (2026-02-03)
+>
+> 서비스 운영 종료 시 도메인 등록을 **제외한** 모든 AWS 리소스를 안전하게 해제하는 절차.
+> 과금이 발생하는 리소스를 빠짐없이 정리하여 불필요한 비용을 방지합니다.
+
+### 7.0 정리 대상 리소스 요약
+
+| 순서 | 서비스 | 리소스 | 월 비용 | 정리 방법 |
+|------|--------|--------|---------|-----------|
+| 1 | EC2 | 인스턴스 (t3.small) | ~$15 | Terminate |
+| 2 | EC2 | 탄력적 IP | 미연결 시 $3.65 | Release |
+| 3 | RDS | DB 인스턴스 (db.t3.micro) | ~$15 | Delete |
+| 4 | Secrets Manager | 12개 시크릿 | ~$6 | Delete |
+| 5 | S3 | ddoksori-backups 버킷 | ~$1 | 객체 삭제 → 버킷 삭제 |
+| 6 | ECR | 2개 리포지토리 | ~$1 | 이미지 삭제 → 리포 삭제 |
+| 7 | Route 53 | Hosted Zone | $0.50 | 커스텀 레코드 삭제 → Zone 삭제 |
+| 8 | Route 53 | 도메인 자동갱신 | $13/년 | Disable (도메인 유지) |
+| 9 | IAM | Role, Policy, OIDC | 무료 | 정리 권장 |
+| 10 | EC2 | 보안 그룹, 키 페어 | 무료 | 정리 권장 |
+
+> **정리 완료 시 절감 비용**: ~$38-40/월 (연간 ~$460)
+
+### 7.1 EC2 인스턴스 종료 (Terminate)
+
+> ⚠️ **Terminate = 영구 삭제**. Stop과 다르며 복구 불가. EBS 볼륨도 함께 삭제됩니다.
+
+```
+1. EC2 Console → Instances → 대상 인스턴스 선택
+2. Instance state → Stop instance (먼저 안전하게 중지)
+   - 중지 완료 확인 (State: Stopped)
+3. 필요한 데이터가 있다면 이 시점에 백업:
+   - EC2 → 인스턴스 선택 → Actions → Image and templates → Create image (AMI)
+   - 또는 SSH로 접속하여 파일 다운로드
+4. Instance state → Terminate instance
+5. 확인 팝업에서 "Terminate" 클릭
+6. State가 "Terminated"로 변경되면 완료 (몇 분 후 목록에서 사라짐)
+```
+
+### 7.2 탄력적 IP 해제 (Release)
+
+> ⚠️ EC2 인스턴스에 연결되지 않은 탄력적 IP는 **시간당 $0.005** 과금됩니다.
+> 반드시 EC2 Terminate 후에 해제하세요.
+
+```
+1. EC2 Console → Network & Security → Elastic IPs
+2. 대상 IP (13.209.245.44) 선택
+3. Actions → Release Elastic IP address
+4. 확인 팝업에서 "Release" 클릭
+5. 목록에서 사라지면 완료
+```
+
+> **Note**: 해제된 IP는 다시 돌아오지 않습니다. 같은 IP가 필요하면 Release하지 마세요.
+
+### 7.3 RDS 인스턴스 삭제
+
+> 💡 삭제 전 최종 스냅샷 생성을 권장합니다 (무료, 필요 시 복원 가능).
+
+```
+1. RDS Console → Databases → 대상 DB 인스턴스 선택
+2. Actions → Delete
+3. 삭제 옵션:
+   - ✅ Create final snapshot: "ddoksori-final-YYYYMMDD" (권장)
+   - ⬜ Retain automated backups: 체크 해제 (과금 방지)
+   - 확인란에 "delete me" 입력
+4. "Delete" 클릭
+5. Status가 "Deleting" → 목록에서 사라지면 완료 (수 분 소요)
+```
+
+**스냅샷 정리** (더 이상 DB가 필요 없을 때):
+
+```
+1. RDS Console → Snapshots
+2. 불필요한 스냅샷 선택 → Actions → Delete snapshot
+   - 스냅샷 보관 시 과금: ~$0.02/GB/월
+```
+
+### 7.4 Secrets Manager 시크릿 삭제
+
+> 기본 복구 기간은 7일이며, 즉시 삭제도 가능합니다.
+
+DDOKSORI에서 사용하는 시크릿 경로 (총 12개):
+
+| 환경 | 시크릿 경로 |
+|------|------------|
+| staging | `ddoksori/staging/database`, `ddoksori/staging/llm`, `ddoksori/staging/oauth/google`, `ddoksori/staging/oauth/naver`, `ddoksori/staging/security`, `ddoksori/staging/infra` |
+| production | `ddoksori/production/database`, `ddoksori/production/llm`, `ddoksori/production/oauth/google`, `ddoksori/production/oauth/naver`, `ddoksori/production/security`, `ddoksori/production/infra` |
+
+```
+1. Secrets Manager Console → Secrets
+2. 각 시크릿 클릭 → Actions → Delete secret
+3. 복구 기간 선택:
+   - 기본: 7일 (7일 내 복원 가능)
+   - 즉시 삭제: "Schedule deletion without a waiting period" 체크
+4. "Schedule deletion" 클릭
+5. 12개 시크릿 모두 반복
+```
+
+> **AWS CLI로 일괄 삭제** (빠른 방법):
+> ```bash
+> # 7일 복구 기간
+> for secret in database llm oauth/google oauth/naver security infra; do
+>   for env in staging production; do
+>     aws secretsmanager delete-secret \
+>       --secret-id "ddoksori/$env/$secret" \
+>       --recovery-window-in-days 7 \
+>       --region ap-northeast-2
+>   done
+> done
+>
+> # 즉시 삭제 (복구 불가)
+> # --recovery-window-in-days 7 대신 --force-delete-without-recovery 사용
+> ```
+
+### 7.5 S3 버킷 삭제
+
+> S3 버킷은 비어 있어야 삭제할 수 있습니다.
+
+```
+1. S3 Console → Buckets → "ddoksori-backups" 클릭
+2. 버킷 비우기:
+   - "Empty" 버튼 클릭
+   - 확인란에 "permanently delete" 입력 → "Empty" 클릭
+   - 모든 객체 삭제 완료 대기
+3. 버킷 삭제:
+   - Buckets 목록으로 돌아가기
+   - "ddoksori-backups" 선택 → "Delete" 클릭
+   - 확인란에 버킷 이름 입력 → "Delete bucket" 클릭
+```
+
+> **Note**: S3 버킷 이름은 글로벌 고유. 삭제 후 같은 이름으로 즉시 재생성 불가할 수 있음.
+
+### 7.6 ECR 리포지토리 삭제
+
+DDOKSORI ECR 리포지토리 2개: `ddoksori-backend`, `ddoksori-frontend`
+
+```
+1. ECR Console → Repositories
+2. "ddoksori-backend" 선택 → Delete
+   - 확인란에 "delete" 입력 → "Delete" 클릭
+3. "ddoksori-frontend" 선택 → Delete
+   - 확인란에 "delete" 입력 → "Delete" 클릭
+```
+
+> **Note**: 리포지토리 삭제 시 내부 이미지도 모두 삭제됩니다. 별도로 이미지를 먼저 삭제할 필요 없음.
+
+### 7.7 Route 53 정리 (도메인은 유지)
+
+> 도메인 등록은 유지하되, Hosted Zone과 커스텀 레코드를 삭제하여 $0.50/월 비용 절감.
+
+#### Hosted Zone 레코드 삭제
+
+```
+1. Route 53 Console → Hosted zones → ddoksori.com 클릭
+2. 커스텀 레코드 삭제 (A, CNAME 등):
+   - A 레코드 (ddoksori.com → 13.209.245.44) 선택 → Delete
+   - CNAME 레코드 (www → ddoksori.com) 선택 → Delete
+   - ⚠️ NS 레코드, SOA 레코드는 삭제하지 마세요 (Zone 삭제 시 자동 제거)
+3. 커스텀 레코드가 모두 삭제되었는지 확인
+```
+
+#### Hosted Zone 삭제
+
+```
+1. Hosted zones 목록으로 돌아가기
+2. "ddoksori.com" 선택 → Delete hosted zone
+3. 확인란에 "delete" 입력 → "Delete" 클릭
+```
+
+#### 도메인 자동갱신 비활성화
+
+```
+1. Route 53 Console → Registered domains → ddoksori.com
+2. Auto-renew: "Disable" 클릭
+   - 현재 등록 기간 만료 시 도메인이 해제됨
+   - 도메인은 만료일까지 소유 (이미 지불한 $13/년)
+```
+
+> **도메인 재사용 시**: Hosted Zone 재생성 ($0.50/월) → A 레코드 새 IP로 설정
+
+### 7.8 IAM 정리
+
+> IAM은 무료이지만, 사용하지 않는 Role/Policy는 보안상 삭제 권장.
+
+#### DDOKSORI IAM 리소스 목록
+
+| 리소스 | 이름 | 용도 |
+|--------|------|------|
+| Role | `ddoksori-github-actions-role` | GitHub Actions OIDC |
+| Role | `ddoksori-ec2-role` | EC2 → ECR/Secrets 접근 |
+| Policy | `AmazonEC2ContainerRegistryReadOnly` (AWS 관리) | ECR 읽기 |
+| Policy | `SecretsManagerReadWrite` (AWS 관리) | Secrets Manager |
+| Policy | 인라인 정책 (ECR push 등) | GitHub Actions용 |
+| OIDC Provider | `token.actions.githubusercontent.com` | GitHub Actions 인증 |
+
+#### 정리 순서 (의존성 주의)
+
+```
+1. IAM Console → Roles → "ddoksori-github-actions-role"
+   - Permissions 탭 → 모든 Policy "Detach" (Remove)
+   - Role 삭제: "Delete" → 역할 이름 입력 → "Delete"
+
+2. IAM Console → Roles → "ddoksori-ec2-role"
+   - Permissions 탭 → 모든 Policy "Detach"
+   - Role 삭제
+
+3. IAM Console → Identity providers
+   - "token.actions.githubusercontent.com" 선택 → Delete
+   - ⚠️ 다른 프로젝트도 이 OIDC를 사용 중이면 삭제하지 마세요
+   - 확인 방법: IAM → Roles에서 이 OIDC를 Trust하는 다른 Role이 있는지 확인
+
+4. 커스텀 정책 삭제 (있는 경우):
+   - IAM → Policies → 필터: "Customer managed"
+   - ddoksori 관련 정책 선택 → Actions → Delete
+```
+
+### 7.9 보안 그룹 및 키 페어 정리
+
+> 무료이지만, 미사용 리소스 정리는 보안 관리에 도움됩니다.
+
+#### 보안 그룹 삭제
+
+```
+1. EC2 Console → Network & Security → Security Groups
+2. ddoksori 관련 보안 그룹 선택:
+   - ddoksori-ec2-sg (SSH + HTTP + HTTPS)
+   - ddoksori-rds-sg (PostgreSQL 5432)
+   - ⚠️ "default" 보안 그룹은 삭제 불가 (VPC 기본)
+3. Actions → Delete security groups
+4. "Delete" 확인
+```
+
+> **Note**: EC2, RDS가 먼저 삭제되어야 보안 그룹 삭제 가능. 사용 중인 보안 그룹은 삭제 거부됨.
+
+#### 키 페어 삭제
+
+```
+1. EC2 Console → Network & Security → Key Pairs
+2. ddoksori용 키 페어 선택
+3. Actions → Delete → "Delete" 확인
+4. 로컬 PC의 .pem 파일도 안전하게 삭제
+```
+
+### 7.10 GitHub Secrets 정리 (선택)
+
+> AWS 리소스는 아니지만, 더 이상 유효하지 않은 시크릿을 정리합니다.
+
+```
+1. GitHub → Repository → Settings → Secrets and variables → Actions
+2. 삭제 대상 시크릿:
+   - AWS_ROLE_ARN (IAM Role 삭제 후 무효)
+   - EC2_SSH_KEY (EC2 삭제 후 무효)
+   - DB_HOST, DB_USER, DB_NAME, DB_PASSWORD (RDS 삭제 후 무효)
+   - DISCORD_WEBHOOK (선택: 웹훅 자체는 Discord에서 관리)
+3. 각 시크릿 옆 "Delete" 클릭
+```
+
+> **유지 권장**: `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `GOOGLE_GENERATIVE_AI_API_KEY` 등
+> 외부 API 키는 다른 프로젝트에서 재사용 가능하므로 유지.
+
+### 7.11 정리 완료 확인 체크리스트
+
+| 순서 | 항목 | 확인 |
+|------|------|------|
+| 1 | EC2 인스턴스 Terminated | ⬜ |
+| 2 | 탄력적 IP Released | ⬜ |
+| 3 | RDS 인스턴스 Deleted (최종 스냅샷 생성) | ⬜ |
+| 4 | Secrets Manager 12개 시크릿 Deleted | ⬜ |
+| 5 | S3 버킷 Emptied + Deleted | ⬜ |
+| 6 | ECR 리포지토리 2개 Deleted | ⬜ |
+| 7 | Route 53 Hosted Zone 삭제 | ⬜ |
+| 8 | Route 53 도메인 자동갱신 Disabled | ⬜ |
+| 9 | IAM Role/Policy/OIDC 삭제 | ⬜ |
+| 10 | 보안 그룹 삭제 | ⬜ |
+| 11 | 키 페어 삭제 | ⬜ |
+| 12 | GitHub Secrets 정리 | ⬜ |
+| 13 | AWS Billing → 24시간 후 과금 $0 확인 | ⬜ |
+
+> **최종 확인**: AWS Console → Billing and Cost Management → Bills에서
+> 24시간 후 과금 항목이 없는지 확인합니다. Route 53 도메인 등록비는
+> 이미 선불이므로 만료일까지 유지됩니다.
+
+---
+
 ## 참고 문서
 
 - 아카이브된 배포 가이드: `docs/_archive/plans/deploy/`
@@ -1674,6 +2199,7 @@ GitHub Repository → Settings → Secrets and variables → Actions
 - 환경변수 템플릿: `.env.example`
 - AWS Secrets Manager 설계: `docs/plans/2026-01-29-aws-secrets-manager-design.md`
 - MAS v2 아키텍처 설계: `docs/plans/2026-01-28-mas-architecture-v2-design.md`
+- 도메인/HTTPS 상세 가이드: `.omc/plans/domain-https-setup.md`
 
 ---
 
@@ -1705,3 +2231,20 @@ Step 3에 통합됨. 상세 설계: `docs/plans/2026-01-29-aws-secrets-manager-d
 ### 2026-02-01: AWS 인프라 초기 설정 가이드
 
 Step 0으로 통합됨.
+
+### 2026-02-03: 도메인 + HTTPS + ALB 검토
+
+Step 6으로 추가됨.
+- ALB 검토: 현재 단계에서 불필요 (비용 $24-38/월, EC2 1대)
+- 도메인: Route 53 구매 → A 레코드 → 탄력적 IP 연결
+- HTTPS: Let's Encrypt + Certbot Docker 컨테이너
+- CI/CD 변경: EC2_HOST IP→도메인, 헬스체크 http→https
+- 상세 가이드: `.omc/plans/domain-https-setup.md`
+
+### 2026-02-03: AWS 리소스 정리 가이드
+
+Step 7으로 추가됨.
+- 도메인 등록을 제외한 전체 AWS 리소스 해제 절차
+- EC2, RDS, Secrets Manager, S3, ECR, Route 53, IAM 정리
+- 의존성 순서 고려한 10단계 정리 절차
+- 정리 완료 시 월 ~$38-40 절감

@@ -37,7 +37,7 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Dict, List, Optional
 
 from ..supervisor.state import ChatState
-from ..supervisor.state.supervisor import AgentMessage, SupervisorState
+from ..supervisor.state.supervisor import AgentMessage
 
 
 class BaseAgent(ABC):

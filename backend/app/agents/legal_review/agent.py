@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ...common.config import AgentConfig
 from ...supervisor.state import ChatState, ReviewResult
+from .terminology_checker import TerminologyChecker
 
 # ============================================================
 # [Review Rules Definitions]
@@ -602,10 +603,9 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     draft_answer = state.get("draft_answer", "")
     query_analysis = state.get("query_analysis", {})
     sources = state.get("sources", [])
-    claim_evidence_map = state.get("claim_evidence_map", [])
-    cited_cases = state.get("cited_cases", [])
     retry_count = state.get("retry_count", 0)
     conversation_phase = state.get("conversation_phase", "initial")
+    terminology_violations = []
 
     query_type = query_analysis.get("query_type", "dispute")
 
@@ -635,6 +635,15 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     if strict_mode:
         _logger.info("[Review v2] Strict mode enabled for providing_law_detail phase")
 
+    # === NEW: Terminology + Data Isolation Check ===
+    terminology_checker = TerminologyChecker()
+    terminology_violations = terminology_checker.check(draft_answer, state)
+
+    if terminology_violations:
+        _logger.info(
+            f"[Review v2] Terminology violations found: {len(terminology_violations)}"
+        )
+
     # 1. 금지 표현 검사
     prohibited_violations = _check_prohibited_expressions(draft_answer)
 
@@ -654,6 +663,18 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     violation_details = _build_violation_details(
         prohibited_violations, has_citation, has_evidence, citation_verify
     )
+
+    # Merge terminology violations into violation_details
+    for tv in terminology_violations:
+        violation_details.append(
+            {
+                "type": tv["type"],
+                "description": tv["description"],
+                "location": "",
+                "severity": tv["severity"],
+                "suggestion": tv.get("suggestion"),
+            }
+        )
 
     # 6. 심각한 위반 개수 계산
     critical_count = sum(1 for v in violation_details if v["severity"] == "critical")

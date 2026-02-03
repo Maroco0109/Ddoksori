@@ -7,8 +7,7 @@ display limits, HyDE generation, RetrievalOverflowCache, and config settings.
 작성일: 2026-01-31
 """
 
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,7 +15,7 @@ from app.agents.query_analysis.classifiers import (
     QueryComplexity,
     classify_query_complexity,
 )
-from app.common.config import RetrievalSettings, get_config
+from app.common.config import get_config
 from app.supervisor.nodes.retrieval_merge import _apply_display_limits
 
 # ============================================================================
@@ -197,7 +196,6 @@ class TestRetrievalOverflowCache:
     @pytest.fixture
     def skip_no_redis(self):
         """Redis 미사용 시 테스트 스킵"""
-        import redis
 
         try:
             from app.common.cache import get_redis_client

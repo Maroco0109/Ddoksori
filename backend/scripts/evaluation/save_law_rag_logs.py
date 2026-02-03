@@ -13,7 +13,7 @@ import os
 import random
 import sys
 from datetime import datetime
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List, Tuple
 
 try:
     from dotenv import load_dotenv
@@ -97,7 +97,7 @@ def save_logs(
 
     if dry_run:
         print(f"queries_loaded: {len(queries)}")
-        print(f"output_dir: {output_dir}")
+        print(f"output_path: {output_path}")
         return
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

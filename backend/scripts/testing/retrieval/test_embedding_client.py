@@ -6,7 +6,7 @@ S3-PR1: OpenAI EmbeddingClient 단위 테스트
 """
 
 import os
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -133,7 +133,7 @@ class TestEmbeddingClient:
 
         client = EmbeddingClient()
         texts = [f"텍스트{i}" for i in range(150)]
-        embeddings = client.embed_batch(texts, batch_size=100)
+        client.embed_batch(texts, batch_size=100)
 
         assert mock_openai_client.embeddings.create.call_count == 2
 

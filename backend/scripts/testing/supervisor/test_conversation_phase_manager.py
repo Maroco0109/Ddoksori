@@ -9,8 +9,6 @@ import pytest
 
 from app.supervisor.conversation_manager import (
     ALL_SLOTS,
-    OPTIONAL_SLOTS,
-    REQUIRED_SLOTS,
     are_required_slots_filled,
     compute_phase_transition,
     compute_slot_status,

@@ -11,7 +11,7 @@ EmbeddingProvider Protocol - 통합 임베딩 프로바이더 인터페이스
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)

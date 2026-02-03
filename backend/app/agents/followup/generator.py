@@ -14,13 +14,11 @@
 4. 최대 3-5개 질문 선택
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from .templates import (
-    QUESTION_TEMPLATES,
     QuestionTemplate,
     get_templates_by_dispute_type,
-    get_templates_by_question_type,
 )
 
 

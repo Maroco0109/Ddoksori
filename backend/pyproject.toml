@@ -4,7 +4,18 @@ line-length = 88
 exclude = ["_archive"]
 
 [tool.ruff.lint]
-select = ["I"]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**/*.py" = ["E402"]
+"app/main.py" = ["E402"]
+"app/agents/query_analysis/agent.py" = ["E402"]
+"app/agents/query_analysis/extractors.py" = ["E402"]
+"app/agents/answer_generation/agent.py" = ["E402"]
+"app/supervisor/conversation_manager.py" = ["E402"]
+"app/supervisor/graph_mas.py" = ["E402"]
+"app/supervisor/state/__init__.py" = ["E402"]
 
 [tool.ruff.format]
 # Black-compatible defaults

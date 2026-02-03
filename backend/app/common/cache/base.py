@@ -12,7 +12,7 @@ import os
 import re
 import time
 from abc import ABC
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

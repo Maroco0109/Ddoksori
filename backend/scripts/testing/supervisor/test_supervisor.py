@@ -11,10 +11,7 @@ SupervisorNode 테스트
 
 import asyncio
 import sys
-import time
 from pathlib import Path
-from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
 
 backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
@@ -32,7 +29,7 @@ from app.supervisor.nodes.supervisor import (
     create_initial_supervisor_state,
     supervisor_router,
 )
-from app.supervisor.state import ChatState, create_initial_state
+from app.supervisor.state import create_initial_state
 
 
 class MockLLM:

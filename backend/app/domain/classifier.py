@@ -9,7 +9,6 @@ S2-4: 키워드 기반 기관 분류 로직
 4. KCA (기본값)
 """
 
-import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 

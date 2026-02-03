@@ -7,8 +7,8 @@ services:
   backend:
     image: ${ECR_REGISTRY}/ddoksori-backend:${IMAGE_TAG:-latest}
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       # === AWS Secrets Manager ===
       - USE_AWS_SECRETS=${USE_AWS_SECRETS:-false}

@@ -15,7 +15,6 @@ PR-3: 대화 메모리 정책 및 관리
 - 30턴 × 1000 = 30K (94% 사용) - DB 기반 메모리로 관리
 """
 
-import asyncio
 import logging
 import uuid
 from dataclasses import dataclass

@@ -7,13 +7,11 @@ PR-1: NO_RETRIEVAL Fast Path 테스트
 
 import asyncio
 import time
-from typing import Any, Dict
 
 import pytest
 
 # 테스트 대상 모듈 import
 from app.supervisor.graph import get_graph_for_chat_type
-from app.supervisor.state import ChatState
 
 
 @pytest.fixture
@@ -124,7 +122,7 @@ class TestNoRetrievalFastPath:
             "NEED_RAG query should have retrieval results"
         )
 
-        print(f"✓ 법령 쿼리는 retrieval 실행됨")
+        print("✓ 법령 쿼리는 retrieval 실행됨")
 
     @pytest.mark.parametrize(
         "query,expected_mode",

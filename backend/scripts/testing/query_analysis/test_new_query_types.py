@@ -8,7 +8,6 @@ import pytest
 
 from app.agents.query_analysis.classifier import (
     HybridIntentClassifier,
-    IntentClassificationResult,
 )
 
 

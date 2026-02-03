@@ -5,9 +5,9 @@ Unit tests for ConversationDB
 설명: ConversationDB 단위 테스트 (모킹 사용, DB 접근 없음)
 """
 
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from datetime import datetime
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 

@@ -1,6 +1,6 @@
 import os
 from contextlib import asynccontextmanager
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import torch
 import uvicorn
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
     print(f"📊 Device: {device.upper()}")
 
     if device == "cuda":
-        print(f"   CUDA Available: True")
+        print("   CUDA Available: True")
         print(f"   CUDA Version: {torch.version.cuda}")
         print(f"   PyTorch Version: {torch.__version__}")
         print(f"   GPU Count: {torch.cuda.device_count()}")
@@ -48,12 +48,12 @@ async def lifespan(app: FastAPI):
             print(f"   GPU {i}: {gpu_name}")
             print(f"   Total VRAM: {gpu_memory:.2f} GB")
     else:
-        print(f"   CUDA Available: False")
-        print(f"   ⚠️  Running on CPU - Performance will be slower")
+        print("   CUDA Available: False")
+        print("   ⚠️  Running on CPU - Performance will be slower")
         if not torch.cuda.is_available():
-            print(f"   Reason: CUDA not available in PyTorch")
+            print("   Reason: CUDA not available in PyTorch")
             print(
-                f"   To enable GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121"
+                "   To enable GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121"
             )
 
     # Model configuration
@@ -152,7 +152,7 @@ async def health():
             modules = list(model.modules())
             if modules and hasattr(modules[0], "auto_model"):
                 model_name_or_path = modules[0].auto_model.config.name_or_path
-    except:
+    except Exception:
         pass
 
     return {"status": "healthy", "device": device, "model": model_name_or_path}

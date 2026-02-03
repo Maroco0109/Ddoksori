@@ -63,8 +63,6 @@ docs/guides/_archive
 
 # documents
 docs/_archive
-# docs/plans
-docs/plans/manus
 
 
 # Data
@@ -82,6 +80,8 @@ frontend/e2e
 frontend/playwright-report
 frontend/vitest.config.ts
 backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
+backend/app/agents/answer_generation/tests
+frontend/.vite
 
 # Agents
 .agent
@@ -92,4 +92,3 @@ backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
-AUDIT_REPORT.md

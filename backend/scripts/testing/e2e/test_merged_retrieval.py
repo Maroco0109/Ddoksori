@@ -8,7 +8,6 @@ Tests agent structure, protocol compliance, and import integrity.
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 

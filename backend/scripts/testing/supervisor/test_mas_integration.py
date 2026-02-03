@@ -9,9 +9,6 @@ MAS Supervisor Graph 통합 테스트 (Phase 5)
 - Fan-out 라우팅 동작
 """
 
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
 # 전체 파일에 unit 마커 적용 (Mock 사용, DB 불필요)
@@ -165,7 +162,7 @@ class TestSupervisorMaxIterations:
         decision = asyncio.run(supervisor.decide_next_action(state))
 
         assert decision["action"] == "respond"
-        assert decision.get("partial") == True
+        assert decision.get("partial") is True
 
 
 class TestMasGraphRouting:
@@ -182,7 +179,6 @@ class TestMasGraphRouting:
 
     def test_supervisor_to_retrieval_fan_out(self):
         """Supervisor → 3개 Retrieval Agent Fan-out (v2: counsel 제거)"""
-        from langgraph.types import Send
 
         from app.supervisor.graph_mas import _route_mas_supervisor
 

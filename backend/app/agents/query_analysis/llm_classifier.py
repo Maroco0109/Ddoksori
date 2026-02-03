@@ -136,7 +136,7 @@ async def llm_classify(
         from ...common.config import get_config
 
         config = get_config()
-        client = openai.AsyncOpenAI(api_key=config.openai_api_key)
+        client = openai.AsyncOpenAI(api_key=config.llm.openai_api_key)
 
         # Few-shot 프롬프트 구성
         few_shot_text = "\n".join(

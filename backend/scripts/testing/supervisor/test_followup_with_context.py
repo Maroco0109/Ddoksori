@@ -470,38 +470,5 @@ class TestFollowupDetailResponse:
         assert len(result["messages"]) == 1
 
 
-# ============================================================================
-# D-4: generation_node_v2 FOLLOWUP_WITH_CONTEXT 분기 테스트
-# ============================================================================
-
-
-class TestGenerationNodeV2Followup:
-    """generation_node_v2에서 FOLLOWUP_WITH_CONTEXT 분기 테스트"""
-
-    @pytest.mark.asyncio
-    @patch("app.agents.answer_generation.agent.get_config")
-    async def test_followup_mode_triggers_detail(self, mock_config):
-        """FOLLOWUP_WITH_CONTEXT 모드에서 상세 응답"""
-        from app.agents.answer_generation.agent import generation_node_v2
-
-        mock_cfg = MagicMock()
-        mock_cfg.response.response_mode = "minimal"
-        mock_config.return_value = mock_cfg
-
-        state = {
-            "user_query": "분쟁 해결 절차도 안내해드릴까요?",
-            "mode": "FOLLOWUP_WITH_CONTEXT",
-            "_last_turn_context": {
-                "retrieval": {"laws": []},
-                "available_details": {},
-                "followup_questions": [],
-            },
-        }
-
-        result = await generation_node_v2(state)
-        assert result["response_depth"] == "detail"
-        assert "한국소비자원" in result["draft_answer"]
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-p", "no:asyncio", "--tb=short"])

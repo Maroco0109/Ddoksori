@@ -76,7 +76,7 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     result = check_output(final_answer)
 
     if result["blocked"]:
-        logger.warning(f"[OutputGuardrail] Blocked output")
+        logger.warning("[OutputGuardrail] Blocked output")
         return {
             **updates,
             "guardrail_blocked": True,

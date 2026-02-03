@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi.errors import RateLimitExceeded
 
 # 환경변수 로드
 load_dotenv()
@@ -79,6 +80,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate Limiting 설정 (SEC-04)
+from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 # 라우터 등록
 app.include_router(health_router)
 app.include_router(chat_router)
@@ -95,7 +102,7 @@ app.include_router(users_router)
 async def startup_event():
     """애플리케이션 시작 시 로그 및 서비스 시작"""
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
-    logger.info(f"[Startup] 똑소리 API 서버 시작")
+    logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
     logger.info(f"[Startup] Embedding API: {embed_api_url}")
 

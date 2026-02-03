@@ -2,7 +2,6 @@
 
 import hashlib
 import logging
-from typing import Optional
 
 import jwt
 from fastapi import Depends, HTTPException, status

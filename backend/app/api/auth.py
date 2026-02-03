@@ -32,14 +32,15 @@ from datetime import datetime, timedelta
 from typing import Dict
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.auth.dependencies import decode_access_token, get_current_user
-from app.auth.models import AuthResponse, User
+from app.auth.models import User
 from app.auth.service import AuthService
 from app.auth.user_db import UserDB
 from app.common.config import get_config
+from app.middleware.rate_limiter import RateLimits, limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -93,7 +94,8 @@ async def _periodic_state_cleanup():
 
 
 @router.get("/google")
-async def google_login():
+@limiter.limit(RateLimits.AUTH)
+async def google_login(request: Request):
     """
     Google 로그인을 시작합니다.
 
@@ -113,7 +115,9 @@ async def google_login():
 
 
 @router.get("/google/callback")
+@limiter.limit(RateLimits.AUTH_CALLBACK)
 async def google_callback(
+    request: Request,
     code: str = Query(..., description="Authorization Code"),
     state: str = Query(..., description="OAuth State"),
 ):
@@ -169,7 +173,8 @@ async def google_callback(
 
 
 @router.get("/naver")
-async def naver_login():
+@limiter.limit(RateLimits.AUTH)
+async def naver_login(request: Request):
     """
     Naver 로그인을 시작합니다.
 
@@ -189,7 +194,9 @@ async def naver_login():
 
 
 @router.get("/naver/callback")
+@limiter.limit(RateLimits.AUTH_CALLBACK)
 async def naver_callback(
+    request: Request,
     code: str = Query(..., description="Authorization Code"),
     state: str = Query(..., description="OAuth State"),
 ):

@@ -12,7 +12,6 @@ from app.agents.answer_generation.formats import (
     RESPONSE_FORMATS,
     FormatSelector,
     PromptBuilder,
-    ResponseFormat,
     SectionConfig,
 )
 

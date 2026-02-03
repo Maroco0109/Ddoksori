@@ -380,7 +380,7 @@ class HybridIntentClassifier:
 
         # system_meta 패턴
         if any(p in query_lower for p in self._system_meta_patterns):
-            logger.info(f"[HybridIntentClassifier] Fast path: system_meta")
+            logger.info("[HybridIntentClassifier] Fast path: system_meta")
             return IntentClassificationResult(
                 query_type="system_meta",
                 confidence=1.0,
@@ -393,7 +393,7 @@ class HybridIntentClassifier:
         if len(query_lower) <= 10 and any(
             p in query_lower for p in self._greeting_patterns
         ):
-            logger.info(f"[HybridIntentClassifier] Fast path: general (greeting)")
+            logger.info("[HybridIntentClassifier] Fast path: general (greeting)")
             return IntentClassificationResult(
                 query_type="general",
                 confidence=1.0,
@@ -407,7 +407,7 @@ class HybridIntentClassifier:
 
         if re.search(r"\S+법", query):
             # "X법"이 명시적으로 언급되면 law로 분류
-            logger.info(f"[HybridIntentClassifier] Fast path: law (법률명 패턴)")
+            logger.info("[HybridIntentClassifier] Fast path: law (법률명 패턴)")
             return IntentClassificationResult(
                 query_type="law",
                 confidence=0.9,
@@ -424,7 +424,7 @@ class HybridIntentClassifier:
 
         # === Layer 2: LLM Classification ===
         if not self.use_llm:
-            logger.info(f"[HybridIntentClassifier] LLM disabled, returning ambiguous")
+            logger.info("[HybridIntentClassifier] LLM disabled, returning ambiguous")
             return IntentClassificationResult(
                 query_type="ambiguous",
                 confidence=0.0,
@@ -456,7 +456,7 @@ class HybridIntentClassifier:
 
             cached = IntentClassificationCache.get(query)
             if cached:
-                logger.info(f"[HybridIntentClassifier] Cache hit")
+                logger.info("[HybridIntentClassifier] Cache hit")
                 return IntentClassificationResult(
                     query_type=cached.get("query_type", "ambiguous"),
                     domain=cached.get("domain"),
@@ -488,7 +488,7 @@ class HybridIntentClassifier:
                     "model_used": result.model_used,
                 },
             )
-            logger.debug(f"[HybridIntentClassifier] Cached result")
+            logger.debug("[HybridIntentClassifier] Cached result")
         except ImportError:
             logger.debug("[HybridIntentClassifier] Cache module not available")
         except Exception as e:

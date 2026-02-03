@@ -32,8 +32,7 @@ PostgreSQL users 테이블 접근을 담당합니다.
 
 import asyncio
 import logging
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import psycopg2
 import psycopg2.extras

@@ -14,8 +14,8 @@
 """
 
 import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set
 
 
 def calculate_ndcg(retrieved: List[str], relevant: Set[str], k: int = 3) -> float:
@@ -333,7 +333,7 @@ class RetrievalMetrics:
 
         # Laws 섹션 평가
         laws_retrieved = [
-            self._get_doc_id(l) for l in retrieved_results.get("laws", [])
+            self._get_doc_id(law) for law in retrieved_results.get("laws", [])
         ]
         laws_relevant = expected_by_type.get("law", set())
 

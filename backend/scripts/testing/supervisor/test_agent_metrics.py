@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from app.common.metrics import AgentMetrics, MetricRecord
+from app.common.metrics import AgentMetrics
 
 
 class TestMeasureContextManager:

@@ -11,7 +11,6 @@ MAS 아키텍처 테스트 (ralph-loop)
 """
 
 import asyncio
-import os
 
 import pytest
 
@@ -26,12 +25,8 @@ class TestV2ModuleImports:
         """protocols.py import 테스트"""
         from app.agents.protocols import (
             CitedCase,
-            GenerationOutput,
             MetadataFilter,
             QueryAnalysisOutput,
-            RetrievalTaskInput,
-            RetryContext,
-            ReviewOutput,
             Violation,
         )
 
@@ -384,7 +379,7 @@ class TestE2EV2:
 
         # 결과 확인
         assert result is not None
-        print(f"\n[E2E Result]")
+        print("\n[E2E Result]")
         print(f"  mode: {result.get('mode')}")
         print(f"  final_answer length: {len(result.get('final_answer', '') or '')}")
 

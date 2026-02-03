@@ -39,7 +39,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.common.config import AuthConfig, get_config
+from app.common.config import AuthConfig
 
 logger = logging.getLogger(__name__)
 

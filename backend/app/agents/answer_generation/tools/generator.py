@@ -6,7 +6,6 @@
 LLM 기반 구조화된 답변 생성
 """
 
-import json
 import os
 import re
 import time
@@ -15,6 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI, OpenAI
 
 from ....common.config import get_config
+from ....common.sanitization import (
+    get_security_instructions,
+    wrap_retrieved_context,
+    wrap_user_input,
+)
 
 # S1-1 MVP Answer Template
 DISCLAIMER = "본 답변은 정보 제공 목적이며 법률 자문이 아닙니다. 최종 판단·결정은 관련 기관 또는 전문가와 상담하여 진행해 주세요."
@@ -266,6 +270,9 @@ class RAGGenerator:
         }
 
     def _get_system_prompt(self) -> str:
+        # SEC-02: 보안 지시사항 추가 (L4)
+        security_instructions = get_security_instructions()
+
         return (
             """당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
 
@@ -286,10 +293,13 @@ class RAGGenerator:
 - 법률 판단이나 예측
 - 개인정보 요구
 """
+            + security_instructions
         )
 
     def _build_prompt(self, query: str, chunks: List[Dict]) -> str:
-        lines = [f"사용자 질문: {query}\n", "관련 검색 결과:\n"]
+        # SEC-02: 사용자 입력을 <user_input> 태그로 래핑 (L3)
+        wrapped_query = wrap_user_input(query)
+        lines = [f"사용자 질문: {wrapped_query}\n", "관련 검색 결과:\n"]
 
         for i, chunk in enumerate(chunks[:5], 1):
             lines.append(f"[결과 {i}]")
@@ -301,7 +311,9 @@ class RAGGenerator:
             if chunk.get("url"):
                 lines.append(f"URL: {chunk['url']}")
             lines.append(f"유사도: {chunk.get('similarity', 0):.3f}")
-            lines.append(f"\n내용:\n{chunk.get('content', '')[:500]}...\n")
+            # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
+            content = wrap_retrieved_context(chunk.get("content", ""), max_length=500)
+            lines.append(f"\n내용:\n{content}\n")
 
         lines.append("\n다음 형식으로 답변하세요:")
         lines.append(DISCLAIMER)
@@ -580,6 +592,9 @@ class RAGGenerator:
         # PR-6: 면책 문구는 답변 끝에 배치
         disclaimer_section = f"\n\n---\n*{DISCLAIMER}*" if include_disclaimer else ""
 
+        # SEC-02: 보안 지시사항 추가 (L4)
+        security_instructions = get_security_instructions()
+
         return f"""당신은 한국 소비자 분쟁 조정 전문 상담 어시스턴트입니다.
 
 역할:
@@ -606,7 +621,7 @@ class RAGGenerator:
 - "~해야 합니다", "~입니다" 같은 단정적 표현
 - 법률 판단이나 예측
 - 개인정보 요구
-"""
+{security_instructions}"""
 
     def _build_structured_prompt(
         self,
@@ -625,7 +640,9 @@ class RAGGenerator:
         2. 관련 법령 및 기준 (laws + criteria)
         3. 추가 안내 (agency_info)
         """
-        lines = [f"사용자 질문: {query}\n"]
+        # SEC-02: 사용자 입력을 <user_input> 태그로 래핑 (L3)
+        wrapped_query = wrap_user_input(query)
+        lines = [f"사용자 질문: {wrapped_query}\n"]
 
         # 온보딩 컨텍스트 추가
         if onboarding:
@@ -672,8 +689,11 @@ class RAGGenerator:
                 if case.get("decision_date"):
                     lines.append(f"   결정일: {case['decision_date']}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
-                content = case.get("content", "")[:300]
-                lines.append(f"   내용: {content}...")
+                # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
+                content = wrap_retrieved_context(
+                    case.get("content", ""), max_length=300
+                )
+                lines.append(f"   내용: {content}")
         else:
             lines.append("   관련 분쟁조정사례를 찾지 못했습니다.")
 
@@ -682,8 +702,11 @@ class RAGGenerator:
             for i, case in enumerate(counsels[:3], 1):
                 lines.append(f"\n{i}. {case.get('doc_title', '제목 없음')}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
-                content = case.get("content", "")[:200]
-                lines.append(f"   내용: {content}...")
+                # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
+                content = wrap_retrieved_context(
+                    case.get("content", ""), max_length=200
+                )
+                lines.append(f"   내용: {content}")
         else:
             lines.append("   관련 상담사례를 찾지 못했습니다.")
 
@@ -698,8 +721,10 @@ class RAGGenerator:
                 full_path = law.get("full_path", "")
                 lines.append(f"\n{i}. {law_name} {full_path}")
                 lines.append(f"   유사도: {law.get('similarity', 0):.2%}")
-                text = law.get("text", law.get("content", ""))[:300]
-                lines.append(f"   내용: {text}...")
+                # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
+                text = law.get("text", law.get("content", ""))
+                wrapped_text = wrap_retrieved_context(text, max_length=300)
+                lines.append(f"   내용: {wrapped_text}")
         else:
             lines.append("   관련 법령을 찾지 못했습니다.")
 
@@ -717,8 +742,10 @@ class RAGGenerator:
 
                 lines.append(f"\n{i}. [{source_label}] {path}")
                 lines.append(f"   유사도: {crit.get('similarity', 0):.2%}")
-                text = crit.get("unit_text", crit.get("content", ""))[:300]
-                lines.append(f"   내용: {text}...")
+                # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
+                text = crit.get("unit_text", crit.get("content", ""))
+                wrapped_text = wrap_retrieved_context(text, max_length=300)
+                lines.append(f"   내용: {wrapped_text}")
         else:
             lines.append("   관련 기준을 찾지 못했습니다.")
 

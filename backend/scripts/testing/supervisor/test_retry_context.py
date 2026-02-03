@@ -11,8 +11,8 @@ Retry Context 단위 테스트 (Phase 7: LegalReviewer 재생성 지원)
 """
 
 import os
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, patch
 
 import pytest
 
