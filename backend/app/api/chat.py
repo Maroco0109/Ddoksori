@@ -67,8 +67,8 @@ KNOWN_GRAPH_NODES = {
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit(RateLimits.CHAT_GUEST)
 async def chat(
-    http_request: Request,
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
@@ -88,26 +88,26 @@ async def chat(
         로그인 사용자의 경우 user_id를 DB에 저장하여 대화 이력 관리
     """
     start_time = time.time()
-    log_entry = rag_logger.create_entry(query=request.message)
+    log_entry = rag_logger.create_entry(query=body.message)
 
     # Get user_id from JWT token
     user_id = current_user.user_id if current_user else None
 
     rag_logger.log_input(
         entry=log_entry,
-        message=request.message,
-        session_id=request.session_id,
-        chat_type=request.chat_type,
-        onboarding=request.onboarding,
-        top_k=request.top_k or 5,
-        chunk_types=request.chunk_types,
-        agencies=request.agencies,
+        message=body.message,
+        session_id=body.session_id,
+        chat_type=body.chat_type,
+        onboarding=body.onboarding,
+        top_k=body.top_k or 5,
+        chunk_types=body.chunk_types,
+        agencies=body.agencies,
     )
 
     try:
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = body.session_id or str(uuid.uuid4())
 
-        graph = get_graph_for_chat_type(request.chat_type)
+        graph = get_graph_for_chat_type(body.chat_type)
 
         # Recursion limit 증가 (기본 25 → 50)
         GRAPH_RECURSION_LIMIT = 50
@@ -118,30 +118,30 @@ async def chat(
 
         session_memory = None
         memory_context = {}
-        if should_use_memory(request.chat_type):
+        if should_use_memory(body.chat_type):
             session_memory = ConversationMemory(
-                chat_type=request.chat_type,
+                chat_type=body.chat_type,
                 session_id=session_id,
                 user_id=user_id,
                 use_db=use_db,
             )
 
             # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
-            await session_memory.add_turn(role="user", content=request.message)
+            await session_memory.add_turn(role="user", content=body.message)
 
             # 메모리 컨텍스트 가져오기
             memory_context = session_memory.get_context_for_llm()
 
         # 통합 상태 초기화
         initial_state = create_initial_state(
-            user_query=request.message,
-            chat_type=request.chat_type,
-            onboarding=cast(Any, request.onboarding),
+            user_query=body.message,
+            chat_type=body.chat_type,
+            onboarding=cast(Any, body.onboarding),
         )
 
         # 온보딩 데이터 영속화
-        if request.onboarding and session_memory:
-            session_memory.save_metadata("onboarding", dict(request.onboarding))
+        if body.onboarding and session_memory:
+            session_memory.save_metadata("onboarding", dict(body.onboarding))
         elif session_memory:
             saved_onboarding = session_memory.get_metadata("onboarding")
             if saved_onboarding:
@@ -169,10 +169,10 @@ async def chat(
         # === PR-6: L1 Supervisor Response Cache Check ===
         from app.supervisor.cache import SupervisorResponseCache
 
-        cached_response = SupervisorResponseCache.get(request.message, session_id)
+        cached_response = SupervisorResponseCache.get(body.message, session_id)
         if cached_response:
             logger.info(
-                f"[L1 Cache HIT] Returning cached response for: {request.message[:30]}..."
+                f"[L1 Cache HIT] Returning cached response for: {body.message[:30]}..."
             )
             # 캐시에서 복원한 응답을 사용
             final_state = {
@@ -219,7 +219,7 @@ async def chat(
                 "guardrail_blocked"
             ):
                 SupervisorResponseCache.set(
-                    request.message,
+                    body.message,
                     {
                         "final_answer": final_state.get("final_answer"),
                         "mode": final_state.get("mode"),
@@ -229,7 +229,7 @@ async def chat(
                     session_id,
                 )
                 logger.debug(
-                    f"[L1 Cache SAVE] Cached response for: {request.message[:30]}..."
+                    f"[L1 Cache SAVE] Cached response for: {body.message[:30]}..."
                 )
             # === PR-6 끝 ===
 
@@ -280,7 +280,7 @@ async def chat(
 
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None
-        if request.debug and node_timings:
+        if body.debug and node_timings:
             timing_response = [
                 NodeTiming(
                     node_name=name,
@@ -295,9 +295,9 @@ async def chat(
             **response_data,
             chunks_used=len(response_data["sources"]),
             model="gpt-4o-mini",
-            node_timings=timing_response if request.debug else None,
-            request_id=log_entry.request_id if request.debug else None,
-            total_time_ms=log_entry.total_time_ms if request.debug else None,
+            node_timings=timing_response if body.debug else None,
+            request_id=log_entry.request_id if body.debug else None,
+            total_time_ms=log_entry.total_time_ms if body.debug else None,
         )
 
     except Exception as e:
@@ -339,8 +339,8 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
 @router.post("/chat/stream")
 @limiter.limit(RateLimits.CHAT_GUEST)
 async def chat_stream_sse(
-    http_request: Request,
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
@@ -358,19 +358,19 @@ async def chat_stream_sse(
 
     async def event_generator():
         start_time = time.time()
-        log_entry = rag_logger.create_entry(query=request.message)
+        log_entry = rag_logger.create_entry(query=body.message)
         rag_logger.log_input(
             entry=log_entry,
-            message=request.message,
-            session_id=request.session_id,
-            chat_type=request.chat_type,
-            onboarding=request.onboarding,
-            top_k=request.top_k or 5,
-            chunk_types=request.chunk_types,
-            agencies=request.agencies,
+            message=body.message,
+            session_id=body.session_id,
+            chat_type=body.chat_type,
+            onboarding=body.onboarding,
+            top_k=body.top_k or 5,
+            chunk_types=body.chunk_types,
+            agencies=body.agencies,
         )
 
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = body.session_id or str(uuid.uuid4())
         final_state = None
 
         # 즉시 연결 확인 이벤트 전송 (클라이언트에 연결 성공 알림)
@@ -380,7 +380,7 @@ async def chat_stream_sse(
         user_id = current_user.user_id if current_user else None
 
         try:
-            graph = get_graph_for_chat_type(request.chat_type)
+            graph = get_graph_for_chat_type(body.chat_type)
             GRAPH_RECURSION_LIMIT = 50
 
             # Create memory with DB persistence
@@ -389,26 +389,26 @@ async def chat_stream_sse(
 
             session_memory = None
             memory_context = {}
-            if should_use_memory(request.chat_type):
+            if should_use_memory(body.chat_type):
                 session_memory = ConversationMemory(
-                    chat_type=request.chat_type,
+                    chat_type=body.chat_type,
                     session_id=session_id,
                     user_id=user_id,
                     use_db=use_db,
                 )
-                await session_memory.add_turn(role="user", content=request.message)
+                await session_memory.add_turn(role="user", content=body.message)
                 memory_context = session_memory.get_context_for_llm()
 
             # 초기 상태 생성
             initial_state = create_initial_state(
-                user_query=request.message,
-                chat_type=request.chat_type,
-                onboarding=cast(Any, request.onboarding),
+                user_query=body.message,
+                chat_type=body.chat_type,
+                onboarding=cast(Any, body.onboarding),
             )
 
             # 온보딩 데이터 영속화
-            if request.onboarding and session_memory:
-                session_memory.save_metadata("onboarding", dict(request.onboarding))
+            if body.onboarding and session_memory:
+                session_memory.save_metadata("onboarding", dict(body.onboarding))
             elif session_memory:
                 saved_onboarding = session_memory.get_metadata("onboarding")
                 if saved_onboarding:
