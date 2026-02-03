@@ -92,7 +92,9 @@ ChatType = Literal["dispute", "general"]
 
 # 위반 유형
 ViolationType = Literal[
-    "hallucination", "legal_judgment", "prohibited_expression", "query_mismatch"
+    "hallucination", "legal_judgment", "prohibited_expression", "query_mismatch",
+    "terminology_missing", "terminology_mismatch", "forbidden_header",
+    "format_violation", "template_variable", "data_isolation"
 ]
 
 # 심각도

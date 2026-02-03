@@ -33,6 +33,9 @@ from ...supervisor.state import ChatState
 from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 from .cache import get_answer_cache
 from .fallback import AnswerGenerationFallback
+from .template_router import TemplateRouter
+from .template_loader import TemplateLoader
+from .context_builder import ContextBuilder
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
 # 법적 책임 회피를 위해 LLM 생성 대신 미리 정의된 안전한 문구를 사용합니다.
@@ -100,22 +103,6 @@ DOMAIN_KOREAN_NAMES = {
     "construction": "건설/건축",
 }
 
-# === Progressive Disclosure Phase Templates ===
-
-PHASE_CASE_SUMMARY_FOLLOWUP = """
-{main_content}
-
----
-**관련 법령과 분쟁해결기준도 상세히 알려드릴까요?** 해당 상황에 적용되는 법적 근거를 확인하실 수 있습니다.
-""".strip()
-
-PHASE_LAW_DETAIL_FOLLOWUP = """
-{main_content}
-
----
-**분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해 드릴까요?** 직접 분쟁조정을 신청하시는 방법을 알려드릴 수 있습니다.
-""".strip()
-
 PHASE_PROCEDURE_TEMPLATE = """
 ## 분쟁 해결 절차 안내
 
@@ -143,15 +130,6 @@ PHASE_PROCEDURE_TEMPLATE = """
 ---
 > 분쟁조정위원회의 조정안에 양측이 동의하면 재판상 화해와 같은 효력이 발생합니다.
 """.strip()
-
-PHASE_COMPLETED_TEMPLATE = """
-도움이 되셨기를 바랍니다. 추가로 궁금하신 소비자 분쟁 사항이 있으시면 언제든 말씀해 주세요!
-""".strip()
-
-# Legacy aliases (하위호환)
-PHASE_CASE_OFFER_TEMPLATE = PHASE_CASE_SUMMARY_FOLLOWUP
-PHASE_PROCEDURE_OFFER_TEMPLATE = PHASE_LAW_DETAIL_FOLLOWUP
-
 
 import logging
 
@@ -181,14 +159,6 @@ META_CONVERSATIONAL_ONBOARDING_TEMPLATE = """안녕하세요, 똑소리입니다
 3. **원하시는 해결 방법**: 환불, 교환, 수리 중 무엇을 원하시나요?
 
 자세한 상황을 말씀해 주시면 관련 법령과 유사 사례를 바탕으로 해결 방법을 안내해 드리겠습니다.""".strip()
-
-# Progressive Disclosure 요약 응답 후속 질문 생성용
-PROGRESSIVE_FOLLOWUP_TEMPLATES = {
-    "laws": "관련 법령을 자세히 알려드릴까요?",
-    "criteria": "분쟁해결기준(배상/환불 기준)을 확인해보시겠어요?",
-    "cases": "비슷한 분쟁 조정 사례 {count}건도 확인해 보시겠어요?",
-    "procedure": "분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해드릴까요?",
-}
 
 
 def _get_llm_model() -> str:
@@ -365,134 +335,6 @@ def _build_restricted_response(
         "is_restricted": True,
         "agency_code": agency_code,
     }
-
-
-# ========================================
-# Progressive Disclosure 헬퍼 함수 (Phase C+E)
-# ========================================
-
-
-def _build_available_details(retrieval: Dict) -> Dict:
-    """
-    검색 결과에서 아직 제공하지 않은 상세 정보 메타데이터를 추출합니다.
-
-    Progressive Disclosure의 핵심: 사용자에게 어떤 정보가 더 있는지 알려주어
-    필요한 정보만 선택적으로 요청할 수 있게 합니다.
-
-    Args:
-        retrieval: RetrievalResult dict
-
-    Returns:
-        available_details dict with section counts and previews
-    """
-    details = {}
-
-    laws = retrieval.get("laws", [])
-    if laws:
-        preview_titles = [l.get("doc_title", "") for l in laws[:2]]
-        details["laws"] = {
-            "count": len(laws),
-            "preview": ", ".join(t for t in preview_titles if t) or "관련 법령",
-        }
-
-    criteria = retrieval.get("criteria", [])
-    if criteria:
-        preview_titles = [c.get("doc_title", "") for c in criteria[:2]]
-        details["criteria"] = {
-            "count": len(criteria),
-            "preview": ", ".join(t for t in preview_titles if t) or "분쟁해결기준",
-        }
-
-    cases = retrieval.get("disputes", []) + retrieval.get("counsels", [])
-    if cases:
-        details["cases"] = {
-            "count": len(cases),
-            "preview": f"유사 조정사례 {len(cases)}건",
-        }
-
-    return details
-
-
-def _build_progressive_summary(
-    draft_answer: str,
-    retrieval: Dict,
-    max_length: int = 200,
-) -> str:
-    """
-    전체 답변에서 핵심 요약만 추출합니다 (minimal 모드).
-
-    규칙 기반 추출:
-    1. draft_answer의 첫 문단 (또는 첫 200자)
-    2. 마크다운 헤딩(##) 제거, 핵심 문장만 유지
-
-    Args:
-        draft_answer: LLM이 생성한 전체 답변
-        retrieval: RetrievalResult (요약 보강용)
-        max_length: 요약 최대 길이
-
-    Returns:
-        요약된 답변 문자열
-    """
-    if not draft_answer:
-        return "관련 정보를 찾았습니다. 상세 내용을 확인해보시겠어요?"
-
-    # 마크다운 헤딩/구분선 제거
-    import re
-
-    lines = draft_answer.split("\n")
-    content_lines = []
-    for line in lines:
-        stripped = line.strip()
-        # 헤딩, 구분선, 빈 줄 건너뛰기
-        if (
-            stripped.startswith("#")
-            or stripped.startswith("---")
-            or stripped.startswith("> 본 답변")
-        ):
-            continue
-        if stripped:
-            content_lines.append(stripped)
-
-    summary = " ".join(content_lines)
-
-    # max_length로 자르되 문장 단위로
-    if len(summary) > max_length:
-        # 마지막 완성된 문장까지 자르기
-        truncated = summary[:max_length]
-        last_period = max(
-            truncated.rfind("."), truncated.rfind("다."), truncated.rfind("요.")
-        )
-        if last_period > max_length // 2:
-            summary = truncated[: last_period + 1]
-        else:
-            summary = truncated.rstrip() + "..."
-
-    return summary
-
-
-def _build_progressive_followups(retrieval: Dict, available_details: Dict) -> list:
-    """
-    available_details 기반으로 구체적인 후속 질문을 생성합니다.
-
-    Args:
-        retrieval: RetrievalResult
-        available_details: _build_available_details() 결과
-
-    Returns:
-        후속 질문 리스트 (최대 3개)
-    """
-    questions = []
-
-    if "laws" in available_details or "criteria" in available_details:
-        questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES["laws"])
-
-    if "cases" in available_details:
-        count = available_details["cases"]["count"]
-        questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES["cases"].format(count=count))
-
-    questions.append(PROGRESSIVE_FOLLOWUP_TEMPLATES["procedure"])
-
-    return questions[:3]
 
 
 def _meta_conversational_response(state: Dict) -> Dict:
@@ -675,21 +517,15 @@ def _followup_detail_response(state: Dict, config=None) -> Dict:
     cited_cases = _extract_cited_cases(filtered_retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
-    # 남은 상세 정보 계산 (이미 제공한 섹션 제외)
-    remaining_details = {k: v for k, v in available_details.items() if k != detail_type}
-    remaining_followups = _build_progressive_followups(
-        cached_retrieval, remaining_details
-    )
-
     return {
         "draft_answer": draft_answer,
         "claim_evidence_map": claim_evidence_map,
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": 0.8,  # 캐시 사용이므로 고정값
-        "followup_questions": remaining_followups,
+        "followup_questions": [],
         "response_depth": "detail",
-        "available_details": remaining_details if remaining_details else None,
+        "available_details": None,
         "retrieval": filtered_retrieval,  # retrieval state도 업데이트
         "generation_time_ms": (time.time() - start_time) * 1000,
         "messages": [AIMessage(content=draft_answer)],
@@ -782,88 +618,6 @@ def _build_retry_prompt_supplement(retry_context: Dict) -> str:
     return "\n".join(lines)
 
 
-def _build_phase_aware_law_detail(retrieval: Dict) -> str:
-    """
-    providing_law_detail phase용 법령/기준 상세 답변 생성.
-
-    캐시된 Retrieval 결과에서 laws/criteria 섹션을 추출하여
-    구조화된 법령 상세 정보를 생성합니다.
-    """
-    laws = retrieval.get("laws", [])
-    criteria = retrieval.get("criteria", [])
-
-    lines = []
-
-    if laws:
-        lines.append("## 관련 법령")
-        lines.append("")
-        for i, law in enumerate(laws[:5], 1):
-            title = law.get("doc_title") or law.get("title", "제목 없음")
-            content = (law.get("content") or "")[:300]
-            lines.append(f"### {i}. {title}")
-            if content:
-                lines.append(f"> {content}")
-            lines.append("")
-
-    if criteria:
-        lines.append("## 분쟁해결기준")
-        lines.append("")
-        for i, crit in enumerate(criteria[:5], 1):
-            title = crit.get("doc_title") or crit.get("title", "제목 없음")
-            content = (crit.get("content") or "")[:300]
-            lines.append(f"### {i}. {title}")
-            if content:
-                lines.append(f"> {content}")
-            lines.append("")
-
-    if not lines:
-        return "관련 법령 및 기준 정보를 찾을 수 없습니다."
-
-    return "\n".join(lines)
-
-
-def _generate_retrieval_based_followups(
-    retrieval: Dict,
-    query_analysis: Dict,
-) -> List[str]:
-    """
-    검색 결과 섹션 존재 여부에 기반한 후속질문 생성.
-
-    Phase 시스템 제거 후 단순화된 후속질문:
-    - 법령 결과가 있으면: "관련 법령도 알려드릴까요?"
-    - 유사 사례가 있으면: "비슷한 분쟁 조정 사례도 보시겠어요?"
-    - 절차 정보 관련: "분쟁 해결 절차도 안내해드릴까요?"
-    """
-    questions = []
-
-    if not retrieval:
-        return questions
-
-    laws = retrieval.get("laws", [])
-    criteria = retrieval.get("criteria", [])
-    disputes = retrieval.get("disputes", [])
-    counsels = retrieval.get("counsels", [])
-
-    # 법령 결과가 있으면
-    if laws or criteria:
-        questions.append("관련 법령과 분쟁해결기준도 상세히 알려드릴까요?")
-
-    # 유사 사례가 있으면
-    if disputes or counsels:
-        case_count = len(disputes) + len(counsels)
-        if case_count > 1:
-            questions.append(
-                f"비슷한 분쟁 조정 사례 {case_count}건도 확인해 보시겠어요?"
-            )
-
-    # 절차 안내는 항상 제안
-    questions.append(
-        "분쟁 해결 절차(한국소비자원, 전자거래분쟁조정 등)도 안내해드릴까요?"
-    )
-
-    return questions[:3]  # 최대 3개
-
-
 def _build_generation_result(
     answer: str,
     start_time: float,
@@ -911,7 +665,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     Phase 0: 빠른 탈출 (LLM 불필요)
     Phase 1: 검색 결과 + Sufficiency Check
     Phase 2: 캐시 확인
-    Phase 3: FormatSelector + PromptBuilder (flexible 모드)
+    Phase 3: Template Selection + Rendering
     Phase 4: LLM 생성
     Phase 5: 후처리 (progressive summary, followup, cache)
 
@@ -963,60 +717,13 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # general 쿼리 처리
     if query_type == "general":
-        if app_config.chatbot_features.answer_format_mode == "flexible":
-            # flexible 모드: LLM으로 자연스러운 인사 + 상담 유도 응답 생성
-            from .formats import FormatSelector, PromptBuilder
-            from .formats.config import ResponseFormat
-
-            selector = FormatSelector()
-            builder = PromptBuilder()
-
-            # general_greeting 포맷 강제 선택
-            selected_format = selector.select_format(
-                query_analysis=query_analysis,
-                retrieval={},
-                onboarding=onboarding if onboarding else None,
-            )
-            format_system_prompt = builder.build_system_prompt(selected_format)
-            format_user_prompt = builder.build_user_prompt(
-                response_format=selected_format,
-                query=user_query,
-                retrieval={},
-                agency_info={},
-                context={},
-                onboarding=onboarding if onboarding else None,
-            )
-
-            draft_answer, model_used, claim_evidence_map = (
-                AnswerGenerationFallback.generate_with_fallback(
-                    query=user_query,
-                    retrieval={},
-                    agency_info={},
-                    include_disclaimer=False,
-                    system_prompt=format_system_prompt,
-                    user_prompt=format_user_prompt,
-                )
-            )
-
-            # Progressive summary for general greeting (skip if response_mode == legacy)
-            display_answer = draft_answer
-            if response_mode != "legacy":
-                display_answer = _build_progressive_summary(draft_answer, {}, 300)
-
-            return _build_generation_result(
-                answer=display_answer,
-                start_time=start_time,
-                has_evidence=True,
-                model_used=model_used,
-            )
-        else:
-            # fixed 모드: 하드코딩 응답
-            response = _build_general_response(user_query)
-            return _build_generation_result(
-                answer=response,
-                start_time=start_time,
-                has_evidence=True,
-            )
+        response = _build_general_response(user_query)
+        return _build_generation_result(
+            answer=response,
+            start_time=start_time,
+            has_evidence=True,
+            model_used="rule_based",
+        )
 
     # restricted (Phase 9)
     if query_type == "restricted":
@@ -1029,18 +736,6 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         result["retrieval_confidence"] = 0.0
         result["generation_time_ms"] = (time.time() - start_time) * 1000
         return result
-
-    # Legacy classify_domain (fixed 모드 하위호환)
-    if app_config.chatbot_features.answer_format_mode != "flexible":
-        classification = classify_domain(user_query)
-        if classification.is_restricted:
-            result = _build_restricted_response(
-                user_query, classification, retrieval or {}
-            )
-            result["cited_cases"] = []
-            result["retrieval_confidence"] = 0.0
-            result["generation_time_ms"] = (time.time() - start_time) * 1000
-            return result
 
     # ==========================================
     # Phase 1: 검색 결과 + Sufficiency Check
@@ -1101,7 +796,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             )
 
     # ==========================================
-    # Phase 3: FormatSelector + PromptBuilder
+    # Phase 3: Template Selection + Rendering
     # ==========================================
 
     retry_supplement = (
@@ -1123,37 +818,24 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     agency_info = retrieval.get("agency", DEFAULT_AGENCY_INFO)
     include_disclaimer = mode == "NEED_RAG"
 
-    format_system_prompt = None
-    format_user_prompt = None
-    selected_format_id = None
+    # New template system
+    router = TemplateRouter()
+    loader = TemplateLoader()
+    ctx_builder = ContextBuilder()
 
-    if app_config.chatbot_features.answer_format_mode == "flexible":
-        from .formats import FormatSelector, PromptBuilder
+    template_key = router.select_template(state)
+    context = ctx_builder.build(state)
 
-        selector = FormatSelector()
-        builder = PromptBuilder()
+    # Add fallback reason if applicable
+    if template_key == "fallback":
+        context["logic_from_gold_set"] = router.get_fallback_reason(state)
 
-        selected_format = selector.select_format(
-            query_analysis=query_analysis,
-            retrieval=retrieval,
-            onboarding=onboarding if onboarding else None,
-        )
-        selected_format_id = selected_format.format_id
-        context = selector.build_context(retrieval, onboarding if onboarding else None)
+    rendered_prompt = loader.render(template_key, context)
+    logger.info(f"[Generation] Template: {template_key} (query_type={query_type})")
 
-        format_system_prompt = builder.build_system_prompt(selected_format)
-        format_user_prompt = builder.build_user_prompt(
-            response_format=selected_format,
-            query=user_query,
-            retrieval=retrieval,
-            agency_info=agency_info,
-            context=context,
-            onboarding=onboarding if onboarding else None,
-            conversation_history=conversation_history,
-        )
-        logger.info(
-            f"[Generation] Format: {selected_format_id} (query_type={query_type})"
-        )
+    # Use rendered prompt as system_prompt for LLM
+    format_system_prompt = rendered_prompt
+    format_user_prompt = None  # Template already contains user context
 
     # ==========================================
     # Phase 4: LLM 생성
@@ -1173,78 +855,23 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     )
 
     # ==========================================
-    # Phase 5: 후처리
+    # Phase 5: Post-Processing
     # ==========================================
 
-    # 5a. Progressive Summary (response_mode != legacy)
+    # 5a. response_depth is always "full" with new template system
     response_depth = "full"
     available_details = None
     display_answer = draft_answer
 
-    if response_mode != "legacy":
-        summary_max_length = app_config.response.summary_max_length
-        display_answer = _build_progressive_summary(
-            draft_answer, retrieval, summary_max_length
-        )
-        available_details = _build_available_details(retrieval)
-        response_depth = "summary"
-        logger.info(
-            f"[Generation] Progressive summary applied (mode={response_mode}, len={len(display_answer)})"
-        )
-
-    # 5b. CitedCase 추출
+    # 5b. CitedCase extraction
     cited_cases = _extract_cited_cases(retrieval)
 
-    # 5c. 후속 질문 생성
+    # 5c. followup_questions - template generates these inline, extract if needed
     followup_questions = []
-    if app_config.chatbot_features.enable_followup_questions:
-        if (
-            selected_format_id
-            and app_config.chatbot_features.answer_format_mode == "flexible"
-        ):
-            from ..followup import FollowupQuestionGenerator
-
-            followup_generator = FollowupQuestionGenerator()
-            questions_result = followup_generator.generate_questions(
-                query_analysis=query_analysis,
-                retrieval=retrieval,
-                answer=draft_answer,
-                format_id=selected_format_id,
-            )
-            followup_questions = questions_result.get("followup_questions", [])
-        elif query_type == "dispute":
-            followup_questions = _generate_retrieval_based_followups(
-                retrieval, query_analysis
-            )
-
-    # Progressive onboarding-aware followups (response_mode != legacy)
-    if response_mode != "legacy" and not followup_questions:
-        days = onboarding.get("days_since_purchase")
-        purchase_item = onboarding.get("purchase_item", "")
-        if days is not None:
-            custom_followups = []
-            if days <= 14:
-                custom_followups.append(
-                    f"청약철회 관련 법령을 자세히 알려드릴까요? (구매 후 {days}일 경과)"
-                )
-            else:
-                custom_followups.append(
-                    f"관련 법령을 자세히 알려드릴까요? (구매 후 {days}일 경과)"
-                )
-            if purchase_item:
-                custom_followups.append(
-                    f"'{purchase_item}' 관련 유사 분쟁 조정 사례도 확인해 보시겠어요?"
-                )
-            custom_followups.append("조정신청 절차가 궁금하시면 안내해드릴까요?")
-            followup_questions = custom_followups[:3]
-        elif available_details:
-            followup_questions = _build_progressive_followups(
-                retrieval, available_details
-            )
 
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
-    # 5d. 캐시 저장
+    # 5d. Cache storage
     if not retry_context:
         cache = get_answer_cache()
         cache.set(
@@ -1252,18 +879,15 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             query_type,
             {
                 "answer": draft_answer,
-                "summary": display_answer if response_depth == "summary" else None,
                 "claim_evidence_map": claim_evidence_map,
                 "cited_cases": cited_cases,
                 "has_evidence": has_evidence,
                 "retrieval_confidence": retrieval_confidence,
-                "available_details": available_details,
-                "response_depth": response_depth,
             },
         )
 
     return {
-        "draft_answer": display_answer,
+        "draft_answer": draft_answer,
         "claim_evidence_map": claim_evidence_map,
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
@@ -1272,7 +896,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         "response_depth": response_depth,
         "available_details": available_details,
         "generation_time_ms": (time.time() - start_time) * 1000,
-        "messages": [AIMessage(content=display_answer)],
+        "messages": [AIMessage(content=draft_answer)],
         "generation_model_used": model_used,
         "is_followup": False,
         "_cache_hit": False,
