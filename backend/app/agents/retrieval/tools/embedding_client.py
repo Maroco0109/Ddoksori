@@ -6,7 +6,6 @@ OpenAI text-embedding-3-large 클라이언트
 """
 
 import logging
-import os
 from typing import List
 
 logger = logging.getLogger(__name__)
