@@ -39,6 +39,7 @@ jobs:
           host: ${{ env.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 5m
           script: |
             set -e  # 에러 시 즉시 종료
             cd /home/ubuntu/ddoksori
