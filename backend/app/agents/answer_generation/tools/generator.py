@@ -690,7 +690,9 @@ class RAGGenerator:
                     lines.append(f"   결정일: {case['decision_date']}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
                 # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
-                content = wrap_retrieved_context(case.get("content", ""), max_length=300)
+                content = wrap_retrieved_context(
+                    case.get("content", ""), max_length=300
+                )
                 lines.append(f"   내용: {content}")
         else:
             lines.append("   관련 분쟁조정사례를 찾지 못했습니다.")
@@ -701,7 +703,9 @@ class RAGGenerator:
                 lines.append(f"\n{i}. {case.get('doc_title', '제목 없음')}")
                 lines.append(f"   유사도: {case.get('similarity', 0):.2%}")
                 # SEC-02b: 검색 결과를 <retrieved_context> 태그로 래핑
-                content = wrap_retrieved_context(case.get("content", ""), max_length=200)
+                content = wrap_retrieved_context(
+                    case.get("content", ""), max_length=200
+                )
                 lines.append(f"   내용: {content}")
         else:
             lines.append("   관련 상담사례를 찾지 못했습니다.")
