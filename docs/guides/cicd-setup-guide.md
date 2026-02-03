@@ -573,6 +573,99 @@ env:
 
 ---
 
+### A-16. EC2 환경변수 설정 (.env + AWS Secrets Manager)
+
+EC2에서 Docker Compose가 실행될 때 필요한 환경변수를 설정합니다.
+
+#### 비시크릿 설정 (.env 파일)
+
+`ECR_REGISTRY`는 민감 정보가 아니므로 `.env` 파일에 저장합니다:
+
+```bash
+# EC2에서 실행
+cd /home/ubuntu/ddoksori
+
+# AWS Account ID 확인
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "AWS Account ID: $AWS_ACCOUNT_ID"
+
+# .env 파일 생성
+cat > .env << EOF
+# ECR Registry (필수)
+ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com
+
+# AWS Secrets Manager 활성화
+USE_AWS_SECRETS=true
+SECRETS_ENV=staging
+
+# 비시크릿 설정
+REDIS_HOST=redis
+LOG_LEVEL=INFO
+ENABLE_ANSWER_CACHE=true
+EOF
+
+# 권한 설정
+chmod 600 .env
+
+# 확인
+cat .env
+```
+
+#### 시크릿 설정 (AWS Secrets Manager)
+
+민감한 정보(DATABASE_URL, API 키 등)는 AWS Secrets Manager에 저장합니다.
+
+**1. Secrets Manager 시크릿 생성 (AWS Console)**
+
+| Secret Name | Key | 설명 |
+|-------------|-----|------|
+| `ddoksori/staging/database` | `DATABASE_URL` | `postgresql://user:pass@rds-endpoint:5432/ddoksori` |
+| `ddoksori/staging/llm` | `OPENAI_API_KEY` | OpenAI API 키 |
+| `ddoksori/staging/security` | `JWT_SECRET_KEY` | JWT 서명용 시크릿 (선택) |
+
+**생성 방법:**
+1. AWS Console → Secrets Manager → **Store a new secret**
+2. Secret type: `Other type of secret`
+3. Key/value pairs 입력
+4. Secret name: `ddoksori/staging/database` 형식으로 입력
+5. Store 클릭
+
+**2. EC2 IAM Role에 Secrets Manager 읽기 권한 추가**
+
+IAM → Roles → EC2 Role → Add permissions → Create inline policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SecretsManagerReadDdoksori",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": [
+        "arn:aws:secretsmanager:ap-northeast-2:*:secret:ddoksori/staging/*",
+        "arn:aws:secretsmanager:ap-northeast-2:*:secret:ddoksori/production/*"
+      ]
+    }
+  ]
+}
+```
+
+**3. 권한 테스트 (EC2에서 실행)**
+
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id "ddoksori/staging/database" \
+  --region ap-northeast-2 \
+  --query 'SecretString' --output text
+```
+
+성공 시 `{"DATABASE_URL":"postgresql://..."}` 출력
+
+> **중요**: `.env` 파일에 `USE_AWS_SECRETS=true`를 설정해야 백엔드가 Secrets Manager에서 시크릿을 로드합니다.
+
+---
+
 ### Phase A 완료 체크리스트
 
 **AWS 기본 설정:**
@@ -588,8 +681,13 @@ env:
 - [ ] 동적 IP 화이트리스트용 보안 그룹 생성 및 IAM 정책 연결
 - [ ] 탄력적 IP 할당 및 EC2 연결
 - [ ] Docker + Docker Compose 설치
-- [ ] EC2 IAM Role 연결 (ECR ReadOnly)
+- [ ] EC2 IAM Role 연결 (ECR ReadOnly + SecretsManager Read)
 - [ ] `/home/ubuntu/ddoksori/` 디렉토리 + `docker-compose.prod.yml` 배치
+
+**환경변수 설정 (A-16):**
+- [ ] EC2에 `.env` 파일 생성 (`ECR_REGISTRY`, `USE_AWS_SECRETS=true`)
+- [ ] AWS Secrets Manager에 시크릿 생성 (`ddoksori/staging/database`, `ddoksori/staging/llm`)
+- [ ] EC2 IAM Role에 Secrets Manager 읽기 권한 추가
 
 **GitHub Secrets:**
 - [ ] `AWS_ROLE_ARN` 등록
@@ -952,6 +1050,50 @@ EC2 → Security Groups → ddoksori-github-actions-ssh → Edit inbound rules
 **문제**: `docker login` 실패
 
 **확인**: IAM Role에 `AmazonEC2ContainerRegistryPowerUser` 정책 연결 확인
+
+### ECR_REGISTRY 미설정 오류
+
+**증상**:
+```bash
+$ docker compose -f docker-compose.prod.yml ps
+WARN[0000] The "ECR_REGISTRY" variable is not set. Defaulting to a blank string.
+NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS
+(컨테이너 없음)
+```
+
+**또는 Health Check 실패**:
+```
+curl: (7) Failed to connect to 15.165.215.141 port 80 after 135 ms: Couldn't connect to server
+```
+
+**원인**: EC2의 `.env` 파일이 없거나 `ECR_REGISTRY`가 설정되지 않음
+
+**해결**:
+1. EC2에 SSH 접속
+2. `/home/ubuntu/ddoksori/.env` 파일 생성 (A-16 참조)
+3. 환경변수 확인:
+   ```bash
+   source .env && echo "ECR_REGISTRY: $ECR_REGISTRY"
+   ```
+4. 배포 재시도:
+   ```bash
+   docker compose -f docker-compose.prod.yml pull
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+
+### Secrets Manager AccessDeniedException
+
+**증상**:
+```
+An error occurred (AccessDeniedException) when calling the GetSecretValue operation
+```
+
+**원인**: EC2 IAM Role에 Secrets Manager 읽기 권한이 없음
+
+**해결**:
+1. EC2에 연결된 IAM Role 확인 (EC2 Console → 인스턴스 → Security)
+2. IAM Role에 `secretsmanager:GetSecretValue` 권한 추가 (A-16 참조)
+3. EC2 재시작하여 IAM 역할 변경 반영
 
 ### 기타
 
