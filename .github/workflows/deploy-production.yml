@@ -6,7 +6,7 @@ on:
 
 env:
   AWS_REGION: ap-northeast-2
-  EC2_HOST: 13.209.245.44
+  EC2_HOST: 15.165.215.141
 
 jobs:
   # Wait for build to complete first
