@@ -10,7 +10,7 @@ S3-PR1: 임베딩 모델 전환 (Phase 1 - 코드 준비)
 
 import logging
 import os
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 

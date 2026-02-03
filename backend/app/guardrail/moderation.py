@@ -5,7 +5,7 @@ Sprint 1: 입력/출력 유해성 검사
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI

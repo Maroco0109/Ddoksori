@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from ..base import BaseAgent
 from .agent import verify_citation_accuracy
 from .llm_reviewer import get_reviewer
-from .relevance_checker import RelevanceResult, get_relevance_checker
+from .relevance_checker import get_relevance_checker
 
 logger = logging.getLogger(__name__)
 

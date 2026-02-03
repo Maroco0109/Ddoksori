@@ -12,7 +12,7 @@ Phase 8: 모든 Retrieval Agent가 동일한 UnifiedRetriever (SQL search_hybrid
     - OPENAI_API_KEY: OpenAI API 키 (text-embedding-3-large)
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

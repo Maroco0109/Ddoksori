@@ -38,7 +38,6 @@ from ...supervisor.state import (
 from .classifiers import (
     classify_mode,
     classify_query_complexity,
-    classify_query_type,
     classify_query_type_with_confidence,
 )
 
@@ -219,9 +218,6 @@ def query_analysis_node(state: ChatState) -> Dict:
 from .classifiers import classify_mode as _classify_mode
 from .classifiers import classify_query_complexity as _classify_query_complexity
 from .classifiers import classify_query_type as _classify_query_type
-from .classifiers import (
-    classify_query_type_with_confidence as _classify_query_type_with_confidence,
-)
 
 # === Backward Compatibility Exports ===
 # 기존 코드와의 호환성을 위해 일부 함수/상수를 re-export
@@ -229,13 +225,10 @@ from .constants import (
     AMBIGUOUS_QUERY_PATTERNS,  # backward compat for tests
     COMMON_PRODUCTS,
     CRITERIA_KEYWORDS,
-    DISPUTE_INTENT_KEYWORDS,
     DISPUTE_VERBS,
     INDIVIDUAL_KEYWORDS,
     LAW_KEYWORDS,
     PROCEDURE_KEYWORDS,
-    QUERY_TYPE_TO_RETRIEVERS,
-    RESTRICTED_DOMAIN_AGENCIES,
     RESTRICTED_DOMAIN_KEYWORDS,
     SYSTEM_META_KEYWORDS,
     VERB_SYNONYMS,
@@ -246,19 +239,6 @@ from .detectors import is_meta_conversational as _is_meta_conversational
 from .detectors import is_procedure_query as _is_procedure_query
 from .detectors import is_system_meta_query as _is_system_meta_query
 from .detectors import should_promote_to_rag as _should_promote_to_rag
-from .expanders import create_synonym_variant_query as _create_synonym_variant_query
-from .expanders import expand_query_by_type as _expand_query_by_type
-from .expanders import generate_search_queries as _generate_search_queries
-from .extractors import (
-    check_missing_onboarding_fields as _check_missing_onboarding_fields,
-)
-from .extractors import determine_agency_hint as _determine_agency_hint
-from .extractors import extract_info_from_message as _extract_info_from_message
-from .extractors import extract_keywords as _extract_keywords
-from .extractors import (
-    get_missing_fields_description as _get_missing_fields_description,
-)
-from .extractors import normalize_query as _normalize_query
 
 
 async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
@@ -393,9 +373,7 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # Step 6: 정보 추출 및 누락 필드 확인
     extracted_info = extract_info_from_message(user_query)
-    missing_fields = check_missing_onboarding_fields(
-        chat_type, onboarding, extracted_info
-    )
+    check_missing_onboarding_fields(chat_type, onboarding, extracted_info)
 
     # Step 6.5: 날짜 계산 및 카테고리 결정 (Onboarding 정보 보강)
     from .extractors import compute_days_since_purchase, determine_product_category

@@ -18,7 +18,6 @@
 
 import os
 from enum import Enum
-from typing import Optional
 
 
 class LogLevel(str, Enum):

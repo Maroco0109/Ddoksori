@@ -6,8 +6,6 @@ MAS Supervisor Graph 단위 테스트 (Phase 5)
 테스트 대상: backend/app/orchestrator/graph.py - create_mas_supervisor_graph()
 """
 
-from typing import Any, Dict
-
 import pytest
 
 # 전체 파일에 unit 마커 적용 (DB 의존성 없음)

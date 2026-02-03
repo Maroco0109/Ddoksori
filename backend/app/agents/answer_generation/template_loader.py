@@ -6,12 +6,14 @@ Implements singleton caching for performance.
 """
 
 import logging
-import os
 import re
+import threading
 from pathlib import Path
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+_template_lock = threading.Lock()
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 
 
 class _SafeFormatDict(dict):
@@ -29,15 +31,19 @@ class TemplateLoader:
     REQUIRED_TEMPLATES = {"solution", "action", "execution", "fallback", "base"}
 
     def __new__(cls) -> "TemplateLoader":
-        """Singleton pattern - ensures only one instance exists."""
+        """Singleton pattern - thread-safe with double-checked locking."""
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with _template_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
         """Initialize template loader (loads templates on first call)."""
         if self._templates is None:
-            self._templates = self._load_all_prompts()
+            with _template_lock:
+                if self._templates is None:
+                    self._templates = self._load_all_prompts()
 
     def _load_all_prompts(self) -> Dict[str, str]:
         """Load all prompt templates from prompts/ directory.
@@ -132,7 +138,7 @@ class TemplateLoader:
                 template = template.replace(placeholder, str(val))
 
         # Check for any remaining unsubstituted placeholders
-        remaining_placeholders = re.findall(r"\{(\w+)\}", template)
+        remaining_placeholders = _PLACEHOLDER_RE.findall(template)
         if remaining_placeholders:
             logger.warning(
                 f"Template '{template_key}' has unsubstituted variables: {remaining_placeholders}"

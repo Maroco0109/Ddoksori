@@ -31,7 +31,7 @@ def _get_prometheus_metrics():
     global _prometheus_metrics
     if _prometheus_metrics is None:
         try:
-            from prometheus_client import Counter, Gauge, Histogram
+            from prometheus_client import Counter, Histogram  # noqa: F401
 
             _prometheus_metrics = {
                 "violations_total": Counter(

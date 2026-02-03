@@ -19,6 +19,10 @@ FIELD_ALIASES = {
     "doc_title": ["doc_title", "title", "사건명"],
 }
 
+# Pre-compiled regex patterns for amount extraction
+_MAN_WON_RE = re.compile(r"(\d+)\s*만\s*원")
+_NUMBERS_RE = re.compile(r"\d+")
+
 
 def _get_field(data: dict, field_name: str, default: str = "") -> str:
     """필드 별칭 체인을 통해 값을 가져옵니다."""
@@ -59,6 +63,11 @@ class ContextBuilder:
                 retrieval.get("disputes", []), retrieval.get("counsels", [])
             ),
         }
+
+        # Sanitize values to prevent template variable injection
+        for key in ("user_query", "refined_user_case", "target_category"):
+            if key in context:
+                context[key] = context[key].replace("{", "{{").replace("}", "}}")
 
         logger.debug(
             f"Built context with {len(context)} variables: "
@@ -193,12 +202,12 @@ class ContextBuilder:
         text = text.replace(",", "")
 
         # Try to match "N만원" pattern first
-        man_match = re.search(r"(\d+)\s*만\s*원", text)
+        man_match = _MAN_WON_RE.search(text)
         if man_match:
             return int(man_match.group(1)) * 10000
 
         # Fallback: find all numbers and return the largest
-        numbers = re.findall(r"\d+", text)
+        numbers = _NUMBERS_RE.findall(text)
         if numbers:
             return max([int(n) for n in numbers])
 

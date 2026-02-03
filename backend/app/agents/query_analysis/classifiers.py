@@ -134,7 +134,7 @@ def classify_mode(
 
         if response_mode != "legacy":
             if is_followup_with_context(query, previous_followups, threshold):
-                logger.info(f"[QueryAnalysis] Followup matched → FOLLOWUP_WITH_CONTEXT")
+                logger.info("[QueryAnalysis] Followup matched → FOLLOWUP_WITH_CONTEXT")
                 return "FOLLOWUP_WITH_CONTEXT"
 
     # NEW: 모호한 쿼리는 RAG로 라우팅 (명확화 단계 제거됨)

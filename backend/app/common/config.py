@@ -25,7 +25,6 @@ Pydantic Settings를 활용하여 환경변수 기반 설정을 타입 안전하
 - AppConfig: 애플리케이션 전역 설정
 """
 
-import os
 from functools import lru_cache
 from typing import Dict, List, Literal, Optional
 

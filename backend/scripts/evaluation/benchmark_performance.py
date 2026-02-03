@@ -41,7 +41,7 @@ def benchmark_search(
     client = httpx.Client(base_url=api_url, timeout=30)
     times = []
 
-    print(f"🔍 Benchmarking /search endpoint...")
+    print("🔍 Benchmarking /search endpoint...")
     print(f"  Queries: {len(queries)}")
     print(f"  Iterations per query: {iterations}")
     print(f"  Total requests: {len(queries) * iterations}")
@@ -111,7 +111,7 @@ def benchmark_chat(
     client = httpx.Client(base_url=api_url, timeout=60)
     times = []
 
-    print(f"\n💬 Benchmarking /chat endpoint...")
+    print("\n💬 Benchmarking /chat endpoint...")
     print(f"  Queries: {len(queries)}")
     print(f"  Iterations per query: {iterations}")
     print(f"  Total requests: {len(queries) * iterations}")
@@ -213,7 +213,7 @@ def main():
     # Test queries (Korean)
     queries = ["환불", "배송지연", "소비자분쟁조정"]
 
-    print(f"\n🚀 API Performance Benchmark")
+    print("\n🚀 API Performance Benchmark")
     print(f"  Base URL: {args.url}")
     print(f"  Search iterations: {args.search_iterations}")
     print(f"  Chat iterations: {args.chat_iterations}")

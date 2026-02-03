@@ -9,9 +9,8 @@
 """
 
 import logging
-import os
 import time
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict
 
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 # === PR-6: 캐시 관련 함수 ===
-from .cache import QueryAnalysisCache, SupervisorResponseCache
+from .cache import SupervisorResponseCache
 
 
 def _cache_check_node(state: ChatState) -> Dict[str, Any]:

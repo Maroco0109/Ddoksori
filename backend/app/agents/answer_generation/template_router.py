@@ -6,7 +6,6 @@ and hard routing rules.
 """
 
 import logging
-import re
 from typing import Dict
 
 from .context_builder import ContextBuilder
@@ -73,12 +72,12 @@ class TemplateRouter:
 
         # Rule 2b: Criminal keywords check
         if TemplateRouter._contains_criminal_keywords(user_query):
-            logger.warning(f"Fallback: Criminal keywords detected in query")
+            logger.warning("Fallback: Criminal keywords detected in query")
             return "fallback"
 
         # Rule 2c: International keywords check
         if TemplateRouter._contains_international_keywords(user_query):
-            logger.warning(f"Fallback: International transaction keywords detected")
+            logger.warning("Fallback: International transaction keywords detected")
             return "fallback"
 
         # Rule 3: Needs clarification

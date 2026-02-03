@@ -15,7 +15,6 @@ from pathlib import Path
 backend_path = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
-from typing import Any, cast
 
 import pytest
 
@@ -24,7 +23,6 @@ pytestmark = pytest.mark.unit
 
 from app.supervisor.state import (
     AgentMessage,
-    ChatState,
     SupervisorState,
     create_initial_state,
 )

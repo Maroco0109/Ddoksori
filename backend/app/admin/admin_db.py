@@ -3,8 +3,8 @@
 import asyncio
 import logging
 import math
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from datetime import date
+from typing import Any, Dict, Optional
 
 import psycopg2
 import psycopg2.extras

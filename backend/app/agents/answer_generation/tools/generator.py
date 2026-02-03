@@ -6,7 +6,6 @@
 LLM 기반 구조화된 답변 생성
 """
 
-import json
 import os
 import re
 import time

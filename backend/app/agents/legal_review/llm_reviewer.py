@@ -15,6 +15,7 @@ S2-PR2: 법률 검토 하이브리드 (규칙 + LLM)
 import json
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -441,9 +442,14 @@ class HybridLegalReviewer:
                 latency_ms = (time.time() - start_time) * 1000
                 self._llm_call_count += 1
                 self._total_llm_latency_ms += latency_ms
+                logger.warning(
+                    "[llm_review] All retries exhausted, degrading to rule-based review only"
+                )
                 return LLMReviewResult(
+                    passed=True,
                     error=f"api_retry_exhausted: {str(last_error)}",
                     latency_ms=latency_ms,
+                    overall_comment="LLM review skipped due to API failure; rule-based review only",
                 )
 
             # 메트릭 업데이트
@@ -513,6 +519,9 @@ class HybridLegalReviewer:
             if len(content) > MAX_SOURCE_CONTENT_CHARS:
                 content = content[:MAX_SOURCE_CONTENT_CHARS] + "..."
 
+            # Sanitize to prevent prompt injection
+            title = title.replace("{", "").replace("}", "")
+            content = content.replace("{", "").replace("}", "")
             part = f"[{title}]\n{content}"
 
             if total_chars + len(part) > max_chars:
@@ -651,13 +660,16 @@ class HybridLegalReviewer:
 
 # 모듈 레벨 싱글턴 인스턴스
 _reviewer_instance: Optional[HybridLegalReviewer] = None
+_reviewer_lock = threading.Lock()
 
 
 def get_reviewer() -> HybridLegalReviewer:
-    """싱글턴 reviewer 인스턴스 반환"""
+    """싱글턴 reviewer 인스턴스 반환 (thread-safe)"""
     global _reviewer_instance
     if _reviewer_instance is None:
-        _reviewer_instance = HybridLegalReviewer()
+        with _reviewer_lock:
+            if _reviewer_instance is None:
+                _reviewer_instance = HybridLegalReviewer()
     return _reviewer_instance
 
 

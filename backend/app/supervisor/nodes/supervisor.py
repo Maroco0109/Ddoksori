@@ -39,7 +39,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol
 
 from ...agents.registry import get_agent_registry
 from ...common.config import get_config

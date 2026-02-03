@@ -7,10 +7,9 @@ BaseRedisCache를 상속하여 구현.
 
 import logging
 import os
-import time
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
-from app.common.cache import BaseRedisCache, get_redis_client, hash_query
+from app.common.cache import hash_query
 from app.common.metrics import PROM_CACHE_ERRORS, PROM_CACHE_HITS, PROM_CACHE_MISSES
 
 logger = logging.getLogger(__name__)

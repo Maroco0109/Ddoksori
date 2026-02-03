@@ -11,7 +11,6 @@ S1-PR5: LLM API 오류 시 다중 폴백 전략
 """
 
 import logging
-import os
 from typing import Any, AsyncGenerator, Dict, List, Mapping, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -58,7 +57,7 @@ class AnswerGenerationFallback:
             try:
                 if model == "rule_based":
                     answer = cls._rule_based_generation(retrieval, agency_info)
-                    logger.info(f"[fallback] Using rule_based generation")
+                    logger.info("[fallback] Using rule_based generation")
                     return answer, model, []
 
                 answer, claim_evidence_map = cls._try_llm_generation(
@@ -233,7 +232,7 @@ class AnswerGenerationFallback:
                 # rule_based 처리
                 if model == "rule_based":
                     answer = cls._rule_based_generation(retrieval, agency_info)
-                    logger.info(f"[fallback_streaming] Using rule_based generation")
+                    logger.info("[fallback_streaming] Using rule_based generation")
                     yield {
                         "type": "complete",
                         "content": answer,

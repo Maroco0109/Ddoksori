@@ -11,23 +11,20 @@ Legal Review Agent Enhanced 기능 테스트
     pytest backend/scripts/testing/legal_review/test_enhanced_review.py -v
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # 테스트 대상 모듈
 from app.agents.legal_review.agent import (
-    CitationVerifyResult,
     _extract_law_references,
     verify_citation_accuracy,
 )
 from app.agents.legal_review.confidence_scorer import (
     ConfidenceScorer,
-    ConfidenceScoreResult,
 )
 from app.agents.legal_review.relevance_checker import (
     RelevanceChecker,
-    RelevanceResult,
 )
 
 

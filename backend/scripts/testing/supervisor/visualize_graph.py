@@ -205,22 +205,22 @@ def print_routing_thresholds():
     print("MAS Supervisor Routing Thresholds")
     print("=" * 60)
 
-    print(f"\n[Similarity Threshold]")
+    print("\n[Similarity Threshold]")
     threshold = config.agent.similarity_threshold
     print(f"  SIMILARITY_THRESHOLD: {threshold}")
     print(f"  - >= {threshold}: → generation (has evidence)")
     print(f"  - < {threshold}: → low_similarity_mode")
 
-    print(f"\n[Review Retry]")
-    print(f"  MAX_RETRIES: 2")
-    print(f"  - retry_count < 2: → generation (retry)")
-    print(f"  - retry_count >= 2: → output_guardrail")
+    print("\n[Review Retry]")
+    print("  MAX_RETRIES: 2")
+    print("  - retry_count < 2: → generation (retry)")
+    print("  - retry_count >= 2: → output_guardrail")
 
-    print(f"\n[Supervisor Routing]")
-    print(f"  - query_analysis → analyze intent, extract keywords")
-    print(f"  - generation → draft answer with Fallback chain")
-    print(f"  - review → legal review (skip for general/system_meta)")
-    print(f"  - output_guardrail → final validation, END")
+    print("\n[Supervisor Routing]")
+    print("  - query_analysis → analyze intent, extract keywords")
+    print("  - generation → draft answer with Fallback chain")
+    print("  - review → legal review (skip for general/system_meta)")
+    print("  - output_guardrail → final validation, END")
 
 
 def main():

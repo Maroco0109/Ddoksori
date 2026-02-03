@@ -21,7 +21,10 @@ def test_import_compatibility():
     logger.info("=== Testing Import Compatibility ===")
 
     try:
-        from app.llm.exaone_client import ExaoneLLMClient, LLMUnavailableError
+        from app.llm.exaone_client import (  # noqa: F401
+            ExaoneLLMClient,
+            LLMUnavailableError,
+        )
 
         logger.info("✅ ExaoneLLMClient imported successfully")
         logger.info("✅ LLMUnavailableError imported successfully")
@@ -68,8 +71,6 @@ def test_backward_compatibility():
     logger.info("\n=== Testing Backward Compatibility (2.4B) ===")
 
     try:
-        from app.llm.exaone_client import ExaoneLLMClient
-
         with os.popen(
             'EXAONE_MODEL="LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct" python -c "from app.llm.exaone_client import ExaoneLLMClient; c=ExaoneLLMClient(); print(c.model, c.temperature, c.max_tokens)"'
         ) as proc:
@@ -102,7 +103,6 @@ def test_env_variable_override():
         from importlib import reload
 
         import app.llm.exaone_client as exaone_module
-        from app.llm.exaone_client import ExaoneLLMClient
 
         reload(exaone_module)
 

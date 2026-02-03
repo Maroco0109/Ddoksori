@@ -14,13 +14,10 @@ Combines dense (pgvector) and lexical (PostgreSQL FTS) retrieval
 using Reciprocal Rank Fusion (RRF) algorithm.
 """
 
-import json
-import os
 import time
 from typing import Any, Dict, List, Optional, Union, cast
 
 import psycopg2
-import requests
 
 # Import embedding configuration
 from utils.embedding_connection import (
@@ -29,7 +26,7 @@ from utils.embedding_connection import (
     RRF_WEIGHT_LEXICAL,
 )
 
-from .base import BaseRetriever, Document, to_documents
+from .base import Document, to_documents
 from .retriever import (
     RAGRetriever,
     SearchResult,

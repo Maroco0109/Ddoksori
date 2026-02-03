@@ -221,7 +221,7 @@ class DataCollector:
         output_file = self.output_dir / "training_data.jsonl"
         self.save_examples(all_examples, output_file)
 
-        print(f"\nData collection complete!")
+        print("\nData collection complete!")
         print(f"Total log files found: {self.stats['total_files']}")
         print(f"Successfully parsed: {self.stats['parsed_files']}")
         print(f"Skipped (no query_analysis): {self.stats['skipped_no_query_analysis']}")

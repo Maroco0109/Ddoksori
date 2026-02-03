@@ -17,7 +17,6 @@ import argparse
 import json
 import sys
 import uuid
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -176,7 +175,7 @@ class ChatCLI:
             print(f"[새 세션] 세션 ID: {self.session_id}")
 
         elif cmd == "/session":
-            print(f"[세션 정보]")
+            print("[세션 정보]")
             print(f"  세션 ID: {self.session_id}")
             print(f"  상담 유형: {self.chat_type}")
             print(f"  대화 수: {len(self.history)}")

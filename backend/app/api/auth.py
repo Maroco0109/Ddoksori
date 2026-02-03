@@ -36,7 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
 from app.auth.dependencies import decode_access_token, get_current_user
-from app.auth.models import AuthResponse, User
+from app.auth.models import User
 from app.auth.service import AuthService
 from app.auth.user_db import UserDB
 from app.common.config import get_config

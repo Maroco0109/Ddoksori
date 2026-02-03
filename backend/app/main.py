@@ -95,7 +95,7 @@ app.include_router(users_router)
 async def startup_event():
     """애플리케이션 시작 시 로그 및 서비스 시작"""
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
-    logger.info(f"[Startup] 똑소리 API 서버 시작")
+    logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
     logger.info(f"[Startup] Embedding API: {embed_api_url}")
 

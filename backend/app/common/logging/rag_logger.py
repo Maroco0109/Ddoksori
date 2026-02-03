@@ -27,7 +27,6 @@ logs/rag/YYYY-MM-DD/HHMMSS_{request_id}.json
 
 import json
 import logging
-import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -490,13 +489,13 @@ class RAGLogger:
 
         law_logs = [
             LawLog(
-                unit_id=l.get("unit_id", ""),
-                law_name=l.get("law_name", ""),
-                full_path=l.get("full_path", ""),
-                similarity=l.get("similarity", 0.0),
-                text_preview=(l.get("text") or "")[:200],
+                unit_id=law.get("unit_id", ""),
+                law_name=law.get("law_name", ""),
+                full_path=law.get("full_path", ""),
+                similarity=law.get("similarity", 0.0),
+                text_preview=(law.get("text") or "")[:200],
             )
-            for l in laws
+            for law in laws
         ]
 
         criteria_logs = [

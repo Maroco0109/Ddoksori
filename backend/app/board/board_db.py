@@ -7,7 +7,7 @@
 import asyncio
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import psycopg2
 import psycopg2.extras

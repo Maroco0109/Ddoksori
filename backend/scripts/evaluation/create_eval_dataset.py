@@ -23,9 +23,8 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -249,9 +248,9 @@ def interactive_review(input_path: str, output_path: str):
             if line.strip():
                 items.append(json.loads(line))
 
-    print(f"\n=== Interactive Review Mode ===")
+    print("\n=== Interactive Review Mode ===")
     print(f"Loaded {len(items)} items from {input_path}")
-    print(f"Commands: (e)ssential, (s)upporting, (r)emove, (n)ext, (q)uit\n")
+    print("Commands: (e)ssential, (s)upporting, (r)emove, (n)ext, (q)uit\n")
 
     reviewed_items = []
 
@@ -345,19 +344,19 @@ def main():
         cat = item["category"]
         category_counts[cat] = category_counts.get(cat, 0) + 1
 
-    print(f"\nCategory distribution:")
+    print("\nCategory distribution:")
     for cat, count in sorted(category_counts.items()):
         print(f"  {cat}: {count}")
 
     # 저장
     save_dataset(items, args.output)
 
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     print(f"1. Review the draft: {args.output}")
-    print(f"2. Run interactive review:")
-    print(f"   python scripts/evaluation/create_eval_dataset.py \\")
+    print("2. Run interactive review:")
+    print("   python scripts/evaluation/create_eval_dataset.py \\")
     print(f"     --interactive --input {args.output} \\")
-    print(f"     --output data/evaluation/eval_dataset.jsonl")
+    print("     --output data/evaluation/eval_dataset.jsonl")
 
 
 if __name__ == "__main__":

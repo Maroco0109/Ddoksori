@@ -7,6 +7,7 @@ JSON 파일을 통해 런타임에 설정을 변경할 수 있으며, 파일이 
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -45,6 +46,9 @@ _CONFIG_DIR = Path(__file__).parent
 # 설정 캐시 (첫 로드 후 재사용)
 _cached_config: Optional[Dict[str, Any]] = None
 
+# 스레드 안전성을 위한 락
+_config_lock = threading.Lock()
+
 
 def load_routing_config() -> Dict[str, Any]:
     """
@@ -66,35 +70,40 @@ def load_routing_config() -> Dict[str, Any]:
     if _cached_config is not None:
         return _cached_config
 
-    config = _DEFAULT_CONFIG.copy()
-    config_path = _CONFIG_DIR / _CONFIG_FILE_NAME
+    with _config_lock:
+        # Double-checked locking
+        if _cached_config is not None:
+            return _cached_config
 
-    # JSON 파일이 존재하면 로드하여 병합
-    if config_path.exists():
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                user_config = json.load(f)
+        config = _DEFAULT_CONFIG.copy()
+        config_path = _CONFIG_DIR / _CONFIG_FILE_NAME
 
-            # 기본값 위에 사용자 설정 오버라이드
-            config.update(user_config)
-            logger.info(f"라우팅 설정을 {config_path}에서 로드했습니다.")
+        # JSON 파일이 존재하면 로드하여 병합
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    user_config = json.load(f)
 
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"라우팅 설정 파일 파싱 실패: {config_path} - {e}. 기본값을 사용합니다."
+                # 기본값 위에 사용자 설정 오버라이드
+                config.update(user_config)
+                logger.info(f"라우팅 설정을 {config_path}에서 로드했습니다.")
+
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"라우팅 설정 파일 파싱 실패: {config_path} - {e}. 기본값을 사용합니다."
+                )
+            except Exception as e:
+                logger.error(
+                    f"라우팅 설정 파일 로드 중 오류 발생: {config_path} - {e}. 기본값을 사용합니다."
+                )
+        else:
+            logger.info(
+                f"라우팅 설정 파일이 없습니다 ({config_path}). 기본값을 사용합니다."
             )
-        except Exception as e:
-            logger.error(
-                f"라우팅 설정 파일 로드 중 오류 발생: {config_path} - {e}. 기본값을 사용합니다."
-            )
-    else:
-        logger.info(
-            f"라우팅 설정 파일이 없습니다 ({config_path}). 기본값을 사용합니다."
-        )
 
-    # 결과 캐시
-    _cached_config = config
-    return config
+        # 결과 캐시
+        _cached_config = config
+        return config
 
 
 def get_criminal_keywords() -> List[str]:
