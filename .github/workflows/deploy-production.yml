@@ -86,9 +86,9 @@ jobs:
           echo "Waiting for services to start..."
           sleep 30
 
-          # Backend health check with retries
+          # Backend health check (Nginx:80 → Backend:8000 프록시)
           for i in {1..10}; do
-            if curl -sf http://${{ env.EC2_HOST }}:8000/health; then
+            if curl -sf http://${{ env.EC2_HOST }}/health; then
               echo "Backend is healthy!"
               break
             fi
@@ -97,7 +97,7 @@ jobs:
           done
 
           # Final verification
-          curl -f http://${{ env.EC2_HOST }}:8000/health || exit 1
+          curl -f http://${{ env.EC2_HOST }}/health || exit 1
 
       - name: Discord Notification - Success
         if: success() && env.DISCORD_WEBHOOK != ''

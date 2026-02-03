@@ -156,7 +156,7 @@ async def llm_classify(
 
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=config.models.query_classifier,
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=0.1,

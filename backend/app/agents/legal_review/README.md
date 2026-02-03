@@ -56,8 +56,12 @@ flowchart TD
 
 ## 4. 코드 구조 (Code Structure)
 
+### 파일 목록
 - **`agent.py`**: 에이전트 진입점 (`review_node`). 규칙 기반 검토 로직(`PROHIBITED_PATTERNS`) 구현.
-- **`llm_reviewer.py`**: (Optional) 복잡한 문맥 검토가 필요할 때 사용하는 LLM 기반 검토기.
+- **`llm_reviewer.py`**: LLM 기반 검토기. 복잡한 문맥 검토가 필요할 때 사용.
+- **`reviewer_agent.py`**: 하이브리드 검토 시스템 (규칙 기반 + LLM).
+- **`confidence_scorer.py`**: 답변 신뢰도 점수 계산.
+- **`relevance_checker.py`**: 답변과 출처의 관련성 검증.
 - **`metrics.py`**: 검토 통과율, 수정률 등의 지표 정의.
 
 ### 주요 함수

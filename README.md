@@ -82,7 +82,7 @@ docker compose up -d
 
 ## 5. Configuration
 
-`.env` 파일 설정을 통해 시스템 동작을 제어합니다. `backend/.env.example`을 복사하여 사용하세요.
+`.env` 파일 설정을 통해 시스템 동작을 제어합니다. `.env.example`을 복사하여 사용하세요.
 
 ### 기본 설정
 | 변수명 | 설명 | 기본값/예시 |
@@ -196,10 +196,10 @@ sequenceDiagram
 
 | 대상 | 문서 링크 | 설명 |
 |------|-----------|------|
-| **시작하기** | [EASY_START_GUIDE_KR.md](docs/guides/EASY_START_GUIDE_KR.md) | 상세 설치 및 실행 가이드 |
+| **배포 가이드** | [docs/guides/deployment-execution-guide.md](docs/guides/deployment-execution-guide.md) | 로컬/Docker 배포 실행 가이드 |
 | **API** | [backend/app/api/README.md](backend/app/api/README.md) | 엔드포인트 및 데이터 모델 명세 |
 | **아키텍처** | [backend/app/supervisor/README.md](backend/app/supervisor/README.md) | 에이전트 상세 설계 및 구현 가이드 |
 | **인프라** | [docs/infrastructure/runpod-vllm-setup.md](docs/infrastructure/runpod-vllm-setup.md) | RunPod vLLM 서버 설정 가이드 |
-| **로드맵** | [docs/plans/sprint-roadmap.md](docs/plans/sprint-roadmap.md) | 스프린트별 개발 계획 및 PR 목록 |
-| **평가** | [docs/guides/evaluation-strategy.md](docs/guides/evaluation-strategy.md) | 에이전트별 평가 지표 및 전략 |
-| **테스트** | [backend/scripts/testing/README.md](backend/scripts/testing/README.md) | 테스트 전략 및 데이터 파이프라인 |
+| **테스트** | [backend/scripts/testing/README.md](backend/scripts/testing/README.md) | 테스트 구조 및 실행 가이드 |
+| **CI/CD** | [docs/guides/backup-setup-guide.md](docs/guides/backup-setup-guide.md) | GitHub Actions CI/CD 및 백업 가이드 |
+| **Feature** | [docs/feature/MAS_SUPERVISOR_ARCHITECTURE.md](docs/feature/MAS_SUPERVISOR_ARCHITECTURE.md) | MAS Supervisor v2 아키텍처 설계 |

@@ -201,7 +201,7 @@ backend/app/supervisor/
 │   ├── supervisor.py     # Supervisor 노드 로직
 │   ├── clarify.py        # ask_clarification 노드
 │   ├── retrieval_merge.py  # 3개 Agent 결과 병합
-│   └── guardrail.py      # Input/Output Guardrail
+│   └── memory_save.py    # 대화 메모리 저장
 └── checkpointer.py       # 대화 상태 체크포인트 (Memory/Postgres)
 ```
 

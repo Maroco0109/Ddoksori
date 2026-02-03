@@ -197,6 +197,8 @@ class ModelConfig(BaseSettings):
         MODEL_SUPERVISOR: Supervisor 에이전트 모델 (기본값: gpt-4o)
         MODEL_DRAFT_AGENT: Draft 에이전트 모델 (기본값: gpt-4o)
         MODEL_REVIEW_AGENT: Review 에이전트 모델 (기본값: gpt-4o)
+        MODEL_QUERY_CLASSIFIER: Query Classifier 에이전트 모델 (기본값: gpt-4o-mini)
+        MODEL_QUERY_EXPANDER: Query Expander 에이전트 모델 (기본값: gpt-4o-mini)
     """
 
     model_config = SettingsConfigDict(env_prefix="MODEL_")
@@ -204,6 +206,12 @@ class ModelConfig(BaseSettings):
     supervisor: str = Field(default="gpt-4o", description="Supervisor 에이전트 모델")
     draft_agent: str = Field(default="gpt-4o", description="Draft 에이전트 모델")
     review_agent: str = Field(default="gpt-4o", description="Review 에이전트 모델")
+    query_classifier: str = Field(
+        default="gpt-4o-mini", description="Query Classifier 에이전트 모델"
+    )
+    query_expander: str = Field(
+        default="gpt-4o-mini", description="Query Expander 에이전트 모델"
+    )
 
 
 class PortConfig(BaseSettings):

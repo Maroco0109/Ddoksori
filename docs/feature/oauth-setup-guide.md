@@ -7,14 +7,13 @@
 
 ## 📋 개요
 
-이 가이드는 DDOKSORI 챗봇에 Google, Kakao, Naver 소셜 로그인을 설정하는 방법을 단계별로 설명합니다.
+이 가이드는 DDOKSORI 챗봇에 Google, Naver 소셜 로그인을 설정하는 방법을 단계별로 설명합니다.
 
 ### 지원하는 OAuth Providers
 
 | Provider | 인증 방식 | 사용자 정보 | 비고 |
 |----------|----------|-----------|------|
 | Google | OAuth 2.0 | email, name, picture | 이메일 자동 인증됨 |
-| Kakao | OAuth 2.0 | email, nickname, profile_image | REST API 키 사용 |
 | Naver | OAuth 2.0 | email, name, profile_image | Client Secret 필수 |
 
 ---
@@ -91,7 +90,7 @@ Client secret: GOCSPX-AbCdEfGhIjKlMnOpQrStUvWxYz
 
 ### 6단계: 환경 변수 설정
 
-`backend/.env` 파일에 추가:
+`.env` 파일에 추가:
 ```bash
 GOOGLE_CLIENT_ID=123456789012-abcdefghijklmnopqrstuvwxyz123456.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-AbCdEfGhIjKlMnOpQrStUvWxYz
@@ -112,93 +111,6 @@ GOOGLE_CLIENT_SECRET=GOCSPX-AbCdEfGhIjKlMnOpQrStUvWxYz
   ```sql
   SELECT * FROM users WHERE provider = 'google';
   ```
-
----
-
-## 🟡 Kakao OAuth 설정
-
-### 1단계: Kakao Developers 접속
-
-1. https://developers.kakao.com/ 접속
-2. Kakao 계정으로 로그인
-
-### 2단계: 애플리케이션 등록
-
-1. 상단 메뉴: **내 애플리케이션**
-2. "애플리케이션 추가하기" 클릭
-3. 앱 정보 입력:
-   - **앱 이름**: DDOKSORI
-   - **사업자명**: 개인 또는 회사명
-4. "저장" 클릭
-
-### 3단계: 플랫폼 설정
-
-1. 생성된 앱 선택
-2. 좌측 메뉴: **플랫폼**
-3. "Web 플랫폼 등록" 클릭
-4. **사이트 도메인** 입력:
-   - 개발: `http://localhost:5173`
-   - 프로덕션: `https://your-domain.com`
-5. "저장" 클릭
-
-### 4단계: 카카오 로그인 활성화
-
-1. 좌측 메뉴: **제품 설정** → **카카오 로그인**
-2. **카카오 로그인 활성화** ON으로 전환
-3. **Redirect URI** 등록:
-   - "Redirect URI 등록" 버튼 클릭
-   - 개발: `http://localhost:8000/api/auth/kakao/callback`
-   - 프로덕션: `https://your-domain.com/api/auth/kakao/callback`
-4. "저장" 클릭
-
-### 5단계: 동의 항목 설정
-
-1. 좌측 메뉴: **제품 설정** → **카카오 로그인** → **동의항목**
-2. 필요한 정보 설정:
-   - **닉네임**: 필수 동의
-   - **프로필 사진**: 선택 동의
-   - **카카오계정(이메일)**: 필수 동의
-3. "저장" 클릭
-
-### 6단계: Client Secret 발급 (선택사항, 권장)
-
-1. 좌측 메뉴: **제품 설정** → **카카오 로그인** → **보안**
-2. "Client Secret" 섹션
-3. "코드 생성" 버튼 클릭
-4. 생성된 Secret 복사
-
-**보안 강화**: Client Secret을 사용하면 보안이 강화됩니다 (선택사항이지만 권장).
-
-### 7단계: REST API 키 확인
-
-1. 좌측 메뉴: **앱 설정** → **요약 정보**
-2. **앱 키** 섹션에서 **REST API 키** 복사
-
-**예시**:
-```
-REST API 키: abc123def456ghi789jkl012mno345pq
-Client Secret: xyz987uvw654tsr321qpo876nml543k
-```
-
-### 8단계: 환경 변수 설정
-
-`backend/.env` 파일에 추가:
-```bash
-KAKAO_CLIENT_ID=abc123def456ghi789jkl012mno345pq
-KAKAO_CLIENT_SECRET=xyz987uvw654tsr321qpo876nml543k  # 선택사항
-```
-
-### 9단계: 테스트
-
-1. 백엔드 재시작
-2. "로그인" → "Kakao로 계속하기" 클릭
-3. Kakao 계정 로그인
-4. 동의 및 계속 (첫 로그인 시)
-
-**성공 확인**:
-```sql
-SELECT * FROM users WHERE provider = 'kakao';
-```
 
 ---
 
@@ -252,7 +164,7 @@ Client Secret: KlMnOpQrSt
 
 ### 5단계: 환경 변수 설정
 
-`backend/.env` 파일에 추가:
+`.env` 파일에 추가:
 ```bash
 NAVER_CLIENT_ID=AbCdEfGhIj
 NAVER_CLIENT_SECRET=KlMnOpQrSt
@@ -285,12 +197,6 @@ SELECT * FROM users WHERE provider = 'naver';
    - `https://your-domain.com/api/auth/google/callback`
 4. "저장"
 
-#### Kakao
-1. Kakao Developers → 앱 선택 → 카카오 로그인
-2. **Redirect URI** 추가:
-   - `https://your-domain.com/api/auth/kakao/callback`
-3. "저장"
-
 #### Naver
 1. Naver Developers → Application → 앱 선택
 2. **Callback URL** 업데이트:
@@ -307,7 +213,6 @@ FRONTEND_URL=https://your-domain.com
 # OAuth credentials는 동일하게 유지
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-KAKAO_CLIENT_ID=...
 NAVER_CLIENT_ID=...
 NAVER_CLIENT_SECRET=...
 ```
@@ -393,17 +298,6 @@ http://localhost:8000/api/auth/{provider}/callback
 
 ---
 
-### Kakao "동의 항목 미설정" 에러
-
-**원인**: 필수 동의 항목이 설정되지 않음
-
-**해결**:
-1. Kakao Developers → 카카오 로그인 → 동의항목
-2. 이메일을 "필수 동의"로 설정
-3. 닉네임을 "필수 동의"로 설정
-
----
-
 ### "Invalid state" 에러
 
 **원인**: OAuth state가 만료됨 (10분 TTL)
@@ -452,7 +346,6 @@ grep -i "oauth.*error" backend/logs/app.log | tail -100
 ### 공식 문서
 
 - **Google OAuth**: https://developers.google.com/identity/protocols/oauth2
-- **Kakao Login**: https://developers.kakao.com/docs/latest/ko/kakaologin/common
 - **Naver Login**: https://developers.naver.com/docs/login/overview/
 
 ### 내부 문서

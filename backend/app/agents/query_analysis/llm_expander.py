@@ -85,7 +85,7 @@ async def expand_query_with_llm(
 
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=config.models.query_expander,
                 messages=[
                     {"role": "system", "content": QUERY_EXPANSION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},

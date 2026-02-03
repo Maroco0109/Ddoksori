@@ -155,7 +155,7 @@ Is the server running on host "dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws
 **Step 1: 연결 정보 확인**
 ```bash
 # .env 파일 확인
-cat backend/.env | grep DB_
+cat .env | grep DB_
 
 # 출력 예:
 # DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
@@ -291,7 +291,7 @@ jwt_secret_key
 
 **Step 1: 필수 환경 변수 체크리스트**
 ```bash
-# backend/.env 파일에 다음 항목 필수:
+# .env 파일에 다음 항목 필수:
 JWT_SECRET_KEY=<32자 이상 랜덤 문자열>
 CONVERSATION_MEMORY_BACKEND=db
 DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
@@ -302,12 +302,12 @@ DB_NAME=ddoksori
 
 **Step 2: 환경 변수 검증 스크립트**
 ```bash
-# backend/.env 파일 검증
+# .env 파일 검증
 python3 << 'EOF'
 import os
 from pathlib import Path
 
-env_file = Path("backend/.env")
+env_file = Path(".env")
 if not env_file.exists():
     print("❌ .env 파일이 없습니다!")
     exit(1)
@@ -365,7 +365,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 services:
   backend:
     env_file:
-      - ./backend/.env  # ← 경로 확인
+      - ./.env  # ← 경로 확인
     environment:
       # 또는 직접 명시
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
@@ -382,7 +382,7 @@ docker compose exec backend env | grep JWT_SECRET_KEY
 **Step 3: 파일 권한 확인**
 ```bash
 # .env 파일 읽기 권한 확인
-ls -la backend/.env
+ls -la .env
 
 # 출력 예: -rw-r--r-- (644 권한, 정상)
 ```
@@ -415,7 +415,7 @@ docker compose logs backend | grep -i "cleanup"
 **Step 2: 환경 변수 확인**
 ```bash
 # .env 파일 확인
-grep CONVERSATION_MEMORY_BACKEND backend/.env
+grep CONVERSATION_MEMORY_BACKEND .env
 
 # 출력: CONVERSATION_MEMORY_BACKEND=db (정상)
 ```
@@ -452,8 +452,8 @@ EOF
 
 **Step 1: 환경 변수 확인**
 ```bash
-# backend/.env
-grep -E "BACKEND_URL|FRONTEND_URL" backend/.env
+# .env
+grep -E "BACKEND_URL|FRONTEND_URL" .env
 
 # 출력 예:
 # BACKEND_URL=http://localhost:8000
@@ -465,9 +465,6 @@ grep -E "BACKEND_URL|FRONTEND_URL" backend/.env
 **Google OAuth (console.cloud.google.com)**:
 - Redirect URI: `http://localhost:8000/api/auth/google/callback`
 - 프로덕션: `https://your-domain.com/api/auth/google/callback`
-
-**Kakao OAuth (developers.kakao.com)**:
-- Redirect URI: `http://localhost:8000/api/auth/kakao/callback`
 
 **Naver OAuth (developers.naver.com)**:
 - Callback URL: `http://localhost:8000/api/auth/naver/callback`
@@ -497,7 +494,7 @@ HTTPException: Invalid token
 
 **Step 1: JWT_SECRET_KEY 고정**
 ```bash
-# backend/.env 파일에 고정된 값 사용
+# .env 파일에 고정된 값 사용
 JWT_SECRET_KEY=yQ7XvZ3mN8kP2wR5tL9xU6bC4aJ1sH0e  # 변경하지 말 것!
 ```
 
@@ -628,7 +625,7 @@ services:
 - [ ] **backend/.env**: 필수 환경 변수 모두 설정
 - [ ] **DB 마이그레이션**: DBA가 004_conversation_memory.sql 실행 완료
 - [ ] **DB 권한**: ddoksori_ro 계정에 SELECT 권한 부여 확인
-- [ ] **OAuth 설정**: Google/Kakao/Naver OAuth Redirect URI 등록 (선택사항)
+- [ ] **OAuth 설정**: Google/Naver OAuth Redirect URI 등록 (선택사항)
 - [ ] **Docker 메모리**: 8GB 이상 할당
 
 ### 배포 후 체크리스트

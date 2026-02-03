@@ -223,15 +223,18 @@ python -m scripts.evaluation.run_evaluation \
 
 ### 4.1 데이터 품질 테스트
 ```bash
+# Note: test_data_quality.py was removed in test refactoring (branch refactor/47-test-refactor)
+# Use domain classifier tests and evaluation scripts instead:
 conda activate dsr
 cd backend
-python -m pytest scripts/testing/data/test_data_quality.py -v -p no:asyncio
+python -m pytest scripts/testing/domain/test_domain_classifier.py -v -p no:asyncio
+# Or verify data quality using:
+python backend/scripts/evaluation/verify_loaded_data.py
 ```
 
 **테스트 항목**:
-- 각 테이블 레코드 수 확인
-- embedding null 체크
-- 필수 필드 검증
+- 도메인 분류기 검증
+- 데이터 로딩 검증 스크립트
 
 ### 4.2 Retrieval 노드 테스트
 ```bash
@@ -404,9 +407,10 @@ python -m scripts.evaluation.run_evaluation \
   --output results/retrieval_eval.json
 
 # 테스트 실행 (backend 디렉토리에서)
+# Note: test_data_quality.py was removed in test refactoring
 cd backend
-python -m pytest scripts/testing/data/test_data_quality.py -v -p no:asyncio
-python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestRetrievalNode -v -p no:asyncio
+python -m pytest scripts/testing/domain/test_domain_classifier.py -v -p no:asyncio
+python backend/scripts/evaluation/verify_loaded_data.py
 
 # DB 확인 (Docker)
 docker exec -it ddoksori_db psql -U postgres -d ddoksori -c "SELECT COUNT(*) FROM law_units;"

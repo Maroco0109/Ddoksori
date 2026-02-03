@@ -81,7 +81,7 @@ def save_logs(
     repo_root = _find_repo_root()
 
     if load_dotenv:
-        env_path = os.path.join(repo_root, "backend", ".env")
+        env_path = os.path.join(repo_root, ".env")
         load_dotenv(env_path)
 
     backend_root = os.path.join(repo_root, "backend")

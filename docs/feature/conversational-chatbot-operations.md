@@ -17,7 +17,7 @@
 
 ```bash
 # .env 파일 확인
-grep -E "ANSWER_FORMAT_MODE|CONVERSATION_MEMORY_BACKEND|ENABLE_FOLLOWUP_QUESTIONS" backend/.env
+grep -E "ANSWER_FORMAT_MODE|CONVERSATION_MEMORY_BACKEND|ENABLE_FOLLOWUP_QUESTIONS" .env
 ```
 
 ### 점진적 롤아웃 전략
@@ -25,7 +25,7 @@ grep -E "ANSWER_FORMAT_MODE|CONVERSATION_MEMORY_BACKEND|ENABLE_FOLLOWUP_QUESTION
 #### Phase 1: 후속 질문만 활성화 (저위험)
 
 ```bash
-# backend/.env
+# .env
 ANSWER_FORMAT_MODE=fixed
 CONVERSATION_MEMORY_BACKEND=memory
 ENABLE_FOLLOWUP_QUESTIONS=true
@@ -258,7 +258,7 @@ WHERE last_login_at < NOW() - INTERVAL '30 days'
 
 **현재 환경 확인**:
 ```bash
-grep -E "DB_HOST|DB_USER" backend/.env
+grep -E "DB_HOST|DB_USER" .env
 ```
 
 **READ-ONLY 계정 (`ddoksori_ro`) 사용 시**:
@@ -326,7 +326,7 @@ WHERE expires_at IS NOT NULL
 게스트 세션 보관 기간 변경:
 
 ```bash
-# backend/.env
+# .env
 GUEST_SESSION_TTL_HOURS=48  # 24시간 → 48시간으로 연장
 
 # 백엔드 재시작
@@ -638,7 +638,7 @@ SLIDING_WINDOW_SIZE=15
 
 기존 answer cache 활용:
 ```bash
-# backend/.env
+# .env
 ENABLE_ANSWER_CACHE=true
 REDIS_HOST=localhost
 REDIS_PORT=6379

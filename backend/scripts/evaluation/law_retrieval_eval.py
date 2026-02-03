@@ -12,8 +12,9 @@ from typing import Dict, Iterable, List, Optional
 
 from dotenv import load_dotenv
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-ENV_PATH = BACKEND_DIR / ".env"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+BACKEND_DIR = REPO_ROOT / "backend"
+ENV_PATH = REPO_ROOT / ".env"
 load_dotenv(ENV_PATH)
 
 if str(BACKEND_DIR) not in sys.path:
