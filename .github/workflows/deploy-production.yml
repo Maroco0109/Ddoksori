@@ -54,13 +54,16 @@ jobs:
           host: ${{ env.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 5m
+          timeout: 60s
           script: |
+            set -e  # 에러 시 즉시 종료
             cd /home/ubuntu/ddoksori
 
             # Backup current deployment
             echo "Creating backup..."
-            docker compose -f docker-compose.prod.yml config > backups/backup-$(date +%Y%m%d-%H%M%S).yml 2>/dev/null || true
             mkdir -p backups
+            docker compose -f docker-compose.prod.yml config > backups/backup-$(date +%Y%m%d-%H%M%S).yml 2>/dev/null || true
 
             # ECR Login
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
@@ -80,6 +83,53 @@ jobs:
             # Show status
             echo "Deployment complete:"
             docker compose -f docker-compose.prod.yml ps
+
+            # === Smoke Test ===
+            echo "Waiting 30s for services to start..."
+            sleep 30
+
+            echo "=== Running Smoke Tests ==="
+
+            # 1. Health Check (필수 - DB 연결 확인)
+            echo "Testing /health..."
+            HEALTH=$(curl -sf http://localhost:8000/health || echo '{"status":"error"}')
+            if ! echo "$HEALTH" | grep -q '"status":"healthy"'; then
+              echo "FAILED: /health"
+              echo "Response: $HEALTH"
+              echo "=== Backend Logs ==="
+              docker compose -f docker-compose.prod.yml logs --tail 50 backend
+              exit 1
+            fi
+            echo "OK: /health - DB connected"
+
+            # 2. LLM Check (경고만 - 외부 서비스)
+            echo "Testing /health/llm/supervisor..."
+            LLM=$(curl -sf http://localhost:8000/health/llm/supervisor || echo '{"status":"error"}')
+            if echo "$LLM" | grep -q '"status":"healthy"'; then
+              echo "OK: /health/llm/supervisor"
+            else
+              echo "WARNING: /health/llm/supervisor unhealthy (non-blocking)"
+            fi
+
+            # 3. Embedding Check (경고만 - 외부 서비스)
+            echo "Testing /health/embedding..."
+            EMBED=$(curl -sf http://localhost:8000/health/embedding || echo '{"status":"error"}')
+            if echo "$EMBED" | grep -q '"status":"healthy"'; then
+              echo "OK: /health/embedding"
+            else
+              echo "WARNING: /health/embedding unhealthy (non-blocking)"
+            fi
+
+            # 4. Root endpoint (필수 - API 서버 응답)
+            echo "Testing /..."
+            ROOT=$(curl -sf http://localhost:8000/ || echo '')
+            if [ -z "$ROOT" ]; then
+              echo "FAILED: / endpoint returned empty"
+              exit 1
+            fi
+            echo "OK: / endpoint"
+
+            echo "=== Smoke Tests Completed ==="
 
       - name: Health Check
         run: |
