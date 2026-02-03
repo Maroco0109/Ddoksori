@@ -29,7 +29,7 @@
 
 ### 1.2 API 키 확인
 
-**필수 API 키 (backend/.env에 설정):**
+**필수 API 키 (.env에 설정):**
 - `OPENAI_API_KEY` - gpt-4o-mini Supervisor/QueryAnalyst/Draft/Review, Embedding
 - `ANTHROPIC_API_KEY` - Claude 3 Haiku (Fallback용)
 
@@ -73,10 +73,10 @@ ssh -L 19012:localhost:9010 root@<pod-ip-3> -N &
 
 ## 2. 환경 변수 설정
 
-### 2.1 backend/.env 파일 수정
+### 2.1 .env 파일 수정
 
 ```bash
-cd /home/maroco/LLM/backend
+cd /home/maroco/LLM
 cp .env.example .env
 # 아래 값들을 실제 환경에 맞게 수정
 ```
@@ -144,10 +144,10 @@ MAS_SUPERVISOR_CANARY_PERCENT=0
 
 ## 3. Docker 서비스 시작
 
-### 3.0. 루트에 심볼릭 링크
+### 3.0. 루트에 .env 파일 확인
 ```bash
-# .env의 위치를 명시
-ln -s backend/.env .env
+# .env 파일은 프로젝트 루트에 위치해야 합니다
+ls -la .env
 ```
 
 ### 3.1 서비스 시작

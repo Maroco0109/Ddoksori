@@ -12,7 +12,7 @@
 - 원인 추정: adaptive 모드의 LLM 기반 분류 개입 또는 Redis 캐시 오류
 
 ### 이슈 2: RESPONSE_MODE 환경변수 전달
-- `backend/.env`에 `RESPONSE_MODE=adaptive` 설정됨
+- `.env`에 `RESPONSE_MODE=adaptive` 설정됨
 - `docker-compose.yml`의 `${RESPONSE_MODE:-legacy}`와의 관계 정리 필요
 - 배포 가이드에서 A/B 테스트 섹션이 너무 하단에 위치
 
@@ -193,7 +193,7 @@ class GenerationOutput(TypedDict):
 | `agents/query_analysis/agent.py` | 1 | 로그 보강 |
 | `supervisor/nodes/supervisor.py` | 1 | 라우팅 로그 보강 |
 | `docker-compose.yml` | 2 | RESPONSE_MODE 정리 |
-| `backend/.env.example` | 2 | RESPONSE_MODE 문서화 |
+| `.env.example` | 2 | RESPONSE_MODE 문서화 |
 | `docs/guides/deployment-execution-guide.md` | 2 | A/B 섹션 이동 |
 | `api/chat.py` | 3-A | 온보딩 영속화 |
 | `supervisor/state/session.py` | 3-A | 온보딩 복원 |

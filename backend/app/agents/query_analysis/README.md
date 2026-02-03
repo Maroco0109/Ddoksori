@@ -42,7 +42,25 @@ flowchart TD
 
 ## 3. 코드 구조 (Code Structure)
 
-- **`agent.py`**: 에이전트의 모든 로직이 포함된 메인 파일입니다.
+```
+backend/app/agents/query_analysis/
+├── __init__.py              # 모듈 export
+├── agent.py                 # 메인 에이전트 (query_analysis_node)
+├── classifier.py            # 의도 분류 로직
+├── classifiers.py           # 분류기 유틸리티
+├── constants.py             # 상수 정의 (불용어, 키워드 등)
+├── detectors.py             # 쿼리 패턴 감지
+├── expanders.py             # 쿼리 확장 로직 (도메인별)
+├── extractors.py            # 엔티티 추출 (슬롯 필링)
+├── llm_classifier.py        # LLM 기반 분류
+├── llm_expander.py          # LLM 기반 확장
+├── metrics.py               # 품질 메트릭
+├── tools.py                 # 유틸리티 함수
+└── docs/                    # 추가 문서
+```
+
+### 주요 함수
+- **`agent.py`**:
     - `query_analysis_node(state)`: LangGraph 노드 진입점.
     - `_classify_query_type(query)`: 정규식 및 키워드 기반 의도 분류.
     - `_extract_keywords(query)`: 불용어 제거 및 핵심어 추출.
@@ -73,7 +91,11 @@ QueryAnalysisAgent가 LLM 기반 쿼리 확장 및 키워드 추출을 전담합
 이 에이전트에 대한 테스트 코드는 `backend/scripts/testing/query_analysis/` 디렉토리에 위치합니다.
 
 ### 주요 테스트 스크립트
-- **`test_pr2_hybrid.py`**: 하이브리드 의도 분류 및 동의어 처리 로직을 검증합니다.
+- **`test_pr2_hybrid.py`**: 하이브리드 의도 분류 및 동의어 처리 로직
+- **`test_classifier.py`**: 쿼리 분류기 단위 테스트
+- **`test_intent_cache.py`**: 의도 분류 캐싱 검증
+- **`test_ambiguous_queries.py`**: 모호한 쿼리 처리
+- **`test_new_query_types.py`**: 신규 쿼리 유형 감지
 
 ### 실행 방법
 ```bash

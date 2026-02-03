@@ -162,37 +162,261 @@ GitHub repo → **Settings → Secrets and variables → Actions → New reposit
 
 | 포트 | 프로토콜 | 소스 | 용도 |
 |------|---------|------|------|
-| 22 | TCP | My IP (또는 GitHub Actions IP) | SSH |
-| 80 | TCP | 0.0.0.0/0 | Frontend (Nginx) |
-| 8000 | TCP | 0.0.0.0/0 | Backend (FastAPI) |
+| 22 | TCP | My IP | SSH - 개발자 접속용 (콘솔에서 "My IP" 선택) |
+| 80 | TCP | 0.0.0.0/0 | HTTP (Nginx → Backend 프록시) |
 
-> **보안 주의:** Production에서는 8000 포트를 Nginx 뒤에 숨기고 80/443만 노출할 것.
+> **Note:** 8000 포트는 열지 않습니다. Nginx가 Docker 내부 네트워크(`ddoksori-net`)에서
+> Backend:8000으로 프록시하므로 외부 노출이 불필요합니다.
+>
+> **GitHub Actions의 SSH 접근 (포트 22):**
+> CI/CD 배포 시 GitHub Actions Runner가 SSH로 EC2에 접속해야 합니다.
+> Runner의 IP는 매번 바뀌므로, **배포 직전에 Runner IP를 보안 그룹에 추가하고 배포 후 제거**하는
+> "동적 IP 화이트리스트" 방식을 사용합니다. 설정 방법은 아래 **B-1a**를 참조하세요.
 
-#### B-2. EC2 초기 설정
+#### B-1a. GitHub Actions SSH 동적 IP 화이트리스트 설정
 
-SSH 접속 후 실행:
+GitHub Actions Runner는 매번 다른 IP에서 실행됩니다.
+**배포 시에만** Runner IP를 보안 그룹에 열고, **끝나면 즉시 닫는** 방식이 업계 표준입니다.
+
+> **다른 방식과 비교:**
+>
+> | 방식 | 보안 | 관리 부담 | 비고 |
+> |------|:----:|:---------:|------|
+> | **동적 IP 화이트리스트 (채택)** | ★★★★ | 낮음 | 배포 중 몇 분만 포트 22 열림 |
+> | 전체 IP 대역 등록 (Prefix List) | ★★ | 높음 | 수백 개 IP, 주기적 갱신 필요 |
+> | 0.0.0.0/0 개방 | ★ | 없음 | 포트 22가 항상 전체 공개 |
+> | AWS SSM Send-Command | ★★★★★ | 중간 | SSH 자체를 안 씀 (고급) |
+
+##### 작동 원리
+
+```
+배포 워크플로우 시작
+  │
+  ├─ 1) Runner의 퍼블릭 IP 확인 (예: 20.1.2.3)
+  ├─ 2) 보안 그룹에 SSH 규칙 추가: 20.1.2.3/32 → 포트 22
+  ├─ 3) SSH로 EC2 접속 → docker compose pull → up -d
+  ├─ 4) 헬스체크
+  └─ 5) 보안 그룹에서 SSH 규칙 제거: 20.1.2.3/32 (if: always → 실패해도 반드시 실행)
+```
+
+##### 1단계: CI/CD 전용 보안 그룹 생성
+
+기존 보안 그룹의 규칙과 섞이지 않도록 **별도 보안 그룹**을 만들어 EC2에 추가합니다.
+
+```
+EC2 → Security Groups → Create security group
+
+  이름: ddoksori-github-actions-ssh
+  설명: Temporary SSH access for GitHub Actions deployment
+  VPC: EC2와 동일한 VPC 선택
+  인바운드 규칙: 비워둠 (워크플로우가 동적으로 관리)
+```
+
+생성 후 **보안 그룹 ID** (예: `sg-0abc1234def56789`) 를 메모합니다.
+
+그 다음 이 보안 그룹을 EC2 인스턴스에 **추가** 연결합니다:
+
+```
+EC2 → 인스턴스 선택 → Actions → Security → Change security groups
+  → "ddoksori-github-actions-ssh" 추가 → Save
+```
+
+> **왜 별도 보안 그룹?**
+> 워크플로우가 `authorize` / `revoke`를 반복하므로, 기존 보안 그룹의 규칙에 영향을 주지 않기 위해
+> 격리된 보안 그룹을 사용합니다. EC2 인스턴스에는 보안 그룹을 여러 개 붙일 수 있습니다.
+
+##### 2단계: IAM 정책 생성 & Role에 연결
+
+GitHub Actions의 OIDC Role이 보안 그룹을 수정할 수 있도록 권한을 추가합니다.
+
+```
+IAM → Policies → Create policy → JSON 탭에 붙여넣기:
+```
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubActionsSecurityGroupAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:DescribeSecurityGroups"
+      ],
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:<AWS_ACCOUNT_ID>:security-group/<SG_ID>"
+      ]
+    }
+  ]
+}
+```
+
+> **`<AWS_ACCOUNT_ID>`**: AWS 계정 ID (12자리 숫자, 콘솔 우측 상단에서 확인)
+> **`<SG_ID>`**: 1단계에서 생성한 보안 그룹 ID (예: `sg-0abc1234def56789`)
+
+정책 이름: `ddoksori-github-actions-sg-policy`
+
+생성 후 기존 OIDC Role (`ddoksori-github-actions`)에 이 정책을 **연결(Attach)**합니다:
+
+```
+IAM → Roles → ddoksori-github-actions → Permissions → Add permissions
+  → Attach policies → "ddoksori-github-actions-sg-policy" 선택 → Add
+```
+
+##### 3단계: GitHub Secret 추가
+
+```
+GitHub repo → Settings → Secrets and variables → Actions → New repository secret
+
+  Name:  AWS_SECURITY_GROUP_ID
+  Value: sg-0abc1234def56789    (1단계에서 메모한 보안 그룹 ID)
+```
+
+##### 4단계: deploy 워크플로우에 IP 추가/제거 스텝 적용
+
+`deploy-staging.yml`과 `deploy-production.yml` 모두에 적용합니다.
+
+**변경 전 (현재):**
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - name: Configure AWS credentials
+    # ...
+  - name: Get ECR Login
+    # ...
+  - name: Deploy to Staging     # ← SSH 접속
+    uses: appleboy/ssh-action@v1.0.0
+    # ...
+  - name: Health Check
+    # ...
+```
+
+**변경 후:**
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Configure AWS credentials
+    uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+      aws-region: ${{ env.AWS_REGION }}
+
+  # ===== 동적 IP 화이트리스트: 시작 =====
+  - name: Get Runner IP
+    id: runner-ip
+    uses: haythem/public-ip@v1.3
+
+  - name: Open SSH for Runner IP
+    run: |
+      aws ec2 authorize-security-group-ingress \
+        --group-id ${{ secrets.AWS_SECURITY_GROUP_ID }} \
+        --protocol tcp \
+        --port 22 \
+        --cidr ${{ steps.runner-ip.outputs.ipv4 }}/32
+      echo "✓ Opened SSH for ${{ steps.runner-ip.outputs.ipv4 }}/32"
+  # ===== 동적 IP 화이트리스트: 끝 =====
+
+  - name: Get ECR Login
+    id: ecr-login
+    uses: aws-actions/amazon-ecr-login@v2
+
+  - name: Deploy to Staging
+    uses: appleboy/ssh-action@v1.0.0
+    with:
+      host: ${{ env.EC2_HOST }}
+      username: ubuntu
+      key: ${{ secrets.EC2_SSH_KEY }}
+      script: |
+        cd /home/ubuntu/ddoksori
+        # ... (기존 배포 스크립트 동일)
+
+  - name: Health Check
+    run: |
+      # ... (기존 헬스체크 동일)
+
+  # ===== 동적 IP 화이트리스트: 정리 (반드시 실행) =====
+  - name: Close SSH for Runner IP
+    if: always()
+    run: |
+      aws ec2 revoke-security-group-ingress \
+        --group-id ${{ secrets.AWS_SECURITY_GROUP_ID }} \
+        --protocol tcp \
+        --port 22 \
+        --cidr ${{ steps.runner-ip.outputs.ipv4 }}/32
+      echo "✓ Closed SSH for ${{ steps.runner-ip.outputs.ipv4 }}/32"
+  # ===== 동적 IP 화이트리스트: 끝 =====
+
+  - name: Discord Notification - Success
+    # ... (기존 동일)
+```
+
+> **핵심 포인트:**
+> - `if: always()` → 배포가 실패해도 **반드시** IP를 제거합니다 (보안 누수 방지)
+> - `haythem/public-ip@v1.3` → Runner의 퍼블릭 IPv4를 가져오는 검증된 Action
+> - `/32` → 정확히 해당 Runner IP 1개만 허용 (가장 좁은 범위)
+> - 보안 그룹 규칙이 배포 중 몇 분만 존재하므로 공격 표면이 최소화됩니다
+
+##### 전체 설정 체크리스트
+
+- [ ] 1단계: `ddoksori-github-actions-ssh` 보안 그룹 생성 (인바운드 비움)
+- [ ] 1단계: EC2 인스턴스에 보안 그룹 추가 연결
+- [ ] 2단계: IAM 정책 생성 (`ec2:AuthorizeSecurityGroupIngress`, `RevokeSecurityGroupIngress`)
+- [ ] 2단계: 기존 OIDC Role에 정책 Attach
+- [ ] 3단계: GitHub Secret `AWS_SECURITY_GROUP_ID` 등록
+- [ ] 4단계: `deploy-staging.yml`에 IP 추가/제거 스텝 적용
+- [ ] 4단계: `deploy-production.yml`에 IP 추가/제거 스텝 적용
+- [ ] 테스트: main에 push → 배포 성공 → Actions 로그에서 "Opened SSH" / "Closed SSH" 확인
+
+#### B-2. 탄력적 IP (Elastic IP) 할당
+
+EC2 퍼블릭 IP는 재부팅 시 변경되므로, 고정 IP를 할당해야 배포 워크플로우가 안정적으로 동작합니다.
+
+1. **EC2 → Elastic IPs → Allocate Elastic IP address** 클릭
+2. 할당된 IP 선택 → **Actions → Associate Elastic IP address**
+3. 대상 EC2 인스턴스(`ddoksori-staging`) 선택 → Associate
+
+> **비용:** EC2에 연결된 상태면 **무료**. 연결하지 않고 방치하면 과금 발생.
+
+할당된 IP를 `deploy-staging.yml`의 `EC2_HOST`와 도메인 DNS A 레코드에 설정합니다.
+
+#### B-3. EC2 초기 설정 (터미널)
+
+EC2는 빈 서버이므로 Docker 등을 직접 설치해야 합니다.
+로컬 터미널에서 SSH로 접속한 뒤 아래 명령어를 실행합니다.
 
 ```bash
-# Docker 설치 (Ubuntu)
+# 1) SSH 접속 (로컬 터미널에서 실행)
+ssh -i "다운받은키.pem" ubuntu@<탄력적IP>
+
+# 2) Docker + 기본 패키지 설치
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 awscli curl
+sudo apt-get install -y docker.io docker-compose-v2 curl unzip
 sudo systemctl start docker && sudo systemctl enable docker
 sudo usermod -aG docker ubuntu
 
-# 재접속 (docker 그룹 반영)
-exit
-# SSH 재접속 후:
+# 3) AWS CLI v2 설치 (Ubuntu 24.04에서는 apt로 설치 불가)
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+rm -rf aws awscliv2.zip
 
-# 확인
+# 4) 재접속 (docker 그룹 반영을 위해 필요)
+exit
+ssh -i "다운받은키.pem" ubuntu@<탄력적IP>
+
+# 5) 설치 확인
 docker --version
 docker compose version
 aws --version
 
-# 프로젝트 디렉토리 생성
+# 6) 프로젝트 디렉토리 생성
 mkdir -p /home/ubuntu/ddoksori/backups
 ```
 
-#### B-3. EC2에 IAM Role 연결
+#### B-4. EC2에 IAM Role 연결
 
 EC2가 ECR에서 이미지를 pull하려면 별도 IAM Role이 필요:
 
@@ -206,22 +430,36 @@ EC2가 ECR에서 이미지를 pull하려면 별도 IAM Role이 필요:
 
 > **Note:** AWS Secrets Manager도 사용할 경우 `SecretsManagerReadWrite` 정책도 추가.
 
-#### B-4. docker-compose.prod.yml 배치
+#### B-5. 프로젝트 코드 배치 (git clone)
 
-EC2에 `docker-compose.prod.yml`을 배치:
+EC2에서 프로젝트를 clone합니다. **반드시 `.` (현재 디렉토리)를 붙여야 합니다.**
 
 ```bash
-# 방법 1: scp로 로컬에서 전송
-scp -i <key.pem> docker-compose.prod.yml ubuntu@<EC2_HOST>:/home/ubuntu/ddoksori/
-
-# 방법 2: EC2에서 git clone (첫 배포 시)
+# EC2에서 실행 (B-3에서 이미 /home/ubuntu/ddoksori/ 생성됨)
 cd /home/ubuntu/ddoksori
-git clone <repo-url> .
+git clone <repo-url> .    # ← 마지막 "." 필수!
+```
+
+> **⚠️ 주의:** `.` 없이 `git clone <url>`을 실행하면 `/home/ubuntu/ddoksori/LLM/` 하위에
+> 코드가 생성되어 워크플로우 경로(`/home/ubuntu/ddoksori/`)와 불일치합니다.
+>
+> 만약 이미 잘못 clone한 경우:
+> ```bash
+> # 잘못된 하위 디렉토리 내용물을 상위로 이동
+> shopt -s dotglob
+> mv /home/ubuntu/ddoksori/LLM/* /home/ubuntu/ddoksori/
+> rmdir /home/ubuntu/ddoksori/LLM
+> ```
+
+clone 후 확인:
+```bash
+ls /home/ubuntu/ddoksori/docker-compose.prod.yml   # 파일이 보여야 정상
 ```
 
 **Phase B 완료 체크리스트:**
 - [ ] EC2 인스턴스 생성 (t3.small, Ubuntu 24.04 LTS)
-- [ ] 보안 그룹 설정 (22, 80, 8000)
+- [ ] 보안 그룹 설정 (22, 80)
+- [ ] 탄력적 IP 할당 및 EC2 연결
 - [ ] Docker + Docker Compose 설치
 - [ ] EC2 IAM Role 연결 (ECR ReadOnly)
 - [ ] `/home/ubuntu/ddoksori/` 디렉토리 + `docker-compose.prod.yml` 배치
@@ -241,25 +479,36 @@ git clone <repo-url> .
 
 > **EC2_SSH_KEY 등록 방법:** `.pem` 파일을 텍스트 편집기로 열어 `-----BEGIN RSA PRIVATE KEY-----`부터 `-----END RSA PRIVATE KEY-----`까지 전체 복사하여 등록.
 
-#### C-2. 배포 워크플로우 확인
+#### C-2. EC2_HOST 설정 → push (코드 수정)
 
-`.github/workflows/` 에 다음 파일이 존재하는지 확인:
-- `deploy-staging.yml` - Staging 배포
-- `deploy-production.yml` - Production 배포 + 자동 롤백
+B-2에서 할당한 탄력적 IP(또는 도메인)를 워크플로우에 반영합니다.
 
-**deploy-staging.yml 내 EC2_HOST 확인:**
+**수정 대상 파일 2개:**
+
+`deploy-staging.yml`:
 ```yaml
 env:
-  EC2_HOST: staging.ddoksori.com  # 실제 EC2 퍼블릭 IP 또는 도메인으로 교체
+  EC2_HOST: <탄력적IP 또는 staging.ddoksori.com>
 ```
+
+`deploy-production.yml`:
+```yaml
+env:
+  EC2_HOST: <탄력적IP 또는 ddoksori.com>
+```
+
+> **도메인이 없으면** 탄력적 IP를 직접 넣으면 됩니다 (예: `3.35.xxx.xxx`).
+> **도메인이 있으면** DNS A 레코드를 탄력적 IP로 연결 후 도메인을 입력합니다.
+
+수정 후 commit & push합니다.
 
 #### C-3. Staging 배포 테스트
 
 1. main 브랜치에 코드 머지
 2. `build.yml` 성공 → `deploy-staging.yml` 자동 실행
 3. GitHub Actions 탭에서 배포 로그 확인
-4. `http://<EC2_IP>:8000/health` 접속하여 헬스체크 확인
-5. `http://<EC2_IP>` 접속하여 Frontend 확인
+4. `http://<탄력적IP>/health` 접속하여 헬스체크 확인 (Nginx가 Backend로 프록시)
+5. `http://<탄력적IP>` 접속하여 Frontend 확인
 
 #### C-4. Production 배포 테스트
 
@@ -297,9 +546,10 @@ env:
 | **A-6** | 워크플로우 파일 확인 | ⬜ 미진행 |
 | **A-7** | CI + 빌드 검증 | ⬜ 미진행 |
 | **B-1** | EC2 인스턴스 생성 | ⬜ 미진행 |
-| **B-2** | EC2 초기 설정 | ⬜ 미진행 |
-| **B-3** | EC2 IAM Role 연결 | ⬜ 미진행 |
-| **B-4** | docker-compose.prod.yml 배치 | ⬜ 미진행 |
+| **B-2** | 탄력적 IP 할당 | ⬜ 미진행 |
+| **B-3** | EC2 초기 설정 | ⬜ 미진행 |
+| **B-4** | EC2 IAM Role 연결 | ⬜ 미진행 |
+| **B-5** | docker-compose.prod.yml 배치 | ⬜ 미진행 |
 | **C-1** | 추가 GitHub Secrets 등록 | ⬜ 미진행 |
 | **C-2** | 배포 워크플로우 확인 | ⬜ 미진행 |
 | **C-3** | Staging 배포 테스트 | ⬜ 미진행 |
@@ -952,7 +1202,7 @@ volumes:
 
 **구현 완료 파일:**
 - `backend/app/common/secrets.py` - AWS Secrets Manager SDK 래퍼, os.environ 사전 주입
-  - SECRET_CATEGORIES (라인 27-35): database, llm, oauth/google, oauth/kakao, oauth/naver, security, infra
+  - SECRET_CATEGORIES (라인 27-35): database, llm, oauth/google, oauth/naver, security, infra
   - `inject_aws_secrets()` → `get_config()` 호출 전에 환경변수 주입
 
 **환경별 시크릿 흐름:**
@@ -1352,7 +1602,6 @@ GitHub Repository → Settings → Secrets and variables → Actions
 | `ddoksori/{env}/database` | DB_HOST, DB_USER, DB_PASSWORD, DATABASE_URL |
 | `ddoksori/{env}/llm` | OPENAI_API_KEY, ANTHROPIC_API_KEY |
 | `ddoksori/{env}/oauth/google` | GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET |
-| `ddoksori/{env}/oauth/kakao` | KAKAO_CLIENT_ID, KAKAO_CLIENT_SECRET |
 | `ddoksori/{env}/oauth/naver` | NAVER_CLIENT_ID, NAVER_CLIENT_SECRET |
 | `ddoksori/{env}/security` | JWT_SECRET_KEY, SECRET_KEY |
 | `ddoksori/{env}/infra` | HF_TOKEN, EXAONE_RUNPOD_API_KEY |
@@ -1422,7 +1671,7 @@ GitHub Repository → Settings → Secrets and variables → Actions
 - 아카이브된 배포 가이드: `docs/_archive/plans/deploy/`
 - 현재 Docker 설정 (개발): `docker-compose.yml`
 - 테스트 설정: `backend/pytest.ini`
-- 환경변수 템플릿: `backend/.env.example`
+- 환경변수 템플릿: `.env.example`
 - AWS Secrets Manager 설계: `docs/plans/2026-01-29-aws-secrets-manager-design.md`
 - MAS v2 아키텍처 설계: `docs/plans/2026-01-28-mas-architecture-v2-design.md`
 

@@ -218,26 +218,66 @@ backend/
 │   │   └── query_criteria.py         # 분쟁조정기준 쿼리 예제
 │   │
 │   └── testing/                      # 테스트 스크립트
-│       ├── conftest.py               # pytest 설정
-│       │                             # - API 클라이언트 fixture
-│       │                             # - 테스트 환경 설정
+│       ├── conftest.py               # pytest 공통 Fixture
+│       ├── test_mas_architecture.py  # MAS 아키텍처 통합 테스트
+│       ├── README.md                 # 테스트 가이드
 │       │
-│       ├── validate_hybrid_retrieval.py
-│       │                             # 하이브리드 검색 검증
-│       │
-│       ├── verify_phase5_api.py      # Phase 5 API 검증
-│       │
-│       ├── api/                      # API 테스트
-│       │   ├── test_api_endpoints.py # 엔드포인트 테스트
-│       │   ├── test_api_concurrent.py # 동시성 테스트
-│       │   └── test_api_error_handling.py # 에러 처리 테스트
-│       │
-│       ├── data/                     # 데이터 테스트
-│       │   └── test_data_quality.py  # 데이터 품질 테스트
-│       │
-│       └── integration/              # 통합 테스트
-│           ├── test_api_integration.py # API 통합 테스트
-│           └── test_docker_environment.py # Docker 환경 테스트
+│       ├── agents/                   # 에이전트 기본 테스트
+│       │   └── test_base_agent.py
+│       ├── answer_generation/        # 답변 생성 테스트
+│       │   ├── test_followup.py
+│       │   ├── test_formats.py
+│       │   └── test_specialist_agency.py
+│       ├── auth/                     # 인증 테스트
+│       │   └── test_jwt_dependencies.py
+│       ├── data/                     # 데이터 수집 테스트
+│       │   └── test_collect_training_data.py
+│       ├── domain/                   # 도메인 분류 테스트
+│       │   ├── golden_set.py
+│       │   └── test_domain_classifier.py
+│       ├── e2e/                      # E2E 통합 테스트
+│       │   ├── test_merged_graph.py
+│       │   ├── test_merged_retrieval.py
+│       │   ├── test_mock_scenarios.py
+│       │   ├── test_system_architecture.py
+│       │   └── test_unified_retriever.py
+│       ├── generation/               # 생성 노드 테스트
+│       ├── legal_review/             # 법률 검토 테스트
+│       │   ├── test_enhanced_review.py
+│       │   └── test_review_logic.py
+│       ├── llm/                      # LLM 호환성 검증
+│       │   └── verify_compatibility.py
+│       ├── persistence/              # 대화 영속화 테스트
+│       │   └── test_conversation_db_unit.py
+│       ├── query_analysis/           # 질의 분석 테스트
+│       │   ├── test_ambiguous_queries.py
+│       │   ├── test_classifier.py
+│       │   ├── test_intent_cache.py
+│       │   ├── test_new_query_types.py
+│       │   └── test_pr2_hybrid.py
+│       ├── retrieval/                # 검색 테스트
+│       │   └── test_embedding_client.py
+│       └── supervisor/               # MAS Supervisor 테스트 (20개)
+│           ├── test_adaptive_rag.py
+│           ├── test_agent_communication.py
+│           ├── test_agent_metrics.py
+│           ├── test_agent_trace.py
+│           ├── test_answer_cache.py
+│           ├── test_conversation_memory.py
+│           ├── test_conversation_phase_manager.py
+│           ├── test_e2e_queries.py
+│           ├── test_fast_path.py
+│           ├── test_followup_with_context.py
+│           ├── test_mas_integration.py
+│           ├── test_mas_supervisor_graph.py
+│           ├── test_memory_db.py
+│           ├── test_progressive_disclosure.py
+│           ├── test_retrieval_merge.py
+│           ├── test_retry_context.py
+│           ├── test_selective_retrieval.py
+│           ├── test_sufficiency.py
+│           ├── test_supervisor.py
+│           └── test_supervisor_state.py
 │
 └── 📋 logs/ - 로그 저장소
     └── rag/                          # RAG 파이프라인 로그

@@ -241,8 +241,10 @@ python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarific
 
 ### 5.3 에러 처리 테스트
 ```bash
+# Note: test_api_error_handling.py was removed in test refactoring (branch refactor/47-test-refactor)
+# Use supervisor tests for error handling validation:
 cd backend
-python -m pytest scripts/testing/api/test_api_error_handling.py -v -p no:asyncio
+python -m pytest scripts/testing/supervisor/test_retry_context.py -v -p no:asyncio
 ```
 
 ### 5.4 프론트엔드 개발 서버
@@ -525,8 +527,8 @@ python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestReviewNode 
 # Clarification 노드 테스트
 python -m pytest scripts/testing/orchestrator/test_pr2_nodes.py::TestAskClarificationNode -v -p no:asyncio
 
-# 에러 처리 테스트
-python -m pytest scripts/testing/api/test_api_error_handling.py -v -p no:asyncio
+# 에러 처리 테스트 (test_api_error_handling.py was removed in test refactoring)
+python -m pytest scripts/testing/supervisor/test_retry_context.py -v -p no:asyncio
 
 # Review 평가
 python -m scripts.evaluation.evaluate_review \

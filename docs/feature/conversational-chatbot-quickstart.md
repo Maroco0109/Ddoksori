@@ -14,7 +14,7 @@
 - ✅ **유연한 답변 형식**: 쿼리 타입별 동적 답변 구조 (3가지 형식)
 - ✅ **장기 메모리 (30턴)**: PostgreSQL 기반 대화 영속화
 - ✅ **후속 질문**: 템플릿 기반 맥락적 질문 생성 (29개 템플릿)
-- ✅ **소셜 로그인**: Google, Kakao, Naver OAuth 2.0 인증
+- ✅ **소셜 로그인**: Google, Naver OAuth 2.0 인증
 - ✅ **게스트 세션 관리**: 24시간 TTL 자동 삭제
 
 ---
@@ -23,7 +23,7 @@
 
 ### 1. 환경 변수 설정
 
-**Backend** (`backend/.env`):
+**Backend** (`.env`):
 ```bash
 # JWT Secret (필수 - 32자 이상)
 JWT_SECRET_KEY=change-this-to-random-32-char-string-in-production
@@ -42,7 +42,6 @@ CLEANUP_INTERVAL_HOURS=1
 # OAuth (나중에 설정 가능)
 GOOGLE_CLIENT_ID=your-client-id-here
 GOOGLE_CLIENT_SECRET=your-secret-here
-# KAKAO_CLIENT_ID=...
 # NAVER_CLIENT_ID=...
 ```
 
@@ -53,7 +52,7 @@ GOOGLE_CLIENT_SECRET=your-secret-here
 **현재 환경 확인**:
 ```bash
 # .env 파일에서 DB 설정 확인
-grep -E "DB_HOST|DB_USER|USE_RDS_FOR_TESTS" backend/.env
+grep -E "DB_HOST|DB_USER|USE_RDS_FOR_TESTS" .env
 ```
 
 #### 옵션 A: 로컬 테스트 환경 (권장)
@@ -356,7 +355,7 @@ psql -h $DB_HOST -U $DB_USER -d ddoksori -c "\du $DB_USER"
 **해결**:
 ```bash
 # .env 확인
-grep CONVERSATION_MEMORY_BACKEND backend/.env
+grep CONVERSATION_MEMORY_BACKEND .env
 
 # 출력이 db여야 함
 CONVERSATION_MEMORY_BACKEND=db
@@ -488,10 +487,9 @@ grep "Deleted.*expired guest conversations" backend/logs/app.log
 ### 배포 전
 
 - [ ] `JWT_SECRET_KEY` 변경 (최소 32자, cryptographically secure)
-- [ ] OAuth Client ID/Secret 발급 (Google, Kakao, Naver)
+- [ ] OAuth Client ID/Secret 발급 (Google, Naver)
 - [ ] Production Redirect URI 등록:
   - Google: `https://your-domain.com/api/auth/google/callback`
-  - Kakao: `https://your-domain.com/api/auth/kakao/callback`
   - Naver: `https://your-domain.com/api/auth/naver/callback`
 - [ ] `.env` BACKEND_URL/FRONTEND_URL 변경
 - [ ] DB 마이그레이션 실행 (production DB)
