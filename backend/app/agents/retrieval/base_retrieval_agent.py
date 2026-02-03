@@ -36,8 +36,6 @@ def _get_db_config() -> Dict[str, str]:
     return conn
 
 
-
-
 class BaseRetrievalAgent(BaseAgent):
     """Retrieval Agent 공통 베이스 - 검색 결과 포맷팅 및 에러 처리 공유"""
 

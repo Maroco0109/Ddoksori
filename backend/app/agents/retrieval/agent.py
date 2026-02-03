@@ -54,8 +54,6 @@ def _get_db_config() -> Dict[str, str]:
     }
 
 
-
-
 RETRIEVER_TYPE_STRUCTURED = "structured"
 RETRIEVER_TYPE_HYBRID = "hybrid"
 RETRIEVER_TYPE_LAW = "law"
