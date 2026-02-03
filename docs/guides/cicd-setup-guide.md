@@ -377,6 +377,7 @@ aws ecr describe-images \
 | Name | `ddoksori-staging` |
 | AMI | Ubuntu 24.04 LTS |
 | Instance type | `t3.medium` (~$30/월, 4GB RAM 권장) |
+| Storage (EBS) | **30GB gp3** (Docker 이미지 + 여유 공간) |
 | Key pair | 새로 생성 → `.pem` 파일 다운로드 & 안전 보관 |
 | Network | 기본 VPC |
 | Security group | 아래 참조 |
@@ -513,7 +514,20 @@ aws --version
 
 # 6) 프로젝트 디렉토리 생성
 mkdir -p /home/ubuntu/ddoksori/backups
+
+# 7) Swap 설정 (4GB - OOM 방지 필수)
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# 8) Swap 확인
+free -h
+# 출력 예: Swap: 4.0Gi
 ```
+
+> **⚠️ Swap 필수**: Backend가 PyTorch/임베딩 모델을 로드할 때 4GB RAM으로 부족할 수 있습니다. Swap이 없으면 OOM(Out of Memory)으로 인스턴스가 응답 불가 상태가 됩니다.
 
 ---
 
