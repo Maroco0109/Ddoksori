@@ -206,8 +206,12 @@ class ModelConfig(BaseSettings):
     supervisor: str = Field(default="gpt-4o", description="Supervisor 에이전트 모델")
     draft_agent: str = Field(default="gpt-4o", description="Draft 에이전트 모델")
     review_agent: str = Field(default="gpt-4o", description="Review 에이전트 모델")
-    query_classifier: str = Field(default="gpt-4o-mini", description="Query Classifier 에이전트 모델")
-    query_expander: str = Field(default="gpt-4o-mini", description="Query Expander 에이전트 모델")
+    query_classifier: str = Field(
+        default="gpt-4o-mini", description="Query Classifier 에이전트 모델"
+    )
+    query_expander: str = Field(
+        default="gpt-4o-mini", description="Query Expander 에이전트 모델"
+    )
 
 
 class PortConfig(BaseSettings):
