@@ -5,7 +5,6 @@ S3-PR1: OpenAI EmbeddingClient 단위 테스트
     pytest backend/scripts/testing/retrieval/test_embedding_client.py -v
 """
 
-import os
 from unittest.mock import Mock, patch
 
 import pytest

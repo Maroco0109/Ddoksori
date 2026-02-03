@@ -151,8 +151,7 @@ class EmbeddingAdapter:
         self.dimensions = EMBEDDING_DIMENSIONS
         self.client = EmbeddingClient()
         logger.info(
-            f"[EmbeddingAdapter] Using OpenAI embeddings "
-            f"(dimensions={self.dimensions})"
+            f"[EmbeddingAdapter] Using OpenAI embeddings (dimensions={self.dimensions})"
         )
 
     def embed(self, texts: List[str]) -> List[List[float]]:
