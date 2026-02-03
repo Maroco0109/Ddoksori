@@ -376,7 +376,7 @@ aws ecr describe-images \
 |------|---|
 | Name | `ddoksori-staging` |
 | AMI | Ubuntu 24.04 LTS |
-| Instance type | `t3.small` (~$15/월) |
+| Instance type | `t3.medium` (~$30/월, 4GB RAM 권장) |
 | Key pair | 새로 생성 → `.pem` 파일 다운로드 & 안전 보관 |
 | Network | 기본 VPC |
 | Security group | 아래 참조 |
@@ -1143,12 +1143,12 @@ An error occurred (AccessDeniedException) when calling the GetSecretValue operat
 
 ## 비용 참고 (AWS)
 
-- EC2 t3.small: ~$15/월
+- EC2 t3.medium: ~$30/월 (4GB RAM, 권장)
 - RDS db.t3.micro: ~$15/월
 - ECR: ~$1/월 (스토리지)
 - S3 (DB 백업): ~$1/월
 - Secrets Manager: ~$6/월 (7개 시크릿 x 2환경)
-- **예상 총 비용**: $30-70/월
+- **예상 총 비용**: $50-80/월
 
 ---
 
