@@ -668,13 +668,15 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
 
     # Merge terminology violations into violation_details
     for tv in terminology_violations:
-        violation_details.append({
-            "type": tv["type"],
-            "description": tv["description"],
-            "location": "",
-            "severity": tv["severity"],
-            "suggestion": tv.get("suggestion"),
-        })
+        violation_details.append(
+            {
+                "type": tv["type"],
+                "description": tv["description"],
+                "location": "",
+                "severity": tv["severity"],
+                "suggestion": tv.get("suggestion"),
+            }
+        )
 
     # 6. 심각한 위반 개수 계산
     critical_count = sum(1 for v in violation_details if v["severity"] == "critical")

@@ -28,9 +28,18 @@ class TerminologyChecker:
 
     # Forbidden structural headers
     FORBIDDEN_HEADERS = [
-        "[공감]", "[가이드]", "[출처]", "[돌파 논리]", "[사건 요약]",
-        "[상황 정리]", "[법적 근거]", "[근거 안내]", "[절차 안내]",
-        "[법률]", "[해결기준]", "[유사사례]",
+        "[공감]",
+        "[가이드]",
+        "[출처]",
+        "[돌파 논리]",
+        "[사건 요약]",
+        "[상황 정리]",
+        "[법적 근거]",
+        "[근거 안내]",
+        "[절차 안내]",
+        "[법률]",
+        "[해결기준]",
+        "[유사사례]",
     ]
 
     def check(self, response: str, input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -65,7 +74,7 @@ class TerminologyChecker:
             # Check if the term has a parenthetical annotation nearby
             # Pattern: term followed by ( ... ) within reasonable distance
             # Allow flexible whitespace and minor particle differences
-            pattern = rf'{re.escape(term)}\s*\(([^)]+)\)'
+            pattern = rf"{re.escape(term)}\s*\(([^)]+)\)"
             matches = re.findall(pattern, response)
 
             if not matches:
@@ -75,21 +84,23 @@ class TerminologyChecker:
                 # But standalone "해제" without annotation is a violation
 
                 # Find standalone occurrences (not inside parentheses)
-                standalone_pattern = rf'(?<!\()(?<!\（){re.escape(term)}(?!\s*[\(（])'
+                standalone_pattern = rf"(?<!\()(?<!\（){re.escape(term)}(?!\s*[\(（])"
                 standalone_matches = re.findall(standalone_pattern, response)
 
                 # Also check if there's at least one annotated occurrence
-                annotated_pattern = rf'{re.escape(term)}\s*[\(（]'
+                annotated_pattern = rf"{re.escape(term)}\s*[\(（]"
                 has_annotation = bool(re.search(annotated_pattern, response))
 
                 if standalone_matches and not has_annotation:
-                    violations.append({
-                        "type": "terminology_missing",
-                        "description": f"용어 '{term}'에 대한 괄호 풀이가 누락되었습니다. "
-                                       f"올바른 형식: {term}({expected_meaning})",
-                        "severity": "critical",
-                        "suggestion": f"{term}({expected_meaning})",
-                    })
+                    violations.append(
+                        {
+                            "type": "terminology_missing",
+                            "description": f"용어 '{term}'에 대한 괄호 풀이가 누락되었습니다. "
+                            f"올바른 형식: {term}({expected_meaning})",
+                            "severity": "critical",
+                            "suggestion": f"{term}({expected_meaning})",
+                        }
+                    )
             else:
                 # Check if the meaning matches (allow minor particle differences)
                 for match in matches:
@@ -97,26 +108,29 @@ class TerminologyChecker:
                     # Core meaning check: key words must be present
                     # Extract key content words from expected meaning
                     if not self._meanings_match(match_clean, expected_meaning):
-                        violations.append({
-                            "type": "terminology_mismatch",
-                            "description": f"용어 '{term}'의 풀이가 사전과 다릅니다. "
-                                           f"현재: {term}({match_clean}), "
-                                           f"올바른 형식: {term}({expected_meaning})",
-                            "severity": "critical",
-                            "suggestion": f"{term}({expected_meaning})",
-                        })
+                        violations.append(
+                            {
+                                "type": "terminology_mismatch",
+                                "description": f"용어 '{term}'의 풀이가 사전과 다릅니다. "
+                                f"현재: {term}({match_clean}), "
+                                f"올바른 형식: {term}({expected_meaning})",
+                                "severity": "critical",
+                                "suggestion": f"{term}({expected_meaning})",
+                            }
+                        )
 
         return violations
 
     def _meanings_match(self, actual: str, expected: str) -> bool:
         """Check if two meanings match (allowing minor differences like particles)."""
+
         # Remove common particles and whitespace for comparison
         def normalize(text: str) -> str:
             # Remove particles and whitespace
-            text = re.sub(r'\s+', '', text)
+            text = re.sub(r"\s+", "", text)
             # Remove common particles
-            for particle in ['은', '는', '이', '가', '을', '를', '의', '에', '로']:
-                text = text.replace(particle, '')
+            for particle in ["은", "는", "이", "가", "을", "를", "의", "에", "로"]:
+                text = text.replace(particle, "")
             return text
 
         actual_norm = normalize(actual)
@@ -142,41 +156,49 @@ class TerminologyChecker:
         violations = []
         for header in self.FORBIDDEN_HEADERS:
             if header in response:
-                violations.append({
-                    "type": "forbidden_header",
-                    "description": f"금지된 구조적 헤더 '{header}'가 노출되었습니다.",
-                    "severity": "critical",
-                    "suggestion": f"'{header}' 헤더를 제거하고 자연스러운 문장으로 전환하세요.",
-                })
+                violations.append(
+                    {
+                        "type": "forbidden_header",
+                        "description": f"금지된 구조적 헤더 '{header}'가 노출되었습니다.",
+                        "severity": "critical",
+                        "suggestion": f"'{header}' 헤더를 제거하고 자연스러운 문장으로 전환하세요.",
+                    }
+                )
         return violations
 
     def _check_bold_markdown(self, response: str) -> List[Dict[str, Any]]:
         """Check for forbidden bold markdown."""
         violations = []
         if "**" in response:
-            violations.append({
-                "type": "format_violation",
-                "description": "마크다운 볼드체(**)가 포함되어 있습니다.",
-                "severity": "critical",
-                "suggestion": "볼드체를 제거하고 『』 기호나 줄바꿈으로 강조하세요.",
-            })
+            violations.append(
+                {
+                    "type": "format_violation",
+                    "description": "마크다운 볼드체(**)가 포함되어 있습니다.",
+                    "severity": "critical",
+                    "suggestion": "볼드체를 제거하고 『』 기호나 줄바꿈으로 강조하세요.",
+                }
+            )
         return violations
 
     def _check_template_variables(self, response: str) -> List[Dict[str, Any]]:
         """Check for unsubstituted template variables."""
         violations = []
         # Look for {variable_name} patterns that should have been replaced
-        unsubstituted = re.findall(r'\{(\w+)\}', response)
+        unsubstituted = re.findall(r"\{(\w+)\}", response)
         if unsubstituted:
-            violations.append({
-                "type": "template_variable",
-                "description": f"치환되지 않은 템플릿 변수가 발견되었습니다: {', '.join(unsubstituted)}",
-                "severity": "critical",
-                "suggestion": "템플릿 변수를 올바른 데이터로 치환하세요.",
-            })
+            violations.append(
+                {
+                    "type": "template_variable",
+                    "description": f"치환되지 않은 템플릿 변수가 발견되었습니다: {', '.join(unsubstituted)}",
+                    "severity": "critical",
+                    "suggestion": "템플릿 변수를 올바른 데이터로 치환하세요.",
+                }
+            )
         return violations
 
-    def _check_data_isolation(self, response: str, input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _check_data_isolation(
+        self, response: str, input_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Check data isolation: if data is "데이터 없음", the section should not appear.
 
@@ -192,42 +214,55 @@ class TerminologyChecker:
         laws = retrieval.get("laws", [])
         if not laws:
             # Look for law-related headers in response
-            law_indicators = ['『소비자보호법', '『전자상거래', '『약관규제', '『할부거래', '『민법', '『상법']
+            law_indicators = [
+                "『소비자보호법",
+                "『전자상거래",
+                "『약관규제",
+                "『할부거래",
+                "『민법",
+                "『상법",
+            ]
             for indicator in law_indicators:
                 if indicator in response:
-                    violations.append({
-                        "type": "data_isolation",
-                        "description": f"법률 데이터가 없는데 법률 관련 섹션({indicator}...)이 생성되었습니다.",
-                        "severity": "warning",
-                        "suggestion": "데이터가 없는 섹션은 제목을 포함하여 완전히 생략하세요.",
-                    })
+                    violations.append(
+                        {
+                            "type": "data_isolation",
+                            "description": f"법률 데이터가 없는데 법률 관련 섹션({indicator}...)이 생성되었습니다.",
+                            "severity": "warning",
+                            "suggestion": "데이터가 없는 섹션은 제목을 포함하여 완전히 생략하세요.",
+                        }
+                    )
                     break
 
         # Check criteria data isolation
         criteria = retrieval.get("criteria", [])
         if not criteria:
-            if '『소비자분쟁해결기준』' in response:
-                violations.append({
-                    "type": "data_isolation",
-                    "description": "해결기준 데이터가 없는데 『소비자분쟁해결기준』 섹션이 생성되었습니다.",
-                    "severity": "warning",
-                    "suggestion": "데이터가 없는 섹션은 제목을 포함하여 완전히 생략하세요.",
-                })
+            if "『소비자분쟁해결기준』" in response:
+                violations.append(
+                    {
+                        "type": "data_isolation",
+                        "description": "해결기준 데이터가 없는데 『소비자분쟁해결기준』 섹션이 생성되었습니다.",
+                        "severity": "warning",
+                        "suggestion": "데이터가 없는 섹션은 제목을 포함하여 완전히 생략하세요.",
+                    }
+                )
 
         # Check case data isolation
         disputes = retrieval.get("disputes", [])
         counsels = retrieval.get("counsels", [])
         if not disputes and not counsels:
             # Generic case indicators
-            case_indicators = ['유사 사례', '조정사례', '상담사례']
+            case_indicators = ["유사 사례", "조정사례", "상담사례"]
             for indicator in case_indicators:
                 if indicator in response:
-                    violations.append({
-                        "type": "data_isolation",
-                        "description": f"사례 데이터가 없는데 사례 관련 내용('{indicator}')이 생성되었습니다.",
-                        "severity": "warning",
-                        "suggestion": "데이터가 없는 섹션은 완전히 생략하세요.",
-                    })
+                    violations.append(
+                        {
+                            "type": "data_isolation",
+                            "description": f"사례 데이터가 없는데 사례 관련 내용('{indicator}')이 생성되었습니다.",
+                            "severity": "warning",
+                            "suggestion": "데이터가 없는 섹션은 완전히 생략하세요.",
+                        }
+                    )
                     break
 
         return violations

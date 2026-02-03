@@ -14,8 +14,27 @@ from .context_builder import ContextBuilder
 logger = logging.getLogger(__name__)
 
 # Routing Constants
-CRIMINAL_KEYWORDS = ["사기", "잠적", "먹튀", "고소", "경찰", "벽돌", "고발", "야반도주", "신고"]
-INTL_KEYWORDS = ["직구", "해외결제", "알리", "테무", "아마존", "배대지", "관세", "해외 사이트"]
+CRIMINAL_KEYWORDS = [
+    "사기",
+    "잠적",
+    "먹튀",
+    "고소",
+    "경찰",
+    "벽돌",
+    "고발",
+    "야반도주",
+    "신고",
+]
+INTL_KEYWORDS = [
+    "직구",
+    "해외결제",
+    "알리",
+    "테무",
+    "아마존",
+    "배대지",
+    "관세",
+    "해외 사이트",
+]
 HIGH_AMOUNT_THRESHOLD = 5_000_000
 
 # Phase Constants

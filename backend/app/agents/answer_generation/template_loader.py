@@ -59,7 +59,9 @@ class TemplateLoader:
                         loaded[key] = f.read()
                     logger.debug(f"Loaded template '{key}' from {full_path}")
                 except Exception as e:
-                    logger.warning(f"Failed to read template '{key}' from {full_path}: {e}")
+                    logger.warning(
+                        f"Failed to read template '{key}' from {full_path}: {e}"
+                    )
                     loaded[key] = ""
             else:
                 logger.warning(f"Template file not found: {full_path}")
@@ -106,6 +108,7 @@ class TemplateLoader:
 
         # Check for any remaining unsubstituted placeholders
         import re
+
         remaining_placeholders = re.findall(r"\{(\w+)\}", template)
         if remaining_placeholders:
             logger.warning(
