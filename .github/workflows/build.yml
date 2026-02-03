@@ -61,8 +61,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-${{ hashFiles('backend/requirements.txt') }}
+          cache-to: type=gha,mode=max,scope=backend-${{ hashFiles('backend/requirements.txt') }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v5
@@ -72,5 +72,5 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend-${{ hashFiles('frontend/package-lock.json') }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ hashFiles('frontend/package-lock.json') }}
