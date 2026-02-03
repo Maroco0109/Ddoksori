@@ -156,6 +156,175 @@ class LawRetriever:
 
         return results
 
+    def criteria_search(
+        self,
+        query: str,
+        top_k: int = 3,
+        document_types: Optional[List[str]] = None,
+        category_set: Optional[Dict[str, str]] = None,
+    ) -> List[SimilarChunkResult]:
+        """분류 세트 기반 criteria 검색 (DB 필터 포함 hybrid RRF)"""
+        if not self.conn:
+            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+
+        rds = RDSInternalRetriever(self.db_config, self.embed_api_url)
+        query_embedding = rds.embed_query(query)
+
+        filter_dataset = "law_guide"
+        filter_document_type = document_types or ["시행규칙", "별표"]
+        section = (category_set or {}).get("section_name")
+        category = (category_set or {}).get("category_name")
+        subcategory = (category_set or {}).get("subcategory_name")
+
+        #중분류는 부분 매칭 허용
+        category_like = None
+        if category:
+            category_like = category if "%" in category else f"%{category}%"
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH bm25_results AS (
+                    SELECT
+                        vc.chunk_id,
+                        ts_rank_cd(
+                            '{0.1, 0.2, 0.4, 0.6}',
+                            vc.text_tsv,
+                            websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
+                        )::FLOAT as score,
+                        ROW_NUMBER() OVER (
+                            ORDER BY ts_rank_cd(
+                                '{0.1, 0.2, 0.4, 0.6}',
+                                vc.text_tsv,
+                                websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
+                            ) DESC
+                        ) as rank
+                    FROM vector_chunks vc
+                    WHERE
+                        vc.text_tsv @@ websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
+                        AND ts_rank_cd(
+                            '{0.1, 0.2, 0.4, 0.6}',
+                            vc.text_tsv,
+                            websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
+                        ) >= 0.02
+                        AND ( %s IS NULL OR vc.dataset_type = %s )
+                        AND ( %s IS NULL OR vc.document_type = ANY(%s) )
+                        AND ( %s IS NULL OR vc.metadata ->> '대분류' = %s )
+                        AND ( %s IS NULL OR vc.metadata ->> '중분류' LIKE %s )
+                        AND ( %s IS NULL OR vc.metadata ->> '소분류' = %s )
+                    ORDER BY score DESC
+                    LIMIT 100
+                ),
+                vector_results AS (
+                    SELECT
+                        vc.chunk_id,
+                        (1 - (vc.embedding <=> %s::vector))::FLOAT as similarity,
+                        ROW_NUMBER() OVER (ORDER BY vc.embedding <=> %s::vector) as rank
+                    FROM vector_chunks vc
+                    WHERE
+                        ( %s IS NULL OR vc.dataset_type = %s )
+                        AND ( %s IS NULL OR vc.document_type = ANY(%s) )
+                        AND ( %s IS NULL OR vc.metadata ->> '대분류' = %s )
+                        AND ( %s IS NULL OR vc.metadata ->> '중분류' LIKE %s )
+                        AND ( %s IS NULL OR vc.metadata ->> '소분류' = %s )
+                    ORDER BY vc.embedding <=> %s::vector
+                    LIMIT 100
+                ),
+                rrf_combined AS (
+                    SELECT
+                        COALESCE(b.chunk_id, v.chunk_id) as chunk_id,
+                        (COALESCE(1.0 / (60 + b.rank), 0) +
+                         COALESCE(1.0 / (60 + v.rank), 0))::FLOAT as rrf_score,
+                        COALESCE(b.score, 0)::FLOAT as bm25_score,
+                        COALESCE(v.similarity, 0)::FLOAT as vector_similarity
+                    FROM bm25_results b
+                    FULL OUTER JOIN vector_results v ON b.chunk_id = v.chunk_id
+                )
+                SELECT
+                    vc.chunk_id,
+                    vc.dataset_type,
+                    vc.text,
+                    rc.rrf_score,
+                    rc.bm25_score,
+                    rc.vector_similarity,
+                    vc.law_name,
+                    vc.chunk_type,
+                    vc.category,
+                    vc.document_type,
+                    vc.source_url,
+                    vc.source_file,
+                    vc.printed_page,
+                    vc.source_year,
+                    vc.metadata
+                FROM rrf_combined rc
+                JOIN vector_chunks vc ON rc.chunk_id = vc.chunk_id
+                ORDER BY rc.rrf_score DESC
+                LIMIT %s
+                """,
+                (
+                    query,
+                    query,
+                    query,
+                    query,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_document_type,
+                    filter_document_type,
+                    section,
+                    section,
+                    category_like,
+                    category_like,
+                    subcategory,
+                    subcategory,
+                    query_embedding,
+                    query_embedding,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_document_type,
+                    filter_document_type,
+                    section,
+                    section,
+                    category_like,
+                    category_like,
+                    subcategory,
+                    subcategory,
+                    query_embedding,
+                    top_k,
+                ),
+            )
+
+            results: List[SimilarChunkResult] = []
+            for row in cur.fetchall():
+                metadata = row[14]
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except Exception:
+                        metadata = None
+                metadata = metadata if isinstance(metadata, dict) else {}
+
+                results.append(
+                    SimilarChunkResult(
+                        chunk_id=row[0],
+                        dataset_type=row[1] or "",
+                        text=row[2] or "",
+                        similarity=float(row[3] or 0.0),
+                        law_name=row[6],
+                        chunk_type=row[7],
+                        category=row[8],
+                        document_type=row[9],
+                        source_url=row[10],
+                        source_file=row[11],
+                        printed_page=row[12],
+                        source_year=row[13],
+                        metadata=metadata or None,
+                        vector_similarity=float(row[5] or 0.0),
+                        rrf_score=float(row[3] or 0.0),
+                    )
+                )
+
+        return results
+
     def search_two_stage(self, query: str, top_k: int = 3) -> List[SimilarChunkResult]:
         """Legacy API wrapper for compatibility."""
         return self.hybrid_search(query, top_k)

@@ -49,6 +49,7 @@ logs/
 
 # Data files (JSONL files are tracked in git for now, but can be excluded later)
 # backend/data/*.jsonl
+backend/data/category
 
 # Model cache
 .cache/

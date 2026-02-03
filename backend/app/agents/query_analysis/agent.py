@@ -130,6 +130,11 @@ def query_analysis_node(state: ChatState) -> Dict:
 
     # Step 3: 키워드 추출
     keywords = extract_keywords(normalized_query)
+    #온보딩 purchase_item을 keywords에 포함 (검색 에이전트 전달용)
+    if onboarding and onboarding.get("purchase_item"):
+        purchase_item = str(onboarding.get("purchase_item")).strip()
+        if purchase_item and purchase_item not in keywords:
+            keywords.append(purchase_item)
 
     # Step 4: 기관 추천 힌트 및 Restricted 도메인 감지
     restricted_domain = (
@@ -334,6 +339,11 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # Step 4: 키워드 추출
     keywords = extract_keywords(normalized_query)
+    #온보딩 purchase_item을 keywords에 포함 (검색 에이전트 전달용)
+    if onboarding and onboarding.get("purchase_item"):
+        purchase_item = str(onboarding.get("purchase_item")).strip()
+        if purchase_item and purchase_item not in keywords:
+            keywords.append(purchase_item)
 
     # Step 5: LLM 기반 쿼리 확장 (v2 핵심)
     expanded_queries = await expand_query_with_llm_v2(
