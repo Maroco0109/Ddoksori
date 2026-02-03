@@ -8,6 +8,8 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.common.sanitization import sanitize_user_input
+
 # === 요청 모델 ===
 
 
@@ -31,10 +33,12 @@ class ChatRequest(BaseModel):
 
     @field_validator("message")
     @classmethod
-    def message_not_empty(cls, v):
+    def message_not_empty_and_sanitized(cls, v):
+        """메시지 유효성 검사 및 sanitization (SEC-02)"""
         if not v or not v.strip():
             raise ValueError("메시지는 빈 문자열일 수 없습니다")
-        return v.strip()
+        # SEC-02: 입력 sanitization (L1-L2)
+        return sanitize_user_input(v.strip())
 
 
 class SearchRequest(BaseModel):

@@ -12,10 +12,11 @@ import time
 import uuid
 from typing import Any, Dict, Optional, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.auth.dependencies import get_current_user_optional
+from app.middleware.rate_limiter import limiter, RateLimits
 from app.auth.models import User
 from app.common.config import get_config
 from app.common.logger import get_rag_logger
@@ -64,7 +65,9 @@ KNOWN_GRAPH_NODES = {
 
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit(RateLimits.CHAT_GUEST)
 async def chat(
+    http_request: Request,
     request: ChatRequest,
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
@@ -334,7 +337,9 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
 
 
 @router.post("/chat/stream")
+@limiter.limit(RateLimits.CHAT_GUEST)
 async def chat_stream_sse(
+    http_request: Request,
     request: ChatRequest,
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):

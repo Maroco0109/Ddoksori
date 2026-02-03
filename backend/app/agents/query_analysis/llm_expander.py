@@ -77,7 +77,7 @@ async def expand_query_with_llm(
     config = get_config()
 
     try:
-        client = AsyncOpenAI(api_key=config.openai_api_key)
+        client = AsyncOpenAI(api_key=config.llm.openai_api_key)
 
         user_prompt = QUERY_EXPANSION_USER_PROMPT.format(
             query=query, keywords=", ".join(keywords) if keywords else "없음"

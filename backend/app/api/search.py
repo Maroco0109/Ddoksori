@@ -7,9 +7,10 @@ LLM 답변 생성 없이 검색만 수행합니다.
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.agents.retrieval.tools.retriever import SearchResult
+from app.middleware.rate_limiter import limiter, RateLimits
 
 from .dependencies import get_retrieval_mode, get_retriever
 from .models import SearchRequest
@@ -41,7 +42,8 @@ def _serialize_search_result(chunk: SearchResult) -> Dict[str, Any]:
 
 
 @router.post("/search")
-async def search(request: SearchRequest, retriever=Depends(get_retriever)):
+@limiter.limit(RateLimits.SEARCH)
+async def search(http_request: Request, request: SearchRequest, retriever=Depends(get_retriever)):
     """
     Vector DB에서 유사한 사례 검색
 
