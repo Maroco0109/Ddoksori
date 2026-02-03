@@ -329,8 +329,9 @@ class TestLLMReviewSystemPrompt:
     def test_prompt_contains_required_sections(self):
         assert "법적 판단" in LLM_REVIEW_SYSTEM_PROMPT
         assert "전문가 사칭" in LLM_REVIEW_SYSTEM_PROMPT
-        assert "근거 없는 주장" in LLM_REVIEW_SYSTEM_PROMPT
-        assert "부적절한 조언" in LLM_REVIEW_SYSTEM_PROMPT
+        assert "용어 병기" in LLM_REVIEW_SYSTEM_PROMPT
+        assert "데이터 부재" in LLM_REVIEW_SYSTEM_PROMPT
+        assert "형식 검증" in LLM_REVIEW_SYSTEM_PROMPT
         assert "JSON" in LLM_REVIEW_SYSTEM_PROMPT
 
 
