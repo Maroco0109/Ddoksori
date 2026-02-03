@@ -90,32 +90,18 @@ class DatabaseConfig(BaseSettings):
 
 class EmbeddingConfig(BaseSettings):
     """
-    임베딩 서버 설정.
-
-    KURE-v1 또는 OpenAI 임베딩 서버 연결 설정을 관리합니다.
+    임베딩 설정 (OpenAI text-embedding-3-large).
 
     환경변수:
-        EMBED_API_URL: 임베딩 API URL (기본값: http://localhost:8001/embed)
-        EMBEDDING_MODEL_NAME: 임베딩 모델명 (기본값: nlpai-lab/KURE-v1)
-        USE_OPENAI_EMBEDDING: OpenAI 임베딩 사용 여부 (기본값: false)
+        EMBEDDING_MODEL: 임베딩 모델명 (기본값: text-embedding-3-large)
     """
 
-    model_config = SettingsConfigDict(env_prefix="EMBED_")
+    model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
 
-    api_url: str = Field(
-        default="http://localhost:8001/embed",
-        alias="EMBED_API_URL",
-        description="임베딩 API URL",
-    )
-    model_name: str = Field(
-        default="nlpai-lab/KURE-v1",
-        alias="EMBEDDING_MODEL_NAME",
-        description="임베딩 모델명",
-    )
-    use_openai: bool = Field(
-        default=False,
-        alias="USE_OPENAI_EMBEDDING",
-        description="OpenAI 임베딩 사용 여부",
+    model: str = Field(
+        default="text-embedding-3-large",
+        alias="EMBEDDING_MODEL",
+        description="OpenAI 임베딩 모델명",
     )
 
 

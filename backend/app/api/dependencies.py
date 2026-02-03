@@ -9,7 +9,6 @@ from typing import Any, Dict, Generator
 
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
 from app.agents.retrieval.tools.retriever import RAGRetriever
-from utils.embedding_connection import get_embedding_api_url
 
 
 def get_db_config() -> Dict[str, Any]:
@@ -28,11 +27,6 @@ def get_db_config() -> Dict[str, Any]:
     }
 
 
-def get_embed_api_url() -> str:
-    """임베딩 API URL 반환"""
-    return get_embedding_api_url()
-
-
 def get_retrieval_mode() -> str:
     """검색 모드 반환 ('hybrid' 또는 'dense')"""
     return os.getenv("RETRIEVAL_MODE", "dense")
@@ -49,13 +43,12 @@ def get_retriever() -> Generator[Any, None, None]:
         HybridRetriever 또는 RAGRetriever 인스턴스
     """
     db_config = get_db_config()
-    embed_api_url = get_embed_api_url()
     retrieval_mode = get_retrieval_mode()
 
     if retrieval_mode == "hybrid":
-        retriever_instance = HybridRetriever(db_config, embed_api_url)
+        retriever_instance = HybridRetriever(db_config)
     else:
-        retriever_instance = RAGRetriever(db_config, embed_api_url)
+        retriever_instance = RAGRetriever(db_config)
 
     try:
         retriever_instance.connect()
@@ -66,7 +59,6 @@ def get_retriever() -> Generator[Any, None, None]:
 
 __all__ = [
     "get_db_config",
-    "get_embed_api_url",
     "get_retrieval_mode",
     "get_retriever",
 ]

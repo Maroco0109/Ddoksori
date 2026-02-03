@@ -37,8 +37,6 @@ def _get_db_config() -> Dict[str, str]:
     return conn
 
 
-def _get_embed_api_url() -> str:
-    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
 class BaseRetrievalAgent(BaseAgent):
@@ -208,4 +206,4 @@ class BaseRetrievalAgent(BaseAgent):
         pass
 
 
-__all__ = ["BaseRetrievalAgent", "_get_db_config", "_get_embed_api_url"]
+__all__ = ["BaseRetrievalAgent", "_get_db_config"]

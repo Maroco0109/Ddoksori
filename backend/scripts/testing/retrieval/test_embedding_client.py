@@ -148,59 +148,37 @@ class TestEmbeddingClient:
 
 
 class TestEmbeddingAdapter:
-    """EmbeddingAdapter 테스트"""
+    """EmbeddingAdapter 테스트 (OpenAI only)"""
 
-    def test_adapter_raises_when_openai_disabled(self):
-        """USE_OPENAI_EMBEDDING=false일 때 NotImplementedError 발생"""
-        from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
+    def test_adapter_init(self):
+        """어댑터 초기화 테스트"""
+        with patch("openai.OpenAI") as mock_cls:
+            mock_instance = Mock()
+            mock_cls.return_value = mock_instance
 
-        with patch.dict(os.environ, {"USE_OPENAI_EMBEDDING": "false"}):
-            with pytest.raises(NotImplementedError, match="KURE-v1은 1024차원"):
-                EmbeddingAdapter()
+            from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
 
-    def test_adapter_raises_when_env_not_set(self):
-        """환경 변수 미설정 시 NotImplementedError 발생"""
-        from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
+            adapter = EmbeddingAdapter()
 
-        env = os.environ.copy()
-        env.pop("USE_OPENAI_EMBEDDING", None)
-
-        with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(NotImplementedError):
-                EmbeddingAdapter()
-
-    def test_adapter_works_when_openai_enabled(self):
-        """USE_OPENAI_EMBEDDING=true일 때 정상 동작"""
-        with patch.dict(os.environ, {"USE_OPENAI_EMBEDDING": "true"}):
-            with patch("openai.OpenAI") as mock_cls:
-                mock_instance = Mock()
-                mock_cls.return_value = mock_instance
-
-                from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
-
-                adapter = EmbeddingAdapter()
-
-                assert adapter.use_openai is True
-                assert adapter.dimensions == 1536
+            assert adapter.dimensions == 1536
 
     def test_adapter_embed_delegates_to_client(self):
         """embed 메서드가 클라이언트로 위임되는지 테스트"""
-        with patch.dict(os.environ, {"USE_OPENAI_EMBEDDING": "true"}):
-            with patch("openai.OpenAI") as mock_cls:
-                mock_instance = Mock()
-                mock_response = Mock()
-                mock_response.data = [Mock(embedding=[0.1] * 1536)]
-                mock_response.usage = Mock(total_tokens=50)
-                mock_instance.embeddings.create.return_value = mock_response
-                mock_cls.return_value = mock_instance
+        with patch("openai.OpenAI") as mock_cls:
+            mock_instance = Mock()
+            mock_response = Mock()
+            mock_response.data = [Mock(embedding=[0.1] * 1536)]
+            mock_response.usage = Mock(total_tokens=50)
+            mock_instance.embeddings.create.return_value = mock_response
+            mock_cls.return_value = mock_instance
 
-                from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
+            from app.agents.retrieval.tools.embedding_client import EmbeddingAdapter
 
-                adapter = EmbeddingAdapter()
-                result = adapter.embed(["테스트"])
+            adapter = EmbeddingAdapter()
+            result = adapter.embed(["테스트"])
 
-                assert len(result) == 1
-                assert len(result[0]) == 1536
+            assert len(result) == 1
+            assert len(result[0]) == 1536
 
 
 class TestGetEmbeddingDimensions:

@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, ClassVar, Dict, List, TypedDict
 
-from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config
 from .tools.rds_internal_retriever import SimilarChunkResult
 from .tools.specialized_retrievers import LawRetriever
 
@@ -40,14 +40,13 @@ class LawRetrievalAgent(BaseRetrievalAgent):
             expanded_queries = [query]
 
         db_config = _get_db_config()
-        embed_url = _get_embed_api_url()
 
         document_types = None
         if task_input:
             metadata_filter = task_input.get("metadata_filter") or {}
             document_types = metadata_filter.get("document_types") or None
 
-        retriever = LawRetriever(db_config, embed_url)
+        retriever = LawRetriever(db_config)
         retriever.connect()
 
         try:

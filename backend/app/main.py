@@ -39,12 +39,6 @@ if os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true":
         f"[Langsmith] Tracing enabled - Project: {os.getenv('LANGCHAIN_PROJECT', 'default')}"
     )
 
-# 임베딩 API URL 설정
-from utils.embedding_connection import get_embedding_api_url
-
-embed_api_url = get_embedding_api_url()
-os.environ["EMBED_API_URL"] = embed_api_url
-
 # API 라우터 import
 from app.api import (
     admin_router,
@@ -104,7 +98,7 @@ async def startup_event():
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
     logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
-    logger.info(f"[Startup] Embedding API: {embed_api_url}")
+    logger.info("[Startup] Embedding: OpenAI text-embedding-3-large")
 
     # ConversationCleanupService 시작
     try:

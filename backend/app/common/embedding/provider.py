@@ -5,8 +5,6 @@ EmbeddingProvider Protocol - 통합 임베딩 프로바이더 인터페이스
 
 지원 프로바이더:
 - OpenAI (text-embedding-3-large): 1536차원
-- KURE-v1 (Local): 1024차원
-- BGE-M3 (Local): 1024차원 dense + sparse
 """
 
 import logging

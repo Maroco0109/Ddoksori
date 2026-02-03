@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 import psycopg2
-import requests
 
 from .rds_internal_retriever import RDSInternalRetriever, SimilarChunkResult
 
@@ -67,31 +66,30 @@ class LawRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
+        embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
         self.conn = None
+        self._rds_retriever: Optional[RDSInternalRetriever] = None
 
     def connect(self):
         """데이터베이스 연결"""
         self.conn = psycopg2.connect(**self.db_config)
+        self._rds_retriever = RDSInternalRetriever(self.db_config)
+        self._rds_retriever.connect()
 
     def close(self):
         """연결 종료"""
         if self.conn:
             self.conn.close()
+        if self._rds_retriever:
+            self._rds_retriever.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url, json={"texts": [query]}, timeout=10
-            )
-            response.raise_for_status()
-            return response.json()["embeddings"][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
+        if self._rds_retriever is None:
+            raise RuntimeError("connect()를 먼저 호출하세요.")
+        return self._rds_retriever.embed_query(query)
 
     def hybrid_search(
         self,
@@ -219,31 +217,30 @@ class CriteriaRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
+        embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
         self.conn = None
+        self._rds_retriever: Optional[RDSInternalRetriever] = None
 
     def connect(self):
         """데이터베이스 연결"""
         self.conn = psycopg2.connect(**self.db_config)
+        self._rds_retriever = RDSInternalRetriever(self.db_config)
+        self._rds_retriever.connect()
 
     def close(self):
         """연결 종료"""
         if self.conn:
             self.conn.close()
+        if self._rds_retriever:
+            self._rds_retriever.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url, json={"texts": [query]}, timeout=10
-            )
-            response.raise_for_status()
-            return response.json()["embeddings"][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
+        if self._rds_retriever is None:
+            raise RuntimeError("connect()를 먼저 호출하세요.")
+        return self._rds_retriever.embed_query(query)
 
     def hybrid_search(
         self,
@@ -421,30 +418,29 @@ class CaseRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
+        embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
         self.conn = None
+        self._rds_retriever: Optional[RDSInternalRetriever] = None
 
     def connect(self):
         self.conn = psycopg2.connect(**self.db_config)
+        self._rds_retriever = RDSInternalRetriever(self.db_config)
+        self._rds_retriever.connect()
 
     def close(self):
         """연결 종료"""
         if self.conn:
             self.conn.close()
+        if self._rds_retriever:
+            self._rds_retriever.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성"""
-        try:
-            response = requests.post(
-                self.embed_api_url, json={"texts": [query]}, timeout=10
-            )
-            response.raise_for_status()
-            return response.json()["embeddings"][0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
+        if self._rds_retriever is None:
+            raise RuntimeError("connect()를 먼저 호출하세요.")
+        return self._rds_retriever.embed_query(query)
 
     def _search_by_doc_type(
         self, query: str, doc_type: str, top_k: int = 3
@@ -981,15 +977,14 @@ class StructuredRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
+        embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
 
         self.agency_classifier = AgencyClassifier()
-        self.case_retriever = CaseRetriever(db_config, embed_api_url)
-        self.law_retriever = LawRetriever(db_config, embed_api_url)
-        self.criteria_retriever = CriteriaRetriever(db_config, embed_api_url)
+        self.case_retriever = CaseRetriever(db_config)
+        self.law_retriever = LawRetriever(db_config)
+        self.criteria_retriever = CriteriaRetriever(db_config)
 
     def connect(self):
         """모든 retriever 연결"""

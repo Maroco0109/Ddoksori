@@ -54,8 +54,6 @@ def _get_db_config() -> Dict[str, str]:
     }
 
 
-def _get_embed_api_url() -> str:
-    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
 RETRIEVER_TYPE_STRUCTURED = "structured"
@@ -223,9 +221,8 @@ def retrieval_node(state: ChatState) -> Dict:
         from .tools.specialized_retrievers import StructuredRetriever
 
         db_config = _get_db_config()
-        embed_api_url = _get_embed_api_url()
 
-        retriever = StructuredRetriever(db_config, embed_api_url)
+        retriever = StructuredRetriever(db_config)
         retriever.connect()
 
         try:

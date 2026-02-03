@@ -11,14 +11,12 @@ UnifiedRetriever에서 계속 사용됩니다.
 벡터 검색, 하이브리드 검색, 컨텍스트 확장 기능 제공
 """
 
-import os
 import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
 
 import psycopg2
-import requests
 
 
 def _to_category_path(category: Optional[str]) -> List[str]:
@@ -102,17 +100,9 @@ class RAGRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
         self.conn: Any = None
-
-        # Optional: OpenAI embedding (1536 dims) to match RDS vector dims.
-        # When enabled, we bypass the local/remote embedding HTTP server.
-        self._use_openai_embedding = (
-            os.getenv("USE_OPENAI_EMBEDDING", "false").lower() == "true"
-        )
         self._openai_embedder: Any = None
 
         # 쿼리 유형별 데이터 소스 가중치
@@ -144,25 +134,15 @@ class RAGRetriever:
             self.conn.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성"""
-        if self._use_openai_embedding:
-            try:
-                if self._openai_embedder is None:
-                    from .embedding_client import EmbeddingClient
-
-                    self._openai_embedder = EmbeddingClient()
-                return self._openai_embedder.embed_query(query)
-            except Exception as e:
-                raise Exception(f"OpenAI 임베딩 오류: {e}")
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
         try:
-            response = requests.post(
-                self.embed_api_url, json={"texts": [query]}, timeout=10
-            )
-            response.raise_for_status()
-            embeddings = response.json()["embeddings"]
-            return embeddings[0]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"임베딩 API 오류: {e}")
+            if self._openai_embedder is None:
+                from .embedding_client import EmbeddingClient
+
+                self._openai_embedder = EmbeddingClient()
+            return self._openai_embedder.embed_query(query)
+        except Exception as e:
+            raise Exception(f"OpenAI 임베딩 오류: {e}")
 
     def embed_query_timed(self, query: str) -> Tuple[List[float], float]:
         """
@@ -964,9 +944,7 @@ def main():
         "password": os.getenv("DB_PASSWORD", "postgres"),
     }
 
-    embed_api_url = os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
-
-    retriever = RAGRetriever(db_config, embed_api_url)
+    retriever = RAGRetriever(db_config)
     retriever.connect()
 
     try:

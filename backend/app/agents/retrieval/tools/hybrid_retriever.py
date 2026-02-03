@@ -14,17 +14,11 @@ Combines dense (pgvector) and lexical (PostgreSQL FTS) retrieval
 using Reciprocal Rank Fusion (RRF) algorithm.
 """
 
+import os
 import time
 from typing import Any, Dict, List, Optional, Union, cast
 
 import psycopg2
-
-# Import embedding configuration
-from utils.embedding_connection import (
-    EMBEDDING_MODEL,
-    RRF_WEIGHT_DENSE,
-    RRF_WEIGHT_LEXICAL,
-)
 
 from .base import Document, to_documents
 from .retriever import (
@@ -34,6 +28,10 @@ from .retriever import (
     _map_vector_chunks_doc_type,
     _to_category_path,
 )
+
+# RRF weights (can be overridden via environment variables)
+RRF_WEIGHT_DENSE = float(os.getenv("RRF_WEIGHT_DENSE", "1.0"))
+RRF_WEIGHT_LEXICAL = float(os.getenv("RRF_WEIGHT_LEXICAL", "1.0"))
 
 
 class HybridRetriever:
@@ -51,30 +49,22 @@ class HybridRetriever:
     def __init__(
         self,
         db_config: Dict[str, str],
-        embed_api_url: str = "http://localhost:8001/embed",
-        embedding_model: Optional[str] = None,
     ):
         """
         Initialize hybrid retriever
 
         Args:
             db_config: Database connection config
-            embed_api_url: KURE-v1 embedding API endpoint URL
-            embedding_model: Active embedding model ('kure-v1')
         """
         self.db_config = db_config
-        self.embed_api_url = embed_api_url
         self.conn: Any = None
-
-        # Embedding configuration
-        self.embedding_model = embedding_model or EMBEDDING_MODEL
 
         # RRF weights (from environment or defaults)
         self.rrf_weight_dense = RRF_WEIGHT_DENSE
         self.rrf_weight_lexical = RRF_WEIGHT_LEXICAL
 
         # Create RAGRetriever instance for dense search
-        self.rag_retriever = RAGRetriever(db_config, embed_api_url)
+        self.rag_retriever = RAGRetriever(db_config)
 
     def connect(self):
         """Connect to database"""

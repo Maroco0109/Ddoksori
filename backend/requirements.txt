@@ -23,14 +23,8 @@ SQLAlchemy==2.0.45
 redis==5.2.1
 
 # ============================================================================
-# ML & Embeddings
+# Tokenization (OpenAI)
 # ============================================================================
-sentence-transformers==3.3.1
-torch==2.5.1
-transformers==4.57.3
-tokenizers==0.22.2
-safetensors==0.7.0
-huggingface-hub==0.36.0
 tiktoken==0.12.0
 
 # ============================================================================
@@ -124,17 +118,7 @@ Jinja2==3.1.6
 python-dateutil==2.9.0.post0
 
 # ============================================================================
-# NOTES FOR WINDOWS 11 INSTALLATION
+# NOTES
 # ============================================================================
-# The following packages from the Linux environment are NOT included because
-# they are incompatible with Windows 11:
-#
-# - uvloop: Linux/macOS only async event loop (not needed on Windows)
-#
-# For Windows installation:
-# 1. Install PyTorch first: pip install torch --index-url https://download.pytorch.org/whl/cu124
-#    (or use CPU-only: pip install torch --index-url https://download.pytorch.org/whl/cpu)
-# 2. Then install: pip install -r requirements.txt
-#
-# Note: NVIDIA CUDA packages will auto-install with torch if you have NVIDIA GPU.
-# For CPU-only, use the CPU wheel version above.
+# - uvloop is Linux/macOS only (not needed on Windows)
+# - Local embedding (KURE-v1) removed - using OpenAI embeddings only

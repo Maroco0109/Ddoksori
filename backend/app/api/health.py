@@ -13,7 +13,7 @@ from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
 from app.agents.retrieval.tools.retriever import RAGRetriever
 from app.common.config import get_config
 
-from .dependencies import get_db_config, get_embed_api_url, get_retrieval_mode
+from .dependencies import get_db_config, get_retrieval_mode
 
 router = APIRouter(tags=["Health"])
 
@@ -55,14 +55,13 @@ async def health_check():
         error: 오류 메시지 (unhealthy인 경우)
     """
     db_config = get_db_config()
-    embed_api_url = get_embed_api_url()
     retrieval_mode = get_retrieval_mode()
 
     try:
         if retrieval_mode == "hybrid":
-            checker = HybridRetriever(db_config, embed_api_url)
+            checker = HybridRetriever(db_config)
         else:
-            checker = RAGRetriever(db_config, embed_api_url)
+            checker = RAGRetriever(db_config)
 
         checker.connect()
         checker.close()
@@ -127,27 +126,15 @@ async def check_exaone_llm():
 
 @router.get("/health/embedding")
 async def check_embedding():
-    use_openai = os.getenv("USE_OPENAI_EMBEDDING", "false").lower() == "true"
-
-    if use_openai:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
-        return {"status": "healthy", "type": "OpenAI Embedding"}
-    else:
-        embed_url = get_embed_api_url()
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(embed_url, timeout=5.0)
-                if response.status_code in [200, 404, 405]:
-                    return {"status": "healthy", "url": embed_url}
-                else:
-                    return {
-                        "status": "unhealthy",
-                        "error": f"Embedding server returned {response.status_code}",
-                    }
-        except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}
+    """OpenAI 임베딩 API 상태 확인"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
+    return {
+        "status": "healthy",
+        "type": "OpenAI Embedding",
+        "model": "text-embedding-3-large",
+    }
 
 
 __all__ = ["router"]

@@ -48,33 +48,22 @@ def rds_db_config():
 
 
 # ============================================================
-# Embedding API URL Fixture
-# ============================================================
-
-
-@pytest.fixture(scope="module")
-def embed_api_url():
-    """임베딩 API URL (OpenAI 또는 KURE-v1)."""
-    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
-
-
-# ============================================================
 # HybridRetriever Fixture
 # ============================================================
 
 
 @pytest.fixture(scope="module")
-def hybrid_retriever(rds_db_config, embed_api_url):
+def hybrid_retriever(rds_db_config):
     """
     HybridRetriever 인스턴스 (module-scoped lifecycle).
 
     connect → yield → close 패턴으로 DB 연결을 관리합니다.
+    Uses OpenAI text-embedding-3-large for embeddings.
     """
     from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
 
     retriever = HybridRetriever(
         db_config=rds_db_config,
-        embed_api_url=embed_api_url,
     )
     retriever.connect()
     yield retriever

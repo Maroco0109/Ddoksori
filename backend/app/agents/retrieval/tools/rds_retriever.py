@@ -7,7 +7,6 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 import psycopg2
-import requests
 
 from .rds_internal_retriever import SimilarChunkResult
 
@@ -18,11 +17,10 @@ class RDSRetriever:
     def __init__(
         self,
         db_config: Optional[Dict[str, str]] = None,
-        embed_api_url: Optional[str] = None,
     ) -> None:
         self.db_config = db_config or self._get_db_config()
-        self.embed_api_url = embed_api_url or self._get_embed_api_url()
         self.conn = None
+        self._openai_client = None
 
     def connect(self) -> None:
         self.conn = psycopg2.connect(**self.db_config)
@@ -32,21 +30,7 @@ class RDSRetriever:
             self.conn.close()
 
     def embed_query(self, query: str) -> List[float]:
-        use_openai = os.getenv("USE_OPENAI_EMBEDDING", "false").lower() == "true"
-        has_openai_key = bool(os.getenv("OPENAI_API_KEY"))
-
-        if use_openai or has_openai_key:
-            return self._embed_query_openai(query)
-
-        response = requests.post(
-            self.embed_api_url,
-            json={"texts": [query]},
-            timeout=10,
-        )
-        response.raise_for_status()
-        return response.json()["embeddings"][0]
-
-    def _embed_query_openai(self, query: str) -> List[float]:
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -55,14 +39,13 @@ class RDSRetriever:
                 "Install it with: pip install openai"
             ) from exc
 
-        model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-        dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
+        if self._openai_client is None:
+            self._openai_client = OpenAI()
 
-        client = OpenAI()
-        response = client.embeddings.create(
-            model=model,
+        response = self._openai_client.embeddings.create(
+            model="text-embedding-3-large",
             input=[query],
-            dimensions=dimensions,
+            dimensions=1536,
         )
         return response.data[0].embedding
 
@@ -530,10 +513,6 @@ class RDSRetriever:
             "user": os.getenv("DB_USER", "postgres"),
             "password": os.getenv("DB_PASSWORD", "postgres"),
         }
-
-    @staticmethod
-    def _get_embed_api_url() -> str:
-        return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
 def hybrid_rrf_search(
