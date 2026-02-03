@@ -40,41 +40,75 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e  # 에러 시 즉시 종료
             cd /home/ubuntu/ddoksori
 
-            # ECR Login
-            aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
+            # .env 파일 로드 (ECR_REGISTRY, USE_AWS_SECRETS 등)
+            if [ -f .env ]; then
+              echo "Loading .env file..."
+              set -a
+              source .env
+              set +a
+            fi
 
-            # Pull latest images
-            export ECR_REGISTRY=${{ steps.ecr-login.outputs.registry }}
-            docker compose -f docker-compose.prod.yml pull
+            # ECR_REGISTRY 검증
+            if [ -z "$ECR_REGISTRY" ]; then
+              echo "ERROR: ECR_REGISTRY is not set!"
+              echo "Please create /home/ubuntu/ddoksori/.env with ECR_REGISTRY"
+              exit 1
+            fi
+            echo "ECR_REGISTRY: $ECR_REGISTRY"
 
-            # Deploy with zero-downtime
+            # ECR 로그인
+            echo "Logging into ECR..."
+            aws ecr get-login-password --region ap-northeast-2 | \
+              docker login --username AWS --password-stdin $ECR_REGISTRY
+
+            # 이미지 Pull
+            echo "Pulling latest images..."
+            docker compose -f docker-compose.prod.yml pull || {
+              echo "ERROR: Failed to pull images"
+              exit 1
+            }
+
+            # 배포 (zero-downtime)
+            echo "Deploying containers..."
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            # Cleanup old images
+            # 오래된 이미지 정리
             docker image prune -f
 
-            # Show status
+            # 상태 확인
+            echo "=== Container Status ==="
             docker compose -f docker-compose.prod.yml ps
 
-      - name: Health Check
-        run: |
-          echo "Waiting for services to start..."
-          sleep 30
+            # 내부 Health Check (30초 대기 후)
+            echo "Waiting 30s for services to start..."
+            sleep 30
 
-          # Backend health check (Nginx:80 → Backend:8000 프록시)
+            echo "Running internal health check..."
+            if curl -sf http://localhost/health; then
+              echo "Internal health check passed!"
+            else
+              echo "ERROR: Internal health check failed"
+              echo "=== Backend Logs ==="
+              docker compose -f docker-compose.prod.yml logs --tail 50 backend
+              exit 1
+            fi
+
+      - name: External Health Check
+        run: |
+          echo "Verifying external access to http://${{ env.EC2_HOST }}/health..."
           for i in {1..5}; do
             if curl -sf http://${{ env.EC2_HOST }}/health; then
-              echo "Backend is healthy!"
-              break
+              echo "External health check passed!"
+              exit 0
             fi
             echo "Attempt $i failed, retrying in 10s..."
             sleep 10
           done
-
-          # Final verification
-          curl -f http://${{ env.EC2_HOST }}/health || exit 1
+          echo "ERROR: External health check failed after 5 attempts"
+          exit 1
 
       - name: Discord Notification - Success
         if: success() && env.DISCORD_WEBHOOK != ''
