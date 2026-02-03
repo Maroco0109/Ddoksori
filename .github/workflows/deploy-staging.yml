@@ -84,15 +84,16 @@ jobs:
             echo "=== Container Status ==="
             docker compose -f docker-compose.prod.yml ps
 
-            # === Smoke Test ===
+            # === Smoke Test (docker exec로 컨테이너 내부에서 테스트) ===
             echo "Waiting 30s for services to start..."
             sleep 30
 
             echo "=== Running Smoke Tests ==="
+            BACKEND_CONTAINER=$(docker compose -f docker-compose.prod.yml ps -q backend)
 
             # 1. Health Check (필수 - DB 연결 확인)
             echo "Testing /health..."
-            HEALTH=$(curl -sf http://localhost:8000/health || echo '{"status":"error"}')
+            HEALTH=$(docker exec $BACKEND_CONTAINER curl -sf http://localhost:8000/health || echo '{"status":"error"}')
             if ! echo "$HEALTH" | grep -q '"status":"healthy"'; then
               echo "FAILED: /health"
               echo "Response: $HEALTH"
@@ -104,7 +105,7 @@ jobs:
 
             # 2. LLM Check (경고만 - 외부 서비스)
             echo "Testing /health/llm/supervisor..."
-            LLM=$(curl -sf http://localhost:8000/health/llm/supervisor || echo '{"status":"error"}')
+            LLM=$(docker exec $BACKEND_CONTAINER curl -sf http://localhost:8000/health/llm/supervisor || echo '{"status":"error"}')
             if echo "$LLM" | grep -q '"status":"healthy"'; then
               echo "OK: /health/llm/supervisor"
             else
@@ -113,7 +114,7 @@ jobs:
 
             # 3. Embedding Check (경고만 - 외부 서비스)
             echo "Testing /health/embedding..."
-            EMBED=$(curl -sf http://localhost:8000/health/embedding || echo '{"status":"error"}')
+            EMBED=$(docker exec $BACKEND_CONTAINER curl -sf http://localhost:8000/health/embedding || echo '{"status":"error"}')
             if echo "$EMBED" | grep -q '"status":"healthy"'; then
               echo "OK: /health/embedding"
             else
@@ -122,7 +123,7 @@ jobs:
 
             # 4. Root endpoint (필수 - API 서버 응답)
             echo "Testing /..."
-            ROOT=$(curl -sf http://localhost:8000/ || echo '')
+            ROOT=$(docker exec $BACKEND_CONTAINER curl -sf http://localhost:8000/ || echo '')
             if [ -z "$ROOT" ]; then
               echo "FAILED: / endpoint returned empty"
               exit 1
