@@ -26,6 +26,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# LLM 재시도 설정
+MAX_LLM_RETRIES = 2
+RETRY_DELAY_SEC = 1.0
+
+# 출처 본문 최대 문자 수 (한국어 기준 ~700-1000 토큰)
+MAX_SOURCE_CONTENT_CHARS = 350
+
 
 def _get_agent_functions():
     from .agent import (
@@ -383,10 +390,10 @@ class HybridLegalReviewer:
         start_time = time.time()
 
         try:
+            import openai as openai_module
             from openai import OpenAI
 
             client = OpenAI()
-
             config = get_config()
             review_model = config.models.review_agent
 
@@ -400,15 +407,44 @@ class HybridLegalReviewer:
                 answer=draft_answer,
             )
 
-            response = client.chat.completions.create(
-                model=review_model,
-                messages=[
-                    {"role": "system", "content": LLM_REVIEW_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                timeout=15,
-            )
+            # 재시도 로직이 포함된 API 호출
+            response = None
+            last_error = None
+            for attempt in range(MAX_LLM_RETRIES + 1):
+                try:
+                    response = client.chat.completions.create(
+                        model=review_model,
+                        messages=[
+                            {"role": "system", "content": LLM_REVIEW_SYSTEM_PROMPT},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        response_format={"type": "json_object"},
+                        timeout=15,
+                    )
+                    break
+                except (
+                    openai_module.RateLimitError,
+                    openai_module.APIStatusError,
+                ) as e:
+                    last_error = e
+                    if attempt < MAX_LLM_RETRIES:
+                        logger.warning(
+                            f"[llm_review] API call failed (attempt {attempt + 1}/{MAX_LLM_RETRIES + 1}): {e}"
+                        )
+                        time.sleep(RETRY_DELAY_SEC * (attempt + 1))
+                        continue
+                    logger.warning(
+                        f"[llm_review] API call failed after {MAX_LLM_RETRIES + 1} attempts: {e}"
+                    )
+
+            if response is None:
+                latency_ms = (time.time() - start_time) * 1000
+                self._llm_call_count += 1
+                self._total_llm_latency_ms += latency_ms
+                return LLMReviewResult(
+                    error=f"api_retry_exhausted: {str(last_error)}",
+                    latency_ms=latency_ms,
+                )
 
             # 메트릭 업데이트
             latency_ms = (time.time() - start_time) * 1000
@@ -473,9 +509,9 @@ class HybridLegalReviewer:
             content = source.get("content", "") or source.get("text", "") or str(source)
             title = source.get("title", "") or source.get("doc_type", f"출처 {i}")
 
-            # 청크 길이 제한
-            if len(content) > 500:
-                content = content[:500] + "..."
+            # 한국어 토큰 특성 고려 (1글자 ≈ 2-3 토큰)
+            if len(content) > MAX_SOURCE_CONTENT_CHARS:
+                content = content[:MAX_SOURCE_CONTENT_CHARS] + "..."
 
             part = f"[{title}]\n{content}"
 

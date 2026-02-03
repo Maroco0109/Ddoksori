@@ -7,10 +7,18 @@ Implements singleton caching for performance.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class _SafeFormatDict(dict):
+    """Dict that returns the original placeholder for missing keys in format_map."""
+
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
 
 
 class TemplateLoader:
@@ -18,6 +26,7 @@ class TemplateLoader:
 
     _instance: Optional["TemplateLoader"] = None
     _templates: Optional[Dict[str, str]] = None
+    REQUIRED_TEMPLATES = {"solution", "action", "execution", "fallback", "base"}
 
     def __new__(cls) -> "TemplateLoader":
         """Singleton pattern - ensures only one instance exists."""
@@ -59,13 +68,25 @@ class TemplateLoader:
                         loaded[key] = f.read()
                     logger.debug(f"Loaded template '{key}' from {full_path}")
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to read template '{key}' from {full_path}: {e}"
-                    )
-                    loaded[key] = ""
+                    if key in self.REQUIRED_TEMPLATES:
+                        logger.error(
+                            f"Required template '{key}' failed to load from {full_path}: {e}"
+                        )
+                        raise RuntimeError(
+                            f"Required template '{key}' failed to load: {e}"
+                        ) from e
+                    else:
+                        logger.warning(
+                            f"Failed to read template '{key}' from {full_path}: {e}"
+                        )
+                        loaded[key] = ""
             else:
-                logger.warning(f"Template file not found: {full_path}")
-                loaded[key] = ""
+                if key in self.REQUIRED_TEMPLATES:
+                    logger.error(f"Required template file not found: {full_path}")
+                    raise RuntimeError(f"Required template file not found: {full_path}")
+                else:
+                    logger.warning(f"Template file not found: {full_path}")
+                    loaded[key] = ""
 
         return loaded
 
@@ -98,17 +119,19 @@ class TemplateLoader:
         # First, replace base_persona placeholder
         template = raw_template.replace("{base_persona}", base)
 
-        # Then replace all context variables
-        for key, val in context.items():
-            placeholder = f"{{{key}}}"
-            if placeholder in template:
+        # Build safe context for format_map (preserves unsubstituted vars)
+        safe_context = _SafeFormatDict({k: str(v) for k, v in context.items()})
+        try:
+            template = template.format_map(safe_context)
+        except (KeyError, ValueError, IndexError) as e:
+            logger.warning(
+                f"Template '{template_key}' format_map failed: {e}, falling back to manual substitution"
+            )
+            for key, val in context.items():
+                placeholder = f"{{{key}}}"
                 template = template.replace(placeholder, str(val))
-            else:
-                logger.debug(f"Variable '{key}' not found in template '{template_key}'")
 
         # Check for any remaining unsubstituted placeholders
-        import re
-
         remaining_placeholders = re.findall(r"\{(\w+)\}", template)
         if remaining_placeholders:
             logger.warning(

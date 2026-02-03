@@ -42,6 +42,25 @@ class TerminologyChecker:
         "[유사사례]",
     ]
 
+    # 의미 일치 판단 임계값 (문자 집합 겹침 비율)
+    MEANING_MATCH_THRESHOLD = 0.7
+
+    def __init__(self):
+        """사전 컴파일된 정규식 패턴을 초기화합니다."""
+        self._term_patterns = {
+            term: re.compile(rf"{re.escape(term)}\s*\(([^)]+)\)")
+            for term in self.TERMINOLOGY_DICT
+        }
+        self._standalone_patterns = {
+            term: re.compile(rf"(?<!\()(?<!\（){re.escape(term)}(?!\s*[\(（])")
+            for term in self.TERMINOLOGY_DICT
+        }
+        self._annotated_patterns = {
+            term: re.compile(rf"{re.escape(term)}\s*[\(（]")
+            for term in self.TERMINOLOGY_DICT
+        }
+        self._template_var_pattern = re.compile(r"\{(\w+)\}")
+
     def check(self, response: str, input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Run all terminology and format checks.
@@ -74,8 +93,7 @@ class TerminologyChecker:
             # Check if the term has a parenthetical annotation nearby
             # Pattern: term followed by ( ... ) within reasonable distance
             # Allow flexible whitespace and minor particle differences
-            pattern = rf"{re.escape(term)}\s*\(([^)]+)\)"
-            matches = re.findall(pattern, response)
+            matches = self._term_patterns[term].findall(response)
 
             if not matches:
                 # Term appears but has no annotation at all
@@ -84,12 +102,10 @@ class TerminologyChecker:
                 # But standalone "해제" without annotation is a violation
 
                 # Find standalone occurrences (not inside parentheses)
-                standalone_pattern = rf"(?<!\()(?<!\（){re.escape(term)}(?!\s*[\(（])"
-                standalone_matches = re.findall(standalone_pattern, response)
+                standalone_matches = self._standalone_patterns[term].findall(response)
 
                 # Also check if there's at least one annotated occurrence
-                annotated_pattern = rf"{re.escape(term)}\s*[\(（]"
-                has_annotation = bool(re.search(annotated_pattern, response))
+                has_annotation = bool(self._annotated_patterns[term].search(response))
 
                 if standalone_matches and not has_annotation:
                     violations.append(
@@ -146,7 +162,7 @@ class TerminologyChecker:
         overlap = len(actual_chars & expected_chars)
         total = len(expected_chars)
 
-        if total > 0 and overlap / total >= 0.7:
+        if total > 0 and overlap / total >= self.MEANING_MATCH_THRESHOLD:
             return True
 
         return False
@@ -184,7 +200,7 @@ class TerminologyChecker:
         """Check for unsubstituted template variables."""
         violations = []
         # Look for {variable_name} patterns that should have been replaced
-        unsubstituted = re.findall(r"\{(\w+)\}", response)
+        unsubstituted = self._template_var_pattern.findall(response)
         if unsubstituted:
             violations.append(
                 {

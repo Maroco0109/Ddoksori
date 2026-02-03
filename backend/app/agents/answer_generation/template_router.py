@@ -10,32 +10,13 @@ import re
 from typing import Dict
 
 from .context_builder import ContextBuilder
+from .routing_config import (
+    get_criminal_keywords,
+    get_high_amount_threshold,
+    get_intl_keywords,
+)
 
 logger = logging.getLogger(__name__)
-
-# Routing Constants
-CRIMINAL_KEYWORDS = [
-    "사기",
-    "잠적",
-    "먹튀",
-    "고소",
-    "경찰",
-    "벽돌",
-    "고발",
-    "야반도주",
-    "신고",
-]
-INTL_KEYWORDS = [
-    "직구",
-    "해외결제",
-    "알리",
-    "테무",
-    "아마존",
-    "배대지",
-    "관세",
-    "해외 사이트",
-]
-HIGH_AMOUNT_THRESHOLD = 5_000_000
 
 # Phase Constants
 PHASE_1 = "solution"
@@ -84,9 +65,9 @@ class TemplateRouter:
         amount_text = onboarding.get("purchase_amount", "") + " " + user_query
         amount = ContextBuilder.extract_amount(amount_text)
 
-        if amount and amount > HIGH_AMOUNT_THRESHOLD:
+        if amount and amount > get_high_amount_threshold():
             logger.warning(
-                f"Fallback: High amount detected ({amount:,}원 > {HIGH_AMOUNT_THRESHOLD:,}원)"
+                f"Fallback: High amount detected ({amount:,}원 > {get_high_amount_threshold():,}원)"
             )
             return "fallback"
 
@@ -134,7 +115,7 @@ class TemplateRouter:
         amount_text = onboarding.get("purchase_amount", "") + " " + user_query
         amount = ContextBuilder.extract_amount(amount_text)
 
-        if amount and amount > HIGH_AMOUNT_THRESHOLD:
+        if amount and amount > get_high_amount_threshold():
             return f"피해 금액({amount:,}원) 고액 사건"
 
         # Check criminal keywords
@@ -151,14 +132,12 @@ class TemplateRouter:
     @staticmethod
     def _contains_criminal_keywords(text: str) -> bool:
         """Check if text contains criminal-related keywords."""
-        text_lower = text.lower()
-        return any(keyword in text_lower for keyword in CRIMINAL_KEYWORDS)
+        return any(keyword in text for keyword in get_criminal_keywords())
 
     @staticmethod
     def _contains_international_keywords(text: str) -> bool:
         """Check if text contains international transaction keywords."""
-        text_lower = text.lower()
-        return any(keyword in text_lower for keyword in INTL_KEYWORDS)
+        return any(keyword in text for keyword in get_intl_keywords())
 
     @staticmethod
     def _has_retrieval_results(retrieval: Dict) -> bool:

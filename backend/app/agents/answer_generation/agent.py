@@ -563,11 +563,12 @@ def _extract_cited_cases(retrieval: Dict) -> List[Dict]:
             elif "상담" in cat or "counsel" in cat.lower():
                 category = "상담"
 
+            case_info = ContextBuilder.extract_case_info(result)
             cited_cases.append(
                 {
                     "case_id": result.get("chunk_id") or result.get("doc_id", ""),
                     "category": category,
-                    "title": result.get("doc_title") or result.get("title", ""),
+                    "title": case_info["title"],
                     "summary": (result.get("content", "") or result.get("summary", ""))[
                         :200
                     ],
@@ -657,37 +658,24 @@ def _build_generation_result(
     return result
 
 
-async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
+def _try_early_exit(state: Dict, config: Any, start_time: float):
     """
-    [답변생성 노드 v2 진입점] — 통합 단일 파이프라인
+    Phase 0: 빠른 탈출 — LLM 불필요한 경로를 처리합니다.
 
-    모든 response_mode(legacy/minimal/adaptive)에서 동일한 파이프라인을 거칩니다:
-    Phase 0: 빠른 탈출 (LLM 불필요)
-    Phase 1: 검색 결과 + Sufficiency Check
-    Phase 2: 캐시 확인
-    Phase 3: Template Selection + Rendering
-    Phase 4: LLM 생성
-    Phase 5: 후처리 (progressive summary, followup, cache)
+    META_CONVERSATIONAL, FOLLOWUP_WITH_CONTEXT, followup(검색 결과 없음),
+    general, restricted 쿼리를 규칙 기반으로 즉시 응답합니다.
 
     Args:
-        state: ChatState (v2 호환)
-        config: RunnableConfig (스트리밍용)
+        state: ChatState
+        config: RunnableConfig
+        start_time: 시작 시각 (time.time())
 
     Returns:
-        Dict with draft_answer, claim_evidence_map, cited_cases, etc.
+        결과 Dict (매칭 시) 또는 None (매칭 없음)
     """
     import time
 
-    from langchain_core.messages import AIMessage
-
-    start_time = time.time()
-    app_config = get_config()
-    response_mode = app_config.response.response_mode
     mode = state.get("mode", "NEED_RAG")
-
-    # ==========================================
-    # Phase 0: 빠른 탈출 (LLM 불필요한 경로)
-    # ==========================================
 
     if mode == "META_CONVERSATIONAL":
         logger.info("[Generation] META_CONVERSATIONAL mode → guide response")
@@ -700,10 +688,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     user_query = state.get("user_query", "")
     query_analysis = state.get("query_analysis", {})
     retrieval = state.get("retrieval", {})
-    retry_context = state.get("retry_context")
     query_type = query_analysis.get("query_type", "dispute")
-    onboarding = state.get("onboarding") or {}
-    conversation_history = state.get("conversation_history", [])
 
     # followup query_type (후속 턴이지만 검색 결과 없는 경우)
     if query_type == "followup" and not retrieval:
@@ -737,32 +722,35 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         result["generation_time_ms"] = (time.time() - start_time) * 1000
         return result
 
-    # ==========================================
-    # Phase 1: 검색 결과 + Sufficiency Check
-    # ==========================================
+    return None
 
-    if not retrieval:
-        no_result_msg = "죄송합니다. 관련 정보를 찾을 수 없습니다. 질문을 더 구체적으로 작성해 주시면 도움이 될 것 같습니다."
-        return _build_generation_result(
-            answer=no_result_msg,
-            start_time=start_time,
-            has_evidence=False,
-            clarifying_questions=[
-                "어떤 제품/서비스에 대한 분쟁인가요?",
-                "언제 구매하셨나요?",
-                "어떤 문제가 발생했나요?",
-            ],
-        )
 
+def _check_sufficiency(state: Dict, retrieval: Dict, start_time: float) -> tuple:
+    """
+    Phase 1: 검색 결과 충분성 검사를 수행합니다.
+
+    Args:
+        state: ChatState
+        retrieval: 검색 결과 Dict
+        start_time: 시작 시각
+
+    Returns:
+        (result_or_none, confidence) 튜플.
+        insufficient이면 result Dict, 아니면 None. confidence는 항상 반환.
+    """
     checker = RetrievalSufficiencyChecker()
     suf_result = checker.evaluate(retrieval)
     retrieval_confidence = suf_result.confidence
 
     if suf_result.level == "insufficient":
-        insufficient_msg = f"죄송합니다. 검색된 정보가 충분하지 않아 정확한 답변을 드리기 어렵습니다.\n\n{suf_result.reason}\n\n다음 정보를 추가로 알려주시면 더 정확한 답변을 드릴 수 있습니다:"
+        insufficient_msg = (
+            f"죄송합니다. 검색된 정보가 충분하지 않아 정확한 답변을 드리기 어렵습니다."
+            f"\n\n{suf_result.reason}"
+            f"\n\n다음 정보를 추가로 알려주시면 더 정확한 답변을 드릴 수 있습니다:"
+        )
         for i, q in enumerate(suf_result.clarifying_questions, 1):
             insufficient_msg += f"\n{i}. {q}"
-        return _build_generation_result(
+        result = _build_generation_result(
             answer=insufficient_msg,
             start_time=start_time,
             has_evidence=False,
@@ -770,38 +758,81 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
             clarifying_questions=suf_result.clarifying_questions,
             model_used="sufficiency_insufficient",
         )
+        return (result, retrieval_confidence)
 
-    # ==========================================
-    # Phase 2: 캐시 확인
-    # ==========================================
+    return (None, retrieval_confidence)
 
-    if not retry_context:
-        cache = get_answer_cache()
-        cached = cache.get(user_query, query_type)
-        if cached:
-            return _build_generation_result(
-                answer=cached["answer"],
-                start_time=start_time,
-                claim_evidence_map=cached.get("claim_evidence_map", []),
-                cited_cases=cached.get("cited_cases", []),
-                has_evidence=cached.get("has_evidence", True),
-                retrieval_confidence=cached.get(
-                    "retrieval_confidence", retrieval_confidence
-                ),
-                model_used="cache",
-                cache_hit=True,
-                # Progressive summary가 캐시에 있으면 사용
-                response_depth=cached.get("response_depth", "full"),
-                available_details=cached.get("available_details"),
-            )
 
-    # ==========================================
-    # Phase 3: Template Selection + Rendering
-    # ==========================================
+def _try_cache(
+    state: Dict,
+    user_query: str,
+    query_type: str,
+    retry_context,
+    retrieval_confidence: float,
+    start_time: float,
+):
+    """
+    Phase 2: 캐시 확인 — 동일 질문에 대한 캐시된 답변을 반환합니다.
 
-    retry_supplement = (
-        _build_retry_prompt_supplement(retry_context) if retry_context else None
-    )
+    Args:
+        state: ChatState
+        user_query: 사용자 질문
+        query_type: 쿼리 유형
+        retry_context: 재시도 컨텍스트 (있으면 캐시 스킵)
+        retrieval_confidence: 검색 신뢰도
+        start_time: 시작 시각
+
+    Returns:
+        캐시된 결과 Dict 또는 None
+    """
+    if retry_context:
+        return None
+
+    cache = get_answer_cache()
+    cached = cache.get(user_query, query_type)
+    if cached:
+        return _build_generation_result(
+            answer=cached["answer"],
+            start_time=start_time,
+            claim_evidence_map=cached.get("claim_evidence_map", []),
+            cited_cases=cached.get("cited_cases", []),
+            has_evidence=cached.get("has_evidence", True),
+            retrieval_confidence=cached.get(
+                "retrieval_confidence", retrieval_confidence
+            ),
+            model_used="cache",
+            cache_hit=True,
+            response_depth=cached.get("response_depth", "full"),
+            available_details=cached.get("available_details"),
+        )
+
+    return None
+
+
+def _render_and_generate(
+    state: Dict,
+    user_query: str,
+    retrieval: Dict,
+    onboarding: Dict,
+    retry_supplement,
+    mode: str,
+) -> tuple:
+    """
+    Phase 3-4: 템플릿 선택/렌더링 + LLM 생성을 수행합니다.
+
+    Args:
+        state: ChatState
+        user_query: 사용자 질문
+        retrieval: 검색 결과
+        onboarding: 온보딩 정보
+        retry_supplement: 재시도 보충 프롬프트 (없으면 None)
+        mode: 현재 모드 (NEED_RAG 등)
+
+    Returns:
+        (draft_answer, model_used, claim_evidence_map) 튜플
+    """
+    query_analysis = state.get("query_analysis", {})
+    query_type = query_analysis.get("query_type", "dispute")
 
     DEFAULT_AGENCY_INFO = {
         "agency": "KCA",
@@ -818,7 +849,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     agency_info = retrieval.get("agency", DEFAULT_AGENCY_INFO)
     include_disclaimer = mode == "NEED_RAG"
 
-    # New template system
+    # Template system
     router = TemplateRouter()
     loader = TemplateLoader()
     ctx_builder = ContextBuilder()
@@ -826,21 +857,16 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     template_key = router.select_template(state)
     context = ctx_builder.build(state)
 
-    # Add fallback reason if applicable
     if template_key == "fallback":
         context["logic_from_gold_set"] = router.get_fallback_reason(state)
 
     rendered_prompt = loader.render(template_key, context)
     logger.info(f"[Generation] Template: {template_key} (query_type={query_type})")
 
-    # Use rendered prompt as system_prompt for LLM
     format_system_prompt = rendered_prompt
     format_user_prompt = None  # Template already contains user context
 
-    # ==========================================
-    # Phase 4: LLM 생성
-    # ==========================================
-
+    # LLM generation
     draft_answer, model_used, claim_evidence_map = (
         AnswerGenerationFallback.generate_with_fallback(
             query=user_query,
@@ -854,24 +880,84 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         )
     )
 
-    # ==========================================
-    # Phase 5: Post-Processing
-    # ==========================================
+    return (draft_answer, model_used, claim_evidence_map)
 
-    # 5a. response_depth is always "full" with new template system
-    response_depth = "full"
-    available_details = None
-    display_answer = draft_answer
 
-    # 5b. CitedCase extraction
+async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
+    """
+    [답변생성 노드 v2 진입점] — 통합 단일 파이프라인
+
+    모든 response_mode(legacy/minimal/adaptive)에서 동일한 파이프라인을 거칩니다:
+    Phase 0: 빠른 탈출 (LLM 불필요)
+    Phase 1: 검색 결과 + Sufficiency Check
+    Phase 2: 캐시 확인
+    Phase 3: Template Selection + Rendering
+    Phase 4: LLM 생성
+    Phase 5: 후처리 (progressive summary, followup, cache)
+
+    Args:
+        state: ChatState (v2 호환)
+        config: RunnableConfig (스트리밍용)
+
+    Returns:
+        Dict with draft_answer, claim_evidence_map, cited_cases, etc.
+    """
+    import time
+
+    from langchain_core.messages import AIMessage
+
+    start_time = time.time()
+
+    # Phase 0: 빠른 탈출
+    early_result = _try_early_exit(state, config, start_time)
+    if early_result is not None:
+        return early_result
+
+    user_query = state.get("user_query", "")
+    query_analysis = state.get("query_analysis", {})
+    retrieval = state.get("retrieval", {})
+    retry_context = state.get("retry_context")
+    query_type = query_analysis.get("query_type", "dispute")
+    onboarding = state.get("onboarding") or {}
+    mode = state.get("mode", "NEED_RAG")
+
+    # Phase 1: Sufficiency Check
+    if not retrieval:
+        return _build_generation_result(
+            answer="죄송합니다. 관련 정보를 찾을 수 없습니다. 질문을 더 구체적으로 작성해 주시면 도움이 될 것 같습니다.",
+            start_time=start_time,
+            has_evidence=False,
+            clarifying_questions=[
+                "어떤 제품/서비스에 대한 분쟁인가요?",
+                "언제 구매하셨나요?",
+                "어떤 문제가 발생했나요?",
+            ],
+        )
+
+    suf_result_tuple = _check_sufficiency(state, retrieval, start_time)
+    if suf_result_tuple[0] is not None:
+        return suf_result_tuple[0]
+    retrieval_confidence = suf_result_tuple[1]
+
+    # Phase 2: 캐시 확인
+    cached = _try_cache(
+        state, user_query, query_type, retry_context, retrieval_confidence, start_time
+    )
+    if cached is not None:
+        return cached
+
+    # Phase 3-4: Template + LLM 생성
+    retry_supplement = (
+        _build_retry_prompt_supplement(retry_context) if retry_context else None
+    )
+    draft_answer, model_used, claim_evidence_map = _render_and_generate(
+        state, user_query, retrieval, onboarding, retry_supplement, mode
+    )
+
+    # Phase 5: Post-processing
     cited_cases = _extract_cited_cases(retrieval)
-
-    # 5c. followup_questions - template generates these inline, extract if needed
-    followup_questions = []
-
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
-    # 5d. Cache storage
     if not retry_context:
         cache = get_answer_cache()
         cache.set(
@@ -892,9 +978,9 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": retrieval_confidence,
-        "followup_questions": followup_questions,
-        "response_depth": response_depth,
-        "available_details": available_details,
+        "followup_questions": [],
+        "response_depth": "full",
+        "available_details": None,
         "generation_time_ms": (time.time() - start_time) * 1000,
         "messages": [AIMessage(content=draft_answer)],
         "generation_model_used": model_used,
