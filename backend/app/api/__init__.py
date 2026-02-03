@@ -28,7 +28,6 @@ from .chat import router as chat_router
 # 의존성도 export
 from .dependencies import (
     get_db_config,
-    get_embed_api_url,
     get_retrieval_mode,
     get_retriever,
 )
@@ -73,6 +72,5 @@ __all__ = [
     # 의존성
     "get_retriever",
     "get_db_config",
-    "get_embed_api_url",
     "get_retrieval_mode",
 ]
