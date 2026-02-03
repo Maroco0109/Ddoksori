@@ -24,14 +24,12 @@ export default function LoginModal() {
   const login = useAuthStore((state) => state.login);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
 
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-
   const handleGoogleLogin = () => {
-    window.location.href = `${BACKEND_URL}/auth/google`;
+    window.location.href = '/auth/google';
   };
 
   const handleNaverLogin = () => {
-    window.location.href = `${BACKEND_URL}/auth/naver`;
+    window.location.href = '/auth/naver';
   };
 
   // 개발 환경에서만 사용할 테스트 로그인 함수
