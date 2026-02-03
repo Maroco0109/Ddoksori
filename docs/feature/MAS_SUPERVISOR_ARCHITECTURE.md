@@ -255,7 +255,7 @@ def get_graph_for_chat_type(chat_type: str, session_id: str = None):
     return get_unified_graph()
 ```
 
-**파일**: `backend/.env.example`
+**파일**: `.env.example`
 
 ```bash
 # MAS Supervisor 그래프 전환 플래그 (Phase 7: 기본값 true)

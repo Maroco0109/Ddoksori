@@ -15,7 +15,7 @@ Transformed the DDOKSORI RAG chatbot from a rigid, fixed-format system into a fl
 1. **Flexible Answer Formatting**: Dynamic response structure based on query type (3 formats)
 2. **Long-term Memory (30-turn)**: PostgreSQL-based conversation persistence with sliding window
 3. **Contextual Follow-up Questions**: Template-based question generation (29 templates)
-4. **Social Login**: OAuth 2.0 integration (Google, Kakao, Naver)
+4. **Social Login**: OAuth 2.0 integration (Google, Naver)
 
 ---
 
@@ -198,11 +198,6 @@ class GoogleOAuth(OAuthProvider):
     # Token exchange: https://oauth2.googleapis.com/token
     # User info: https://www.googleapis.com/oauth2/v2/userinfo
 
-class KakaoOAuth(OAuthProvider):
-    # Authorization: https://kauth.kakao.com/oauth/authorize
-    # Token exchange: https://kauth.kakao.com/oauth/token
-    # User info: https://kapi.kakao.com/v2/user/me
-
 class NaverOAuth(OAuthProvider):
     # Authorization: https://nid.naver.com/oauth2.0/authorize
     # Token exchange: https://nid.naver.com/oauth2.0/token
@@ -213,8 +208,6 @@ class NaverOAuth(OAuthProvider):
 ```bash
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-KAKAO_CLIENT_ID=...
-KAKAO_CLIENT_SECRET=...
 NAVER_CLIENT_ID=...
 NAVER_CLIENT_SECRET=...
 ```
@@ -886,7 +879,7 @@ async def test_db_failure_falls_back_to_memory():
 
 #### Added Social Login Handler
 ```typescript
-const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
+const handleSocialLogin = (provider: 'google' | 'naver') => {
   const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   window.location.href = `${backendUrl}/api/auth/${provider}/login`;
 };
@@ -900,10 +893,6 @@ const handleSocialLogin = (provider: 'google' | 'kakao' | 'naver') => {
 >
   <svg>...</svg>
   Google로 계속하기
-</button>
-
-<button onClick={() => handleSocialLogin('kakao')}>
-  Kakao로 계속하기
 </button>
 
 <button onClick={() => handleSocialLogin('naver')}>
@@ -1127,7 +1116,7 @@ export async function get<T>(endpoint: string): Promise<T> {
 
 ### Backend Environment Variables
 
-**File**: `backend/.env`
+**File**: `.env`
 
 ```bash
 # ============================================================================
@@ -1138,13 +1127,10 @@ JWT_ALGORITHM=HS256
 JWT_TOKEN_EXPIRE_DAYS=30
 
 # ============================================================================
-# OAuth Providers (Google, Kakao, Naver)
+# OAuth Providers (Google, Naver)
 # ============================================================================
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-
-KAKAO_CLIENT_ID=your-kakao-rest-api-key
-KAKAO_CLIENT_SECRET=your-kakao-client-secret-optional
 
 NAVER_CLIENT_ID=your-naver-client-id
 NAVER_CLIENT_SECRET=your-naver-client-secret
@@ -1197,19 +1183,6 @@ VITE_API_BASE_URL=http://localhost:8000
    - Development: `http://localhost:8000/api/auth/google/callback`
    - Production: `https://your-domain.com/api/auth/google/callback`
 8. Copy **Client ID** and **Client Secret** to `.env`
-
-### Kakao OAuth
-
-1. Go to [Kakao Developers](https://developers.kakao.com/)
-2. "내 애플리케이션" → "애플리케이션 추가하기"
-3. "플랫폼" → "Web" 추가
-   - 사이트 도메인: `http://localhost:5173` (development)
-4. "제품 설정" → "카카오 로그인" 활성화
-5. "Redirect URI":
-   - Development: `http://localhost:8000/api/auth/kakao/callback`
-   - Production: `https://your-domain.com/api/auth/kakao/callback`
-6. (Optional) "보안" → "Client Secret" 발급
-7. Copy **REST API 키** (Client ID) to `.env`
 
 ### Naver OAuth
 
@@ -1459,7 +1432,7 @@ if ENABLE_ANSWER_CACHE:
 
 ### Pre-deployment
 
-- [ ] OAuth credentials obtained for all 3 providers
+- [ ] OAuth credentials obtained for all providers (Google, Naver)
 - [ ] Production redirect URIs added to OAuth apps
 - [ ] `JWT_SECRET_KEY` generated (min 32 chars, cryptographically secure)
 - [ ] **Database migration `004_conversation_memory.sql` executed on production DB**:
@@ -1564,7 +1537,7 @@ def decrypt_token(encrypted: str) -> str:
 ### 4. No Email Verification
 
 **Current**: Users can login with any OAuth provider
-**Limitation**: Email not verified for Kakao/Naver (only Google verifies)
+**Limitation**: Email not verified for Naver (only Google verifies)
 **Future Enhancement**: Add email verification step
 
 ---

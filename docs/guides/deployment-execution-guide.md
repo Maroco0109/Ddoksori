@@ -76,7 +76,6 @@ psql -h ["rds address"] \
 | Provider | 콘솔 URL | Redirect URI |
 |----------|---------|-------------|
 | Google | [console.cloud.google.com](https://console.cloud.google.com/) | `http://localhost:8000/api/auth/google/callback` |
-| Kakao | [developers.kakao.com](https://developers.kakao.com/) | `http://localhost:8000/api/auth/kakao/callback` |
 | Naver | [developers.naver.com](https://developers.naver.com/) | `http://localhost:8000/api/auth/naver/callback` |
 
 **OAuth 설정은 선택사항입니다.** 소셜 로그인 없이도 게스트 모드로 시스템 사용 가능합니다.
@@ -122,11 +121,11 @@ conda run -n dsr pip install -r requirements.txt
 
 ### 2.3 환경 변수 설정
 
-#### Backend 환경 변수 (`backend/.env`)
+#### Backend 환경 변수 (`.env`)
 
 ```bash
-# backend/.env 파일 생성
-cd /home/maroco/LLM/backend
+# .env 파일 생성
+cd /home/maroco/LLM
 cp .env.example .env
 nano .env  # 또는 vi, code 등 선호하는 에디터 사용
 ```
@@ -183,10 +182,6 @@ FOLLOWUP_SIMILARITY_THRESHOLD=0.8
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-# Kakao OAuth
-KAKAO_CLIENT_ID=
-KAKAO_CLIENT_SECRET=
-
 # Naver OAuth
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
@@ -227,7 +222,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 # 출력 예시:
 # yQ7XvZ3mN8kP2wR5tL9xU6bC4aJ1sH0eGfKpMqNr
 
-# 이 값을 복사하여 backend/.env 파일의 JWT_SECRET_KEY에 붙여넣기
+# 이 값을 복사하여 .env 파일의 JWT_SECRET_KEY에 붙여넣기
 ```
 
 ---

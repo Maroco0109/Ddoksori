@@ -38,7 +38,7 @@ aws rds describe-db-instances \
   --query 'DBInstances[0].Endpoint.Address'
 
 # 5. 애플리케이션 연결 전환
-# backend/.env의 DB_HOST를 새 엔드포인트로 변경
+# .env의 DB_HOST를 새 엔드포인트로 변경
 
 # 6. 확인 후 기존 인스턴스 삭제 (선택)
 aws rds delete-db-instance \

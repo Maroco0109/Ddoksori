@@ -117,7 +117,7 @@ Now, the EXAONE API will be available at `http://localhost:19010/v1`.
 
 ### 5. Configuration
 
-Update your `backend/.env` file with the following variables:
+Update your `.env` file with the following variables:
 
 **단일 인스턴스 (공유):**
 ```env

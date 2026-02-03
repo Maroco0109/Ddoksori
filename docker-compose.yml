@@ -17,7 +17,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       - REDIS_HOST=redis
     depends_on:

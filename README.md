@@ -82,7 +82,7 @@ docker compose up -d
 
 ## 5. Configuration
 
-`.env` 파일 설정을 통해 시스템 동작을 제어합니다. `backend/.env.example`을 복사하여 사용하세요.
+`.env` 파일 설정을 통해 시스템 동작을 제어합니다. `.env.example`을 복사하여 사용하세요.
 
 ### 기본 설정
 | 변수명 | 설명 | 기본값/예시 |

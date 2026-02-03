@@ -1202,7 +1202,7 @@ volumes:
 
 **구현 완료 파일:**
 - `backend/app/common/secrets.py` - AWS Secrets Manager SDK 래퍼, os.environ 사전 주입
-  - SECRET_CATEGORIES (라인 27-35): database, llm, oauth/google, oauth/kakao, oauth/naver, security, infra
+  - SECRET_CATEGORIES (라인 27-35): database, llm, oauth/google, oauth/naver, security, infra
   - `inject_aws_secrets()` → `get_config()` 호출 전에 환경변수 주입
 
 **환경별 시크릿 흐름:**
@@ -1602,7 +1602,6 @@ GitHub Repository → Settings → Secrets and variables → Actions
 | `ddoksori/{env}/database` | DB_HOST, DB_USER, DB_PASSWORD, DATABASE_URL |
 | `ddoksori/{env}/llm` | OPENAI_API_KEY, ANTHROPIC_API_KEY |
 | `ddoksori/{env}/oauth/google` | GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET |
-| `ddoksori/{env}/oauth/kakao` | KAKAO_CLIENT_ID, KAKAO_CLIENT_SECRET |
 | `ddoksori/{env}/oauth/naver` | NAVER_CLIENT_ID, NAVER_CLIENT_SECRET |
 | `ddoksori/{env}/security` | JWT_SECRET_KEY, SECRET_KEY |
 | `ddoksori/{env}/infra` | HF_TOKEN, EXAONE_RUNPOD_API_KEY |
@@ -1672,7 +1671,7 @@ GitHub Repository → Settings → Secrets and variables → Actions
 - 아카이브된 배포 가이드: `docs/_archive/plans/deploy/`
 - 현재 Docker 설정 (개발): `docker-compose.yml`
 - 테스트 설정: `backend/pytest.ini`
-- 환경변수 템플릿: `backend/.env.example`
+- 환경변수 템플릿: `.env.example`
 - AWS Secrets Manager 설계: `docs/plans/2026-01-29-aws-secrets-manager-design.md`
 - MAS v2 아키텍처 설계: `docs/plans/2026-01-28-mas-architecture-v2-design.md`
 
