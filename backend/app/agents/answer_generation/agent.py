@@ -26,6 +26,7 @@ from typing import Any, Dict, List
 from langchain_core.messages import AIMessage
 
 from ...domain import AGENCY_INFO
+from ..followup.generator import FollowupQuestionGenerator
 from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 from .cache import get_answer_cache
 from .context_builder import ContextBuilder
@@ -954,6 +955,16 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     cited_cases = _extract_cited_cases(retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
+    # Phase 6: Generate followup questions
+    query_analysis = state.get("query_analysis", {})
+    followup_generator = FollowupQuestionGenerator()
+    followup_result = followup_generator.generate_questions(
+        query_analysis=query_analysis,
+        retrieval=retrieval,
+        answer=draft_answer,
+    )
+    followup_questions = followup_result.get("followup_questions", [])
+
     if not retry_context:
         cache = get_answer_cache()
         cache.set(
@@ -974,7 +985,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": retrieval_confidence,
-        "followup_questions": [],
+        "followup_questions": followup_questions,
         "response_depth": "full",
         "available_details": None,
         "generation_time_ms": (time.time() - start_time) * 1000,
