@@ -325,7 +325,9 @@ class CriteriaRetriever:
     ) -> List[SimilarChunkResult]:
         """분류 세트 기반 criteria 검색 (DB 필터 포함 hybrid RRF)"""
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         rds = RDSInternalRetriever(self.db_config, self.embed_api_url)
         query_embedding = rds.embed_query(query)

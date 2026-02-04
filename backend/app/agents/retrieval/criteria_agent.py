@@ -35,6 +35,7 @@ NON_ITEM_KEYWORDS = {
     "문의",
 }
 
+
 def _normalize_keyword(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^0-9a-z가-힣]+", "", value)
@@ -187,7 +188,9 @@ def _classify_with_llm(
         load_dotenv(dotenv_path=backend_dir / ".env")
         config = get_config().llm
         if not config.openai_api_key:
-            logger.warning("[CriteriaRetrieval] OPENAI_API_KEY missing, skipping classify")
+            logger.warning(
+                "[CriteriaRetrieval] OPENAI_API_KEY missing, skipping classify"
+            )
             return []
 
         client = OpenAI(api_key=config.openai_api_key)
@@ -206,7 +209,7 @@ def _classify_with_llm(
             f"{keywords}\n\n"
             "출력은 JSON 배열로만 반환하라. 예시:\n"
             "[\n"
-            "  {\"keyword\":\"위스키\",\"subcategory_name\":\"주류\"}\n"
+            '  {"keyword":"위스키","subcategory_name":"주류"}\n'
             "]\n\n"
             "분류가 필요없는 키워드는 배열에 포함하지 마라."
         )
@@ -405,9 +408,7 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                     ranked = await _search_and_fuse(
                         expanded_queries,
                         per_query_k,
-                        {
-                            "subcategory_name": category_set.get("subcategory_name")
-                        },
+                        {"subcategory_name": category_set.get("subcategory_name")},
                     )
                     for r in ranked:
                         if (
@@ -466,8 +467,12 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
                 used = len(parent_trim) + len(current_trim)
                 remaining = max_total - used
                 if remaining > 0:
-                    extra = min(remaining, max(0, len(current_text) - len(current_trim)))
-                    current_trim += current_text[len(current_trim): len(current_trim) + extra]
+                    extra = min(
+                        remaining, max(0, len(current_text) - len(current_trim))
+                    )
+                    current_trim += current_text[
+                        len(current_trim) : len(current_trim) + extra
+                    ]
 
                 if is_grandchild:
                     label = "[하위]"
