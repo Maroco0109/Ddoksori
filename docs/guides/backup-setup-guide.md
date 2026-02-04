@@ -290,7 +290,7 @@ export DB_PASSWORD="your-password"
 export S3_BUCKET="ddoksori-backups"
 
 # 백업 실행
-cd /home/maroco/LLM
+cd /path/to/project
 ./backend/scripts/backup/backup_to_s3.sh manual
 ```
 

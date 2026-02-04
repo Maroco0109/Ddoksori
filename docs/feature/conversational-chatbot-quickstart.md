@@ -102,7 +102,7 @@ psql -h $DB_HOST -U $DB_USER -d ddoksori -c "\du $DB_USER"
 # ↑ READ-ONLY 계정이면 다음 단계 진행 불가
 
 # 2. 쓰기 권한이 있는 계정으로 마이그레이션 실행
-psql -h dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com \
+psql -h your-db-instance.ap-northeast-2.rds.amazonaws.com \
      -U ddoksori_admin \
      -d ddoksori \
      -f backend/database/migrations/004_conversation_memory.sql

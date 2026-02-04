@@ -88,7 +88,7 @@ psql -h ["rds address"] \
 
 ```bash
 # 작업 디렉토리로 이동
-cd /home/maroco
+cd /path/to/project
 
 # 프로젝트 클론 (이미 있으면 스킵)
 git clone <repository-url> LLM
@@ -105,14 +105,14 @@ git pull origin feature/34-e2e
 
 ```bash
 # Conda 환경 생성 (처음 한 번만)
-conda create -n dsr python=3.11 -y
+conda create -n your-env python=3.11 -y
 
 # 환경 활성화
-conda activate dsr
+conda activate your-env
 
 # 패키지 설치
 cd backend
-conda run -n dsr pip install -r requirements.txt
+conda run -n your-env pip install -r requirements.txt
 ```
 
 **⏱️ 예상 소요 시간**: 10-15분 (PyTorch, Transformers 등 대용량 패키지 포함)
@@ -125,7 +125,7 @@ conda run -n dsr pip install -r requirements.txt
 
 ```bash
 # .env 파일 생성
-cd /home/maroco/LLM
+cd /path/to/project/LLM
 cp .env.example .env
 nano .env  # 또는 vi, code 등 선호하는 에디터 사용
 ```
@@ -202,7 +202,7 @@ ANTHROPIC_API_KEY=<Anthropic API 키>  # 선택사항
 #### Frontend 환경 변수 (`frontend/.env`)
 
 ```bash
-cd /home/maroco/LLM/frontend
+cd /path/to/project/LLM/frontend
 nano .env
 ```
 
@@ -220,7 +220,7 @@ VITE_API_BASE_URL=http://localhost:8000
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # 출력 예시:
-# yQ7XvZ3mN8kP2wR5tL9xU6bC4aJ1sH0eGfKpMqNr
+# your-generated-jwt-secret-key-min-32-characters
 
 # 이 값을 복사하여 .env 파일의 JWT_SECRET_KEY에 붙여넣기
 ```
@@ -312,7 +312,7 @@ psql -h your_rds_dir.us-east-1.rds.amazonaws.com \
 
 ```bash
 # CloudBeaver 시작
-cd /home/maroco/LLM
+cd /path/to/project/LLM
 docker compose up -d cloudbeaver
 
 # 로그 확인
@@ -352,7 +352,7 @@ open http://localhost:8978
 ### 3.3 Step 3: Docker 이미지 빌드
 
 ```bash
-cd /home/maroco/LLM
+cd /path/to/project/LLM
 
 # Backend 이미지 빌드 (캐시 없이)
 docker compose build --no-cache backend
@@ -380,7 +380,7 @@ docker compose build --no-cache frontend
 ### 3.4 Step 4: 컨테이너 시작
 
 ```bash
-cd /home/maroco/LLM
+cd /path/to/project/LLM
 
 # 모든 서비스 시작
 docker compose up -d
@@ -584,7 +584,7 @@ LIMIT 5;
 #### 전체 서비스 재시작
 
 ```bash
-cd /home/maroco/LLM
+cd /path/to/project/LLM
 
 # 모든 서비스 재시작
 docker compose restart
@@ -885,8 +885,8 @@ RESPONSE_MODE=minimal docker compose up -d backend
 #### 방법 3: 로컬 개발 서버에서 테스트
 
 ```bash
-cd /home/maroco/LLM/backend
-conda activate dsr
+cd /path/to/project/LLM/backend
+conda activate your-env
 
 # legacy 모드 (기본)
 RESPONSE_MODE=legacy uvicorn app.main:app --reload
