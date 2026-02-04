@@ -232,6 +232,8 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
             )
 
         except Exception as e:
+            import traceback
+
             individual_result = {
                 "source": agent_type,
                 "documents": [],
@@ -240,7 +242,9 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 "search_time_ms": (time.time() - start_time) * 1000,
                 "error": str(e),
             }
-            logger.error(f"[RetrievalAgent_v2:{agent_type}] Error: {e}")
+            logger.error(
+                f"[RetrievalAgent_v2:{agent_type}] Error: {e}\n{traceback.format_exc()}"
+            )
 
         return {"individual_retrieval_results": [individual_result]}
 
