@@ -69,6 +69,7 @@ class LawRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
+        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 
@@ -220,6 +221,7 @@ class CriteriaRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
+        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 
@@ -533,6 +535,7 @@ class CaseRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
+        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 
