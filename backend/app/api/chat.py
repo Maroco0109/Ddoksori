@@ -61,6 +61,9 @@ KNOWN_GRAPH_NODES = {
     "retrieval_criteria",
     "retrieval_case",
     "retrieval_merge",
+    "memory_save",
+    "inject_cached_retrieval",
+    "clarify",  # PR-4: 역질문 노드
 }
 
 
