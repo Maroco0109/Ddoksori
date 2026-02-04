@@ -148,7 +148,7 @@ class LawRetriever:
                     source_file=row.get("source_file"),
                     printed_page=row.get("printed_page"),
                     source_year=row.get("source_year"),
-                    metadata=metadata or None,
+                    metadata=metadata,
                     vector_similarity=float(row.get("vector_similarity", 0.0)),
                     rrf_score=float(row.get("rrf_score", 0.0)),
                 )
@@ -312,7 +312,7 @@ class CriteriaRetriever:
                     source_file=row.get("source_file"),
                     printed_page=row.get("printed_page"),
                     source_year=row.get("source_year"),
-                    metadata=metadata or None,
+                    metadata=metadata,
                     vector_similarity=float(row.get("vector_similarity", 0.0)),
                     rrf_score=float(row.get("rrf_score", 0.0)),
                 )
@@ -478,7 +478,7 @@ class CriteriaRetriever:
                         source_file=row[11],
                         printed_page=row[12],
                         source_year=row[13],
-                        metadata=metadata or None,
+                        metadata=metadata,
                         vector_similarity=float(row[5] or 0.0),
                         rrf_score=float(row[3] or 0.0),
                     )
