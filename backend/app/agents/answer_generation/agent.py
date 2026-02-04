@@ -165,22 +165,43 @@ def _get_llm_model() -> str:
 
 def _build_general_response(user_query: str) -> str:
     """
-    일반 대화(인사, 감사)에 대한 규칙 기반 응답 생성
+    일반 대화(인사, 감사, 확인, 작별)에 대한 규칙 기반 응답 생성
     LLM 비용 절감을 위해 단순 패턴 매칭 사용.
     """
-    greetings = ["안녕", "반가", "hello", "hi"]
-    thanks = ["감사", "고마", "thanks", "thank"]
+    query_lower = user_query.lower().strip()
 
-    query_lower = user_query.lower()
+    # 1. 작별 인사 (먼저 체크 - "안녕히"가 "안녕"보다 먼저 매칭되어야 함)
+    goodbyes = ["bye", "안녕히", "잘가", "수고"]
+    for g in goodbyes:
+        if g in query_lower:
+            return "이용해 주셔서 감사합니다! 다음에 또 찾아주세요."
 
+    # 2. 인사말 패턴 (확장)
+    greetings = ["안녕", "반가", "hello", "hi", "하이", "ㅎㅇ", "ㅎ2"]
     for g in greetings:
         if g in query_lower:
-            return "안녕하세요! 저는 소비자 분쟁 상담을 도와드리는 똑소리입니다. 궁금하신 분쟁 관련 사항이 있으시면 말씀해 주세요."
+            return (
+                "안녕하세요! 저는 소비자 분쟁 상담을 도와드리는 **똑소리**입니다.\n\n"
+                "궁금하신 분쟁 관련 사항이 있으시면 편하게 말씀해 주세요.\n\n"
+                "예를 들어:\n"
+                '- "노트북 환불 가능한가요?"\n'
+                '- "헬스장 계약 취소하고 싶어요"\n'
+                '- "청약철회 기간이 어떻게 되나요?"'
+            )
 
+    # 3. 감사 패턴
+    thanks = ["감사", "고마", "thanks", "thank"]
     for t in thanks:
         if t in query_lower:
-            return "도움이 되셨다면 다행이에요. 추가로 궁금하신 사항이 있으시면 언제든 물어봐 주세요!"
+            return "도움이 되셨다면 다행이에요! 추가로 궁금하신 사항이 있으시면 언제든 물어봐 주세요."
 
+    # 4. 확인/동의 패턴
+    confirmations = ["네", "예", "알겠", "오케이", "ok", "ㅇㅇ", "ㅇㅋ"]
+    for c in confirmations:
+        if query_lower == c or query_lower.startswith(c + " "):
+            return "네, 추가로 궁금하신 점이 있으시면 말씀해 주세요!"
+
+    # 5. 기본 응답
     return "네, 무엇을 도와드릴까요? 소비자 분쟁 관련 상담을 원하시면 자세한 상황을 알려주세요."
 
 
