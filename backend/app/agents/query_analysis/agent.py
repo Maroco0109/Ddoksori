@@ -278,45 +278,11 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # Step 2: 질의 유형 분류 (Hybrid: Rule + LLM Fallback)
     from .classifiers import classify_query_type_with_confidence
-    from .llm_classifier import llm_classify
 
     query_type, rule_confidence = classify_query_type_with_confidence(normalized_query)
     logger.info(
         f"[QueryAnalysis v2] Rule-based classification: query_type={query_type}, confidence={rule_confidence:.2f}"
     )
-
-    # LLM Fallback: confidence < 0.7이면 LLM으로 2차 분류
-    llm_used = False
-    if rule_confidence < 0.7:
-        logger.info(
-            f"[QueryAnalysis v2] Low confidence ({rule_confidence:.2f}), trying LLM fallback..."
-        )
-        try:
-            llm_result = await llm_classify(normalized_query)
-            if llm_result:
-                llm_type, llm_confidence, llm_reasoning = llm_result
-                logger.info(
-                    f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}, "
-                    f"reasoning='{llm_reasoning[:100]}'"
-                )
-                if llm_confidence > rule_confidence:
-                    logger.info(
-                        f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
-                    )
-                    query_type = llm_type
-                    llm_used = True
-                else:
-                    logger.info(
-                        f"[QueryAnalysis v2] Rule-based confidence higher, keeping: {query_type}({rule_confidence:.2f})"
-                    )
-        except Exception as e:
-            logger.warning(
-                f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}"
-            )
-    else:
-        logger.info(
-            f"[QueryAnalysis v2] High confidence ({rule_confidence:.2f}), skipping LLM fallback"
-        )
 
     # Step 2.5: 쿼리 복잡도 분류 (Adaptive RAG)
     query_complexity = classify_query_complexity(normalized_query)
@@ -345,13 +311,63 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         if purchase_item and purchase_item not in keywords:
             keywords.append(purchase_item)
 
-    # Step 5: LLM 기반 쿼리 확장 (v2 핵심)
-    expanded_queries = await expand_query_with_llm_v2(
-        query=normalized_query,
-        keywords=keywords,
-        intent=intent,
-        use_fallback=True,
+    # Step 5: LLM 호출 병렬화 (llm_classify + expand_query_with_llm_v2)
+    # 성능 최적화: 두 LLM 호출을 asyncio.gather로 병렬 실행 (6초 → 3초)
+    import asyncio
+
+    from .llm_classifier import llm_classify
+
+    async def _maybe_llm_classify(query: str, confidence: float):
+        """조건부 LLM 분류 - confidence < 0.7일 때만 실행"""
+        if confidence < 0.7:
+            try:
+                logger.info(
+                    f"[QueryAnalysis v2] Low confidence ({confidence:.2f}), trying LLM fallback..."
+                )
+                return await llm_classify(query)
+            except Exception as e:
+                logger.warning(f"[QueryAnalysis v2] LLM fallback failed: {e}")
+                return None
+        logger.info(
+            f"[QueryAnalysis v2] High confidence ({confidence:.2f}), skipping LLM fallback"
+        )
+        return None
+
+    # 병렬 실행 (keywords, intent는 이미 계산됨)
+    llm_result, expanded_queries = await asyncio.gather(
+        _maybe_llm_classify(normalized_query, rule_confidence),
+        expand_query_with_llm_v2(
+            query=normalized_query,
+            keywords=keywords,
+            intent=intent,
+            use_fallback=True,
+        ),
+        return_exceptions=True,  # 한 쪽 실패해도 다른 쪽 계속
     )
+
+    # 예외 처리
+    if isinstance(llm_result, Exception):
+        logger.warning(f"[QueryAnalysis v2] LLM classify exception: {llm_result}")
+        llm_result = None
+    if isinstance(expanded_queries, Exception):
+        logger.warning(
+            f"[QueryAnalysis v2] Query expansion exception: {expanded_queries}"
+        )
+        expanded_queries = [normalized_query]  # fallback
+
+    # LLM 결과 처리
+    llm_used = False
+    if llm_result:
+        llm_type, llm_confidence, llm_reasoning = llm_result
+        logger.info(
+            f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}"
+        )
+        if llm_confidence > rule_confidence:
+            logger.info(
+                f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
+            )
+            query_type = llm_type
+            llm_used = True
 
     # Step 5.5: 멀티턴 컨텍스트 보강 (짧은 후속 질문)
     last_turn = state.get("_last_turn_context") or {}
