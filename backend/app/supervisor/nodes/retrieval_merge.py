@@ -363,8 +363,9 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
 
                 # Sort by (product_relevance * similarity) descending
                 docs.sort(
-                    key=lambda d: d.get("product_relevance", 1.0)
-                    * d.get("similarity", 0.0),
+                    key=lambda d: (
+                        d.get("product_relevance", 1.0) * d.get("similarity", 0.0)
+                    ),
                     reverse=True,
                 )
 
