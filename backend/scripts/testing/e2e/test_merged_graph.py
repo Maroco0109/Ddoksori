@@ -314,16 +314,16 @@ class TestHybridSearchMethods:
             "LawRetrievalAgent._execute_search must use hybrid_search method"
         )
 
-    def test_criteria_agent_uses_hybrid_search(self):
-        """CriteriaRetrievalAgent가 hybrid_search를 사용하는지 확인"""
+    def test_criteria_agent_uses_criteria_search(self):
+        """CriteriaRetrievalAgent가 criteria_search를 사용하는지 확인"""
         import inspect
 
         from app.agents.retrieval.criteria_agent import CriteriaRetrievalAgent
 
         source = inspect.getsource(CriteriaRetrievalAgent._execute_search)
 
-        assert "hybrid_search" in source, (
-            "CriteriaRetrievalAgent._execute_search must use hybrid_search method"
+        assert "criteria_search" in source, (
+            "CriteriaRetrievalAgent._execute_search must use criteria_search method"
         )
 
 

@@ -1,0 +1,3722 @@
+{
+  "계란": {
+    "item": "계란",
+    "subcategory_name": "란류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "메추리알": {
+    "item": "메추리알",
+    "subcategory_name": "란류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "소고기": {
+    "item": "소고기",
+    "subcategory_name": "육류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "돼지고기": {
+    "item": "돼지고기",
+    "subcategory_name": "육류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "닭고기": {
+    "item": "닭고기",
+    "subcategory_name": "육류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "쌀": {
+    "item": "쌀",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "보리": {
+    "item": "보리",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "콩": {
+    "item": "콩",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "조": {
+    "item": "조",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "수수": {
+    "item": "수수",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "팥": {
+    "item": "팥",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "밀": {
+    "item": "밀",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "참깨": {
+    "item": "참깨",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "땅콩": {
+    "item": "땅콩",
+    "subcategory_name": "곡류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "배": {
+    "item": "배",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "사과": {
+    "item": "사과",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "복숭아": {
+    "item": "복숭아",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "토마토": {
+    "item": "토마토",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "수박": {
+    "item": "수박",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "참외": {
+    "item": "참외",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "포도": {
+    "item": "포도",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "감": {
+    "item": "감",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "바나나": {
+    "item": "바나나",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "파인애플": {
+    "item": "파인애플",
+    "subcategory_name": "과일",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "무": {
+    "item": "무",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "배추": {
+    "item": "배추",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "당근": {
+    "item": "당근",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "오이": {
+    "item": "오이",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "가지": {
+    "item": "가지",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "파": {
+    "item": "파",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "마늘": {
+    "item": "마늘",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "감귤": {
+    "item": "감귤",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "자두": {
+    "item": "자두",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "대추": {
+    "item": "대추",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "양배추": {
+    "item": "양배추",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "양파": {
+    "item": "양파",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "고추": {
+    "item": "고추",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "호박": {
+    "item": "호박",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "상추": {
+    "item": "상추",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "시금치": {
+    "item": "시금치",
+    "subcategory_name": "야채류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "생선류": {
+    "item": "생선류",
+    "subcategory_name": "수산물류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "조개류": {
+    "item": "조개류",
+    "subcategory_name": "수산물류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "해조류": {
+    "item": "해조류",
+    "subcategory_name": "수산물류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "건어물류": {
+    "item": "건어물류",
+    "subcategory_name": "수산물류",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "채소종자": {
+    "item": "채소종자",
+    "subcategory_name": "종묘등",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "화훼종자": {
+    "item": "화훼종자",
+    "subcategory_name": "종묘등",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "묘목": {
+    "item": "묘목",
+    "subcategory_name": "종묘등",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "버섯종균": {
+    "item": "버섯종균",
+    "subcategory_name": "종묘등",
+    "category_name": "농·수·축산물",
+    "section_name": "상품(재화) 부문"
+  },
+  "콜라": {
+    "item": "콜라",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "사이다": {
+    "item": "사이다",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "환타": {
+    "item": "환타",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유산균음료": {
+    "item": "유산균음료",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "두유": {
+    "item": "두유",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "넥타류": {
+    "item": "넥타류",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쥬스류": {
+    "item": "쥬스류",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "드링크류": {
+    "item": "드링크류",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "보리음료": {
+    "item": "보리음료",
+    "subcategory_name": "청량음료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "초콜릿": {
+    "item": "초콜릿",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "건과자": {
+    "item": "건과자",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비스킷": {
+    "item": "비스킷",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "미과": {
+    "item": "미과",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "스낵류": {
+    "item": "스낵류",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "껌": {
+    "item": "껌",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "캐러멜": {
+    "item": "캐러멜",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "알사탕": {
+    "item": "알사탕",
+    "subcategory_name": "과자류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "아이스크림": {
+    "item": "아이스크림",
+    "subcategory_name": "빙과류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "빙과": {
+    "item": "빙과",
+    "subcategory_name": "빙과류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유사냉동디저트": {
+    "item": "유사냉동디저트",
+    "subcategory_name": "빙과류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "우유": {
+    "item": "우유",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "분유": {
+    "item": "분유",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연유": {
+    "item": "연유",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "발효유": {
+    "item": "발효유",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "버터": {
+    "item": "버터",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "치즈": {
+    "item": "치즈",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "이유식": {
+    "item": "이유식",
+    "subcategory_name": "낙농제품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "과실": {
+    "item": "과실",
+    "subcategory_name": "통조림류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "해산물": {
+    "item": "해산물",
+    "subcategory_name": "통조림류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "육류통조림": {
+    "item": "육류통조림",
+    "subcategory_name": "통조림류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식빵": {
+    "item": "식빵",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "파이": {
+    "item": "파이",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "떡": {
+    "item": "떡",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "빵": {
+    "item": "빵",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "찹쌀떡": {
+    "item": "찹쌀떡",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카스테라": {
+    "item": "카스테라",
+    "subcategory_name": "제빵류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "정당": {
+    "item": "정당",
+    "subcategory_name": "설탕ㆍ제분류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "물엿": {
+    "item": "물엿",
+    "subcategory_name": "설탕ㆍ제분류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "밀가루": {
+    "item": "밀가루",
+    "subcategory_name": "설탕ㆍ제분류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "콩가루": {
+    "item": "콩가루",
+    "subcategory_name": "설탕ㆍ제분류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전분": {
+    "item": "전분",
+    "subcategory_name": "설탕ㆍ제분류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "참기름": {
+    "item": "참기름",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "대두유": {
+    "item": "대두유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "옥배유": {
+    "item": "옥배유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "낙화생유": {
+    "item": "낙화생유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "채종유": {
+    "item": "채종유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쇼트닝유": {
+    "item": "쇼트닝유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "면실유": {
+    "item": "면실유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "팜유": {
+    "item": "팜유",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "마가린": {
+    "item": "마가린",
+    "subcategory_name": "식용유류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "마요네즈": {
+    "item": "마요네즈",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "케첩": {
+    "item": "케첩",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카레": {
+    "item": "카레",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화학조미료": {
+    "item": "화학조미료",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식초": {
+    "item": "식초",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소금": {
+    "item": "소금",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "고추분": {
+    "item": "고추분",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "후추분": {
+    "item": "후추분",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "겨자": {
+    "item": "겨자",
+    "subcategory_name": "조미료",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "햄": {
+    "item": "햄",
+    "subcategory_name": "고기가공식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소시지": {
+    "item": "소시지",
+    "subcategory_name": "고기가공식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "베이컨": {
+    "item": "베이컨",
+    "subcategory_name": "고기가공식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "어육연제품": {
+    "item": "어육연제품",
+    "subcategory_name": "고기가공식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "된장": {
+    "item": "된장",
+    "subcategory_name": "장류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "고추장": {
+    "item": "고추장",
+    "subcategory_name": "장류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "간장": {
+    "item": "간장",
+    "subcategory_name": "장류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "춘장": {
+    "item": "춘장",
+    "subcategory_name": "장류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소스": {
+    "item": "소스",
+    "subcategory_name": "장류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "커피": {
+    "item": "커피",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "홍차": {
+    "item": "홍차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "율무차": {
+    "item": "율무차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "녹차": {
+    "item": "녹차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쌍화차": {
+    "item": "쌍화차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "구기자차": {
+    "item": "구기자차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "칡차": {
+    "item": "칡차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "생강차": {
+    "item": "생강차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "계피차": {
+    "item": "계피차",
+    "subcategory_name": "다류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "국수": {
+    "item": "국수",
+    "subcategory_name": "면류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "라면": {
+    "item": "라면",
+    "subcategory_name": "면류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "당면": {
+    "item": "당면",
+    "subcategory_name": "면류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "냉면": {
+    "item": "냉면",
+    "subcategory_name": "면류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인스턴트면류": {
+    "item": "인스턴트면류",
+    "subcategory_name": "면류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인삼": {
+    "item": "인삼",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "꿀": {
+    "item": "꿀",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "개소주": {
+    "item": "개소주",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "영지버섯": {
+    "item": "영지버섯",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "알로에": {
+    "item": "알로에",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화분": {
+    "item": "화분",
+    "subcategory_name": "자양식품",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "탁주": {
+    "item": "탁주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소주": {
+    "item": "소주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "청주": {
+    "item": "청주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "맥주": {
+    "item": "맥주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "과실주": {
+    "item": "과실주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "양주": {
+    "item": "양주",
+    "subcategory_name": "주류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도시락": {
+    "item": "도시락",
+    "subcategory_name": "도시락",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "두부": {
+    "item": "두부",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연두부": {
+    "item": "연두부",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "묵": {
+    "item": "묵",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "단무지": {
+    "item": "단무지",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "김치": {
+    "item": "김치",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "젓갈류": {
+    "item": "젓갈류",
+    "subcategory_name": "찬류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "햄버거": {
+    "item": "햄버거",
+    "subcategory_name": "냉동식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "돈가스": {
+    "item": "돈가스",
+    "subcategory_name": "냉동식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "새우": {
+    "item": "새우",
+    "subcategory_name": "냉동식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "만두": {
+    "item": "만두",
+    "subcategory_name": "냉동식품류",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "먹는 샘물": {
+    "item": "먹는 샘물",
+    "subcategory_name": "먹는샘물",
+    "category_name": "식료품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가축사료": {
+    "item": "가축사료",
+    "subcategory_name": "사료",
+    "category_name": "동물사료",
+    "section_name": "상품(재화) 부문"
+  },
+  "특수동물사료": {
+    "item": "특수동물사료",
+    "subcategory_name": "사료",
+    "category_name": "동물사료",
+    "section_name": "상품(재화) 부문"
+  },
+  "반려동물 사료": {
+    "item": "반려동물 사료",
+    "subcategory_name": "사료",
+    "category_name": "동물사료",
+    "section_name": "상품(재화) 부문"
+  },
+  "금·백금·백색금·은 및 보석을 이용한 반지": {
+    "item": "금·백금·백색금·은 및 보석을 이용한 반지",
+    "subcategory_name": "귀금속·보석",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "목걸이": {
+    "item": "목걸이",
+    "subcategory_name": "악세사리",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "귀걸이": {
+    "item": "귀걸이",
+    "subcategory_name": "악세사리",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "팔찌(금": {
+    "item": "팔찌(금",
+    "subcategory_name": "귀금속·보석",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "백금": {
+    "item": "백금",
+    "subcategory_name": "귀금속·보석",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "백색금": {
+    "item": "백색금",
+    "subcategory_name": "귀금속·보석",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "은으로 도금 또는 입힌 것 포함)": {
+    "item": "은으로 도금 또는 입힌 것 포함)",
+    "subcategory_name": "귀금속·보석",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "귀금속 및 보석을 이용하지 아니한 반지": {
+    "item": "귀금속 및 보석을 이용하지 아니한 반지",
+    "subcategory_name": "악세사리",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "팔찌 장신구": {
+    "item": "팔찌 장신구",
+    "subcategory_name": "악세사리",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "도서": {
+    "item": "도서",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "음반": {
+    "item": "음반",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "테이프": {
+    "item": "테이프",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "비디오물": {
+    "item": "비디오물",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "학습지": {
+    "item": "학습지",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타 보충학습부교재": {
+    "item": "기타 보충학습부교재",
+    "subcategory_name": "도서·음반",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "등산용 버너": {
+    "item": "등산용 버너",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "코펠": {
+    "item": "코펠",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "텐트": {
+    "item": "텐트",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "운동구": {
+    "item": "운동구",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "라켓류": {
+    "item": "라켓류",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "낚시용구": {
+    "item": "낚시용구",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "헬스기구": {
+    "item": "헬스기구",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "스키용품": {
+    "item": "스키용품",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "골프용품": {
+    "item": "골프용품",
+    "subcategory_name": "스포츠·레저용품",
+    "category_name": "문화용품 등",
+    "section_name": "상품(재화) 부문"
+  },
+  "TV": {
+    "item": "TV",
+    "subcategory_name": "⑫중고전자제품 매매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "VTR": {
+    "item": "VTR",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "냉장고": {
+    "item": "냉장고",
+    "subcategory_name": "⑫중고전자제품 매매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "세탁기": {
+    "item": "세탁기",
+    "subcategory_name": "⑫중고전자제품 매매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "의류건조기": {
+    "item": "의류건조기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "의류관리기": {
+    "item": "의류관리기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "선풍기": {
+    "item": "선풍기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "에어콘": {
+    "item": "에어콘",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "라디오": {
+    "item": "라디오",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "녹음기": {
+    "item": "녹음기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전축": {
+    "item": "전축",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전자렌지": {
+    "item": "전자렌지",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기보온밥통 및 밥솥": {
+    "item": "전기보온밥통 및 밥솥",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기다리미": {
+    "item": "전기다리미",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기주전자": {
+    "item": "전기주전자",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기장판": {
+    "item": "전기장판",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기담요": {
+    "item": "전기담요",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기청소기": {
+    "item": "전기청소기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기난로": {
+    "item": "전기난로",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기프라이팬": {
+    "item": "전기프라이팬",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가습기": {
+    "item": "가습기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "헤드폰": {
+    "item": "헤드폰",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기면도기": {
+    "item": "전기면도기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식기세척기": {
+    "item": "식기세척기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식기건조기": {
+    "item": "식기건조기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "헤어드라이어": {
+    "item": "헤어드라이어",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기오븐": {
+    "item": "전기오븐",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기약탕기": {
+    "item": "전기약탕기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기냄비": {
+    "item": "전기냄비",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기토스터": {
+    "item": "전기토스터",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "환풍기": {
+    "item": "환풍기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기머리인두": {
+    "item": "전기머리인두",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기믹서": {
+    "item": "전기믹서",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연탄가스배출기": {
+    "item": "연탄가스배출기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기펌프": {
+    "item": "전기펌프",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쥬서기": {
+    "item": "쥬서기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소형전압조정기": {
+    "item": "소형전압조정기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기탈수기": {
+    "item": "전기탈수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "형광등기구": {
+    "item": "형광등기구",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기스탠드": {
+    "item": "전기스탠드",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기문걸이": {
+    "item": "전기문걸이",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도어폰": {
+    "item": "도어폰",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기찜통": {
+    "item": "전기찜통",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기온수보온기": {
+    "item": "전기온수보온기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기곤로": {
+    "item": "전기곤로",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기조리기": {
+    "item": "전기조리기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기온수기": {
+    "item": "전기온수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "온장고": {
+    "item": "온장고",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "송풍기": {
+    "item": "송풍기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "공기청정기": {
+    "item": "공기청정기",
+    "subcategory_name": "②장기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "누전감지기": {
+    "item": "누전감지기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "살수기": {
+    "item": "살수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "냉수기": {
+    "item": "냉수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "제빙기": {
+    "item": "제빙기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "방범경보기": {
+    "item": "방범경보기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "빙수기": {
+    "item": "빙수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "차임벨": {
+    "item": "차임벨",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전자오락기": {
+    "item": "전자오락기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "석유난로": {
+    "item": "석유난로",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "안테나": {
+    "item": "안테나",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "정수기": {
+    "item": "정수기",
+    "subcategory_name": "②장기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "온수기": {
+    "item": "온수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "온수세정기(비데기)": {
+    "item": "온수세정기(비데기)",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연수기": {
+    "item": "연수기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "DVD플레이어": {
+    "item": "DVD플레이어",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "MP3플레이어": {
+    "item": "MP3플레이어",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "Voice-pen": {
+    "item": "Voice-pen",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "핸드블랜더": {
+    "item": "핸드블랜더",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기튀김기": {
+    "item": "전기튀김기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기찜기": {
+    "item": "전기찜기",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "할로플레이트": {
+    "item": "할로플레이트",
+    "subcategory_name": "전자제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "복사기": {
+    "item": "복사기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "타자기": {
+    "item": "타자기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "팩시밀리": {
+    "item": "팩시밀리",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "금전등록기": {
+    "item": "금전등록기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "퍼스널컴퓨터 및 컴퓨터 주변기기": {
+    "item": "퍼스널컴퓨터 및 컴퓨터 주변기기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "워드프로세서": {
+    "item": "워드프로세서",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "계산기": {
+    "item": "계산기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "캐비넷": {
+    "item": "캐비넷",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "파일링캐비넷": {
+    "item": "파일링캐비넷",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "제본기": {
+    "item": "제본기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "등사기": {
+    "item": "등사기",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "컴퓨터소모품(룸팩": {
+    "item": "컴퓨터소모품(룸팩",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "디스켓)": {
+    "item": "디스켓)",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "빔 프로젝트": {
+    "item": "빔 프로젝트",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "PDA": {
+    "item": "PDA",
+    "subcategory_name": "사무용기기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유선전화기": {
+    "item": "유선전화기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "무선전화기": {
+    "item": "무선전화기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인터폰": {
+    "item": "인터폰",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카폰": {
+    "item": "카폰",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "휴대폰": {
+    "item": "휴대폰",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "무선호출기": {
+    "item": "무선호출기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화상전화기": {
+    "item": "화상전화기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "장거리자동전화 발생제어장치": {
+    "item": "장거리자동전화 발생제어장치",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타의 전화기": {
+    "item": "기타의 전화기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전화기접속기기류": {
+    "item": "전화기접속기기류",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "간이구내교환기": {
+    "item": "간이구내교환기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타의 구내교환기 및 그 부대기기": {
+    "item": "기타의 구내교환기 및 그 부대기기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "데이터다중화장치류(디지틀방식의 장치로서 2.048 Mbps 이하의 것. 다만": {
+    "item": "데이터다중화장치류(디지틀방식의 장치로서 2.048 Mbps 이하의 것. 다만",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기통신사업자용은 제외)": {
+    "item": "전기통신사업자용은 제외)",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비디오팩스": {
+    "item": "비디오팩스",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "텔리텍스": {
+    "item": "텔리텍스",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인쇄전신기": {
+    "item": "인쇄전신기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "신용카드조회장치": {
+    "item": "신용카드조회장치",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타 통신전용 정보통신단말장치 및 그 부대기기": {
+    "item": "기타 통신전용 정보통신단말장치 및 그 부대기기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "정보통신용 신호변환장치류(모뎀": {
+    "item": "정보통신용 신호변환장치류(모뎀",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "데이터서비스장치": {
+    "item": "데이터서비스장치",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "패드)": {
+    "item": "패드)",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "선로접속장치류(가입자보호기": {
+    "item": "선로접속장치류(가입자보호기",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "접속함": {
+    "item": "접속함",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "단자함": {
+    "item": "단자함",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전화기용 콘넥터)": {
+    "item": "전화기용 콘넥터)",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유선방송용 전송기자재류": {
+    "item": "유선방송용 전송기자재류",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타 통신기류": {
+    "item": "기타 통신기류",
+    "subcategory_name": "전기통신기자재",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "손목시계": {
+    "item": "손목시계",
+    "subcategory_name": "시계",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "벽시계": {
+    "item": "벽시계",
+    "subcategory_name": "시계",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "탁상시계": {
+    "item": "탁상시계",
+    "subcategory_name": "시계",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용 및 공업용 재봉기": {
+    "item": "가정용 및 공업용 재봉기",
+    "subcategory_name": "재봉기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카메라": {
+    "item": "카메라",
+    "subcategory_name": "광학제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비디오카메라": {
+    "item": "비디오카메라",
+    "subcategory_name": "광학제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카메라부품": {
+    "item": "카메라부품",
+    "subcategory_name": "광학제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "망원경": {
+    "item": "망원경",
+    "subcategory_name": "광학제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "현미경": {
+    "item": "현미경",
+    "subcategory_name": "광학제품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유모차": {
+    "item": "유모차",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유아용삼륜차": {
+    "item": "유아용삼륜차",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "보행기": {
+    "item": "보행기",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "작동완구": {
+    "item": "작동완구",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "봉제완구": {
+    "item": "봉제완구",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "물놀이기구": {
+    "item": "물놀이기구",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "물안경": {
+    "item": "물안경",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "어린이용그네": {
+    "item": "어린이용그네",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "롤러스케이트": {
+    "item": "롤러스케이트",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "조립식완구": {
+    "item": "조립식완구",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "학습교재": {
+    "item": "학습교재",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "과학교재": {
+    "item": "과학교재",
+    "subcategory_name": "아동용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "승용차": {
+    "item": "승용차",
+    "subcategory_name": "자동차",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소형화물자동차": {
+    "item": "소형화물자동차",
+    "subcategory_name": "자동차",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소형승합자동차": {
+    "item": "소형승합자동차",
+    "subcategory_name": "자동차",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "모터사이클": {
+    "item": "모터사이클",
+    "subcategory_name": "모터사이클",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "자전거": {
+    "item": "자전거",
+    "subcategory_name": "자전거",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "자동차용 타이어": {
+    "item": "자동차용 타이어",
+    "subcategory_name": "타이어",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "모터사이클용 타이어": {
+    "item": "모터사이클용 타이어",
+    "subcategory_name": "타이어",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "자전거용 타이어": {
+    "item": "자전거용 타이어",
+    "subcategory_name": "타이어",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유류보일러": {
+    "item": "유류보일러",
+    "subcategory_name": "보일러",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전기보일러": {
+    "item": "전기보일러",
+    "subcategory_name": "보일러",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연탄보일러": {
+    "item": "연탄보일러",
+    "subcategory_name": "보일러",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가스보일러": {
+    "item": "가스보일러",
+    "subcategory_name": "보일러",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "태양열보일러": {
+    "item": "태양열보일러",
+    "subcategory_name": "보일러",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "장류(장롱": {
+    "item": "장류(장롱",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "장식장": {
+    "item": "장식장",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "찬장": {
+    "item": "찬장",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "책장)": {
+    "item": "책장)",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식탁": {
+    "item": "식탁",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "침대": {
+    "item": "침대",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소파": {
+    "item": "소파",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "책상": {
+    "item": "책상",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "문갑": {
+    "item": "문갑",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화장대": {
+    "item": "화장대",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "싱크대": {
+    "item": "싱크대",
+    "subcategory_name": "가구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용 및 휴대용 가스렌지": {
+    "item": "가정용 및 휴대용 가스렌지",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "보온병": {
+    "item": "보온병",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "홈세트": {
+    "item": "홈세트",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "알루미늄스텐레스 법랑제식기 및 냄비": {
+    "item": "알루미늄스텐레스 법랑제식기 및 냄비",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "수저세트": {
+    "item": "수저세트",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "접시": {
+    "item": "접시",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유리 및 크리스탈 식기류": {
+    "item": "유리 및 크리스탈 식기류",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "프라이팬": {
+    "item": "프라이팬",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "주전자": {
+    "item": "주전자",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "찜통": {
+    "item": "찜통",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "압력솥": {
+    "item": "압력솥",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "김치통": {
+    "item": "김치통",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쌀통": {
+    "item": "쌀통",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "하수분쇄기": {
+    "item": "하수분쇄기",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용가스용기 및 그 부속기구": {
+    "item": "가정용가스용기 및 그 부속기구",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도자기재 부엌용품": {
+    "item": "도자기재 부엌용품",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "식탁용품": {
+    "item": "식탁용품",
+    "subcategory_name": "주방용품",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "형광등": {
+    "item": "형광등",
+    "subcategory_name": "전구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "백열전구": {
+    "item": "백열전구",
+    "subcategory_name": "전구",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "피아노": {
+    "item": "피아노",
+    "subcategory_name": "악기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "오르간": {
+    "item": "오르간",
+    "subcategory_name": "악기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기타": {
+    "item": "기타",
+    "subcategory_name": "악기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "바이올린": {
+    "item": "바이올린",
+    "subcategory_name": "악기",
+    "category_name": "공산품",
+    "section_name": "상품(재화) 부문"
+  },
+  "일회용 기저귀": {
+    "item": "일회용 기저귀",
+    "subcategory_name": "생활위생용품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "물휴지(물티슈)": {
+    "item": "물휴지(물티슈)",
+    "subcategory_name": "생활위생용품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "냅킨": {
+    "item": "냅킨",
+    "subcategory_name": "생활위생용품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화장지": {
+    "item": "화장지",
+    "subcategory_name": "생활위생용품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "공책": {
+    "item": "공책",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "만년필": {
+    "item": "만년필",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "크레파스": {
+    "item": "크레파스",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "수채화용그림물감": {
+    "item": "수채화용그림물감",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "유화용그림물감": {
+    "item": "유화용그림물감",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연필": {
+    "item": "연필",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "볼펜": {
+    "item": "볼펜",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "필통": {
+    "item": "필통",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "책가방": {
+    "item": "책가방",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "샤프심": {
+    "item": "샤프심",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "샤프연필": {
+    "item": "샤프연필",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "스케치북": {
+    "item": "스케치북",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "사진첩": {
+    "item": "사진첩",
+    "subcategory_name": "문구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가죽혁대": {
+    "item": "가죽혁대",
+    "subcategory_name": "가죽제품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "피혁제품": {
+    "item": "피혁제품",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가죽가방": {
+    "item": "가죽가방",
+    "subcategory_name": "가방류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "천가방": {
+    "item": "천가방",
+    "subcategory_name": "가방류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "합성섬유가방(책가방은 문구류로 분류)": {
+    "item": "합성섬유가방(책가방은 문구류로 분류)",
+    "subcategory_name": "가방류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "운동화": {
+    "item": "운동화",
+    "subcategory_name": "신발",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "고무신": {
+    "item": "고무신",
+    "subcategory_name": "신발",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가죽구두": {
+    "item": "가죽구두",
+    "subcategory_name": "신발",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "등산화": {
+    "item": "등산화",
+    "subcategory_name": "신발",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "우산": {
+    "item": "우산",
+    "subcategory_name": "우산류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "양산": {
+    "item": "양산",
+    "subcategory_name": "우산류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기성복": {
+    "item": "기성복",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "맞춤복": {
+    "item": "맞춤복",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "내의": {
+    "item": "내의",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "넥타이": {
+    "item": "넥타이",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "와이셔츠": {
+    "item": "와이셔츠",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "커튼": {
+    "item": "커튼",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "수예품": {
+    "item": "수예품",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "침구": {
+    "item": "침구",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "카펫": {
+    "item": "카펫",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "스웨터": {
+    "item": "스웨터",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "한복": {
+    "item": "한복",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "머플러": {
+    "item": "머플러",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "모포": {
+    "item": "모포",
+    "subcategory_name": "의복류",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "동력경운기 및 그 부속작업기": {
+    "item": "동력경운기 및 그 부속작업기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용트랙터 및 그 부속작업기": {
+    "item": "농업용트랙터 및 그 부속작업기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "관리기 및 그 부속작업기": {
+    "item": "관리기 및 그 부속작업기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용엔진": {
+    "item": "농업용엔진",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용모터": {
+    "item": "농업용모터",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "이앙기": {
+    "item": "이앙기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "파종기": {
+    "item": "파종기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용방제기": {
+    "item": "농업용방제기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "시비기": {
+    "item": "시비기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "수확기": {
+    "item": "수확기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용건조기": {
+    "item": "농업용건조기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도정기": {
+    "item": "도정기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "절단기": {
+    "item": "절단기",
+    "subcategory_name": "농업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "어업용기관(디젤기관)": {
+    "item": "어업용기관(디젤기관)",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "어군탐지기": {
+    "item": "어군탐지기",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "구명벌": {
+    "item": "구명벌",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "발전기": {
+    "item": "발전기",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "건조기": {
+    "item": "건조기",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "냉동기": {
+    "item": "냉동기",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "나침의": {
+    "item": "나침의",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "전자수온계": {
+    "item": "전자수온계",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "축전기": {
+    "item": "축전기",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "모터류": {
+    "item": "모터류",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "펌프류": {
+    "item": "펌프류",
+    "subcategory_name": "어업용기계",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용호스": {
+    "item": "농업용호스",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "농업용비닐": {
+    "item": "농업용비닐",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비닐폿트": {
+    "item": "비닐폿트",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "하우스용 PVC파이프": {
+    "item": "하우스용 PVC파이프",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "플라스틱묘판": {
+    "item": "플라스틱묘판",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "곡물건조용망": {
+    "item": "곡물건조용망",
+    "subcategory_name": "농업용자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "어망류": {
+    "item": "어망류",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "연승": {
+    "item": "연승",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "로프류": {
+    "item": "로프류",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "부자류": {
+    "item": "부자류",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "침자류": {
+    "item": "침자류",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "낚시류": {
+    "item": "낚시류",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "구명동의": {
+    "item": "구명동의",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "집어등(램프": {
+    "item": "집어등(램프",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "안정기)": {
+    "item": "안정기)",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "선등": {
+    "item": "선등",
+    "subcategory_name": "어구",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "착유기": {
+    "item": "착유기",
+    "subcategory_name": "축산자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "포유기": {
+    "item": "포유기",
+    "subcategory_name": "축산자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "사료배합기": {
+    "item": "사료배합기",
+    "subcategory_name": "축산자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "케이지": {
+    "item": "케이지",
+    "subcategory_name": "축산자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "급수기": {
+    "item": "급수기",
+    "subcategory_name": "축산자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "창호재(섀시류": {
+    "item": "창호재(섀시류",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "목재류": {
+    "item": "목재류",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도어체크": {
+    "item": "도어체크",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "도어록": {
+    "item": "도어록",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "후로아힌지)": {
+    "item": "후로아힌지)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "목재류(합판": {
+    "item": "목재류(합판",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "바닥널": {
+    "item": "바닥널",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쪽매널블럭": {
+    "item": "쪽매널블럭",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "쪽매마루판": {
+    "item": "쪽매마루판",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인조목재": {
+    "item": "인조목재",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "집성목재)": {
+    "item": "집성목재)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "페인트류(수성·유성페인트": {
+    "item": "페인트류(수성·유성페인트",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "바니쉬": {
+    "item": "바니쉬",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "에나멜페인트": {
+    "item": "에나멜페인트",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "락카)": {
+    "item": "락카)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "토공 및 시멘트류(블럭": {
+    "item": "토공 및 시멘트류(블럭",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "벽돌": {
+    "item": "벽돌",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "기와)": {
+    "item": "기와)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "타일류(내장": {
+    "item": "타일류(내장",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "외장": {
+    "item": "외장",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "바닥": {
+    "item": "바닥",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "모자이크)": {
+    "item": "모자이크)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "위생기구(욕조": {
+    "item": "위생기구(욕조",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "변기": {
+    "item": "변기",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "세면기)": {
+    "item": "세면기)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "조립식제품류(콘크리트부재": {
+    "item": "조립식제품류(콘크리트부재",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "철골부재": {
+    "item": "철골부재",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "목질부재)": {
+    "item": "목질부재)",
+    "subcategory_name": "건축자재",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "순환계용약": {
+    "item": "순환계용약",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "호흡기관용약": {
+    "item": "호흡기관용약",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소화기계용약": {
+    "item": "소화기계용약",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비타민제": {
+    "item": "비타민제",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "자양강장변질제": {
+    "item": "자양강장변질제",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "항생물질제제": {
+    "item": "항생물질제제",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "호르몬제": {
+    "item": "호르몬제",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "외피용약": {
+    "item": "외피용약",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "한약": {
+    "item": "한약",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "동물약품": {
+    "item": "동물약품",
+    "subcategory_name": "의약품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "생리대": {
+    "item": "생리대",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "치약": {
+    "item": "치약",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "은단": {
+    "item": "은단",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용 살충제": {
+    "item": "가정용 살충제",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "외용소독제": {
+    "item": "외용소독제",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "붕대": {
+    "item": "붕대",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "거즈": {
+    "item": "거즈",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "마스크 ‘약사법' 제2조 제7호에 따른 의약외품": {
+    "item": "마스크 ‘약사법' 제2조 제7호에 따른 의약외품",
+    "subcategory_name": "의약외품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "시력보존용안경": {
+    "item": "시력보존용안경",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "콘택트렌즈": {
+    "item": "콘택트렌즈",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "이온수기": {
+    "item": "이온수기",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "휠체어": {
+    "item": "휠체어",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "보청기": {
+    "item": "보청기",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "의족": {
+    "item": "의족",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "혈압계": {
+    "item": "혈압계",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "자석요": {
+    "item": "자석요",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "비데": {
+    "item": "비데",
+    "subcategory_name": "②장기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "안마기": {
+    "item": "안마기",
+    "subcategory_name": "의료기기",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "샴푸": {
+    "item": "샴푸",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "린스": {
+    "item": "린스",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "크림": {
+    "item": "크림",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "로션": {
+    "item": "로션",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "립스틱": {
+    "item": "립스틱",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "매니큐어": {
+    "item": "매니큐어",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "포마드": {
+    "item": "포마드",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "향수": {
+    "item": "향수",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "파운데이션": {
+    "item": "파운데이션",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "마스카라": {
+    "item": "마스카라",
+    "subcategory_name": "화장품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "세탁비누": {
+    "item": "세탁비누",
+    "subcategory_name": "비누 및 합성세제",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "화장비누": {
+    "item": "화장비누",
+    "subcategory_name": "비누 및 합성세제",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "소독비누": {
+    "item": "소독비누",
+    "subcategory_name": "비누 및 합성세제",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "액체비누": {
+    "item": "액체비누",
+    "subcategory_name": "비누 및 합성세제",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "분말세제": {
+    "item": "분말세제",
+    "subcategory_name": "비누 및 합성세제",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용 플라스틱용기": {
+    "item": "가정용 플라스틱용기",
+    "subcategory_name": "플라스틱제품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "호일": {
+    "item": "호일",
+    "subcategory_name": "플라스틱제품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "랩": {
+    "item": "랩",
+    "subcategory_name": "플라스틱제품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "장판": {
+    "item": "장판",
+    "subcategory_name": "플라스틱제품",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "질소비료": {
+    "item": "질소비료",
+    "subcategory_name": "비료",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "인산비료": {
+    "item": "인산비료",
+    "subcategory_name": "비료",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "칼리비료": {
+    "item": "칼리비료",
+    "subcategory_name": "비료",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "복합비료": {
+    "item": "복합비료",
+    "subcategory_name": "비료",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "특수성분비료": {
+    "item": "특수성분비료",
+    "subcategory_name": "비료",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "살균제": {
+    "item": "살균제",
+    "subcategory_name": "농약",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "살충제": {
+    "item": "살충제",
+    "subcategory_name": "농약",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "제초제": {
+    "item": "제초제",
+    "subcategory_name": "농약",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "가정용 고무장갑": {
+    "item": "가정용 고무장갑",
+    "subcategory_name": "고무장갑",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "공업용 고무장갑": {
+    "item": "공업용 고무장갑",
+    "subcategory_name": "고무장갑",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "의료용 고무장갑": {
+    "item": "의료용 고무장갑",
+    "subcategory_name": "고무장갑",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "알칼리건전지": {
+    "item": "알칼리건전지",
+    "subcategory_name": "건전지",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "망간건전지": {
+    "item": "망간건전지",
+    "subcategory_name": "건전지",
+    "category_name": "의약품 및 화학제품",
+    "section_name": "상품(재화) 부문"
+  },
+  "무선호출서비스": {
+    "item": "무선호출서비스",
+    "subcategory_name": "⑥이동통신서비스업",
+    "category_name": "전기·통신·가스서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "이동전화서비스": {
+    "item": "이동전화서비스",
+    "subcategory_name": "⑥이동통신서비스업",
+    "category_name": "전기·통신·가스서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "전자화폐": {
+    "item": "전자화폐",
+    "subcategory_name": "②전자지급수단발행업",
+    "category_name": "금융서비스 및 상품권 관련",
+    "section_name": "서비스업 부문"
+  },
+  "선불전자지급수단": {
+    "item": "선불전자지급수단",
+    "subcategory_name": "②전자지급수단발행업",
+    "category_name": "금융서비스 및 상품권 관련",
+    "section_name": "서비스업 부문"
+  },
+  "상품권": {
+    "item": "상품권",
+    "subcategory_name": "④상품권 관련업",
+    "category_name": "금융서비스 및 상품권 관련",
+    "section_name": "서비스업 부문"
+  },
+  "신유형 상품권": {
+    "item": "신유형 상품권",
+    "subcategory_name": "④상품권 관련업",
+    "category_name": "금융서비스 및 상품권 관련",
+    "section_name": "서비스업 부문"
+  },
+  "미용을 목적으로 한 치료로 제한": {
+    "item": "미용을 목적으로 한 치료로 제한",
+    "subcategory_name": "③피부과 시술 및 치료",
+    "category_name": "의료서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "자동차대여업": {
+    "item": "자동차대여업",
+    "subcategory_name": "①자동차대여업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "안마의자": {
+    "item": "안마의자",
+    "subcategory_name": "②장기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "제습기 생활용품": {
+    "item": "제습기 생활용품",
+    "subcategory_name": "②장기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "의상": {
+    "item": "의상",
+    "subcategory_name": "③단기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "액세서리": {
+    "item": "액세서리",
+    "subcategory_name": "③단기 물품대여서비스업",
+    "category_name": "대여서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "(영화 및 비디오물 상영업 제외)": {
+    "item": "(영화 및 비디오물 상영업 제외)",
+    "subcategory_name": "①공연업",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "영화관람": {
+    "item": "영화관람",
+    "subcategory_name": "②영화관람",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "모바일콘텐츠": {
+    "item": "모바일콘텐츠",
+    "subcategory_name": "③모바일콘텐츠업",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "모바일게임": {
+    "item": "모바일게임",
+    "subcategory_name": "③모바일콘텐츠업",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "인터넷 교육서비스": {
+    "item": "인터넷 교육서비스",
+    "subcategory_name": "④인터넷콘텐츠업",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "인터넷 정보이용서비스": {
+    "item": "인터넷 정보이용서비스",
+    "subcategory_name": "④인터넷콘텐츠업",
+    "category_name": "공연·콘텐츠 관련",
+    "section_name": "서비스업 부문"
+  },
+  "예식장": {
+    "item": "예식장",
+    "subcategory_name": "⑤예식업",
+    "category_name": "결혼·출산 관련",
+    "section_name": "서비스업 부문"
+  },
+  "호텔": {
+    "item": "호텔",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "여관": {
+    "item": "여관",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "펜션": {
+    "item": "펜션",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "민박": {
+    "item": "민박",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "휴양림": {
+    "item": "휴양림",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "오토캠핑장": {
+    "item": "오토캠핑장",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "캠핑장": {
+    "item": "캠핑장",
+    "subcategory_name": "①숙박업",
+    "category_name": "숙박·여행 관련",
+    "section_name": "서비스업 부문"
+  },
+  "1. 전세버스, 특수여객자동차": {
+    "item": "1. 전세버스, 특수여객자동차",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "2. 일반화물, 3. 개별화물, 4. 용달화물": {
+    "item": "2. 일반화물, 3. 개별화물, 4. 용달화물",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "5. 시외버스": {
+    "item": "5. 시외버스",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "6. 철도업(여객), 철도(화물)": {
+    "item": "6. 철도업(여객), 철도(화물)",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "7. 항공(국내여객)": {
+    "item": "7. 항공(국내여객)",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "8. 항공(국제여객)": {
+    "item": "8. 항공(국제여객)",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "9. 선박(국내여객)": {
+    "item": "9. 선박(국내여객)",
+    "subcategory_name": "①운수업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "일반화물운송사업": {
+    "item": "일반화물운송사업",
+    "subcategory_name": "②이사화물자동차운송주선 사업 및 화물자동차 운송사업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "개별화물운송사업": {
+    "item": "개별화물운송사업",
+    "subcategory_name": "②이사화물자동차운송주선 사업 및 화물자동차 운송사업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "용달화물운송사업": {
+    "item": "용달화물운송사업",
+    "subcategory_name": "②이사화물자동차운송주선 사업 및 화물자동차 운송사업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "화물자동차운송주선사업": {
+    "item": "화물자동차운송주선사업",
+    "subcategory_name": "②이사화물자동차운송주선 사업 및 화물자동차 운송사업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "택배": {
+    "item": "택배",
+    "subcategory_name": "③택배ㆍ퀵서비스업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "퀵서비스업": {
+    "item": "퀵서비스업",
+    "subcategory_name": "③택배ㆍ퀵서비스업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "자동차견인업": {
+    "item": "자동차견인업",
+    "subcategory_name": "⑥자동차 견인업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "1급자동차정비업": {
+    "item": "1급자동차정비업",
+    "subcategory_name": "⑦자동차 정비업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "2급자동차정비업": {
+    "item": "2급자동차정비업",
+    "subcategory_name": "⑦자동차 정비업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "간이정비업": {
+    "item": "간이정비업",
+    "subcategory_name": "⑦자동차 정비업",
+    "category_name": "운수·화물·택배 등 관련",
+    "section_name": "서비스업 부문"
+  },
+  "문리": {
+    "item": "문리",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "기술": {
+    "item": "기술",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "예능": {
+    "item": "예능",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "가정": {
+    "item": "가정",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "사무": {
+    "item": "사무",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "독서": {
+    "item": "독서",
+    "subcategory_name": "②학원운영업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "수영장": {
+    "item": "수영장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "체력단련장": {
+    "item": "체력단련장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "테니스장": {
+    "item": "테니스장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "대중종합체육시설업": {
+    "item": "대중종합체육시설업",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "골프연습장": {
+    "item": "골프연습장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "볼링장": {
+    "item": "볼링장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "에어로빅장": {
+    "item": "에어로빅장",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "요가원": {
+    "item": "요가원",
+    "subcategory_name": "④체육시설업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "이벤트주관": {
+    "item": "이벤트주관",
+    "subcategory_name": "⑤레저용역업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "주말농장": {
+    "item": "주말농장",
+    "subcategory_name": "⑤레저용역업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "영화예매": {
+    "item": "영화예매",
+    "subcategory_name": "⑤레저용역업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "할인회원권업": {
+    "item": "할인회원권업",
+    "subcategory_name": "⑥할인회원권업",
+    "category_name": "학원·교습·레저 서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "어학캠프": {
+    "item": "어학캠프",
+    "subcategory_name": "①해외어학연수 수속대행업",
+    "category_name": "연수·유학·이민서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "어학": {
+    "item": "어학",
+    "subcategory_name": "②국내 연수업",
+    "category_name": "연수·유학·이민서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "체험캠프": {
+    "item": "체험캠프",
+    "subcategory_name": "②국내 연수업",
+    "category_name": "연수·유학·이민서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "유학수속대행업": {
+    "item": "유학수속대행업",
+    "subcategory_name": "③유학수속대행업",
+    "category_name": "연수·유학·이민서비스 관련",
+    "section_name": "서비스업 부문"
+  },
+  "부동산중개업": {
+    "item": "부동산중개업",
+    "subcategory_name": "①부동산중개업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "사진인화": {
+    "item": "사진인화",
+    "subcategory_name": "⑦사진현상 촬영업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "카메라 및 비디오 촬영": {
+    "item": "카메라 및 비디오 촬영",
+    "subcategory_name": "⑦사진현상 촬영업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "돌잔치": {
+    "item": "돌잔치",
+    "subcategory_name": "⑨연회시설 운영업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "회갑연의 각종 연회시설 운영업": {
+    "item": "회갑연의 각종 연회시설 운영업",
+    "subcategory_name": "⑨연회시설 운영업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "각종 연회시설 운영업을 제외한 외식서비스업": {
+    "item": "각종 연회시설 운영업을 제외한 외식서비스업",
+    "subcategory_name": "⑩그외 외식업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "컴퓨터 및 주변기기": {
+    "item": "컴퓨터 및 주변기기",
+    "subcategory_name": "⑫중고전자제품 매매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "중고자동차매매업": {
+    "item": "중고자동차매매업",
+    "subcategory_name": "⑬중고자동차매매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "개": {
+    "item": "개",
+    "subcategory_name": "⑮반려동물판매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "고양이 동물보호법에서 규정한 반려동물에 한함": {
+    "item": "고양이 동물보호법에서 규정한 반려동물에 한함",
+    "subcategory_name": "⑮반려동물판매업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "세탁업": {
+    "item": "세탁업",
+    "subcategory_name": "⑯세탁업",
+    "category_name": "기타 개인서비스업 관련",
+    "section_name": "서비스업 부문"
+  },
+  "단독주택": {
+    "item": "단독주택",
+    "subcategory_name": "①주택건설업",
+    "category_name": "건설·건축 관련",
+    "section_name": "서비스업 부문"
+  },
+  "다세대주택": {
+    "item": "다세대주택",
+    "subcategory_name": "①주택건설업",
+    "category_name": "건설·건축 관련",
+    "section_name": "서비스업 부문"
+  },
+  "연립주택": {
+    "item": "연립주택",
+    "subcategory_name": "①주택건설업",
+    "category_name": "건설·건축 관련",
+    "section_name": "서비스업 부문"
+  },
+  "아파트": {
+    "item": "아파트",
+    "subcategory_name": "①주택건설업",
+    "category_name": "건설·건축 관련",
+    "section_name": "서비스업 부문"
+  },
+  "봉안묘": {
+    "item": "봉안묘",
+    "subcategory_name": "①봉안시설",
+    "category_name": "상조·장례 관련",
+    "section_name": "서비스업 부문"
+  },
+  "봉안당": {
+    "item": "봉안당",
+    "subcategory_name": "①봉안시설",
+    "category_name": "상조·장례 관련",
+    "section_name": "서비스업 부문"
+  },
+  "봉안탑": {
+    "item": "봉안탑",
+    "subcategory_name": "①봉안시설",
+    "category_name": "상조·장례 관련",
+    "section_name": "서비스업 부문"
+  }
+}
