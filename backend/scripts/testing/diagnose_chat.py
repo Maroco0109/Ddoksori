@@ -26,11 +26,9 @@ def check_openai_key():
         return False
 
     if api_key.startswith("sk-") and len(api_key) > 20:
-        print(
-            f"[OK] OPENAI_API_KEY format looks valid: {api_key[:12]}...{api_key[-4:]}"
-        )
+        print("[OK] OPENAI_API_KEY format looks valid")
     else:
-        print(f"[WARN] OPENAI_API_KEY may be invalid: {api_key[:8]}...")
+        print("[WARN] OPENAI_API_KEY may be invalid (unexpected format)")
 
     # Test actual API call
     try:
@@ -83,30 +81,40 @@ def check_database():
         from app.api.dependencies import get_db_config
 
         config = get_db_config()
-        print(f"[INFO] DB Host: {config['host']}:{config['port']}/{config['database']}")
+        # Mask sensitive host information
+        host = config["host"]
+        masked_host = host[:8] + "***" if len(host) > 8 else "***"
+        print(f"[INFO] DB Host: {masked_host}:{config['port']}/{config['database']}")
 
-        conn = psycopg2.connect(**config)
-        cursor = conn.cursor()
+        conn = None
+        try:
+            conn = psycopg2.connect(**config)
+            cursor = conn.cursor()
 
-        # Check vector_chunks table exists and has data
-        cursor.execute("SELECT COUNT(*) FROM vector_chunks")
-        total_chunks = cursor.fetchone()[0]
+            # Check vector_chunks table exists and has data
+            cursor.execute("SELECT COUNT(*) FROM vector_chunks")
+            total_chunks = cursor.fetchone()[0]
 
-        # Check how many have embeddings
-        cursor.execute("SELECT COUNT(*) FROM vector_chunks WHERE embedding IS NOT NULL")
-        with_embeddings = cursor.fetchone()[0]
+            # Check how many have embeddings
+            cursor.execute(
+                "SELECT COUNT(*) FROM vector_chunks WHERE embedding IS NOT NULL"
+            )
+            with_embeddings = cursor.fetchone()[0]
 
-        conn.close()
+            print(
+                f"[OK] Database connected: {total_chunks} vector_chunks total, {with_embeddings} with embeddings"
+            )
 
-        print(
-            f"[OK] Database connected: {total_chunks} vector_chunks total, {with_embeddings} with embeddings"
-        )
+            if with_embeddings == 0:
+                print(
+                    "[WARN] No embeddings found! Retrieval will return empty results."
+                )
+                return False
 
-        if with_embeddings == 0:
-            print("[WARN] No embeddings found! Retrieval will return empty results.")
-            return False
-
-        return True
+            return True
+        finally:
+            if conn:
+                conn.close()
     except Exception as e:
         print(f"[FAIL] Database connection failed: {e}")
         return False
@@ -128,8 +136,10 @@ def check_retrieval():
         retriever = HybridRetriever(db_config)
         retriever.connect()
 
-        results = retriever.search("환불 청약철회", top_k=3)
-        retriever.close()
+        try:
+            results = retriever.search("환불 청약철회", top_k=3)
+        finally:
+            retriever.close()
 
         print(f"[OK] Hybrid retrieval returned {len(results)} results")
         if results:
