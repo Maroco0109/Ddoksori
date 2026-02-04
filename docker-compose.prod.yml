@@ -44,6 +44,23 @@ services:
 
       # === Logging ===
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # === Environment ===
+      - ENVIRONMENT=production
+
+      # === OAuth & Auth ===
+      # URL 설정 (프로덕션 도메인)
+      - BACKEND_URL=${BACKEND_URL:-https://ddoksori.duckdns.org}
+      - FRONTEND_URL=${FRONTEND_URL:-https://ddoksori.duckdns.org}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://ddoksori.duckdns.org}
+      # JWT (Secrets Manager 또는 환경변수)
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_TOKEN_EXPIRE_DAYS=${JWT_TOKEN_EXPIRE_DAYS:-30}
+      # OAuth 2.0 (Secrets Manager 또는 환경변수)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

@@ -3,15 +3,18 @@ import { AlertTriangle, ExternalLink } from 'lucide-react';
 import type { MessageWithCitations } from '@/shared/types';
 import { MarkdownRenderer } from '@/shared/components/MarkdownRenderer';
 import { CitationModal } from './CitationModal';
+import { FollowupChips } from './FollowupChips';
 
 interface MessageBubbleProps {
   message: MessageWithCitations;
   chatType?: 'dispute' | 'general';
+  onFollowupSelect?: (question: string) => void;
 }
 
 export function MessageBubble({
   message,
   chatType = 'dispute',
+  onFollowupSelect,
 }: MessageBubbleProps) {
   const [selectedCitationId, setSelectedCitationId] = useState<number | null>(
     null
@@ -96,10 +99,20 @@ export function MessageBubble({
           }`}
         >
           {isAI ? (
-            <MarkdownRenderer
-              content={message.content}
-              onCitationClick={setSelectedCitationId}
-            />
+            <>
+              <MarkdownRenderer
+                content={message.content}
+                onCitationClick={setSelectedCitationId}
+              />
+              {message.followupQuestions &&
+                message.followupQuestions.length > 0 &&
+                onFollowupSelect && (
+                  <FollowupChips
+                    questions={message.followupQuestions}
+                    onSelect={onFollowupSelect}
+                  />
+                )}
+            </>
           ) : (
             message.content
           )}

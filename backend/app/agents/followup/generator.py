@@ -47,6 +47,7 @@ class FollowupQuestionGenerator:
         retrieval: Dict,
         answer: str,
         format_id: Optional[str] = None,
+        is_fallback: bool = False,
     ) -> Dict[str, List[str]]:
         """
         후속 질문과 명확화 질문을 생성합니다.
@@ -84,7 +85,9 @@ class FollowupQuestionGenerator:
             }
         """
         # 1. 컨텍스트 구축
-        context = self._build_context(query_analysis, retrieval, answer, format_id)
+        context = self._build_context(
+            query_analysis, retrieval, answer, format_id, is_fallback
+        )
 
         # 2. 후속 질문 생성
         followup_questions = self._generate_followup_questions(context)
@@ -103,6 +106,7 @@ class FollowupQuestionGenerator:
         retrieval: Dict,
         answer: str,
         format_id: Optional[str] = None,
+        is_fallback: bool = False,
     ) -> Dict:
         """
         템플릿 매칭을 위한 컨텍스트를 구축합니다.
@@ -158,7 +162,41 @@ class FollowupQuestionGenerator:
             "missing_amount": "amount" in missing_fields,
             # 답변 형식
             "format_id": format_id,
+            # Fallback 여부 (rule_based 또는 safe_fallback 사용 시)
+            "is_fallback": is_fallback,
         }
+
+    def _select_questions_by_context(self, context: Dict) -> List[str]:
+        """상황에 따라 적절한 질문 선택 (우선순위 로직)"""
+        has_criteria = context.get("has_criteria", False)
+        has_laws = context.get("has_laws", False)
+        has_cases = context.get("has_cases", False)
+        is_fallback = context.get("is_fallback", False)
+
+        # Case 1: 이상한 말 (fallback) - 3개 버튼
+        if is_fallback:
+            return [
+                "특정 품목의 환불 기준이 궁금하신가요?",
+                "관련 법령을 확인해 드릴까요?",
+                "유사한 분쟁 사례를 찾아볼까요?",
+            ]
+
+        # Case 2: 기준만 제공됨 - 2개 버튼
+        if has_criteria and not has_laws and not has_cases:
+            return [
+                "이 기준의 법적 근거가 궁금하신가요?",
+                "유사한 분쟁 사례를 확인해 보시겠어요?",
+            ]
+
+        # Case 3: 품목만 질의 - 2개 버튼
+        if context.get("product_only", False):
+            return [
+                "관련 법령을 확인해 드릴까요?",
+                "비슷한 사례를 찾아볼까요?",
+            ]
+
+        # Default: 빈 리스트 반환 (기존 템플릿 기반 로직 사용)
+        return []
 
     def _generate_followup_questions(self, context: Dict) -> List[str]:
         """
@@ -170,6 +208,11 @@ class FollowupQuestionGenerator:
         Returns:
             후속 질문 목록 (최대 max_followup_questions개)
         """
+        # 0. 상황별 템플릿 우선 적용 (fallback, 기준만, 품목만)
+        context_based = self._select_questions_by_context(context)
+        if context_based:
+            return context_based
+
         dispute_type = context.get("dispute_type", "일반")
         format_id = context.get("format_id")
 

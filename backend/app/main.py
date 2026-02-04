@@ -93,9 +93,70 @@ app.include_router(users_router)
 
 
 # 시작 로그
+def _validate_security_config():
+    """
+    [SEC-01, SEC-40] 프로덕션 보안 설정 검증
+
+    프로덕션 환경에서 필수 보안 환경변수가 올바르게 설정되었는지 확인합니다.
+    개발 환경에서는 경고만 출력합니다.
+
+    ENVIRONMENT 환경변수:
+        - 'production' 또는 'prod': 프로덕션 모드 (필수 검증 활성화)
+        - 그 외: 개발 모드 (경고만 출력)
+    """
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    is_production = env in ("production", "prod")
+    warnings_list = []
+
+    # JWT_SECRET_KEY 검증
+    jwt_secret = os.getenv("JWT_SECRET_KEY", "")
+    default_jwt_secret = "dev_secret_key_change_in_production"
+    if not jwt_secret or jwt_secret == default_jwt_secret:
+        msg = (
+            "[SEC-01] JWT_SECRET_KEY가 기본값이거나 미설정됨 - 프로덕션에서 변경 필수!"
+        )
+        if is_production:
+            logger.critical(msg)
+            raise RuntimeError(msg)
+        else:
+            warnings_list.append(msg)
+
+    # REDIS_PASSWORD 검증 (Redis 사용 시, 프로덕션에서만 필수)
+    redis_host = os.getenv("REDIS_HOST", "")
+    redis_password = os.getenv("REDIS_PASSWORD", "")
+    if redis_host and not redis_password:
+        msg = "[SEC-40] REDIS_PASSWORD 미설정 - Redis 인증 없이 실행됨"
+        if is_production:
+            logger.critical(msg)
+            raise RuntimeError(msg)
+        else:
+            warnings_list.append(msg)
+
+    # OAuth 설정 검증 (프로덕션에서만 경고)
+    if is_production:
+        oauth_vars = [
+            "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET",
+            "NAVER_CLIENT_ID",
+            "NAVER_CLIENT_SECRET",
+        ]
+        missing = [v for v in oauth_vars if not os.getenv(v)]
+        if missing:
+            logger.warning(
+                f"[Auth] OAuth 환경변수 미설정: {missing} - 소셜 로그인 불가"
+            )
+
+    # 개발 환경 경고 출력
+    for warning in warnings_list:
+        logger.warning(warning)
+
+
 @app.on_event("startup")
 async def startup_event():
     """애플리케이션 시작 시 로그 및 서비스 시작"""
+    # [SEC-01, SEC-40] 보안 설정 검증
+    _validate_security_config()
+
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
     logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")

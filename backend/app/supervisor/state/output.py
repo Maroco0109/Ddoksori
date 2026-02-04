@@ -91,6 +91,9 @@ class OutputState(TypedDict, total=False):
     followup_questions: List[str]
     claim_evidence_map: List[ClaimEvidenceMapping]
 
+    # PR-3: fallback 여부 (후속 질문 선택에 사용)
+    is_fallback: bool
+
     # Progressive Disclosure (Phase C)
     response_depth: ResponseDepth
     available_details: Optional[Dict]

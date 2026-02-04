@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment } from 'react';
+import { useState, useRef, useEffect, Fragment, useCallback } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
 import type { AgencyInfo, ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations, SSESourceInfo, SourceMetadata } from '@/shared/types';
 import { Send } from 'lucide-react';
@@ -633,6 +633,15 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   };
 
+  // 추가 질문 클릭 핸들러
+  const handleDisputeFollowupSelect = useCallback((question: string) => {
+    setDisputeInputValue(question);
+  }, []);
+
+  const handleGeneralFollowupSelect = useCallback((question: string) => {
+    setGeneralInputValue(question);
+  }, []);
+
   // 숫자 포맷팅 함수 (천원 단위 콤마)
   const formatNumber = (value: string) => {
     const number = value.replace(/[^0-9]/g, '');
@@ -830,6 +839,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                     <MessageBubble
                       message={msg}
                       chatType="dispute"
+                      onFollowupSelect={handleDisputeFollowupSelect}
                     />
                     {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
                       <SafetyWarning
@@ -891,6 +901,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
                 <MessageBubble
                   message={msg}
                   chatType="general"
+                  onFollowupSelect={handleGeneralFollowupSelect}
                 />
                 {msg.hasSafetyWarning && msg.clarifyingQuestions && msg.clarifyingQuestions.length > 0 && (
                   <SafetyWarning
