@@ -61,7 +61,10 @@ class TestRetrieverTypesInQueryAnalysis:
 
         async def run_test():
             return await graph.ainvoke(
-                {"messages": [{"role": "user", "content": "안녕"}]},
+                {
+                    "messages": [{"role": "user", "content": "안녕"}],
+                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
+                },
                 config={"configurable": {"thread_id": "test-retriever-types"}},
             )
 
@@ -91,7 +94,10 @@ class TestSelectiveFanOut:
 
         async def run_test():
             return await graph.ainvoke(
-                {"messages": [{"role": "user", "content": query}]},
+                {
+                    "messages": [{"role": "user", "content": query}],
+                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
+                },
                 config={"configurable": {"thread_id": f"test-selective-{query[:5]}"}},
             )
 

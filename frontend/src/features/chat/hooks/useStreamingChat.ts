@@ -13,7 +13,7 @@ import type {
   OnboardingAPIData,
 } from '@/shared/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 const STREAM_TIMEOUT_MS = 120_000; // 120초 (RAG 파이프라인 전체 소요시간 고려)
 const MAX_STREAM_RETRIES = 2;
 

@@ -4,7 +4,7 @@
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useAdminStore } from '@/features/admin/admin.store';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
