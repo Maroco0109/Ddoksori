@@ -657,14 +657,14 @@ REDIS_PORT=6379
 sudo nano /etc/logrotate.d/ddoksori
 
 # 내용:
-/home/maroco/LLM/backend/logs/*.log {
+/path/to/project/backend/logs/*.log {
     daily
     rotate 30
     compress
     delaycompress
     notifempty
     missingok
-    create 0644 maroco maroco
+    create 0644 username username
     postrotate
         systemctl reload ddoksori-backend > /dev/null 2>&1 || true
     endscript

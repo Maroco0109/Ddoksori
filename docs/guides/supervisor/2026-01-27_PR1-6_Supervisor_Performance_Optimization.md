@@ -350,7 +350,7 @@ if query_type in ["law", "criteria"]:
 ### 테스트 결과 ✅
 
 ```bash
-PYTHONPATH=backend /home/maroco/miniconda3/envs/dsr/bin/python -m pytest \
+PYTHONPATH=backend /path/to/conda/envs/your-env/bin/python -m pytest \
   backend/scripts/testing/supervisor/test_supervisor_optimization.py -v -m "not slow"
 # 10/10 passed in 7m 53s ✅
 ```
@@ -513,7 +513,7 @@ def _normalize_query(query: str) -> str:
 ### 테스트 결과 ✅
 
 ```bash
-PYTHONPATH=backend /home/maroco/miniconda3/envs/dsr/bin/python -m pytest \
+PYTHONPATH=backend /path/to/conda/envs/your-env/bin/python -m pytest \
   backend/scripts/testing/supervisor/test_pr6_cache.py -v
 # 7/7 passed in 4.58s ✅
 ```

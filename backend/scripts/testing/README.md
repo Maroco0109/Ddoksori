@@ -270,4 +270,4 @@ def mock_retriever():
 ## 참고 문서
 
 - pytest.ini: `backend/pytest.ini`
-- CLAUDE.md 테스트 섹션: `/home/maroco/LLM/CLAUDE.md`
+- CLAUDE.md 테스트 섹션: `/path/to/project/CLAUDE.md`

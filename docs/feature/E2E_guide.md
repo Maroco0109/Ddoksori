@@ -76,7 +76,7 @@ ssh -L 19012:localhost:9010 root@<pod-ip-3> -N &
 ### 2.1 .env 파일 수정
 
 ```bash
-cd /home/maroco/LLM
+cd /path/to/project
 cp .env.example .env
 # 아래 값들을 실제 환경에 맞게 수정
 ```
@@ -153,7 +153,7 @@ ls -la .env
 ### 3.1 서비스 시작
 
 ```bash
-cd /home/maroco/LLM
+cd /path/to/project
 
 # 전체 서비스 시작
 docker compose up -d

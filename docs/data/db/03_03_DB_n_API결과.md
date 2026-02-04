@@ -45,7 +45,7 @@
 ### 연결 정보
 
 ```
-엔드포인트: dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+엔드포인트: your-db-instance.ap-northeast-2.rds.amazonaws.com
 포트: 5432
 데이터베이스: ddoksori
 사용자: postgres
@@ -91,7 +91,7 @@
 ================================================================================
 [INFO] 스키마 실행 시작
 ================================================================================
-[INFO] 연결 중... dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com:5432/ddoksori
+[INFO] 연결 중... your-db-instance.ap-northeast-2.rds.amazonaws.com:5432/ddoksori
 [OK] 연결 성공
 
 [INFO] 테이블 생성 확인...
@@ -396,7 +396,7 @@ SELECT * FROM search_hybrid_rrf(
 
 **연결 정보 입력**:
 ```
-Host: dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+Host: your-db-instance.ap-northeast-2.rds.amazonaws.com
 Port: 5432
 Database: ddoksori
 Username: postgres
@@ -411,7 +411,7 @@ Password: 별도 공유
 
 **`.env` 파일 설정** (`data_n_db/.env`):
 ```env
-DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+DB_HOST=your-db-instance.ap-northeast-2.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=ddoksori
 DB_USER=postgres
@@ -538,7 +538,7 @@ python DB/03_02_test_search_api.py
 
 **Slack DM 또는 암호화된 채널로 공유**:
 ```env
-DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+DB_HOST=your-db-instance.ap-northeast-2.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=ddoksori
 DB_USER=postgres
@@ -555,7 +555,7 @@ OPENAI_API_KEY=sk-proj-...
 
 **팀원에게 알려줄 정보**:
 ```
-Host: dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+Host: your-db-instance.ap-northeast-2.rds.amazonaws.com
 Port: 5432
 Database: ddoksori
 Username: postgres
