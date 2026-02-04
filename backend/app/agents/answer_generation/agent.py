@@ -514,13 +514,23 @@ def _followup_detail_response(state: Dict, config=None) -> Dict:
     cited_cases = _extract_cited_cases(filtered_retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
+    # Generate followup questions (캐시 응답에서도 생성)
+    query_analysis = state.get("query_analysis", {})
+    followup_generator = FollowupQuestionGenerator()
+    followup_result = followup_generator.generate_questions(
+        query_analysis=query_analysis,
+        retrieval=filtered_retrieval,
+        answer=draft_answer,
+    )
+    followup_questions = followup_result.get("followup_questions", [])
+
     return {
         "draft_answer": draft_answer,
         "claim_evidence_map": claim_evidence_map,
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": 0.8,  # 캐시 사용이므로 고정값
-        "followup_questions": [],
+        "followup_questions": followup_questions,
         "response_depth": "detail",
         "available_details": None,
         "retrieval": filtered_retrieval,  # retrieval state도 업데이트
