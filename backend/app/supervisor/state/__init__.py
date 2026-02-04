@@ -193,6 +193,10 @@ class ChatState(MessagesState):
     response_depth: ResponseDepth  # Progressive Disclosure 응답 깊이
     available_details: Optional[Dict]  # 아직 제공하지 않은 상세 정보 메타데이터
 
+    # === Clarify (PR-4) ===
+    clarifying_questions: List[str]  # 역질문 목록
+    awaiting_user_choice: bool  # 사용자 선택 대기 중
+
     # === 제어 플래그 ===
     retry_count: int
     low_similarity_mode: bool
@@ -298,6 +302,9 @@ def create_initial_state(
         claim_evidence_map=[],
         response_depth="full",
         available_details=None,
+        # Clarify (PR-4)
+        clarifying_questions=[],
+        awaiting_user_choice=False,
         # 제어 플래그
         retry_count=0,
         low_similarity_mode=False,
