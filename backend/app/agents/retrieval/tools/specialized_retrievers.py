@@ -269,6 +269,11 @@ class CriteriaRetriever:
 
         results: List[SimilarChunkResult] = []
         for row in rows:
+            if not isinstance(row, dict):
+                logger.warning(
+                    "[CriteriaRetriever] Skipping non-dict row: %s", type(row)
+                )
+                continue
             metadata = row.get("metadata")
             if isinstance(metadata, str):
                 try:
@@ -445,6 +450,12 @@ class CriteriaRetriever:
 
             results: List[SimilarChunkResult] = []
             for row in cur.fetchall():
+                if not isinstance(row, (tuple, list)):
+                    logger.warning(
+                        "[CriteriaRetriever.criteria_search] Skipping non-tuple row: %s",
+                        type(row),
+                    )
+                    continue
                 metadata = row[14]
                 if isinstance(metadata, str):
                     try:
