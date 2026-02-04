@@ -329,6 +329,7 @@ def _route_mas_supervisor(state: ChatState):
         "query_analyst": "query_analysis",
         "answer_drafter": "generation",
         "legal_reviewer": "review",
+        "clarify": "clarify",  # PR-4: 역질문 노드 라우팅
     }
 
     if next_agent in routing_map:
@@ -393,6 +394,14 @@ def create_mas_supervisor_graph() -> StateGraph:
         _create_timed_node(_inject_cached_retrieval_node, "inject_cached_retrieval"),
     )
 
+    # PR-4: Clarify node for short/ambiguous queries
+    from .nodes.clarify import ask_clarification_node
+
+    graph.add_node(
+        "clarify",
+        _create_timed_node(ask_clarification_node, "clarify"),
+    )
+
     # === 엣지 설정 ===
     graph.set_entry_point("cache_check")
 
@@ -409,7 +418,7 @@ def create_mas_supervisor_graph() -> StateGraph:
         {END: END, "supervisor": "supervisor"},
     )
 
-    # v2 라우팅 (Phase 3-C: inject_cached_retrieval 추가)
+    # v2 라우팅 (Phase 3-C: inject_cached_retrieval 추가, PR-4: clarify 추가)
     graph.add_conditional_edges(
         "supervisor",
         _route_mas_supervisor,
@@ -422,6 +431,7 @@ def create_mas_supervisor_graph() -> StateGraph:
             "review": "review",
             "output_guardrail": "output_guardrail",
             "inject_cached_retrieval": "inject_cached_retrieval",
+            "clarify": "clarify",  # PR-4: 역질문 노드
         },
     )
 
@@ -438,6 +448,9 @@ def create_mas_supervisor_graph() -> StateGraph:
 
     # Phase 3-C: inject_cached_retrieval → generation
     graph.add_edge("inject_cached_retrieval", "generation")
+
+    # PR-4: clarify → output_guardrail (역질문 응답 후 종료)
+    graph.add_edge("clarify", "output_guardrail")
 
     logger.info("[MAS Graph v2] Created MAS Supervisor v2 graph")
 
