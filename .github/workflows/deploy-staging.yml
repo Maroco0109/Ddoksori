@@ -78,11 +78,18 @@ jobs:
               --query 'SecretString' \
               --output text 2>/dev/null || echo '{}')
 
+            # [SEC-FIX] jq로 JSON 파싱 (shell injection 방지)
+            # jq가 없으면 설치
+            if ! command -v jq &> /dev/null; then
+              echo "Installing jq..."
+              sudo apt-get update -qq && sudo apt-get install -y -qq jq
+            fi
+
             # REDIS_PASSWORD (from infra or .env)
             if [ -z "$REDIS_PASSWORD" ]; then
-              REDIS_PASSWORD=$(echo "$INFRA_SECRET" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('REDIS_PASSWORD',''))" 2>/dev/null)
+              REDIS_PASSWORD=$(echo "$INFRA_SECRET" | jq -r '.REDIS_PASSWORD // ""' 2>/dev/null)
               if [ -z "$REDIS_PASSWORD" ]; then
-                echo "ERROR: REDIS_PASSWORD not found in Secrets Manager"
+                echo "ERROR: REDIS_PASSWORD not found in Secrets Manager (ddoksori/staging/infra)"
                 exit 1
               fi
               export REDIS_PASSWORD
@@ -93,10 +100,9 @@ jobs:
 
             # JWT_SECRET_KEY (필수 - SEC-01)
             if [ -z "$JWT_SECRET_KEY" ]; then
-              JWT_SECRET_KEY=$(echo "$APP_SECRET" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('JWT_SECRET_KEY',''))" 2>/dev/null)
+              JWT_SECRET_KEY=$(echo "$APP_SECRET" | jq -r '.JWT_SECRET_KEY // ""' 2>/dev/null)
               if [ -z "$JWT_SECRET_KEY" ]; then
-                echo "ERROR: JWT_SECRET_KEY not found in Secrets Manager"
-                echo "Please add JWT_SECRET_KEY to ddoksori/staging/app secret"
+                echo "ERROR: JWT_SECRET_KEY not found in Secrets Manager (ddoksori/staging/app)"
                 exit 1
               fi
               export JWT_SECRET_KEY
@@ -106,11 +112,12 @@ jobs:
             fi
 
             # OAuth secrets (optional - 경고만)
+            # [SEC-FIX] jq --arg로 변수 전달하여 shell injection 방지
             for VAR in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET; do
               if [ -z "$(eval echo \$$VAR)" ]; then
-                VALUE=$(echo "$APP_SECRET" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('$VAR',''))" 2>/dev/null)
+                VALUE=$(echo "$APP_SECRET" | jq -r --arg key "$VAR" '.[$key] // ""' 2>/dev/null)
                 if [ -n "$VALUE" ]; then
-                  export $VAR="$VALUE"
+                  export "$VAR=$VALUE"
                   echo "$VAR loaded from Secrets Manager"
                 else
                   echo "WARNING: $VAR not found (OAuth login may not work)"
