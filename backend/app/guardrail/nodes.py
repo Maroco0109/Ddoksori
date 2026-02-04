@@ -4,6 +4,7 @@ Guardrail LangGraph Nodes
 
 import logging
 from typing import Any, Dict
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .moderation import MODERATION_ENABLED, check_input, check_output
 
@@ -19,13 +20,19 @@ def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
         messages = state.get("messages", [])
         if messages:
             last_msg = messages[-1]
-            if hasattr(last_msg, "content"):
+            # [Fix Root Cause] Only extract if it is explicitly a HumanMessage
+            if isinstance(last_msg, HumanMessage):
                 user_query = last_msg.content
             elif isinstance(last_msg, dict):
-                user_query = last_msg.get("content", "")
+                 # LangChain style (type='human') or OpenAI style (role='user')
+                 if last_msg.get("type") == "human" or last_msg.get("role") == "user":
+                    user_query = last_msg.get("content", "")
 
     if not user_query:
         return {}
+
+    # [Root Cause Fixed] Loop prevention logic removed as strict type check prevents AI msg extraction
+
 
     result = check_input(user_query)
 
