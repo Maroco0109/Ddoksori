@@ -932,7 +932,72 @@ aws secretsmanager create-secret \
 
 ## 7. 도메인 + HTTPS 적용
 
-### 7.1 도메인 구매 (Route 53)
+### 옵션 개요
+
+| 옵션 | 비용 | 설정 시간 | HTTPS | 추천 상황 |
+|------|------|----------|-------|----------|
+| **A. 탄력적 IP만** | 무료 | 0분 | ❌ (자체서명만) | 1주일 이하 데모 |
+| **B. 무료 서브도메인** | 무료 | 5-15분 | ✅ Let's Encrypt | 포트폴리오/데모 |
+| **C. Route 53** | ~$13/년 | 수 시간 | ✅ Let's Encrypt | 장기 운영 |
+
+---
+
+### 7.1 옵션 A: 탄력적 IP만 사용 (가장 빠름)
+
+도메인 없이 탄력적 IP로 직접 접속합니다.
+
+**장점**: 추가 설정 없음, 즉시 사용 가능
+**단점**: Let's Encrypt 불가 (도메인 필수), 브라우저 경고 발생
+
+```bash
+# HTTP로만 운영 (HTTPS 없음)
+http://<탄력적IP>
+
+# 또는 자체 서명 인증서 (브라우저 경고 발생)
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/selfsigned.key \
+  -out /etc/nginx/ssl/selfsigned.crt
+```
+
+> **적합**: 내부 테스트, 1주일 미만 단기 데모, 발표 직전 빠른 배포
+
+---
+
+### 7.2 옵션 B: 무료 서브도메인 (포트폴리오 추천)
+
+무료 서브도메인 서비스를 사용하면 Let's Encrypt HTTPS를 적용할 수 있습니다.
+
+#### freedns.afraid.org (제한 없음, 즉시 발급)
+
+```
+1. https://freedns.afraid.org 접속 → Sign Up
+2. 가입 후 Subdomains → Add Subdomain
+3. 설정:
+   - Type: A
+   - Subdomain: ddoksori (원하는 이름)
+   - Domain: mooo.com (또는 다른 공개 도메인 선택)
+   - Destination: <탄력적 IP>
+4. Save → 즉시 활성화
+5. 확인: nslookup ddoksori.mooo.com
+```
+
+**사용 가능 도메인 예시**: `mooo.com`, `chickenkiller.com`, `crabdance.com`, `ignorelist.com`
+
+#### duckdns.org (GitHub 로그인, 5개 무료)
+
+```
+1. https://www.duckdns.org 접속 → GitHub으로 로그인
+2. 하단 "sub domain" 입력란에 원하는 이름 입력 (예: ddoksori)
+3. "current ip" 칸에 탄력적 IP 입력
+4. "add now" 클릭
+5. 확인: nslookup ddoksori.duckdns.org
+```
+
+> **DNS 전파**: 보통 1-5분 내 완료. `nslookup`으로 IP가 보이면 7.5 HTTPS 적용 진행.
+
+---
+
+### 7.3 옵션 C: 도메인 구매 (Route 53)
 
 ```
 1. AWS Console → Route 53 → Registered domains → Register Domain
@@ -944,7 +1009,7 @@ aws secretsmanager create-secret \
 5. DNS 전파 확인: nslookup ddoksori.com
 ```
 
-### 7.2 EC2 보안 그룹 변경
+### 7.4 EC2 보안 그룹 변경
 
 443 포트 추가:
 
@@ -954,7 +1019,9 @@ EC2 Console → 인스턴스 → Security 탭 → 보안 그룹 클릭
     Type: HTTPS, Port: 443, Source: 0.0.0.0/0
 ```
 
-### 7.3 HTTPS 적용 (Let's Encrypt + Certbot)
+### 7.5 HTTPS 적용 (Let's Encrypt + Certbot)
+
+> **전제조건**: 옵션 B(무료 서브도메인) 또는 옵션 C(Route 53) 완료 필요. IP만으로는 Let's Encrypt 사용 불가.
 
 > **선택사항**: 도메인 없이 IP로 운영하는 경우 이 단계를 건너뛰세요.
 
