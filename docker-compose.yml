@@ -1,12 +1,6 @@
 services:
-  # CloudBeaver (Web-based Database Manager for RDS)
-  cloudbeaver:
-    image: dbeaver/cloudbeaver:latest
-    container_name: ddoksori_cloudbeaver
-    ports:
-      - "8978:8978"
-    volumes:
-      - cloudbeaver_data:/opt/cloudbeaver/workspace
+  # NOTE: CloudBeaver removed for security (SEC-41)
+  # Use local DBeaver or pgAdmin for database management instead
 
   # FastAPI backend
   backend:
@@ -42,7 +36,7 @@ services:
       - VITE_API_BASE_URL=http://localhost:8000
     command: npm run dev -- --host
 
-  # Redis (Answer Caching)
+  # Redis (Answer Caching) - SEC-40: Added authentication
   redis:
     image: redis:7-alpine
     container_name: ddoksori_redis
@@ -50,14 +44,15 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password_change_in_production}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_redis_password_change_in_production}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_redis_password_change_in_production}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
 
 volumes:
-  cloudbeaver_data:
   redis_data:
   frontend_node_modules:

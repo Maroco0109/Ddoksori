@@ -441,6 +441,11 @@ class RedisConfig(BaseSettings):
     host: str = Field(default="localhost", description="Redis 호스트")
     port: int = Field(default=6379, description="Redis 포트")
     db: int = Field(default=0, description="Redis 데이터베이스 번호")
+    password: str | None = Field(
+        default=None,
+        alias="REDIS_PASSWORD",
+        description="Redis 비밀번호 (SEC-40: 프로덕션 필수)",
+    )
     enable_answer_cache: bool = Field(
         default=False, alias="ENABLE_ANSWER_CACHE", description="답변 캐시 활성화"
     )
