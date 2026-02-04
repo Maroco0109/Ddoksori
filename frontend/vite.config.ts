@@ -12,6 +12,10 @@ export default defineConfig({
   },
   assetsInclude: ['**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif', '**/*.svg'],
   server: {
+    // ========================================
+    // LOCAL DEVELOPMENT ONLY
+    // Production uses nginx proxy (infra/nginx.conf)
+    // ========================================
     proxy: {
       '/auth': {
         target: 'http://localhost:8000',

@@ -39,6 +39,7 @@ def check_openai_key():
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "Say 'OK'"}],
             max_tokens=10,
+            timeout=30.0,
         )
         print(f"[OK] OpenAI API call successful: {response.choices[0].message.content}")
         return True
@@ -64,7 +65,9 @@ def check_embedding():
 
         client = OpenAI(api_key=api_key)
         response = client.embeddings.create(
-            model=config.embedding.model, input="테스트 쿼리"
+            model=config.embedding.model,
+            input="테스트 쿼리",
+            timeout=30.0,
         )
         print(f"[OK] Embedding generated: {len(response.data[0].embedding)} dimensions")
         return True
