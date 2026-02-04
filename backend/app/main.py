@@ -62,6 +62,7 @@ app = FastAPI(
 Instrumentator().instrument(app).expose(app)
 
 # CORS 설정
+# [SEC-07] 보안: 허용 메서드와 헤더를 명시적으로 제한
 cors_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -70,8 +71,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "DELETE"],  # DELETE는 회원탈퇴용
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
 
 # Rate Limiting 설정 (SEC-04)
