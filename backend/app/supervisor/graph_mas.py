@@ -211,14 +211,29 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
         }
 
         try:
+            if agent is None:
+                raise ValueError(f"Agent '{agent_type}' not found in agent_map")
+
             result = await agent.process(request)
             search_time_ms = (time.time() - start_time) * 1000
 
+            # 방어적 체크: result가 None인 경우 처리
+            if result is None:
+                logger.warning(
+                    f"[RetrievalAgent_v2:{agent_type}] agent.process() returned None"
+                )
+                result = {
+                    "status": "failure",
+                    "message": "Agent returned None",
+                    "result": None,
+                }
+
+            result_data = result.get("result") or {}
             individual_result = {
                 "source": agent_type,
-                "documents": result.get("result", {}).get("results", []),
-                "max_similarity": result.get("result", {}).get("max_similarity", 0.0),
-                "avg_similarity": result.get("result", {}).get("avg_similarity", 0.0),
+                "documents": result_data.get("results", []),
+                "max_similarity": result_data.get("max_similarity", 0.0),
+                "avg_similarity": result_data.get("avg_similarity", 0.0),
                 "search_time_ms": search_time_ms,
             }
 
