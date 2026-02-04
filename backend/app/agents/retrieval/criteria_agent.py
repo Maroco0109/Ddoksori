@@ -214,7 +214,7 @@ def _classify_with_llm(
             "분류가 필요없는 키워드는 배열에 포함하지 마라."
         )
 
-        print(f"[CriteriaRetrieval][DEBUG] LLM candidates: {keywords}")
+        logger.debug("[CriteriaRetrieval] LLM candidates: %s", keywords)
         response = client.chat.completions.create(
             model=config.model,
             messages=[
@@ -225,7 +225,7 @@ def _classify_with_llm(
             max_tokens=config.max_tokens,
         )
         content = response.choices[0].message.content or ""
-        print(f"[CriteriaRetrieval][DEBUG] LLM raw: {content[:500]}")
+        logger.debug("[CriteriaRetrieval] LLM raw: %s", content[:500])
         json_block = _extract_json_block(content) or "[]"
         parsed, parse_error = _safe_json_load(json_block)
         if parsed is None:
