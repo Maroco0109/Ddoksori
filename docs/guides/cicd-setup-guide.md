@@ -1023,56 +1023,75 @@ EC2 Console → 인스턴스 → Security 탭 → 보안 그룹 클릭
 
 > **전제조건**: 옵션 B(무료 서브도메인) 또는 옵션 C(Route 53) 완료 필요. IP만으로는 Let's Encrypt 사용 불가.
 
-> **선택사항**: 도메인 없이 IP로 운영하는 경우 이 단계를 건너뛰세요.
+> **참고**: `nginx.conf`와 `docker-compose.prod.yml`에 SSL 설정이 이미 포함되어 있습니다. 인증서만 발급하면 됩니다.
 
-#### 설정 절차 (개요)
-
-1. **nginx.conf 수정** - 80번 포트에서 Certbot 인증 경로 허용
-2. **docker-compose.prod.yml 수정** - certbot 서비스 추가
-3. **초기 인증서 발급** - EC2에서 certbot 실행
-4. **자동 갱신 설정** - cron 또는 systemd timer
-
-#### 1단계: Certbot 초기 발급 (EC2에서 실행)
+#### 1단계: EC2에서 Certbot 설치 및 인증서 발급
 
 ```bash
-# Nginx 컨테이너가 80번 포트로 실행 중이어야 함
-docker compose -f docker-compose.prod.yml up -d nginx
+# SSH로 EC2 접속
+ssh -i "your-key.pem" ubuntu@<탄력적IP>
 
-# Certbot으로 인증서 발급
-sudo certbot certonly --webroot -w /var/www/certbot \
-  -d ddoksori.com -d www.ddoksori.com \
+# Certbot 설치
+sudo apt update && sudo apt install certbot -y
+
+# certbot 디렉토리 생성
+sudo mkdir -p /var/www/certbot
+
+# 컨테이너 중지 (80번 포트 해제)
+cd /home/ubuntu/ddoksori
+docker compose -f docker-compose.prod.yml down
+
+# 인증서 발급 (standalone 모드)
+sudo certbot certonly --standalone \
+  -d ddoksori.duckdns.org \
   --email your-email@example.com \
   --agree-tos --no-eff-email
+
+# 성공 시 출력: "Certificate is saved at /etc/letsencrypt/live/ddoksori.duckdns.org/fullchain.pem"
 ```
 
-#### 2단계: nginx.conf SSL 설정 추가
+#### 2단계: 컨테이너 재시작
 
-```nginx
-server {
-    listen 443 ssl;
-    server_name ddoksori.com www.ddoksori.com;
+```bash
+# ECR 로그인
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-    ssl_certificate /etc/letsencrypt/live/ddoksori.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/ddoksori.com/privkey.pem;
+# 컨테이너 시작 (443 포트 + 인증서 마운트)
+docker compose -f docker-compose.prod.yml up -d
 
-    # ... 기존 location 설정 ...
-}
-
-server {
-    listen 80;
-    server_name ddoksori.com www.ddoksori.com;
-    return 301 https://$host$request_uri;
-}
+# 확인
+curl -I https://ddoksori.duckdns.org
 ```
 
-#### 3단계: 자동 갱신 (cron)
+#### 3단계: 자동 갱신 설정 (cron)
 
 ```bash
 # EC2에서 crontab 설정
-echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/ddoksori/docker-compose.prod.yml restart nginx" | sudo crontab -
+echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/ddoksori/docker-compose.prod.yml restart frontend" | sudo crontab -
 ```
 
 > **참고**: Let's Encrypt 인증서는 90일마다 갱신 필요. 위 cron은 매일 03:00에 갱신 확인.
+
+#### 문제 해결
+
+**인증서 발급 실패 시:**
+```bash
+# 80번 포트 사용 중인 프로세스 확인
+sudo lsof -i :80
+
+# 강제 종료 후 재시도
+sudo kill -9 <PID>
+sudo certbot certonly --standalone -d ddoksori.duckdns.org
+```
+
+**HTTPS 접속 안 될 때:**
+```bash
+# 인증서 경로 확인
+sudo ls -la /etc/letsencrypt/live/ddoksori.duckdns.org/
+
+# nginx 설정 테스트 (컨테이너 내부)
+docker exec -it ddoksori-frontend-1 nginx -t
+```
 
 ---
 
