@@ -61,6 +61,28 @@ jobs:
             fi
             echo "ECR_REGISTRY: $ECR_REGISTRY"
 
+            # === AWS Secrets Manager에서 REDIS_PASSWORD 가져오기 ===
+            if [ -z "$REDIS_PASSWORD" ]; then
+              echo "Fetching REDIS_PASSWORD from AWS Secrets Manager..."
+              SECRET_JSON=$(aws secretsmanager get-secret-value \
+                --secret-id "ddoksori/${SECRETS_ENV:-staging}/infra" \
+                --region ap-northeast-2 \
+                --query 'SecretString' \
+                --output text 2>/dev/null || echo '{}')
+
+              REDIS_PASSWORD=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('REDIS_PASSWORD',''))" 2>/dev/null)
+
+              if [ -z "$REDIS_PASSWORD" ]; then
+                echo "ERROR: REDIS_PASSWORD not found in Secrets Manager"
+                echo "Please add REDIS_PASSWORD to ddoksori/staging/infra secret"
+                exit 1
+              fi
+              export REDIS_PASSWORD
+              echo "REDIS_PASSWORD loaded from Secrets Manager"
+            else
+              echo "REDIS_PASSWORD already set from .env"
+            fi
+
             # ECR 로그인
             echo "Logging into ECR..."
             aws ecr get-login-password --region ap-northeast-2 | \
