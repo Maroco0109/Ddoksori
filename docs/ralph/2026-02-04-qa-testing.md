@@ -81,11 +81,11 @@ Added `FollowupQuestionGenerator` call in cache path (agent.py)
 
 ### Retrieval Agent Test
 ```
-retrieval_law: error - 'embed_api_url' attribute missing
-retrieval_criteria: error - file not found
-retrieval_case: PASS - 10 docs, max_sim=0.697
+retrieval_law: PASS - 10 docs, max_sim=0.066
+retrieval_criteria: PASS - 10 docs, max_sim=0.077
+retrieval_case: PASS - 10 docs, max_sim=0.679
 ```
-**Result**: PENDING FIX (awaiting deployment)
+**Result**: PASS (all agents working)
 
 ---
 
@@ -103,11 +103,17 @@ retrieval_case: PASS - 10 docs, max_sim=0.697
 
 ---
 
-## Pending Deployment
+## Final Verification
 
-Awaiting build and deployment:
-- embed_api_url attribute fix
-- data/ directory copy fix
+All issues resolved. Final test results:
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| clarifying_questions | PASS | ["어떤 제품/서비스에 대한 문의인지...", "어떤 문제가 발생했는지..."] |
+| followup_questions | PASS | 3 questions generated |
+| retrieval_law | PASS | 10 docs, no errors |
+| retrieval_criteria | PASS | 10 docs, no errors |
+| retrieval_case | PASS | 10 docs, max_sim=0.679 |
 
 ---
 
@@ -116,4 +122,5 @@ Awaiting build and deployment:
 1. `fix: wire clarify node to MAS graph for short query handling`
 2. `fix: add clarifying_questions to ChatState schema`
 3. `fix: add clarify node to KNOWN_GRAPH_NODES for SSE streaming`
-4. (Pending) `fix: add missing embed_api_url attribute and data directory copy`
+4. `fix: add missing embed_api_url attribute and data directory copy`
+5. `fix: remove embed_api_url from RDSInternalRetriever calls`
