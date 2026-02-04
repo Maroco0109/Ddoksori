@@ -560,7 +560,7 @@ class RAGLogger:
         if HASH_SYSTEM_PROMPT and APP_ENV == "production" and system_prompt:
             prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:16]
             logged_system_prompt = f"[HASH:{prompt_hash}]"
-            logger.debug(f"[SEC-12] System prompt hashed for production logging")
+            logger.debug("[SEC-12] System prompt hashed for production logging")
 
         entry.llm = LLMLog(
             model=model,

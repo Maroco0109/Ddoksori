@@ -11,7 +11,6 @@ from fastapi import APIRouter
 
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
 from app.agents.retrieval.tools.retriever import RAGRetriever
-from app.common.config import get_config
 
 from .dependencies import get_db_config, get_retrieval_mode
 

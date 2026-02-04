@@ -40,7 +40,6 @@ from app.auth.dependencies import decode_access_token, get_current_user
 from app.auth.models import User
 from app.auth.service import AuthService
 from app.auth.user_db import UserDB
-from app.common.cache.base import get_redis_client
 from app.common.config import get_config
 from app.middleware.rate_limiter import RateLimits, limiter
 
@@ -94,7 +93,9 @@ def _store_state(state: str) -> None:
             logger.warning(f"[Auth] Redis store failed, using fallback: {e}")
 
     # Fallback: 인메모리
-    _oauth_states_fallback[state] = datetime.now() + timedelta(seconds=STATE_TTL_SECONDS)
+    _oauth_states_fallback[state] = datetime.now() + timedelta(
+        seconds=STATE_TTL_SECONDS
+    )
     logger.debug(f"[Auth] OAuth state stored in memory: {state[:8]}...")
 
 
@@ -149,7 +150,9 @@ async def _periodic_state_cleanup():
     while True:
         await asyncio.sleep(300)  # 5분
         _cleanup_expired_states()
-        logger.debug(f"[Auth] OAuth state 정리 완료: {len(_oauth_states_fallback)}개 남음")
+        logger.debug(
+            f"[Auth] OAuth state 정리 완료: {len(_oauth_states_fallback)}개 남음"
+        )
 
 
 # ============================================================

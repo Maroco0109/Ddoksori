@@ -72,10 +72,16 @@ BLOCKED_CATEGORIES = [
 # sanitization.py와 동일한 패턴 사용하되, 보안 로깅 목적
 INJECTION_PATTERNS = [
     # 영어 인젝션 패턴
-    (r"\b(ignore|disregard|forget)\b.*\b(above|previous|instructions?|rules?)\b", "instruction_override"),
+    (
+        r"\b(ignore|disregard|forget)\b.*\b(above|previous|instructions?|rules?)\b",
+        "instruction_override",
+    ),
     (r"\b(pretend|act\s+as|you\s+are\s+now)\b.*", "role_hijacking"),
     (r"\bnew\s+instructions?\b", "new_instruction"),
-    (r"\b(override|bypass)\b.*\b(rules?|instructions?|restrictions?)\b", "bypass_attempt"),
+    (
+        r"\b(override|bypass)\b.*\b(rules?|instructions?|restrictions?)\b",
+        "bypass_attempt",
+    ),
     (r"<\s*/?\s*system\s*>", "system_tag"),
     (r"\[\s*system\s*\]", "system_bracket"),
     # 한국어 인젝션 패턴

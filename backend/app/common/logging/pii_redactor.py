@@ -49,7 +49,11 @@ PII_PATTERNS = [
     # 이메일 주소
     (
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-        lambda m: f"{m.group(0)[:3]}***@{m.group(0).split('@')[1]}" if '@' in m.group(0) else "[EMAIL]",
+        lambda m: (
+            f"{m.group(0)[:3]}***@{m.group(0).split('@')[1]}"
+            if "@" in m.group(0)
+            else "[EMAIL]"
+        ),
         "email",
     ),
     # 주민등록번호 (6자리-7자리 또는 13자리 연속)
@@ -175,9 +179,7 @@ def redact_dict(data: dict, keys_to_redact: Optional[list] = None) -> dict:
         elif isinstance(value, dict):
             redacted[key] = redact_dict(value, keys_to_redact)
         elif isinstance(value, list):
-            redacted[key] = [
-                redact_pii(v) if isinstance(v, str) else v for v in value
-            ]
+            redacted[key] = [redact_pii(v) if isinstance(v, str) else v for v in value]
         else:
             redacted[key] = value
 
