@@ -2,16 +2,19 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '@/shared/api/client';
 import type { AdminPost, PostSearchParams } from '@/shared/types/admin';
-import { useAdminStore } from '../admin.store';
-import { getMockData } from '../mockData';
 
+/**
+ * 게시글 관리 페이지
+ *
+ * SEC-34: 테스트 토큰 조건 분기 제거
+ * 모든 데이터는 백엔드 API를 통해서만 조회/수정됩니다.
+ */
 export default function AdminPostsPage() {
   const [searchParams] = useSearchParams();
   const [posts, setPosts] = useState<AdminPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<AdminPost | null>(null);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
-  const adminToken = useAdminStore((state) => state.adminToken);
 
   const [searchFilters, setSearchFilters] = useState<PostSearchParams>({
     searchType: 'title',
@@ -36,14 +39,9 @@ export default function AdminPostsPage() {
   const fetchPosts = async () => {
     setIsLoading(true);
     try {
-      // 테스트 모드인 경우 mock 데이터 사용
-      if (adminToken === 'test-token-1234') {
-        const data = getMockData('/api/admin/posts', searchFilters);
-        setPosts(data);
-      } else {
-        const data = await apiClient.get<AdminPost[]>('/api/admin/posts', searchFilters);
-        setPosts(data);
-      }
+      // SEC-34: 백엔드 API만 사용
+      const data = await apiClient.get<AdminPost[]>('/api/admin/posts', searchFilters);
+      setPosts(data);
     } catch (error) {
       console.error('게시글 로딩 실패:', error);
     } finally {
@@ -62,16 +60,10 @@ export default function AdminPostsPage() {
     }
 
     try {
-      // 테스트 모드에서는 시뮬레이션만
-      if (adminToken === 'test-token-1234') {
-        alert('게시글 상태가 변경되었습니다. (테스트 모드)');
-        fetchPosts();
-      } else {
-        await apiClient.put(`/api/admin/posts/${postId}/visibility`, { isPublic: !isPublic });
-        alert('게시글 상태가 변경되었습니다.');
-        fetchPosts();
-      }
-    } catch (error) {
+      await apiClient.put(`/api/admin/posts/${postId}/visibility`, { isPublic: !isPublic });
+      alert('게시글 상태가 변경되었습니다.');
+      fetchPosts();
+    } catch {
       alert('상태 변경에 실패했습니다.');
     }
   };
@@ -82,31 +74,19 @@ export default function AdminPostsPage() {
     }
 
     try {
-      // 테스트 모드에서는 시뮬레이션만
-      if (adminToken === 'test-token-1234') {
-        alert('게시글이 삭제되었습니다. (테스트 모드)');
-        fetchPosts();
-      } else {
-        await apiClient.delete(`/api/admin/posts/${postId}`);
-        alert('게시글이 삭제되었습니다.');
-        fetchPosts();
-      }
-    } catch (error) {
+      await apiClient.delete(`/api/admin/posts/${postId}`);
+      alert('게시글이 삭제되었습니다.');
+      fetchPosts();
+    } catch {
       alert('게시글 삭제에 실패했습니다.');
     }
   };
 
   const handleViewDetail = async (postId: number) => {
     try {
-      // 테스트 모드인 경우 mock 데이터 사용
-      if (adminToken === 'test-token-1234') {
-        const post = getMockData(`/api/admin/posts/${postId}`);
-        setSelectedPost(post);
-      } else {
-        const post = await apiClient.get<AdminPost>(`/api/admin/posts/${postId}`);
-        setSelectedPost(post);
-      }
-    } catch (error) {
+      const post = await apiClient.get<AdminPost>(`/api/admin/posts/${postId}`);
+      setSelectedPost(post);
+    } catch {
       alert('게시글을 불러올 수 없습니다.');
     }
   };
@@ -314,7 +294,6 @@ interface NoticeModalProps {
 }
 
 function NoticeModal({ onClose, onSuccess }: NoticeModalProps) {
-  const adminToken = useAdminStore((state) => state.adminToken);
   const [notice, setNotice] = useState({
     title: '',
     content: '',
@@ -330,18 +309,11 @@ function NoticeModal({ onClose, onSuccess }: NoticeModalProps) {
     }
 
     try {
-      // 테스트 모드에서는 시뮬레이션만
-      if (adminToken === 'test-token-1234') {
-        alert('공지사항이 작성되었습니다. (테스트 모드)');
-        onSuccess();
-        onClose();
-      } else {
-        await apiClient.post('/api/admin/posts/notice', notice);
-        alert('공지사항이 작성되었습니다.');
-        onSuccess();
-        onClose();
-      }
-    } catch (error) {
+      await apiClient.post('/api/admin/posts/notice', notice);
+      alert('공지사항이 작성되었습니다.');
+      onSuccess();
+      onClose();
+    } catch {
       alert('공지사항 작성에 실패했습니다.');
     }
   };

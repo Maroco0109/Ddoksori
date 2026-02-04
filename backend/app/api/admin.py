@@ -30,9 +30,11 @@ async def admin_login(request: AdminLoginRequest):
     admin_row = await admin_db.get_admin_by_username(request.username)
 
     if not admin_row:
+        logger.warning(f"[Admin] 로그인 실패: 사용자 없음 - {request.username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if admin_row["password_hash"] != hash_password(request.password):
+        logger.warning(f"[Admin] 로그인 실패: 비밀번호 불일치 - {request.username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     admin = Admin(
@@ -45,7 +47,26 @@ async def admin_login(request: AdminLoginRequest):
     await admin_db.update_admin_last_login(str(admin_row["id"]))
     token = create_admin_token(admin)
 
+    logger.info(f"[Admin] 로그인 성공: {request.username}")
     return AdminLoginResponse(admin=admin, token=token)
+
+
+@router.get("/verify")
+async def verify_admin_token(admin: Admin = Depends(get_current_admin)):
+    """
+    관리자 토큰 검증.
+
+    프론트엔드 AdminGuard에서 토큰 유효성 확인에 사용합니다.
+    SEC-33/34: 백엔드 인증 검증으로 프론트엔드 하드코딩 제거
+    """
+    return {
+        "valid": True,
+        "admin": {
+            "id": admin.id,
+            "username": admin.username,
+            "role": admin.role,
+        },
+    }
 
 
 # ============================================================
