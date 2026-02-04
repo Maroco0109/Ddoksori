@@ -158,8 +158,8 @@ def _safe_json_load(text: str) -> Tuple[Optional[Any], Optional[str]]:
             cleaned = f"[{cleaned}]"
     try:
         return json.loads(cleaned), None
-    except json.JSONDecodeError as exc:
-        error = f"json.loads failed: {exc.msg} at {exc.pos}"
+    except json.JSONDecodeError:
+        pass  # First attempt failed, try with cleanup below
     # Remove trailing commas before } or ]
     cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
     try:
@@ -179,6 +179,7 @@ def _classify_with_llm(
     try:
         from dotenv import load_dotenv
         from openai import OpenAI
+
         from app.common.config import get_config
 
         # dotenv 로드 및 OpenAI 키 사용 (backend/.env)
