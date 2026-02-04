@@ -66,6 +66,17 @@ jobs:
             aws ecr get-login-password --region ap-northeast-2 | \
               docker login --username AWS --password-stdin $ECR_REGISTRY
 
+            # 설정 파일 동기화 (GitHub에서 최신 버전 다운로드)
+            echo "Syncing docker-compose.prod.yml from GitHub..."
+            curl -sf -o docker-compose.prod.yml.new \
+              https://raw.githubusercontent.com/SKN19-FINAL-5team/LLM/main/docker-compose.prod.yml
+            if [ -f docker-compose.prod.yml.new ]; then
+              mv docker-compose.prod.yml.new docker-compose.prod.yml
+              echo "docker-compose.prod.yml updated successfully"
+            else
+              echo "WARNING: Failed to download docker-compose.prod.yml, using existing file"
+            fi
+
             # 이미지 Pull
             echo "Pulling latest images..."
             docker compose -f docker-compose.prod.yml pull || {
