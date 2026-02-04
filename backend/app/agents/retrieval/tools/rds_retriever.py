@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """RDS retriever (direct SQL): dense, BM25, and hybrid RRF search."""
 
+import logging
 import os
 import re
 import time
@@ -10,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import psycopg2
 import requests
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class SimilarChunkResult:
@@ -186,6 +188,216 @@ class RDSRetriever:
                 )
 
         return results
+
+    def _search_hybrid_rrf_fn(
+        self,
+        fn_name: str,
+        query_text: str,
+        filter_dataset: Optional[str],
+        filter_category: Optional[str],
+        filter_document_type: Optional[str],
+        filter_year: Optional[int],
+        result_limit: int,
+        rrf_k: int,
+    ) -> List[Dict]:
+        if not self.conn:
+            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+
+        query_embedding = self.embed_query(query_text)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT * FROM {fn_name}(
+                    %s, %s::vector, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    query_text,
+                    query_embedding,
+                    filter_dataset,
+                    filter_category,
+                    filter_document_type,
+                    filter_year,
+                    result_limit,
+                    rrf_k,
+                ),
+            )
+
+            results: List[Dict] = []
+            for row in cur.fetchall():
+                results.append(
+                    {
+                        "chunk_id": row[0],
+                        "dataset_type": row[1],
+                        "text": row[2],
+                        "rrf_score": float(row[3]),
+                        "bm25_score": float(row[4]),
+                        "vector_similarity": float(row[5]),
+                        "source_url": row[6],
+                        "source_file": row[7],
+                        "printed_page": row[8],
+                        "source_year": row[9],
+                        "metadata": row[10],
+                    }
+                )
+
+        return results
+
+    def search_hybrid_rrf_s2(
+        self,
+        query_text: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_document_type: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+        rrf_k: int = 60,
+    ) -> List[Dict]:
+        return self._search_hybrid_rrf_fn(
+            "search_hybrid_rrf_s2",
+            query_text,
+            filter_dataset,
+            filter_category,
+            filter_document_type,
+            filter_year,
+            result_limit,
+            rrf_k,
+        )
+
+    def search_hybrid_rrf_s2_v2(
+        self,
+        query_text: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_document_type: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+        rrf_k: int = 60,
+    ) -> List[Dict]:
+        if not self.conn:
+            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+
+        query_embedding = self.embed_query(query_text)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM search_hybrid_rrf_s2_v2(
+                    %s, %s::vector, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    query_text,
+                    query_embedding,
+                    filter_dataset,
+                    filter_category,
+                    filter_document_type,
+                    filter_year,
+                    result_limit,
+                    rrf_k,
+                ),
+            )
+
+            results: List[Dict] = []
+            for row in cur.fetchall():
+                results.append(
+                    {
+                        "chunk_id": row[0],
+                        "dataset_type": row[1],
+                        "category": row[2],
+                        "text": row[3],
+                        "rrf_score": float(row[4]),
+                        "bm25_score": float(row[5]),
+                        "vector_similarity": float(row[6]),
+                        "source_url": row[7],
+                        "source_file": row[8],
+                        "printed_page": row[9],
+                        "source_year": row[10],
+                        "metadata": row[11],
+                    }
+                )
+
+        if results and logger.isEnabledFor(logging.DEBUG):
+            logger.debug("hybrid_rrf_s2_v2: first_category=%s", results[0].get("category"))
+
+        return results
+
+    def search_hybrid_rrf_s3(
+        self,
+        query_text: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_document_type: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+        rrf_k: int = 60,
+    ) -> List[Dict]:
+        return self._search_hybrid_rrf_fn(
+            "search_hybrid_rrf_s3",
+            query_text,
+            filter_dataset,
+            filter_category,
+            filter_document_type,
+            filter_year,
+            result_limit,
+            rrf_k,
+        )
+
+    def search_hybrid_rrf_best(
+        self,
+        query_text: str,
+        filter_dataset: Optional[str] = None,
+        filter_category: Optional[str] = None,
+        filter_document_type: Optional[str] = None,
+        filter_year: Optional[int] = None,
+        result_limit: int = 10,
+        rrf_k: int = 60,
+    ) -> List[Dict]:
+        fn_choice = os.getenv("RETRIEVAL_HYBRID_FN", "s2").lower()
+        use_s3 = fn_choice == "s3"
+        use_s2_v2 = fn_choice == "s2_v2"
+        if use_s3:
+            selected = "s3"
+        elif use_s2_v2:
+            selected = "s2_v2"
+        else:
+            selected = "s2"
+        logger.info(
+            "hybrid_rrf_best: selected=%s filter_dataset=%s filter_category=%s",
+            selected,
+            filter_dataset,
+            filter_category,
+        )
+        if use_s3:
+            return self.search_hybrid_rrf_s3(
+                query_text=query_text,
+                filter_dataset=filter_dataset,
+                filter_category=filter_category,
+                filter_document_type=filter_document_type,
+                filter_year=filter_year,
+                result_limit=result_limit,
+                rrf_k=rrf_k,
+            )
+        if use_s2_v2:
+            return self.search_hybrid_rrf_s2_v2(
+                query_text=query_text,
+                filter_dataset=filter_dataset,
+                filter_category=filter_category,
+                filter_document_type=filter_document_type,
+                filter_year=filter_year,
+                result_limit=result_limit,
+                rrf_k=rrf_k,
+            )
+        return self.search_hybrid_rrf_s2(
+            query_text=query_text,
+            filter_dataset=filter_dataset,
+            filter_category=filter_category,
+            filter_document_type=filter_document_type,
+            filter_year=filter_year,
+            result_limit=result_limit,
+            rrf_k=rrf_k,
+        )
 
     def dense_search(
         self,
@@ -600,8 +812,37 @@ def hybrid_rrf_search(
     return results, sql_ms
 
 
+def hybrid_rrf_search_s3(
+    query_text: str,
+    *,
+    filter_dataset: Optional[str] = None,
+    filter_category: Optional[str] = None,
+    filter_document_type: Optional[str] = None,
+    filter_year: Optional[int] = None,
+    result_limit: int = 10,
+    rrf_k: int = 60,
+) -> Tuple[List[Dict], float]:
+    client = RDSRetriever()
+    client.connect()
+    try:
+        results = client.search_hybrid_rrf_s3(
+            query_text=query_text,
+            filter_dataset=filter_dataset,
+            filter_category=filter_category,
+            filter_document_type=filter_document_type,
+            filter_year=filter_year,
+            result_limit=result_limit,
+            rrf_k=rrf_k,
+        )
+    finally:
+        client.close()
+
+    return results, 0.0
+
+
 __all__ = [
     "SimilarChunkResult",
     "RDSRetriever",
     "hybrid_rrf_search",
+    "hybrid_rrf_search_s3",
 ]

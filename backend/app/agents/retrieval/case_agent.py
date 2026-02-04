@@ -1,23 +1,38 @@
-"""CaseRetrievalAgent - 분쟁조정사례 검색 전용 에이전트."""
+"""CaseRetrievalAgent - 상담/조정/해결 통합(case) 검색 에이전트."""
 
 import asyncio
 import json
 import logging
 import math
-from typing import Dict, Any, List, ClassVar, Tuple
+import os
+from typing import Dict, Any, List, ClassVar, Tuple, Optional
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
 from .tools.rds_retriever import RDSRetriever
 
 
 class CaseRetrievalAgent(BaseRetrievalAgent):
-    """분쟁조정사례(mediation_case) 검색 에이전트 - 법적 효력이 있는 분쟁조정 결과"""
+    """상담/조정/해결 통합(case) 검색 에이전트"""
     
     agent_name: ClassVar[str] = "retrieval_case"
-    agent_description: ClassVar[str] = "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
-    default_dataset: ClassVar[str] = "mediation_case"
-    retrieval_source: ClassVar[str] = "case"
+    agent_description: ClassVar[str] = "상담/조정/해결 통합 사례를 검색합니다."
+    default_dataset: ClassVar[str] = "case"
+    retrieval_source: ClassVar[str] = "case_combined"
     logger = logging.getLogger(__name__)
+
+    async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        response = await super().process(request)
+        result = response.get("result")
+        if isinstance(result, dict):
+            documents = result.get("documents") or result.get("results") or []
+            result["documents"] = documents
+            result["source"] = "case"
+            if documents:
+                max_sim = max((d.get("similarity", 0.0) for d in documents), default=0.0)
+                avg_sim = sum((d.get("similarity", 0.0) for d in documents)) / len(documents)
+                result["max_similarity"] = max_sim
+                result["avg_similarity"] = avg_sim
+        return response
 
     @staticmethod
     def _score_case_categories(
@@ -215,48 +230,35 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
         return counsel_quota, dispute_quota, ratio
 
-    @staticmethod
-    def _broaden_query(query: str, track: str) -> str:
-        base = (query or "").strip()
-        if not base:
-            return base
-        lower = base.lower()
-        domain_terms = (
-            "헬스장",
-            "피트니스",
-            "gym",
-            "회원권",
-            "pt",
-            "퍼스널",
-            "수강권",
-        )
-        has_domain = any(t in base or t in lower for t in domain_terms)
-
-        if has_domain:
-            if track == "상담":
-                suffix = " 헬스장 회원권 환불 청약철회 상담 사례"
-            else:
-                suffix = " 헬스장 회원권 환불 분쟁조정 사례"
-        else:
-            if track == "상담":
-                suffix = " 상담 사례"
-            else:
-                suffix = " 분쟁조정 사례"
-
-        if suffix.strip() in base:
-            return base
-        return f"{base}{suffix}"
 
     @staticmethod
-    def _best_similarity(results: List[Dict]) -> float:
-        best = 0.0
+    def _rank_key(item: Dict[str, Any]) -> Tuple[float, float, float]:
+        rrf = float(item.get("rrf_score") or 0.0)
+        vec = float(item.get("vector_similarity", item.get("similarity", 0.0)) or 0.0)
+        bm25 = float(item.get("bm25_score") or 0.0)
+        if rrf <= 0.01:
+            return (vec, rrf, bm25)
+        return (rrf, vec, bm25)
+
+    @classmethod
+    def _best_rank_key(cls, results: List[Dict]) -> Tuple[float, float, float]:
+        best = (0.0, 0.0, 0.0)
         for item in results or []:
             if not isinstance(item, dict):
                 continue
-            score = item.get("vector_similarity", item.get("similarity", 0.0)) or 0.0
-            if score > best:
-                best = score
-        return float(best)
+            key = cls._rank_key(item)
+            if key > best:
+                best = key
+        return best
+
+    @staticmethod
+    def _dedup_key(item: Dict[str, Any]) -> Any:
+        metadata = item.get("metadata") or {}
+        doc_id = metadata.get("doc_id") or item.get("doc_id")
+        case_number = metadata.get("case_number")
+        source_url = item.get("source_url") or item.get("url")
+        chunk_id = item.get("chunk_id")
+        return doc_id or case_number or source_url or chunk_id
     
     async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
         db_config = _get_db_config()
@@ -274,16 +276,52 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
             filter_dataset = getattr(self, "_last_filter_dataset", None) or self.default_dataset
 
-            if filter_category in ("상담", "조정", "해결"):
-                results = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=query,
-                    filter_dataset=filter_dataset,
-                    filter_category=filter_category,
+            def _search_rrf(
+                query_text: str,
+                dataset: Optional[str],
+                category: Optional[str],
+                limit: int,
+            ) -> List[Dict]:
+                results = retriever.search_hybrid_rrf_best(
+                    query_text=query_text,
+                    filter_dataset=dataset,
+                    filter_category=category,
                     filter_document_type=None,
                     filter_year=None,
-                    result_limit=top_k,
+                    result_limit=limit,
                     rrf_k=60,
+                )
+                if results or dataset is None:
+                    return results
+                fallback = retriever.search_hybrid_rrf_best(
+                    query_text=query_text,
+                    filter_dataset=None,
+                    filter_category=category,
+                    filter_document_type=None,
+                    filter_year=None,
+                    result_limit=limit,
+                    rrf_k=60,
+                )
+                self.logger.info(
+                    json.dumps(
+                        {
+                            "event": "case_filter_fallback",
+                            "reason": "dataset_empty",
+                            "filter_dataset": dataset,
+                            "filter_category": category,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                return fallback
+
+            if filter_category in ("상담", "조정", "해결"):
+                results = await asyncio.to_thread(
+                    _search_rrf,
+                    query,
+                    filter_dataset,
+                    filter_category,
+                    top_k,
                 )
                 return results
 
@@ -305,22 +343,22 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             if forced_combined:
                 confident = True
                 winner_track = "분쟁/구제"
-                counsel_quota, dispute_quota, ratio = self._track_quotas(
-                    top_k, confident, winner_track, scores, strong_hits
-                )
-            else:
-                counsel_quota, dispute_quota, ratio = self._track_quotas(
-                    top_k, confident, winner_track, scores, strong_hits
-                )
+            counsel_quota, dispute_quota, ratio = self._track_quotas(
+                top_k, confident, winner_track, scores, strong_hits
+            )
 
+            dispute_split_reason = None
+            min_split_guard = None
             if dispute_quota > 0:
                 if scores["조정"] == 0 and scores["해결"] == 0:
                     combined_weights = {"조정": 1, "해결": 1}
+                    dispute_split_reason = "score_zero"
                 else:
                     combined_weights = {
                         "조정": max(scores["조정"], 1),
                         "해결": max(scores["해결"], 1),
                     }
+                    dispute_split_reason = "ratio_based"
                 combined_quotas = self._allocate_quotas(
                     dispute_quota,
                     combined_weights,
@@ -329,6 +367,47 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 )
             else:
                 combined_quotas = {"조정": 0, "해결": 0}
+                dispute_split_reason = "no_dispute_quota"
+
+            guard_applied = {}
+            if dispute_quota > 0:
+                guard_value = min(3, dispute_quota)
+                for cat in ("조정", "해결"):
+                    if strong_hits.get(cat) and combined_quotas.get(cat, 0) > 0:
+                        guard_applied[cat] = guard_value
+                if guard_applied:
+                    min_split_guard = guard_applied
+                    dispute_split_reason = "min_guard_applied"
+
+            if dispute_quota > 0 and (
+                combined_quotas.get("조정", 0) == 0 or combined_quotas.get("해결", 0) == 0
+            ):
+                zero_reason = "ratio_rounding"
+                if combined_quotas.get("조정", 0) == 0:
+                    if scores["조정"] == 0:
+                        zero_reason = "adjust_score_zero"
+                    elif dispute_quota <= 1:
+                        zero_reason = "quota_too_small"
+                if combined_quotas.get("해결", 0) == 0:
+                    if scores["해결"] == 0:
+                        zero_reason = "relief_score_zero"
+                    elif dispute_quota <= 1:
+                        zero_reason = "quota_too_small"
+                self.logger.info(
+                    json.dumps(
+                        {
+                            "event": "case_dispute_split",
+                            "dispute_quota": dispute_quota,
+                            "scores": {"조정": scores["조정"], "해결": scores["해결"]},
+                            "split": {
+                                "조정": combined_quotas.get("조정", 0),
+                                "해결": combined_quotas.get("해결", 0),
+                            },
+                            "reason": zero_reason,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
 
             self.logger.info(
                 json.dumps(
@@ -343,11 +422,38 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         "score_gap": score_gap,
                         "p_dispute": p_dispute,
                         "confidence": confidence,
+                        "category_scores": {
+                            "상담": float(scores["상담"]),
+                            "조정": float(scores["조정"]),
+                            "해결": float(scores["해결"]),
+                        },
+                        "dispute_split_reason": dispute_split_reason,
+                        "min_split_guard": min_split_guard,
                         "quotas": {
                             "counsel": counsel_quota,
                             "dispute": dispute_quota,
                         },
                         "dispute_split": combined_quotas,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+            bonus_enabled = os.getenv("CASE_WINNER_TRACK_BONUS_ENABLED", "false").lower() == "true"
+            if bonus_enabled:
+                try:
+                    bonus_eps = float(os.getenv("CASE_WINNER_TRACK_BONUS_EPS", "1e-6"))
+                except ValueError:
+                    bonus_eps = 1e-6
+            else:
+                bonus_eps = 0.0
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_winner_track_bonus",
+                        "enabled": bool(bonus_enabled),
+                        "eps": bonus_eps,
+                        "winner_track": winner_track,
                     },
                     ensure_ascii=False,
                 )
@@ -360,14 +466,11 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
             if counsel_quota > 0:
                 counsel_results = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=query,
-                    filter_dataset=filter_dataset,
-                    filter_category="상담",
-                    filter_document_type=None,
-                    filter_year=None,
-                    result_limit=counsel_quota,
-                    rrf_k=60,
+                    _search_rrf,
+                    query,
+                    filter_dataset,
+                    "상담",
+                    counsel_quota,
                 )
                 combined += counsel_results
 
@@ -376,14 +479,11 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 if quota <= 0:
                     continue
                 results = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=query,
-                    filter_dataset=filter_dataset,
-                    filter_category=cat,
-                    filter_document_type=None,
-                    filter_year=None,
-                    result_limit=quota,
-                    rrf_k=60,
+                    _search_rrf,
+                    query,
+                    filter_dataset,
+                    cat,
+                    quota,
                 )
                 if cat == "조정":
                     adjust_results = results
@@ -393,30 +493,27 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
             # Quality gate: if winner track top1 is weak, add counsel results.
             extra_counsel = 0
-            best_counsel = self._best_similarity(counsel_results)
-            best_dispute = self._best_similarity(adjust_results + relief_results)
-            delta = best_counsel - best_dispute
+            best_counsel = self._best_rank_key(counsel_results)
+            best_dispute = self._best_rank_key(adjust_results + relief_results)
+            delta = best_counsel[0] - best_dispute[0]
             winner_track_after_gate = winner_track
             if winner_track == "분쟁/구제":
                 if delta >= 0.05:
                     extra_limit = 2 if delta >= 0.15 else 1
                     extra = await asyncio.to_thread(
-                        retriever.search_hybrid_rrf,
-                        query_text=query,
-                        filter_dataset=filter_dataset,
-                        filter_category="상담",
-                        filter_document_type=None,
-                        filter_year=None,
-                        result_limit=extra_limit,
-                        rrf_k=60,
+                        _search_rrf,
+                        query,
+                        filter_dataset,
+                        "상담",
+                        extra_limit,
                     )
                     extra_counsel = len(extra)
                     if extra:
                         counsel_results += extra
                         combined += extra
-                if best_counsel >= best_dispute + 0.05:
+                if best_counsel[0] >= best_dispute[0] + 0.05:
                     winner_track_after_gate = "상담"
-                elif best_dispute >= best_counsel + 0.05:
+                elif best_dispute[0] >= best_counsel[0] + 0.05:
                     winner_track_after_gate = "분쟁/구제"
                 self.logger.info(
                     json.dumps(
@@ -454,65 +551,156 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     },
                     ensure_ascii=False,
                 )
-            )
+                )
 
-            # Fill stage 1: relax category within same dataset
-            counsel_missing = max(counsel_quota - len(counsel_results), 0)
-            dispute_missing = max(dispute_quota - (len(adjust_results) + len(relief_results)), 0)
+            if bonus_enabled and bonus_eps:
+                for item in combined:
+                    category = item.get("category") if isinstance(item, dict) else None
+                    in_winner = False
+                    if winner_track == "상담":
+                        in_winner = category == "상담"
+                    else:
+                        in_winner = category in ("조정", "해결")
+                    if in_winner and isinstance(item, dict):
+                        item["rrf_score"] = float(item.get("rrf_score") or 0.0) + bonus_eps
+
+            def _finalize_candidates(
+                candidates: List[Dict],
+                limit: int,
+                stage: Optional[str] = None,
+            ) -> List[Dict]:
+                if not candidates:
+                    if stage:
+                        self.logger.info(
+                            json.dumps(
+                                {
+                                    "event": "case_dedup_state",
+                                    "stage": stage,
+                                    "raw": 0,
+                                    "deduped": 0,
+                                    "removed": 0,
+                                    "group_max": 0,
+                                },
+                                ensure_ascii=False,
+                            )
+                        )
+                    return []
+                sorted_items = sorted(candidates, key=self._rank_key, reverse=True)
+                seen = set()
+                deduped = []
+                group_counts: Dict[Any, int] = {}
+                for item in sorted_items:
+                    key = self._dedup_key(item)
+                    group_counts[key] = group_counts.get(key, 0) + 1
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    deduped.append(item)
+                    if len(deduped) >= limit:
+                        break
+                if stage:
+                    removed = len(sorted_items) - len(deduped)
+                    group_max = max(group_counts.values()) if group_counts else 0
+                    self.logger.info(
+                        json.dumps(
+                            {
+                                "event": "case_dedup_state",
+                                "stage": stage,
+                                "raw": len(sorted_items),
+                                "deduped": len(deduped),
+                                "removed": removed,
+                                "group_max": group_max,
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+                return deduped
+
+            combined = _finalize_candidates(combined, top_k, stage="initial")
+            remaining = top_k - len(combined)
+
             fill_counsel = 0
             fill_dispute = 0
-            if counsel_missing > 0:
-                fill = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=query,
-                    filter_dataset=filter_dataset,
-                    filter_category=None,
-                    filter_document_type=None,
-                    filter_year=None,
-                    result_limit=counsel_missing,
-                    rrf_k=60,
-                )
-                fill_counsel = len(fill)
-                combined += fill
-            if dispute_missing > 0:
-                fill = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=query,
-                    filter_dataset=filter_dataset,
-                    filter_category=None,
-                    filter_document_type=None,
-                    filter_year=None,
-                    result_limit=dispute_missing,
-                    rrf_k=60,
-                )
-                fill_dispute = len(fill)
-                combined += fill
-
-            # Fill stage 2: broadened query
-            remaining = top_k - len(combined)
+            fill_relax = 0
             fill_broaden = 0
             if remaining > 0:
-                broadened = self._broaden_query(query, winner_track)
+                if winner_track_after_gate == "상담":
+                    fill = await asyncio.to_thread(
+                        _search_rrf,
+                        query,
+                        filter_dataset,
+                        "상담",
+                        remaining,
+                    )
+                    fill_counsel = len(fill)
+                else:
+                    fill = []
+                    for cat in ("조정", "해결"):
+                        if remaining <= 0:
+                            break
+                        chunk = await asyncio.to_thread(
+                            _search_rrf,
+                            query,
+                            filter_dataset,
+                            cat,
+                            remaining,
+                        )
+                        fill += chunk
+                        remaining = top_k - len(_finalize_candidates(combined + fill, top_k))
+                    fill_dispute = len(fill)
+                combined = _finalize_candidates(combined + fill, top_k, stage="track_fill")
+
+            remaining = top_k - len(combined)
+            if remaining > 0:
                 fill = await asyncio.to_thread(
-                    retriever.search_hybrid_rrf,
-                    query_text=broadened,
-                    filter_dataset=filter_dataset,
-                    filter_category=None,
-                    filter_document_type=None,
-                    filter_year=None,
-                    result_limit=remaining,
-                    rrf_k=60,
+                    _search_rrf,
+                    query,
+                    filter_dataset,
+                    None,
+                    remaining,
+                )
+                fill_relax = len(fill)
+                combined = _finalize_candidates(combined + fill, top_k, stage="category_relax")
+                remaining = top_k - len(combined)
+
+            if remaining > 0:
+                broadened = self._broaden_query(query, winner_track_after_gate)
+                fill = await asyncio.to_thread(
+                    _search_rrf,
+                    broadened,
+                    filter_dataset,
+                    None,
+                    remaining,
                 )
                 fill_broaden = len(fill)
-                combined += fill
+                combined = _finalize_candidates(combined + fill, top_k, stage="broaden")
 
             final_counts = {
                 "상담": len(counsel_results) + fill_counsel,
                 "조정": len(adjust_results),
                 "해결": len(relief_results),
             }
-            if fill_dispute:
+            if fill_dispute and winner_track_after_gate != "상담":
                 final_counts["조정"] += fill_dispute
+
+            sample = combined[0] if combined else {}
+            sample_meta = sample.get("metadata") or {}
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_return_state",
+                        "len": len(combined),
+                        "type": self.retrieval_source,
+                        "keys": list(sample.keys()) if isinstance(sample, dict) else [],
+                        "has_metadata": bool(sample_meta),
+                        "sample_category": sample.get("category") if isinstance(sample, dict) else None,
+                        "sample_dataset_type": sample.get("dataset_type") if isinstance(sample, dict) else None,
+                        "sample_source": sample.get("source_url") if isinstance(sample, dict) else None,
+                        "sample_doc_id": sample_meta.get("doc_id"),
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
             self.logger.info(
                 json.dumps(
@@ -523,6 +711,7 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         "fills": {
                             "counsel": fill_counsel,
                             "dispute": fill_dispute,
+                            "relax": fill_relax,
                             "broaden": fill_broaden,
                         },
                         "total": len(combined),
@@ -536,14 +725,28 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             retriever.close()
     
     def _format_results(self, results: List[Dict]) -> List[Dict[str, Any]]:
-        def _minmax(values: List[float]) -> List[float]:
+        def _rank_norm(values: List[float]) -> List[float]:
             if not values:
                 return []
+            if len(values) == 1:
+                return [0.5]
             vmin = min(values)
             vmax = max(values)
-            if vmax == vmin:
-                return [0.0 for _ in values]
-            return [(v - vmin) / (vmax - vmin) for v in values]
+            if vmin == vmax:
+                return [0.5 for _ in values]
+            counts: Dict[float, int] = {}
+            for v in values:
+                counts[v] = counts.get(v, 0) + 1
+            unique = sorted(set(values), reverse=True)
+            rank_map = {v: idx for idx, v in enumerate(unique)}
+            denom = max(len(unique) - 1, 1)
+            norms = []
+            for v in values:
+                if counts[v] > 1:
+                    norms.append(0.5)
+                else:
+                    norms.append(1.0 - (rank_map[v] / denom))
+            return norms
 
         def _scores(r_item: Any) -> Dict[str, float]:
             if isinstance(r_item, dict):
@@ -557,17 +760,16 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             return {"vec": vec, "bm25": 0.0, "rrf": 0.0}
 
         score_list = [_scores(r) for r in results]
-        norm_vec = _minmax([s["vec"] for s in score_list])
-        norm_bm25 = _minmax([s["bm25"] for s in score_list])
-        norm_rrf = _minmax([s["rrf"] for s in score_list])
+        norm_vec = _rank_norm([s["vec"] for s in score_list])
+        norm_bm25 = _rank_norm([s["bm25"] for s in score_list])
+        norm_rrf = _rank_norm([s["rrf"] for s in score_list])
 
         formatted = []
-        seen_keys = set()
         for idx, r in enumerate(results):
             if isinstance(r, dict):
                 metadata = r.get("metadata") or {}
-                content = r.get("text")
-                source_url = r.get("source_url")
+                content = r.get("text") or r.get("content")
+                source_url = r.get("source_url") or r.get("url")
                 source_file = r.get("source_file")
                 similarity = r.get("vector_similarity", r.get("similarity", 0))
                 chunk_id = r.get("chunk_id")
@@ -575,8 +777,8 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 dataset_type = r.get("dataset_type") or metadata.get("dataset_type")
             else:
                 metadata = r.metadata or {}
-                content = r.text
-                source_url = r.source_url
+                content = r.text or getattr(r, "content", None)
+                source_url = r.source_url or getattr(r, "url", None)
                 source_file = r.source_file
                 similarity = getattr(r, "similarity", 0)
                 chunk_id = r.chunk_id
@@ -588,10 +790,19 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             case_number = metadata.get("case_number")
             decision_date = metadata.get("decision_date")
 
-            dedup_key = doc_id or case_number or source_url or chunk_id
-            if dedup_key in seen_keys:
-                continue
-            seen_keys.add(dedup_key)
+            merged_metadata = dict(metadata)
+            extra_meta = {
+                "category": category,
+                "dataset_type": dataset_type,
+                "chunk_id": chunk_id,
+                "source_year": r.get("source_year") if isinstance(r, dict) else None,
+                "rrf_score": r.get("rrf_score") if isinstance(r, dict) else None,
+                "bm25_score": r.get("bm25_score") if isinstance(r, dict) else None,
+                "vector_similarity": r.get("vector_similarity") if isinstance(r, dict) else None,
+            }
+            for key, value in extra_meta.items():
+                if value is not None and key not in merged_metadata:
+                    merged_metadata[key] = value
 
             soft_score = (
                 0.6 * norm_vec[idx]
@@ -617,24 +828,29 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     "bm25_score": r.get("bm25_score") if isinstance(r, dict) else None,
                     "vector_similarity": r.get("vector_similarity") if isinstance(r, dict) else None,
                     "soft_score": soft_score,
-                    "metadata": metadata,
+                    "metadata": merged_metadata,
                 }
             )
         return formatted
     
     def _build_sources(self, results: List[Dict]) -> List[Dict[str, Any]]:
-        return [
-            {
-                "type": "mediation_case",
-                "index": i + 1,
-                "chunk_id": r.get("chunk_id"),
-                "doc_id": r.get("doc_id"),
-                "doc_title": r.get("doc_title"),
-                "source_org": r.get("source_org"),
-                "similarity": r.get("similarity", 0),
-            }
-            for i, r in enumerate(results)
-        ]
+        sources = []
+        for i, r in enumerate(results):
+            metadata = (r.get("metadata") or {}) if isinstance(r, dict) else {}
+            dataset_type = r.get("dataset_type") if isinstance(r, dict) else None
+            source_type = dataset_type or metadata.get("dataset_type") or "case_combined"
+            sources.append(
+                {
+                    "type": source_type,
+                    "index": i + 1,
+                    "chunk_id": r.get("chunk_id") if isinstance(r, dict) else None,
+                    "doc_id": metadata.get("doc_id") if isinstance(r, dict) else None,
+                    "doc_title": metadata.get("doc_title") if isinstance(r, dict) else None,
+                    "source_org": metadata.get("source_org") if isinstance(r, dict) else None,
+                    "similarity": r.get("similarity", 0) if isinstance(r, dict) else 0,
+                }
+            )
+        return sources
 
 
 case_retrieval_agent = CaseRetrievalAgent()

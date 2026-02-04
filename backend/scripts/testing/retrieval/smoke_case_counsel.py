@@ -92,6 +92,9 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=5, help="top_k")
     args = parser.parse_args()
 
+    if os.getenv("SMOKE_CASE_AGENT_ONLY_NOTE", "false").lower() == "true":
+        print("[SMOKE] This script calls case_agent directly; retrieval_merge is NOT involved.")
+
     db_config = _get_db_config()
     print(
         f"[INFO] DB target: {db_config.get('user')}@{db_config.get('host')}:{db_config.get('port')} "
