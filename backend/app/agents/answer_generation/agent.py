@@ -538,10 +538,12 @@ def _followup_detail_response(state: Dict, config=None) -> Dict:
     # Generate followup questions (캐시 응답에서도 생성)
     query_analysis = state.get("query_analysis", {})
     followup_generator = FollowupQuestionGenerator()
+    is_fallback = model_used in ("rule_based", "safe_fallback")
     followup_result = followup_generator.generate_questions(
         query_analysis=query_analysis,
         retrieval=filtered_retrieval,
         answer=draft_answer,
+        is_fallback=is_fallback,
     )
     followup_questions = followup_result.get("followup_questions", [])
 
@@ -660,6 +662,7 @@ def _build_generation_result(
     model_used: str = None,
     cache_hit: bool = False,
     clarifying_questions: List = None,
+    is_fallback: bool = False,
     **kwargs,
 ) -> Dict:
     """통합 결과 생성 헬퍼"""
@@ -680,6 +683,7 @@ def _build_generation_result(
         "messages": [AIMessage(content=answer)],
         "generation_model_used": model_used,
         "_cache_hit": cache_hit,
+        "is_fallback": is_fallback,
     }
     if clarifying_questions:
         result["clarifying_questions"] = clarifying_questions
@@ -785,6 +789,7 @@ def _check_sufficiency(state: Dict, retrieval: Dict, start_time: float) -> tuple
             retrieval_confidence=retrieval_confidence,
             clarifying_questions=suf_result.clarifying_questions,
             model_used="sufficiency_insufficient",
+            is_fallback=True,
         )
         return (result, retrieval_confidence)
 
@@ -989,10 +994,12 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     # Phase 6: Generate followup questions
     query_analysis = state.get("query_analysis", {})
     followup_generator = FollowupQuestionGenerator()
+    is_fallback = model_used in ("rule_based", "safe_fallback")
     followup_result = followup_generator.generate_questions(
         query_analysis=query_analysis,
         retrieval=retrieval,
         answer=draft_answer,
+        is_fallback=is_fallback,
     )
     followup_questions = followup_result.get("followup_questions", [])
 
