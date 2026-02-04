@@ -488,6 +488,7 @@ class SupervisorNode:
 {self._format_agents()}
 
 ## 중요 규칙 (반드시 준수)
+0. 사용자 질문이 너무 짧거나(5자 이하) 모호하면 → clarify 먼저 (예: "환불", "교환", "어떻게")
 1. "질의 분석"이 없으면 → query_analyst 호출 필수
 2. "검색 결과"가 없으면 → retrieval_team 호출 필수
 3. "답변 초안"이 없으면 → answer_drafter 호출 필수
