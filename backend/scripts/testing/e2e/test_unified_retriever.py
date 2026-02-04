@@ -181,7 +181,7 @@ class TestAgentUnifiedRetrieverIntegration:
             "app.agents.retrieval.criteria_agent.CriteriaRetriever"
         ) as MockRetriever:
             mock_instance = MagicMock()
-            mock_instance.hybrid_search.return_value = [mock_result]
+            mock_instance.criteria_search.return_value = [mock_result]
             mock_instance.fetch_chunk_texts.return_value = {}
             MockRetriever.return_value = mock_instance
 
@@ -205,7 +205,7 @@ class TestAgentUnifiedRetrieverIntegration:
                 }
             )
 
-            mock_instance.hybrid_search.assert_called_once()
+            mock_instance.criteria_search.assert_called()
             assert result["status"] == "success"
 
     @pytest.mark.asyncio
