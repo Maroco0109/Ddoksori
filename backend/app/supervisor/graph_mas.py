@@ -194,12 +194,17 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 "categories": ["조정", "해결", "상담"],
             }
 
+        # query_analysis에서 onboarding_context 가져오기
+        query_analysis = state.get("query_analysis") or {}
+        onboarding_context = query_analysis.get("onboarding_context") or {}
+
         retrieval_task_input = {
             "expanded_queries": expanded_queries,
             "agent_keywords": keywords,
             "metadata_filter": metadata_filter,
             "top_k": 10,
             "ignore_threshold": agent_type in ("law", "criteria"),
+            "onboarding_context": onboarding_context,
         }
 
         request = {

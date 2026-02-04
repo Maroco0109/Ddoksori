@@ -25,6 +25,7 @@
 
 ## 📥 입력 데이터 (Input Data)
 * 사용자 상황: {refined_user_case}
+{user_situation}
 * 법률 데이터: {law_data}
 * 해결 기준 데이터: {criteria_data}
 * 유사 사례 데이터: {case_data}

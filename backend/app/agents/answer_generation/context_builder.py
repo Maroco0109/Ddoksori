@@ -48,6 +48,7 @@ class ContextBuilder:
         """
         retrieval = state.get("retrieval", {}) or {}
         onboarding = state.get("onboarding", {}) or {}
+        query_analysis = state.get("query_analysis", {}) or {}
         user_query = state.get("user_query", "") or ""
 
         logger.info("Building template context from retrieval state")
@@ -62,6 +63,7 @@ class ContextBuilder:
             "case_data": self._build_case_data(
                 retrieval.get("disputes", []), retrieval.get("counsels", [])
             ),
+            "user_situation": self._build_user_situation(query_analysis),
         }
 
         # Sanitize values to prevent template variable injection
@@ -212,6 +214,53 @@ class ContextBuilder:
             return max([int(n) for n in numbers])
 
         return 0
+
+    def _build_user_situation(self, query_analysis: Dict[str, Any]) -> str:
+        """
+        Build user situation section from onboarding_context in query_analysis.
+
+        Args:
+            query_analysis: Query analysis result containing onboarding_context
+
+        Returns:
+            Formatted user situation string or empty string if no context available
+        """
+        onboarding_ctx = query_analysis.get("onboarding_context", {})
+        if not onboarding_ctx:
+            return ""
+
+        lines = []
+        purchase_item = onboarding_ctx.get("purchase_item")
+        purchase_item_category = onboarding_ctx.get("purchase_item_category")
+        days = onboarding_ctx.get("days_since_purchase")
+        within_withdrawal = onboarding_ctx.get("within_withdrawal_period")
+
+        # Only build section if we have meaningful data
+        if not any([purchase_item, days is not None]):
+            return ""
+
+        lines.append("## 사용자 상황")
+
+        if purchase_item:
+            lines.append(f"- 구매 품목: {purchase_item}")
+
+        if purchase_item_category:
+            lines.append(f"- 품목 분류: {purchase_item_category}")
+
+        if days is not None:
+            lines.append(f"- 구입 후 경과: {days}일")
+
+            # Provide specific guidance based on elapsed days
+            if within_withdrawal:
+                lines.append("- 청약철회 가능 여부: **가능** (14일 이내)")
+                lines.append("  → 전자상거래법에 따라 청약철회를 요청할 수 있습니다.")
+            else:
+                lines.append("- 청약철회 가능 여부: **불가** (14일 초과)")
+                lines.append(
+                    "  → 제품 하자나 품질보증기간 내 하자 발생 시 교환/환불 가능"
+                )
+
+        return "\n".join(lines)
 
     @staticmethod
     def extract_case_info(case: Dict[str, Any]) -> Dict[str, str]:

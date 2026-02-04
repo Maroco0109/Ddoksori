@@ -122,6 +122,8 @@ class FollowupQuestionGenerator:
         criteria = retrieval.get("criteria", [])
         agency = retrieval.get("agency", {})
 
+        # 온보딩 컨텍스트에서 enriched 데이터 접근
+        onboarding_ctx = query_analysis.get("onboarding_context", {})
         missing_fields = query_analysis.get("missing_fields", [])
 
         return {
@@ -135,9 +137,22 @@ class FollowupQuestionGenerator:
             # 답변 내용 분석
             "no_timeline_mentioned": self._check_no_timeline(answer),
             "no_procedure_mentioned": self._check_no_procedure(answer),
-            # 누락된 정보
-            "missing_purchase_date": "purchase_date" in missing_fields,
-            "missing_product_name": "product_name" in missing_fields,
+            # 온보딩에 이미 있는 정보는 질문하지 않음
+            "has_purchase_date": bool(onboarding_ctx.get("days_since_purchase")),
+            "has_purchase_item": bool(onboarding_ctx.get("purchase_item")),
+            "has_item_category": bool(onboarding_ctx.get("purchase_item_category")),
+            # 답변에서 다룬 내용도 질문하지 않음
+            "answered_refund_period": "청약철회" in answer or "14일" in answer,
+            "answered_warranty": "품질보증" in answer or "보증기간" in answer,
+            # 누락된 정보 (legacy fallback: 온보딩 컨텍스트 없으면 사용)
+            "missing_purchase_date": (
+                "purchase_date" in missing_fields
+                and not onboarding_ctx.get("days_since_purchase")
+            ),
+            "missing_product_name": (
+                "product_name" in missing_fields
+                and not onboarding_ctx.get("purchase_item")
+            ),
             "missing_issue_detail": "issue_detail" in missing_fields,
             "missing_seller_response": "seller_response" in missing_fields,
             "missing_amount": "amount" in missing_fields,

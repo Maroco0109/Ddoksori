@@ -342,9 +342,19 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
         )
 
     # Post-retrieval product relevance filtering
+    # query_analysis.onboarding_context에서 enriched 데이터 우선 사용
+    query_analysis = state.get("query_analysis") or {}
+    onboarding_ctx = query_analysis.get("onboarding_context") or {}
+
+    # Fallback: 원본 onboarding
     onboarding = state.get("onboarding") or {}
-    purchase_item = onboarding.get("purchase_item")
-    product_category = onboarding.get("product_category")
+
+    purchase_item = onboarding_ctx.get("purchase_item") or onboarding.get(
+        "purchase_item"
+    )
+    product_category = onboarding_ctx.get("purchase_item_category") or onboarding.get(
+        "product_category"
+    )
 
     if purchase_item:
         logger.info(
