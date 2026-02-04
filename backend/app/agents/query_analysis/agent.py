@@ -445,6 +445,17 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
             "rewritten_query": expanded_queries[0] if expanded_queries else user_query,
             "search_queries": expanded_queries,
             "query_complexity": query_complexity.value,
+            # 온보딩 컨텍스트 (enriched)
+            "onboarding_context": {
+                "purchase_item": enriched_onboarding.get("purchase_item"),
+                "purchase_item_category": enriched_onboarding.get("product_category"),
+                "days_since_purchase": enriched_onboarding.get("days_since_purchase"),
+                "within_withdrawal_period": (
+                    enriched_onboarding.get("days_since_purchase", 999) <= 14
+                    if enriched_onboarding.get("days_since_purchase") is not None
+                    else None
+                ),
+            },
         },
         "mode": mode,
         "query_complexity": query_complexity.value,
