@@ -25,8 +25,10 @@ RAG 파이프라인 실행 과정을 상세하게 기록하는 구조화된 JSON
 logs/rag/YYYY-MM-DD/HHMMSS_{request_id}.json
 """
 
+import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -35,6 +37,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .config import RAG_LOG_DIR, is_rag_logging_enabled
+
+# SEC-12: 프로덕션에서 시스템 프롬프트 해싱
+HASH_SYSTEM_PROMPT = os.getenv("HASH_SYSTEM_PROMPT_IN_LOGS", "true").lower() == "true"
+APP_ENV = os.getenv("APP_ENV", "development")
 
 logger = logging.getLogger(__name__)
 
@@ -535,6 +541,9 @@ class RAGLogger:
         """
         LLM 호출 정보를 기록합니다.
 
+        [SEC-12] 프로덕션 환경에서는 시스템 프롬프트를 해시로 대체하여
+        로그를 통한 프롬프트 유출을 방지합니다.
+
         Args:
             entry: 로그 엔트리
             model: 사용된 모델명
@@ -546,9 +555,16 @@ class RAGLogger:
             has_sufficient_evidence: 충분한 증거 존재 여부
             clarifying_questions: 명확화 질문 목록
         """
+        # SEC-12: 프로덕션에서 시스템 프롬프트 해싱
+        logged_system_prompt = system_prompt
+        if HASH_SYSTEM_PROMPT and APP_ENV == "production" and system_prompt:
+            prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:16]
+            logged_system_prompt = f"[HASH:{prompt_hash}]"
+            logger.debug(f"[SEC-12] System prompt hashed for production logging")
+
         entry.llm = LLMLog(
             model=model,
-            system_prompt=system_prompt,
+            system_prompt=logged_system_prompt,
             user_prompt=user_prompt,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
