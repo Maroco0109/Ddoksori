@@ -115,7 +115,10 @@ class TestSupervisorRuleBasedOrder:
     def test_rule_based_order_query_first(self):
         """규칙 기반: 첫 번째는 query_analyst"""
         supervisor = SupervisorNode(llm=None)
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회 (clarify는 general에서 비활성)
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = []
 
@@ -126,7 +129,10 @@ class TestSupervisorRuleBasedOrder:
     def test_rule_based_order_retrieval_second(self):
         """규칙 기반: query 완료 후 retrieval_team"""
         supervisor = SupervisorNode(llm=None)
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = ["query_analyst"]
 
@@ -137,7 +143,10 @@ class TestSupervisorRuleBasedOrder:
     def test_rule_based_order_drafter_third(self):
         """규칙 기반: retrieval 완료 후 answer_drafter"""
         supervisor = SupervisorNode(llm=None)
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = ["query_analyst", "retrieval_team"]
 
@@ -148,7 +157,10 @@ class TestSupervisorRuleBasedOrder:
     def test_rule_based_order_reviewer_fourth(self):
         """규칙 기반: draft 완료 후 legal_reviewer"""
         supervisor = SupervisorNode(llm=None)
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = [
             "query_analyst",
@@ -163,7 +175,10 @@ class TestSupervisorRuleBasedOrder:
     def test_rule_based_order_respond_last(self):
         """규칙 기반: 모든 태스크 완료 시 respond"""
         supervisor = SupervisorNode(llm=None)
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["supervisor"]["completed_tasks"] = [
             "query_analyst",
@@ -183,7 +198,10 @@ class TestSupervisorTimeoutFallback:
     def test_timeout_triggers_rule_based(self):
         """LLM 타임아웃 시 규칙 기반 fallback으로 전환"""
         supervisor = SupervisorNode(llm=TimeoutLLM())
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
 
         decision = asyncio.run(supervisor.decide_next_action(state))
@@ -202,7 +220,10 @@ class TestSupervisorErrorFallback:
     def test_error_triggers_rule_based(self):
         """LLM 예외 발생 시 규칙 기반 fallback으로 전환"""
         supervisor = SupervisorNode(llm=ErrorLLM())
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
 
         decision = asyncio.run(supervisor.decide_next_action(state))
@@ -220,7 +241,10 @@ class TestSupervisorJSONParseFallback:
     def test_invalid_json_triggers_fallback(self):
         """유효하지 않은 JSON 응답 시 규칙 기반 fallback"""
         supervisor = SupervisorNode(llm=MockLLM(response="This is not JSON"))
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
 
         decision = asyncio.run(supervisor.decide_next_action(state))
@@ -237,7 +261,10 @@ class TestSupervisorJSONParseFallback:
             '```json\n{"action": "respond", "reasoning": "마크다운 테스트"}\n```'
         )
         supervisor = SupervisorNode(llm=MockLLM(response=json_in_markdown))
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         # Fast Path 완료 상태: draft_answer 제공 + completed_tasks에 answer_drafter 포함
         state["query_analysis"] = {"query_type": "general", "keywords": []}
@@ -276,7 +303,10 @@ class TestSupervisorLLMDecision:
         """LLM이 call_agent 결정을 반환 (Full Pipeline 경로)"""
         response = '{"action": "call_agent", "target_agent": "retrieval_team", "reasoning": "검색 필요"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
-        state = create_initial_state(user_query="환불 규정 알려줘", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="환불 규정에 대해 알려주세요", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["query_analysis"] = {"query_type": "dispute", "keywords": ["환불"]}
         state["mode"] = "NEED_RAG"
@@ -292,7 +322,10 @@ class TestSupervisorLLMDecision:
         """LLM이 respond 결정을 반환 (NO_RETRIEVAL 경로)"""
         response = '{"action": "respond", "reasoning": "충분한 정보 수집 완료"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
-        state = create_initial_state(user_query="테스트", chat_type="dispute")
+        # chat_type="general"로 설정하여 clarify 노드 우회
+        state = create_initial_state(
+            user_query="테스트 질문입니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["query_analysis"] = {"query_type": "general", "keywords": []}
         state["mode"] = "NO_RETRIEVAL"
@@ -307,7 +340,10 @@ class TestSupervisorLLMDecision:
         """LLM이 clarify 결정을 반환 (NO_RETRIEVAL 경로)"""
         response = '{"action": "clarify", "reasoning": "추가 정보 필요"}'
         supervisor = SupervisorNode(llm=MockLLM(response=response))
-        state = create_initial_state(user_query="환불", chat_type="dispute")
+        # chat_type="general"로 설정하여 supervisor의 짧은 쿼리 clarify 로직 우회
+        state = create_initial_state(
+            user_query="환불에 대해 질문합니다", chat_type="general"
+        )
         state["supervisor"] = create_initial_supervisor_state()
         state["query_analysis"] = {"query_type": "general", "keywords": ["환불"]}
         state["mode"] = "NO_RETRIEVAL"

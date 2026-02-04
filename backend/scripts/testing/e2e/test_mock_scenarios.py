@@ -140,7 +140,7 @@ def _mock_review_fail() -> Dict[str, Any]:
 
 def _create_initial_state(
     query: str = "헬스장 3개월 이용 후 환불 가능한가요?",
-    chat_type: str = "dispute",
+    chat_type: str = "general",  # 기본값 변경: clarify 노드 우회를 위해 general 사용
 ) -> Dict[str, Any]:
     """테스트용 ChatState 초기값 생성."""
     from langchain_core.messages import HumanMessage
@@ -679,7 +679,8 @@ class TestProtocolKeysPresence:
             [],
         )
 
-        state = _create_initial_state("환불 문의", "dispute")
+        # chat_type="general"로 변경하여 clarify 노드 우회 (clarify는 필수정보 누락 시 트리거됨)
+        state = _create_initial_state("환불에 대해 문의합니다", "general")
         final_state = _run_graph_sync(compiled_mock_graph, state)
 
         qa = final_state.get("query_analysis", {})
