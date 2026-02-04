@@ -1589,7 +1589,7 @@ personalized_questions = llm.invoke("""
 
 ### Internal Documentation
 
-- [CLAUDE.md](/home/maroco/LLM/CLAUDE.md) - Project overview
+- [CLAUDE.md](/path/to/project/CLAUDE.md) - Project overview
 - [Implementation Plan](/.claude/plans/snuggly-crunching-frost.md) - Detailed spec
 - [API Documentation](/docs/api/) - Endpoint reference
 - [Database Schema](/docs/database/) - ER diagrams

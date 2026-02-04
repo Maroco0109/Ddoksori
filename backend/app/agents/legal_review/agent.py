@@ -22,6 +22,7 @@ LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을
 - next_agent='retry_generation' 반환으로 재생성 루프 지원
 """
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -229,11 +230,14 @@ def verify_citation_accuracy(
         accuracy = 1.0
 
     # 5. 통과 여부 결정
+    # [SEC-10] 인용 정확도 임계값을 환경변수로 설정 가능하게 변경
+    citation_threshold = float(os.getenv("CITATION_ACCURACY_THRESHOLD", "0.75"))
+
     if strict_mode:
         passed = len(unverified_refs) == 0
     else:
-        # 관대 모드: 50% 이상 검증되면 통과
-        passed = accuracy >= 0.5
+        # 관대 모드: 75% 이상 검증되면 통과 (50% → 75%로 상향)
+        passed = accuracy >= citation_threshold
 
     return CitationVerifyResult(
         passed=passed,

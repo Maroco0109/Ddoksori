@@ -513,7 +513,7 @@ docker compose version
 aws --version
 
 # 6) 프로젝트 디렉토리 생성
-mkdir -p /home/ubuntu/ddoksori/backups
+mkdir -p /home/ubuntu/app/backups
 
 # 7) Swap 설정 (4GB - OOM 방지 필수)
 sudo fallocate -l 4G /swapfile
@@ -551,15 +551,15 @@ EC2가 ECR에서 이미지를 pull하려면 별도 IAM Role이 필요:
 
 ```bash
 # EC2에서 실행
-cd /home/ubuntu/ddoksori
+cd /home/ubuntu/app
 git clone <repo-url> .    # ← 마지막 "." 필수!
 ```
 
-> **주의:** `.` 없이 `git clone <url>`을 실행하면 `/home/ubuntu/ddoksori/LLM/` 하위에 코드가 생성되어 워크플로우 경로와 불일치합니다.
+> **주의:** `.` 없이 `git clone <url>`을 실행하면 `/home/ubuntu/app/LLM/` 하위에 코드가 생성되어 워크플로우 경로와 불일치합니다.
 
 clone 후 확인:
 ```bash
-ls /home/ubuntu/ddoksori/docker-compose.prod.yml   # 파일이 보여야 정상
+ls /home/ubuntu/app/docker-compose.prod.yml   # 파일이 보여야 정상
 ```
 
 ---
@@ -582,7 +582,7 @@ ls /home/ubuntu/ddoksori/docker-compose.prod.yml   # 파일이 보여야 정상
 
 ```yaml
 env:
-  EC2_HOST: <탄력적IP>  # 예: 15.165.215.141
+  EC2_HOST: <탄력적IP>  # 예: xxx.xxx.xxx.xxx
 ```
 
 ---
@@ -597,7 +597,7 @@ EC2에서 Docker Compose가 실행될 때 필요한 환경변수를 설정합니
 
 ```bash
 # EC2에서 실행
-cd /home/ubuntu/ddoksori
+cd /home/ubuntu/app
 
 # AWS Account ID 확인
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -696,7 +696,7 @@ aws secretsmanager get-secret-value \
 - [ ] 탄력적 IP 할당 및 EC2 연결
 - [ ] Docker + Docker Compose 설치
 - [ ] EC2 IAM Role 연결 (ECR ReadOnly + SecretsManager Read)
-- [ ] `/home/ubuntu/ddoksori/` 디렉토리 + `docker-compose.prod.yml` 배치
+- [ ] `/home/ubuntu/app/` 디렉토리 + `docker-compose.prod.yml` 배치
 
 **환경변수 설정 (A-16):**
 - [ ] EC2에 `.env` 파일 생성 (`ECR_REGISTRY`, `USE_AWS_SECRETS=true`)
@@ -1038,7 +1038,7 @@ sudo apt update && sudo apt install certbot -y
 sudo mkdir -p /var/www/certbot
 
 # 컨테이너 중지 (80번 포트 해제)
-cd /home/ubuntu/ddoksori
+cd /home/ubuntu/app
 docker compose -f docker-compose.prod.yml down
 
 # 인증서 발급 (standalone 모드)
@@ -1067,7 +1067,7 @@ curl -I https://ddoksori.duckdns.org
 
 ```bash
 # EC2에서 crontab 설정
-echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/ddoksori/docker-compose.prod.yml restart frontend" | sudo crontab -
+echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/app/docker-compose.prod.yml restart frontend" | sudo crontab -
 ```
 
 > **참고**: Let's Encrypt 인증서는 90일마다 갱신 필요. 위 cron은 매일 03:00에 갱신 확인.
@@ -1111,7 +1111,7 @@ docker exec -it ddoksori-frontend-1 nginx -t
 
 ```bash
 # EC2에서 수동 롤백
-cd /home/ubuntu/ddoksori
+cd /home/ubuntu/app
 
 # 이전 이미지로 롤백
 export IMAGE_TAG=v1.0.0  # 이전 버전
@@ -1163,14 +1163,14 @@ NAME      IMAGE     COMMAND   SERVICE   CREATED   STATUS    PORTS
 
 **또는 Health Check 실패**:
 ```
-curl: (7) Failed to connect to 15.165.215.141 port 80 after 135 ms: Couldn't connect to server
+curl: (7) Failed to connect to xxx.xxx.xxx.xxx port 80 after 135 ms: Couldn't connect to server
 ```
 
 **원인**: EC2의 `.env` 파일이 없거나 `ECR_REGISTRY`가 설정되지 않음
 
 **해결**:
 1. EC2에 SSH 접속
-2. `/home/ubuntu/ddoksori/.env` 파일 생성 (A-16 참조)
+2. `/home/ubuntu/app/.env` 파일 생성 (A-16 참조)
 3. 환경변수 확인:
    ```bash
    source .env && echo "ECR_REGISTRY: $ECR_REGISTRY"
@@ -1219,7 +1219,7 @@ An error occurred (AccessDeniedException) when calling the GetSecretValue operat
 | **A-10** | 탄력적 IP 할당 | |
 | **A-11** | EC2 초기 설정 | |
 | **A-12** | EC2 IAM Role 연결 | |
-| **A-13** | docker-compose.prod.yml 배치 | |
+| **A-13** | 프로젝트 코드 배치 (git clone) | |
 | **A-14** | 추가 GitHub Secrets 등록 | |
 | **A-15** | EC2_HOST 설정 | |
 

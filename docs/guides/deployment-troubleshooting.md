@@ -142,7 +142,7 @@ uv pip install -r backend/requirements.txt --verbose
 #### 증상
 ```
 psycopg2.OperationalError: could not connect to server: Connection timed out
-Is the server running on host "dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com"?
+Is the server running on host "your-db-instance.ap-northeast-2.rds.amazonaws.com"?
 ```
 
 #### 원인
@@ -158,7 +158,7 @@ Is the server running on host "dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws
 cat .env | grep DB_
 
 # 출력 예:
-# DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+# DB_HOST=your-db-instance.ap-northeast-2.rds.amazonaws.com
 # DB_PORT=5432
 # DB_NAME=ddoksori
 # DB_USER=ddoksori_ro
@@ -168,15 +168,15 @@ cat .env | grep DB_
 **Step 2: 네트워크 연결 테스트**
 ```bash
 # Telnet으로 포트 확인
-telnet dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com 5432
+telnet your-db-instance.ap-northeast-2.rds.amazonaws.com 5432
 
 # 또는 netcat
-nc -zv dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com 5432
+nc -zv your-db-instance.ap-northeast-2.rds.amazonaws.com 5432
 ```
 
 **Step 3: psql CLI로 직접 연결 테스트**
 ```bash
-psql -h dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com \
+psql -h your-db-instance.ap-northeast-2.rds.amazonaws.com \
      -U ddoksori_ro \
      -d ddoksori \
      -c "SELECT 1;"
@@ -255,7 +255,7 @@ psql -h ... -U ddoksori_ro -d ddoksori -c "\dt"
 ```bash
 # DBA에게 마이그레이션 실행 완료 여부 확인
 # 또는 직접 실행 (관리자 권한 필요)
-psql -h dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com \
+psql -h your-db-instance.ap-northeast-2.rds.amazonaws.com \
      -U <admin_user> \
      -d ddoksori \
      -f backend/database/migrations/004_conversation_memory.sql
@@ -294,7 +294,7 @@ jwt_secret_key
 # .env 파일에 다음 항목 필수:
 JWT_SECRET_KEY=<32자 이상 랜덤 문자열>
 CONVERSATION_MEMORY_BACKEND=db
-DB_HOST=dsr-postgres.cyhiie0gambz.us-east-1.rds.amazonaws.com
+DB_HOST=your-db-instance.ap-northeast-2.rds.amazonaws.com
 DB_USER=ddoksori_ro
 DB_PASSWORD=<password>
 DB_NAME=ddoksori
@@ -341,7 +341,7 @@ EOF
 # 32자 이상 랜덤 문자열 생성
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
-# 출력 예: yQ7XvZ3mN8kP2wR5tL9xU6bC4aJ1sH0e
+# 출력 예: your-jwt-secret-key-min-32-characters
 # 이 값을 .env 파일에 복사
 ```
 
@@ -495,7 +495,7 @@ HTTPException: Invalid token
 **Step 1: JWT_SECRET_KEY 고정**
 ```bash
 # .env 파일에 고정된 값 사용
-JWT_SECRET_KEY=yQ7XvZ3mN8kP2wR5tL9xU6bC4aJ1sH0e  # 변경하지 말 것!
+JWT_SECRET_KEY=your-jwt-secret-key-min-32-characters  # 변경하지 말 것!
 ```
 
 **Step 2: 토큰 만료 시간 확인**

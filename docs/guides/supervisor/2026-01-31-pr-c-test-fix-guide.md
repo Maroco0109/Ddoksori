@@ -286,9 +286,9 @@ required_nodes = [
 
 ## 7. 관련 문서
 
-- `/home/maroco/LLM/backend/app/supervisor/README.md` - MAS v2 아키텍처
-- `/home/maroco/LLM/docs/guides/supervisor/2026-01-28-pr-a-trace-logging-implementation.md` - PR-A 구현
-- `/home/maroco/LLM/docs/guides/supervisor/2026-01-29-pr-b-memory-save-implementation.md` - PR-B 구현
+- `/path/to/project/backend/app/supervisor/README.md` - MAS v2 아키텍처
+- `/path/to/project/docs/guides/supervisor/2026-01-28-pr-a-trace-logging-implementation.md` - PR-A 구현
+- `/path/to/project/docs/guides/supervisor/2026-01-29-pr-b-memory-save-implementation.md` - PR-B 구현
 
 ---
 

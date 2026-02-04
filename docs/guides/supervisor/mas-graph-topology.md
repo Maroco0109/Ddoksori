@@ -463,10 +463,10 @@ Supervisor는 각 단계의 `current_phase`를 기록하여 실시간 진행 상
 
 ## 참고 문서
 
-- [Supervisor README](/home/maroco/LLM/backend/app/supervisor/README.md): Supervisor 아키텍처 상세 설명
-- [Retrieval Agent README](/home/maroco/LLM/backend/app/agents/retrieval/README.md): Retrieval Agent 구조
-- [MAS Architecture Design](/home/maroco/LLM/docs/plans/2026-01-28-mas-architecture-v2-design.md): Phase 7 설계 문서
-- [Agent Protocols](/home/maroco/LLM/backend/app/agents/protocols.py): 에이전트 인터페이스 정의
+- [Supervisor README](/path/to/project/backend/app/supervisor/README.md): Supervisor 아키텍처 상세 설명
+- [Retrieval Agent README](/path/to/project/backend/app/agents/retrieval/README.md): Retrieval Agent 구조
+- [MAS Architecture Design](/path/to/project/docs/plans/2026-01-28-mas-architecture-v2-design.md): Phase 7 설계 문서
+- [Agent Protocols](/path/to/project/backend/app/agents/protocols.py): 에이전트 인터페이스 정의
 
 ---
 
