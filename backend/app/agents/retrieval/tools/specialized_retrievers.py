@@ -109,7 +109,7 @@ class LawRetriever:
         Returns:
             List[SimilarChunkResult]
         """
-        rds = RDSInternalRetriever(self.db_config, self.embed_api_url)
+        rds = RDSInternalRetriever(self.db_config)
         rds.connect()
         try:
             doc_types = document_types or ["법률", "시행령"]
@@ -256,7 +256,7 @@ class CriteriaRetriever:
         Returns:
             List[SimilarChunkResult]
         """
-        rds = RDSInternalRetriever(self.db_config, self.embed_api_url)
+        rds = RDSInternalRetriever(self.db_config)
         rds.connect()
         try:
             doc_types = document_types or ["시행규칙", "별표"]
@@ -336,7 +336,7 @@ class CriteriaRetriever:
                 "Database connection is not initialized. Call connect() first."
             )
 
-        rds = RDSInternalRetriever(self.db_config, self.embed_api_url)
+        rds = RDSInternalRetriever(self.db_config)
         query_embedding = rds.embed_query(query)
 
         filter_dataset = "law_guide"
