@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/shared/api/client';
 import type { AdminStats } from '@/shared/types/admin';
-import { useAdminStore } from '../admin.store';
-import { getMockData } from '../mockData';
 
+/**
+ * 관리자 대시보드
+ *
+ * SEC-34: 테스트 토큰 조건 분기 제거
+ * 모든 데이터는 백엔드 API를 통해서만 조회됩니다.
+ */
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const adminToken = useAdminStore((state) => state.adminToken);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -15,16 +19,12 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      // 테스트 모드인 경우 mock 데이터 사용
-      if (adminToken === 'test-token-1234') {
-        const data = getMockData('/api/admin/stats');
-        setStats(data);
-      } else {
-        const data = await apiClient.get<AdminStats>('/api/admin/stats');
-        setStats(data);
-      }
-    } catch (error) {
-      console.error('통계 데이터 로딩 실패:', error);
+      // SEC-34: 백엔드 API만 사용
+      const data = await apiClient.get<AdminStats>('/api/admin/stats');
+      setStats(data);
+    } catch (err) {
+      console.error('통계 데이터 로딩 실패:', err);
+      setError('통계 데이터를 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -34,6 +34,14 @@ export default function AdminDashboard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">로딩 중...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">{error}</div>
       </div>
     );
   }

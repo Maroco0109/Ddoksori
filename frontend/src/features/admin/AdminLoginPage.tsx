@@ -4,6 +4,12 @@ import { useAdminStore } from './admin.store';
 import { apiClient } from '@/shared/api/client';
 import type { AdminLoginCredentials, AdminAuthResponse } from '@/shared/types/admin';
 
+/**
+ * 관리자 로그인 페이지
+ *
+ * SEC-33/34: 하드코딩된 테스트 자격 증명 제거
+ * 모든 인증은 백엔드 /api/admin/login API를 통해 처리됩니다.
+ */
 export default function AdminLoginPage() {
   const navigate = useNavigate();
   const adminLogin = useAdminStore((state) => state.adminLogin);
@@ -15,20 +21,6 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 테스트 로그인 함수
-  const handleTestLogin = () => {
-    const testAdmin = {
-      id: 'test-admin-id',
-      username: 'admin',
-      email: 'admin@test.com',
-      role: 'admin' as const,
-    };
-    const testToken = 'test-token-1234';
-
-    adminLogin(testAdmin, testToken);
-    navigate('/admin/dashboard');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -38,19 +30,14 @@ export default function AdminLoginPage() {
       return;
     }
 
-    // 테스트 계정 체크
-    if (credentials.username === 'admin' && credentials.password === 'test1234') {
-      handleTestLogin();
-      return;
-    }
-
     setIsLoading(true);
 
     try {
+      // SEC-33: 백엔드 API를 통한 인증만 허용
       const response = await apiClient.post<AdminAuthResponse>('/api/admin/login', credentials);
       adminLogin(response.admin, response.token);
       navigate('/admin/dashboard');
-    } catch (err) {
+    } catch {
       setError('로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
     } finally {
       setIsLoading(false);
@@ -107,19 +94,6 @@ export default function AdminLoginPage() {
             {isLoading ? '로그인 중...' : '로그인'}
           </button>
         </form>
-
-        <div className="mt-6 border-t pt-4">
-          <button
-            type="button"
-            onClick={handleTestLogin}
-            className="w-full bg-gray-600 text-white py-2 rounded-md hover:bg-gray-700 transition-colors"
-          >
-            테스트 계정으로 로그인
-          </button>
-          <p className="text-xs text-gray-500 text-center mt-2">
-            테스트 ID: admin / PW: test1234
-          </p>
-        </div>
 
         <div className="mt-6 text-xs text-gray-500 text-center">
           <p>관리자 계정으로만 접근 가능합니다.</p>
