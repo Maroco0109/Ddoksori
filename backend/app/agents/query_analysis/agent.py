@@ -174,6 +174,7 @@ def query_analysis_node(state: ChatState) -> Dict:
     )
 
     # 라우팅 모드 결정 (clarification 제거됨)
+    # query_type이 'general'이면 classify_mode에서 'NO_RETRIEVAL'을 반환함
     mode = classify_mode(query_type, False, user_query)
 
     logger.info(f"[QueryAnalysis] mode={mode}, query_type={query_type}")
@@ -436,6 +437,7 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     logger.info(
         f"[QueryAnalysis v2] Before classify_mode: query_type={query_type}, intent={intent}"
     )
+    # query_type이 'general'이면 classify_mode에서 'NO_RETRIEVAL'을 반환함
     mode = classify_mode(query_type, needs_clarification, user_query)
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 

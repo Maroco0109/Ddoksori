@@ -1,0 +1,23 @@
+[
+  {
+    "query": "안녕",
+    "classifier_type": "general",
+    "qa_node_type": "general",
+    "early_exit_triggered": true,
+    "response_preview": "안녕하세요! 똑똑한 소비자지킴이 '똑소리'입니다. 저는 소비자 분쟁 해결을 위해 법령, 분"
+  },
+  {
+    "query": "고마워",
+    "classifier_type": "general",
+    "qa_node_type": "general",
+    "early_exit_triggered": true,
+    "response_preview": "안녕하세요! 똑똑한 소비자지킴이 '똑소리'입니다. 저는 소비자 분쟁 해결을 위해 법령, 분"
+  },
+  {
+    "query": "점심 메뉴 추천 해줘",
+    "classifier_type": "general",
+    "qa_node_type": "general",
+    "early_exit_triggered": true,
+    "response_preview": "안녕하세요! 똑똑한 소비자지킴이 '똑소리'입니다. 저는 소비자 분쟁 해결을 위해 법령, 분"
+  }
+]
