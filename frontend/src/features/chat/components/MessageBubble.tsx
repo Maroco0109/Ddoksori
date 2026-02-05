@@ -8,13 +8,11 @@ import { FollowupChips } from './FollowupChips';
 interface MessageBubbleProps {
   message: MessageWithCitations;
   chatType?: 'dispute' | 'general';
-  onFollowupSelect?: (question: string) => void;
 }
 
 export function MessageBubble({
   message,
   chatType = 'dispute',
-  onFollowupSelect,
 }: MessageBubbleProps) {
   const [selectedCitationId, setSelectedCitationId] = useState<number | null>(
     null
@@ -105,11 +103,9 @@ export function MessageBubble({
                 onCitationClick={setSelectedCitationId}
               />
               {message.followupQuestions &&
-                message.followupQuestions.length > 0 &&
-                onFollowupSelect && (
+                message.followupQuestions.length > 0 && (
                   <FollowupChips
                     questions={message.followupQuestions}
-                    onSelect={onFollowupSelect}
                   />
                 )}
             </>
