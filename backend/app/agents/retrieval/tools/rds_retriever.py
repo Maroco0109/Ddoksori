@@ -15,6 +15,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class SimilarChunkResult:
     chunk_id: str
@@ -95,7 +96,9 @@ class RDSRetriever:
         result_limit: int = 10,
     ) -> List[SimilarChunkResult]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query)
 
@@ -148,7 +151,9 @@ class RDSRetriever:
         rrf_k: int = 60,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -203,7 +208,9 @@ class RDSRetriever:
         rrf_k: int,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -311,7 +318,9 @@ class RDSRetriever:
         rrf_k: int = 60,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -348,7 +357,9 @@ class RDSRetriever:
                     if not doc_id:
                         source_url = row[7]
                         if source_url:
-                            doc_id = hashlib.sha1(source_url.encode("utf-8")).hexdigest()
+                            doc_id = hashlib.sha1(
+                                source_url.encode("utf-8")
+                            ).hexdigest()
                     if not doc_id:
                         doc_id = row[0]
                     if doc_id:
@@ -383,7 +394,9 @@ class RDSRetriever:
                 )
             )
         if results and logger.isEnabledFor(logging.DEBUG):
-            logger.debug("hybrid_rrf_s2_v2: first_category=%s", results[0].get("category"))
+            logger.debug(
+                "hybrid_rrf_s2_v2: first_category=%s", results[0].get("category")
+            )
 
         return results
 
@@ -475,7 +488,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[SimilarChunkResult], float, float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         embed_start = time.time()
         query_embedding = self.embed_query(query)
@@ -523,10 +538,14 @@ class RDSRetriever:
                 """,
                 (
                     query_embedding,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_law_name, filter_law_name,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_law_name,
+                    filter_law_name,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     query_embedding,
                     result_limit,
@@ -567,7 +586,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         document_types = list(filter_document_type) if filter_document_type else None
         where_doc_type = ""
@@ -607,8 +628,10 @@ class RDSRetriever:
                     query_text,
                     query_text,
                     query_text,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
                     *params_doc_type,
                     result_limit,
                 ),
@@ -641,7 +664,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         article_match = re.search(r"(제?\s*\d+\s*조)", query_text)
-        article_token = article_match.group(1).replace(" ", "") if article_match else None
+        article_token = (
+            article_match.group(1).replace(" ", "") if article_match else None
+        )
         main_query = query_text
         if article_match:
             main_query = (query_text.replace(article_match.group(1), " ")).strip()
@@ -708,7 +733,9 @@ class RDSRetriever:
         exclude_deleted: bool = True,
     ) -> Tuple[List[Dict], float]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -793,15 +820,21 @@ class RDSRetriever:
                     query_text,
                     query_text,
                     query_text,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     query_embedding,
                     query_embedding,
-                    filter_dataset, filter_dataset,
-                    filter_category, filter_category,
-                    filter_year, filter_year,
+                    filter_dataset,
+                    filter_dataset,
+                    filter_category,
+                    filter_category,
+                    filter_year,
+                    filter_year,
                     *params_doc_type,
                     query_embedding,
                     rrf_k,

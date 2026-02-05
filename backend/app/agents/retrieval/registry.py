@@ -10,16 +10,20 @@ def _use_v2() -> bool:
 def get_case_agent_class() -> Type:
     if _use_v2():
         from .case_agent_v2 import CaseRetrievalAgentV2
+
         return CaseRetrievalAgentV2
 
     from .case_agent import CaseRetrievalAgent
+
     return CaseRetrievalAgent
 
 
 def get_counsel_agent_class() -> Type:
     if _use_v2():
         from .counsel_agent_v2 import CounselRetrievalAgentV2
+
         return CounselRetrievalAgentV2
 
     from .counsel_agent import CounselRetrievalAgent
+
     return CounselRetrievalAgent

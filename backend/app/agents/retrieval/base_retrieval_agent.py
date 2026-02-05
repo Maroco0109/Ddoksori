@@ -4,51 +4,65 @@ BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
 4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
 """
 
+import logging
 import os
 import time
-import logging
 from abc import abstractmethod
-from typing import Dict, Any, List, ClassVar, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from ..base import BaseAgent
+
 logger = logging.getLogger(__name__)
 
 
 def _get_db_config() -> Dict[str, str]:
     return {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'dbname': os.getenv('DB_NAME', 'ddoksori'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'postgres'),
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": os.getenv("DB_PORT", "5432"),
+        "dbname": os.getenv("DB_NAME", "ddoksori"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "postgres"),
     }
 
 
 def _get_embed_api_url() -> str:
-    return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
+    return os.getenv("EMBED_API_URL", "http://localhost:8001/embed")
 
 
 class BaseRetrievalAgent(BaseAgent):
     """Retrieval Agent 공통 베이스 - 검색 결과 포맷팅 및 에러 처리 공유"""
-    
+
     required_inputs: ClassVar[List[str]] = ["user_query"]
-    provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
-    
+    provided_outputs: ClassVar[List[str]] = [
+        "results",
+        "sources",
+        "max_similarity",
+        "avg_similarity",
+    ]
+
     default_top_k: ClassVar[int] = 5
-    
+
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         error = self.validate_request(request)
         if error:
-            return self.report_to_supervisor(status="failure", result=None, message=error)
-        
+            return self.report_to_supervisor(
+                status="failure", result=None, message=error
+            )
+
         context = request.get("context", {})
         user_query = context.get("user_query", "")
         query_analysis = context.get("query_analysis", {})
         params = request.get("params", {}) or {}
 
         metadata_filter = params.get("metadata_filter") or {}
-        expanded_queries = params.get("expanded_queries") or query_analysis.get("expanded_queries") or []
-        agent_keywords = params.get("agent_keywords") or query_analysis.get("keywords") or []
+        expanded_queries = (
+            params.get("expanded_queries")
+            or query_analysis.get("expanded_queries")
+            or []
+        )
+        agent_keywords = (
+            params.get("agent_keywords") or query_analysis.get("keywords") or []
+        )
         ignore_threshold = bool(params.get("ignore_threshold", False))
 
         self._last_expanded_queries = [
@@ -68,17 +82,17 @@ class BaseRetrievalAgent(BaseAgent):
             "dataset_type"
         )
         self._last_query_analysis = query_analysis
-        
+
         search_query = self._build_search_query(user_query, query_analysis)
         top_k = params.get("top_k", self.default_top_k)
-        
+
         try:
             search_start = time.monotonic()
             results = await self._execute_search(search_query, top_k)
             search_time_ms = (time.monotonic() - search_start) * 1000
             if self._should_rerank(results, search_query, top_k):
                 results = self._rerank_results(results, search_query)
-            
+
             if not results:
                 return self.report_to_supervisor(
                     status="failure",
@@ -91,15 +105,22 @@ class BaseRetrievalAgent(BaseAgent):
                         "search_time_ms": search_time_ms,
                         "error": "no_results",
                     },
-                    message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
+                    message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장.",
                 )
-            
+
             formatted_results = self._format_results(results)
             sources = self._build_sources(results)
-            
-            max_sim = max((r.get("similarity", 0) for r in formatted_results), default=0)
-            avg_sim = sum(r.get("similarity", 0) for r in formatted_results) / len(formatted_results) if formatted_results else 0
-            
+
+            max_sim = max(
+                (r.get("similarity", 0) for r in formatted_results), default=0
+            )
+            avg_sim = (
+                sum(r.get("similarity", 0) for r in formatted_results)
+                / len(formatted_results)
+                if formatted_results
+                else 0
+            )
+
             return self.report_to_supervisor(
                 status="success",
                 result={
@@ -113,18 +134,20 @@ class BaseRetrievalAgent(BaseAgent):
                     "search_time_ms": search_time_ms,
                     "error": None,
                 },
-                message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
+                message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})",
             )
-            
+
         except Exception as e:
             logger.exception(f"{self.agent_name} 검색 오류: {str(e)}")
             return self.report_to_supervisor(
                 status="failure",
                 result=None,
-                message=f"{self.agent_name} 검색 오류: {str(e)}"
+                message=f"{self.agent_name} 검색 오류: {str(e)}",
             )
-    
-    def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
+
+    def _build_search_query(
+        self, user_query: str, query_analysis: Dict[str, Any]
+    ) -> str:
         # query_analysis is handled upstream; prefer expanded queries when provided.
         candidate = None
         expanded_queries = getattr(self, "_last_expanded_queries", None)
@@ -152,7 +175,9 @@ class BaseRetrievalAgent(BaseAgent):
         if not normalized:
             return None
         normalized_set = set(normalized)
-        if "상담" in normalized_set and ("조정" in normalized_set or "해결" in normalized_set):
+        if "상담" in normalized_set and (
+            "조정" in normalized_set or "해결" in normalized_set
+        ):
             return None
         if "상담" in normalized_set:
             return "상담"
@@ -171,17 +196,17 @@ class BaseRetrievalAgent(BaseAgent):
 
     def _rerank_results(self, results: List[Any], query: str) -> List[Any]:
         return results
-    
+
     @abstractmethod
     async def _execute_search(self, query: str, top_k: int) -> List[Any]:
         """서브클래스에서 구현: 실제 검색 수행"""
         pass
-    
+
     @abstractmethod
     def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:
         """서브클래스에서 구현: 결과 포맷팅"""
         pass
-    
+
     @abstractmethod
     def _build_sources(self, results: List[Any]) -> List[Dict[str, Any]]:
         """서브클래스에서 구현: 출처 정보 생성"""

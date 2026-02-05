@@ -6,10 +6,12 @@ Includes rule-based case routing (상담/조정/해결) with quota mixing.
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
-import logging
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -18,10 +20,11 @@ REPO_ROOT = os.path.abspath(
 )
 sys.path.insert(0, os.path.join(REPO_ROOT, "backend"))
 
+import psycopg2
+
 from app.agents.retrieval.base_retrieval_agent import _get_db_config, _get_embed_api_url
 from app.agents.retrieval.case_agent import CaseRetrievalAgent
 from app.agents.retrieval.tools.rds_retriever import RDSRetriever
-import psycopg2
 
 
 def _check_required_fields(item: dict) -> list:
@@ -50,7 +53,9 @@ async def _run_one(
     raw_count = len(formatted)
     formatted_count = len(formatted)
     dedup_removed = max(raw_count - formatted_count, 0)
-    soft_scores = [f.get("soft_score") for f in formatted if f.get("soft_score") is not None]
+    soft_scores = [
+        f.get("soft_score") for f in formatted if f.get("soft_score") is not None
+    ]
     soft_score_stats = {}
     if soft_scores:
         soft_score_stats = {
@@ -87,13 +92,19 @@ async def _run_one(
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
-    parser = argparse.ArgumentParser(description="Smoke test for case/counsel retrieval")
-    parser.add_argument("--query", default="환불 거부 분쟁 조정 사례", help="search query")
+    parser = argparse.ArgumentParser(
+        description="Smoke test for case/counsel retrieval"
+    )
+    parser.add_argument(
+        "--query", default="환불 거부 분쟁 조정 사례", help="search query"
+    )
     parser.add_argument("--top-k", type=int, default=5, help="top_k")
     args = parser.parse_args()
 
     if os.getenv("SMOKE_CASE_AGENT_ONLY_NOTE", "false").lower() == "true":
-        print("[SMOKE] This script calls case_agent directly; retrieval_merge is NOT involved.")
+        print(
+            "[SMOKE] This script calls case_agent directly; retrieval_merge is NOT involved."
+        )
 
     db_config = _get_db_config()
     print(

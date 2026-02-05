@@ -1,7 +1,7 @@
 """CounselRetrievalAgent - 상담사례 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
 
 import asyncio
-from typing import Dict, Any, List, ClassVar
+from typing import Any, ClassVar, Dict, List
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
 from .tools.rds_retriever import RDSRetriever
@@ -9,18 +9,20 @@ from .tools.rds_retriever import RDSRetriever
 
 class CounselRetrievalAgent(BaseRetrievalAgent):
     """상담사례(counsel_case) 검색 에이전트 - 참고용 상담 사례"""
-    
+
     agent_name: ClassVar[str] = "retrieval_counsel"
-    agent_description: ClassVar[str] = "상담사례를 검색합니다. 비슷한 상담 기록이 필요할 때 호출됩니다."
+    agent_description: ClassVar[str] = (
+        "상담사례를 검색합니다. 비슷한 상담 기록이 필요할 때 호출됩니다."
+    )
     default_dataset: ClassVar[str] = "counsel_case"
-    
+
     async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
-        
+
         retriever = RDSRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
             results = await asyncio.to_thread(
                 retriever.search_hybrid_rrf,
@@ -35,7 +37,7 @@ class CounselRetrievalAgent(BaseRetrievalAgent):
             return results
         finally:
             retriever.close()
-    
+
     def _format_results(self, results: List[Dict]) -> List[Dict[str, Any]]:
         formatted = []
         for r in results:
@@ -53,12 +55,16 @@ class CounselRetrievalAgent(BaseRetrievalAgent):
                 similarity = getattr(r, "similarity", 0)
 
             doc_title = metadata.get("doc_title") or source_file
-            doc_id = metadata.get("doc_id") or (r.get("chunk_id") if isinstance(r, dict) else r.chunk_id)
+            doc_id = metadata.get("doc_id") or (
+                r.get("chunk_id") if isinstance(r, dict) else r.chunk_id
+            )
             decision_date = metadata.get("decision_date")
 
             formatted.append(
                 {
-                    "chunk_id": r.get("chunk_id") if isinstance(r, dict) else r.chunk_id,
+                    "chunk_id": r.get("chunk_id")
+                    if isinstance(r, dict)
+                    else r.chunk_id,
                     "doc_id": doc_id,
                     "chunk_type": metadata.get("chunk_type"),
                     "content": content,
@@ -70,12 +76,14 @@ class CounselRetrievalAgent(BaseRetrievalAgent):
                     "similarity": similarity,
                     "rrf_score": r.get("rrf_score") if isinstance(r, dict) else None,
                     "bm25_score": r.get("bm25_score") if isinstance(r, dict) else None,
-                    "vector_similarity": r.get("vector_similarity") if isinstance(r, dict) else None,
+                    "vector_similarity": r.get("vector_similarity")
+                    if isinstance(r, dict)
+                    else None,
                     "metadata": metadata,
                 }
             )
         return formatted
-    
+
     def _build_sources(self, results: List[Dict]) -> List[Dict[str, Any]]:
         return [
             {

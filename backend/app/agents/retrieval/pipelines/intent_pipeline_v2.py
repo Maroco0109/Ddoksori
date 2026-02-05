@@ -20,7 +20,9 @@ class IntentPipelineV2:
             queries.append(q0)
 
         slot_terms = [v for v in slots.values() if isinstance(v, str) and v.strip()]
-        intent_terms = [intent_label] if intent_label and intent_label != "other" else []
+        intent_terms = (
+            [intent_label] if intent_label and intent_label != "other" else []
+        )
         q1 = " ".join(intent_terms + slot_terms).strip()
         if q1 and q1 not in queries:
             queries.append(q1)
@@ -102,7 +104,9 @@ class IntentPipelineV2:
                 keys.add(key)
         return len(keys)
 
-    def _count_keyword_hits(self, results: Iterable[SearchResult], keywords: Sequence[str]) -> int:
+    def _count_keyword_hits(
+        self, results: Iterable[SearchResult], keywords: Sequence[str]
+    ) -> int:
         count = 0
         for item in results:
             text = f"{item.doc_title} {item.content}".lower()

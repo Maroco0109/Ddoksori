@@ -13,7 +13,7 @@ import os
 import random
 from datetime import datetime
 from importlib.util import module_from_spec, spec_from_file_location
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List, Tuple
 
 try:
     from dotenv import load_dotenv
@@ -41,7 +41,9 @@ def _load_queries(path: str) -> List[Tuple[str, Dict]]:
                 continue
             row = json.loads(line)
             for q_idx, q in enumerate(row.get("queries_llm", []) or []):
-                queries.append((q, {"case_index": case_index, "query_index": q_idx, **row}))
+                queries.append(
+                    (q, {"case_index": case_index, "query_index": q_idx, **row})
+                )
     return queries
 
 
@@ -113,7 +115,7 @@ def build_log(
             try:
                 results, sql_ms = hybrid_rrf_search(
                     q,
-                    filter_document_type=['법률', '시행령'],
+                    filter_document_type=["법률", "시행령"],
                     result_limit=top_k,
                     rrf_k=rrf_k,
                 )
@@ -175,7 +177,9 @@ def main() -> int:
         f"ragas_retrieval_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl",
     )
 
-    parser = argparse.ArgumentParser(description="Build RAGAS retrieval log (retriever-only).")
+    parser = argparse.ArgumentParser(
+        description="Build RAGAS retrieval log (retriever-only)."
+    )
     parser.add_argument("--input", dest="input_path", default=default_input)
     parser.add_argument("--output", dest="output_path", default=default_output)
     parser.add_argument("--max-queries", type=int, default=300)

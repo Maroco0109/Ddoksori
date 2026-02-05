@@ -4,7 +4,9 @@ Guardrail LangGraph Nodes - 역할 분리 버전
 
 import logging
 from typing import Any, Dict
+
 from langchain_core.messages import HumanMessage
+
 from .moderation import MODERATION_ENABLED, check_input, check_output
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ SYSTEM_GUIDE_MESSAGE = (
     "환불 거부, 위약금 분쟁, 제품 하자 등 겪고 계신 문제를 구체적으로 말씀해 주시면 "
     "정확한 해결 방안을 안내해 드리겠습니다."
 )
+
 
 def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -45,7 +48,9 @@ def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         # No user message found
         if not last_user_msg:
-            logger.warning("[InputGuardrail] No HumanMessage found. Blocking for safety.")
+            logger.warning(
+                "[InputGuardrail] No HumanMessage found. Blocking for safety."
+            )
             return {
                 "guardrail_blocked": True,
                 "guardrail_type": "loop_prevention",
@@ -60,20 +65,25 @@ def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
             user_query = last_user_msg.get("content", "").strip()
 
     # 2. 루프 감지 (자기 답변에 자기가 답하는 현상 방지)
-    BOT_INDICATORS = ["소비자 분쟁 상담", "똑소리입니다", "안내해 드립니다", "소비자지킴이"]
+    BOT_INDICATORS = [
+        "소비자 분쟁 상담",
+        "똑소리입니다",
+        "안내해 드립니다",
+        "소비자지킴이",
+    ]
     if any(indicator in user_query for indicator in BOT_INDICATORS):
-        logger.warning(f"[InputGuardrail] Self-response loop detected. Blocking.")
+        logger.warning("[InputGuardrail] Self-response loop detected. Blocking.")
         return {
             "guardrail_blocked": True,
             "guardrail_type": "input_loop",
             "final_answer": SYSTEM_GUIDE_MESSAGE,
-            "user_query": ""
+            "user_query": "",
         }
 
     # 3. 유해성 검사 (Moderation)
     result = check_input(user_query)
     if result["blocked"]:
-        logger.warning(f"[InputGuardrail] Blocked by moderation.")
+        logger.warning("[InputGuardrail] Blocked by moderation.")
         return {
             "guardrail_blocked": True,
             "guardrail_type": "input",
@@ -83,11 +93,12 @@ def input_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 4. [중요] 모든 보안 검사 통과 시
     # 에이전트가 일을 할 수 있도록 guardrail_blocked를 False로 반환합니다.
-    logger.info(f"[InputGuardrail] Safety check passed. Handing over to Query Analyst.")
+    logger.info("[InputGuardrail] Safety check passed. Handing over to Query Analyst.")
     return {
-        "guardrail_blocked": False, # 에이전트를 깨우는 신호
+        "guardrail_blocked": False,  # 에이전트를 깨우는 신호
         "user_query": user_query,
     }
+
 
 def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -95,10 +106,10 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     draft_answer = state.get("draft_answer", "")
     final_answer = state.get("final_answer", "")
-    
+
     if not final_answer:
         final_answer = draft_answer
-        
+
     if not final_answer:
         logger.error("[OutputGuardrail] Final answer is empty!")
         final_answer = "죄송합니다. 오류가 발생했습니다. 다시 질문해 주세요."
@@ -120,6 +131,7 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     _save_to_l1_cache({**state, **updates})
     return {**updates, "guardrail_blocked": False}
+
 
 def _save_to_l1_cache(state: Dict[str, Any]) -> None:
     # (기존 캐시 저장 로직 동일)

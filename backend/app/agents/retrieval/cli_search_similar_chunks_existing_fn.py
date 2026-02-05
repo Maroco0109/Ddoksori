@@ -1,8 +1,7 @@
 """CLI (existing DB function): python <file> "<query>" -> prints results."""
 
-import os
-import sys
 import argparse
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -112,7 +111,9 @@ class SearchSimilarChunksClient:
         result_limit: int = 10,
     ) -> List[SimilarChunkResult]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query)
 
@@ -165,7 +166,9 @@ class SearchSimilarChunksClient:
         rrf_k: int = 60,
     ) -> List[Dict]:
         if not self.conn:
-            raise RuntimeError("Database connection is not initialized. Call connect() first.")
+            raise RuntimeError(
+                "Database connection is not initialized. Call connect() first."
+            )
 
         query_embedding = self.embed_query(query_text)
 
@@ -232,7 +235,9 @@ def main() -> int:
 
     if load_dotenv:
         env_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "backend", ".env")
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "..", "backend", ".env"
+            )
         )
         load_dotenv(env_path)
 

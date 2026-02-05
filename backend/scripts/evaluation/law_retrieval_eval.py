@@ -1,8 +1,8 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Evaluate hybrid RRF retrieval against golden JSONL queries."""
+
 import argparse
 import json
-import os
 import re
 import sys
 import time
@@ -21,8 +21,16 @@ if str(BACKEND_DIR) not in sys.path:
 # Load hybrid_rrf_search directly from file to avoid package import issues.
 from importlib.util import module_from_spec, spec_from_file_location  # noqa: E402
 
-_module_path = BACKEND_DIR / "app" / "agents" / "retrieval" / "cli_search_similar_chunks_direct_sql.py"
-_spec = spec_from_file_location("cli_search_similar_chunks_direct_sql", str(_module_path))
+_module_path = (
+    BACKEND_DIR
+    / "app"
+    / "agents"
+    / "retrieval"
+    / "cli_search_similar_chunks_direct_sql.py"
+)
+_spec = spec_from_file_location(
+    "cli_search_similar_chunks_direct_sql", str(_module_path)
+)
 if _spec is None or _spec.loader is None:
     raise RuntimeError("Failed to load cli_search_similar_chunks_direct_sql.py")
 _module = module_from_spec(_spec)
@@ -75,10 +83,26 @@ def _load_law_map(path: Path) -> Dict[str, str]:
 
 
 _CIRCLE_MAP = {
-    "①": "1", "②": "2", "③": "3", "④": "4", "⑤": "5",
-    "⑥": "6", "⑦": "7", "⑧": "8", "⑨": "9", "⑩": "10",
-    "⑪": "11", "⑫": "12", "⑬": "13", "⑭": "14", "⑮": "15",
-    "⑯": "16", "⑰": "17", "⑱": "18", "⑲": "19", "⑳": "20",
+    "①": "1",
+    "②": "2",
+    "③": "3",
+    "④": "4",
+    "⑤": "5",
+    "⑥": "6",
+    "⑦": "7",
+    "⑧": "8",
+    "⑨": "9",
+    "⑩": "10",
+    "⑪": "11",
+    "⑫": "12",
+    "⑬": "13",
+    "⑭": "14",
+    "⑮": "15",
+    "⑯": "16",
+    "⑰": "17",
+    "⑱": "18",
+    "⑲": "19",
+    "⑳": "20",
 }
 
 
@@ -313,7 +337,9 @@ def main() -> None:
             law_hit_any = 1 if law_hits else 0
 
             exact_recall = len(exact_hits) / len(citations) if citations else 0.0
-            article_recall = len(article_hits) / len(article_ids) if article_ids else 0.0
+            article_recall = (
+                len(article_hits) / len(article_ids) if article_ids else 0.0
+            )
             law_recall = len(law_hits) / len(set(gold_law_ids)) if gold_law_ids else 0.0
 
             total_exact_hit_any += exact_hit_any
@@ -346,12 +372,24 @@ def main() -> None:
 
     if output_fh:
         summary = {
-            f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries) if total_queries else 0.0,
-            f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries) if total_queries else 0.0,
-            f"LawHit@{args.top_k}": (total_law_hit_any / total_queries) if total_queries else 0.0,
-            f"exact_recall@{args.top_k}": (total_exact_recall / total_queries) if total_queries else 0.0,
-            f"article_recall@{args.top_k}": (total_article_recall / total_queries) if total_queries else 0.0,
-            f"law_recall@{args.top_k}": (total_law_recall / total_queries) if total_queries else 0.0,
+            f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"LawHit@{args.top_k}": (total_law_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"exact_recall@{args.top_k}": (total_exact_recall / total_queries)
+            if total_queries
+            else 0.0,
+            f"article_recall@{args.top_k}": (total_article_recall / total_queries)
+            if total_queries
+            else 0.0,
+            f"law_recall@{args.top_k}": (total_law_recall / total_queries)
+            if total_queries
+            else 0.0,
             "total_queries": total_queries,
         }
         meta_row = {
@@ -372,12 +410,24 @@ def main() -> None:
             meta_fh.write(existing)
 
     summary = {
-        f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries) if total_queries else 0.0,
-        f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries) if total_queries else 0.0,
-        f"LawHit@{args.top_k}": (total_law_hit_any / total_queries) if total_queries else 0.0,
-        f"exact_recall@{args.top_k}": (total_exact_recall / total_queries) if total_queries else 0.0,
-        f"article_recall@{args.top_k}": (total_article_recall / total_queries) if total_queries else 0.0,
-        f"law_recall@{args.top_k}": (total_law_recall / total_queries) if total_queries else 0.0,
+        f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"LawHit@{args.top_k}": (total_law_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"exact_recall@{args.top_k}": (total_exact_recall / total_queries)
+        if total_queries
+        else 0.0,
+        f"article_recall@{args.top_k}": (total_article_recall / total_queries)
+        if total_queries
+        else 0.0,
+        f"law_recall@{args.top_k}": (total_law_recall / total_queries)
+        if total_queries
+        else 0.0,
         "total_queries": total_queries,
     }
 
@@ -388,7 +438,9 @@ def main() -> None:
         print(f"ArticleHit@{args.top_k}: {summary[f'ArticleHit@{args.top_k}']:.4f}")
         print(f"LawHit@{args.top_k}: {summary[f'LawHit@{args.top_k}']:.4f}")
         print(f"exact_recall@{args.top_k}: {summary[f'exact_recall@{args.top_k}']:.4f}")
-        print(f"article_recall@{args.top_k}: {summary[f'article_recall@{args.top_k}']:.4f}")
+        print(
+            f"article_recall@{args.top_k}: {summary[f'article_recall@{args.top_k}']:.4f}"
+        )
         print(f"law_recall@{args.top_k}: {summary[f'law_recall@{args.top_k}']:.4f}")
         print(f"total_queries: {summary['total_queries']}")
 

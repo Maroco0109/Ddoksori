@@ -1,7 +1,6 @@
-
 import asyncio
 import os
-import json
+
 from dotenv import load_dotenv
 
 # 환경변수 로드
@@ -13,23 +12,33 @@ os.environ["ENABLE_LLM_REVIEW"] = "true"
 from app.agents.legal_review.llm_reviewer import HybridLegalReviewer
 from app.supervisor.state import ChatState
 
+
 async def run_verification():
     with open("verification_result.txt", "w", encoding="utf-8") as f:
+
         def log(msg):
             # print(msg)  # Disable console output to avoid encoding errors
             f.write(msg + "\n")
-            
+
         log("=== Legal Review Agent Verification (Gym Refund Scenario) ===\n")
-        
+
         reviewer = HybridLegalReviewer(enable_llm=True)
-        
+
         # 공통 입력 데이터
         query = "헬스장 PT 6개월치를 끊었는데 개인사정으로 2주만 하고 취소해야합니다. 하지만 특가 상품이라 취소가 어렵다고합니다. 환불이 불가능한가요?"
     sources = [
-        {"doc_type": "law", "title": "방문판매법", "content": "제31조(계약의 해지) 계속거래업자등과 계속거래등의 계약을 체결한 소비자는 계약기간 중 언제든지 계약을 해지할 수 있다."},
-        {"doc_type": "criteria", "title": "소비자분쟁해결기준", "content": "체육시설업: 소비자의 귀책사유로 인한 계약해제 시, 개시일 이후에는 취소일까지의 이용일수에 해당하는 금액과 총 이용금액의 10% 공제 후 환급"}
+        {
+            "doc_type": "law",
+            "title": "방문판매법",
+            "content": "제31조(계약의 해지) 계속거래업자등과 계속거래등의 계약을 체결한 소비자는 계약기간 중 언제든지 계약을 해지할 수 있다.",
+        },
+        {
+            "doc_type": "criteria",
+            "title": "소비자분쟁해결기준",
+            "content": "체육시설업: 소비자의 귀책사유로 인한 계약해제 시, 개시일 이후에는 취소일까지의 이용일수에 해당하는 금액과 총 이용금액의 10% 공제 후 환급",
+        },
     ]
-    
+
     test_cases = [
         {
             "name": "Case 1: Safe Answer with Abstract Terms (Should PASS)",
@@ -44,7 +53,7 @@ async def run_verification():
 
 따라서 '환불 불가'라는 헬스장의 주장은 부당할 소지가 있습니다.
 [출처: 방문판매법 제31조, 소비자분쟁해결기준]
-"""
+""",
         },
         {
             "name": "Case 2: Format Violation (Should FAIL)",
@@ -55,15 +64,15 @@ async def run_verification():
 위약금 10%를 공제하고 나머지 금액을 돌려받으세요.
 
 [해결기준]에 따르면 정당한 권리입니다.
-"""
+""",
         },
         {
             "name": "Case 3: Legal Judgment / Prohibited Expression (Should FAIL)",
             "draft_answer": """
 헬스장의 주장은 **명백한 불법**입니다. 소비자님은 **무조건** 전액 환불받을 수 있습니다.
 소송을 하면 **100% 승소**합니다. 법적으로 강하게 대응하십시오.
-"""
-        }
+""",
+        },
     ]
 
     for case in test_cases:
@@ -73,30 +82,30 @@ async def run_verification():
             "draft_answer": case["draft_answer"],
             "query_analysis": {"query_type": "dispute"},
             "sources": sources,
-            "retry_count": 0
+            "retry_count": 0,
         }
-        
+
         # Run review
         result = reviewer.review(state)
-        
+
         # Print results
         review_data = result.get("review", {})
         passed = review_data.get("passed", False)
         violations = review_data.get("violations", [])
-        
+
         log(f"Result: {'PASS' if passed else 'FAIL'}")
         if not passed:
             log("Violations:")
             for v in violations:
                 log(f" - {v}")
-        
+
         # Check specific expectations
         if "Case 1" in case["name"]:
             if not passed:
                 log("❌ Case 1 Passed expected, but Failed.")
             else:
                 log("✅ Case 1 Passed as expected (Abstract terms accepted).")
-                
+
         elif "Case 2" in case["name"]:
             # Check for format violations
             format_violation = any("형식 위반" in v for v in violations)
@@ -106,12 +115,15 @@ async def run_verification():
                 log("✅ Case 2 Detected format violation as expected.")
 
         elif "Case 3" in case["name"]:
-             # Check for prohibited expressions or legal judgment
-            legal_violation = any("금지 표현" in v or "법적 판단" in v for v in violations)
+            # Check for prohibited expressions or legal judgment
+            legal_violation = any(
+                "금지 표현" in v or "법적 판단" in v for v in violations
+            )
             if not legal_violation:
-                 log("❌ Case 3 Failed expectation. 'Legal violation' not detected.")
+                log("❌ Case 3 Failed expectation. 'Legal violation' not detected.")
             else:
-                 log("✅ Case 3 Detected legal violation as expected.")
+                log("✅ Case 3 Detected legal violation as expected.")
+
 
 if __name__ == "__main__":
     asyncio.run(run_verification())

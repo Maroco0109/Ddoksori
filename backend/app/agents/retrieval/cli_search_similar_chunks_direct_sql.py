@@ -1,26 +1,23 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CLI (direct SQL): dense, BM25, and hybrid RRF search."""
 
 import argparse
 import os
-import re
-import time
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 try:
     from dotenv import load_dotenv
 except Exception:
     load_dotenv = None
 
-from .tools.rds_retriever import RDSRetriever, SimilarChunkResult, hybrid_rrf_search
-
+from .tools.rds_retriever import RDSRetriever
 
 DirectSQLSearchClient = RDSRetriever
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Direct SQL search (dense, bm25, hybrid_rrf).")
+    parser = argparse.ArgumentParser(
+        description="Direct SQL search (dense, bm25, hybrid_rrf)."
+    )
     parser.add_argument("query", help="Search query text")
     parser.add_argument(
         "--mode",
@@ -40,7 +37,9 @@ def main() -> int:
 
     if load_dotenv:
         env_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "backend", ".env")
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "..", "backend", ".env"
+            )
         )
         load_dotenv(env_path)
 
@@ -135,4 +134,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

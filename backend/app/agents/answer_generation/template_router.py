@@ -50,17 +50,19 @@ class TemplateRouter:
         user_query = state.get("user_query", "")
         chat_type = state.get("chat_type", "")
         query_analysis = state.get("query_analysis", {})
-        query_type = query_analysis.get("query_type", "") # 분석된 쿼리 타입 가져오기
+        query_type = query_analysis.get("query_type", "")  # 분석된 쿼리 타입 가져오기
         retrieval = state.get("retrieval", {})
         onboarding = state.get("onboarding") or {}
 
         logger.info(f"Routing template for query: {user_query[:50]}...")
 
         # 수정된 Rule 1: 무조건적인 거절 대신 유형별 분기
-        # 1-1. 시스템/기능 문의나 일반 인사는 'inquiry' 템플릿으로 보내서 
+        # 1-1. 시스템/기능 문의나 일반 인사는 'inquiry' 템플릿으로 보내서
         #      똑소리의 페르소나가 담긴 안내와 역질문이 나가도록 유도합니다.
         if query_type in ["system_meta", "general"]:
-            logger.info(f"Routing to inquiry for persona response: query_type={query_type}")
+            logger.info(
+                f"Routing to inquiry for persona response: query_type={query_type}"
+            )
             return "inquiry"
 
         # 1-2. 부적절한 언어나 정말 관련 없는 내용은 기존대로 reject 처리
@@ -70,8 +72,15 @@ class TemplateRouter:
 
         # 1-3. 그 외 분쟁 상담이 아닌 경우의 기본값 처리
         # 'dispute' 타입을 리스트에 추가하여 상담 시작 시 거절되는 현상을 방지합니다.
-        if chat_type != "dispute" and query_type not in ["dispute", "law", "criteria", "procedure"]:
-            logger.info(f"Fallback to reject for unknown chat_type: {chat_type}, query_type: {query_type}")
+        if chat_type != "dispute" and query_type not in [
+            "dispute",
+            "law",
+            "criteria",
+            "procedure",
+        ]:
+            logger.info(
+                f"Fallback to reject for unknown chat_type: {chat_type}, query_type: {query_type}"
+            )
             return "reject"
 
         # Rule 2a: High amount check

@@ -5,7 +5,7 @@ import json
 import logging
 import math
 import os
-from typing import Dict, Any, List, ClassVar, Tuple, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
 from .tools.rds_retriever import RDSRetriever
@@ -13,7 +13,7 @@ from .tools.rds_retriever import RDSRetriever
 
 class CaseRetrievalAgent(BaseRetrievalAgent):
     """상담/조정/해결 통합(case) 검색 에이전트"""
-    
+
     agent_name: ClassVar[str] = "retrieval_case"
     agent_description: ClassVar[str] = "상담/조정/해결 통합 사례를 검색합니다."
     default_dataset: ClassVar[str] = "case"
@@ -28,8 +28,12 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             result["documents"] = documents
             result["source"] = "case"
             if documents:
-                max_sim = max((d.get("similarity", 0.0) for d in documents), default=0.0)
-                avg_sim = sum((d.get("similarity", 0.0) for d in documents)) / len(documents)
+                max_sim = max(
+                    (d.get("similarity", 0.0) for d in documents), default=0.0
+                )
+                avg_sim = sum((d.get("similarity", 0.0) for d in documents)) / len(
+                    documents
+                )
                 result["max_similarity"] = max_sim
                 result["avg_similarity"] = avg_sim
         return response
@@ -66,45 +70,127 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
         # A) 조정 (분쟁조정/절차)
         adjust_strong = (
-            "분쟁조정", "조정신청", "조정 접수", "조정위원회", "조정 결정", "조정 결과",
-            "합의가 안돼", "합의 안돼", "합의 실패", "중재", "조정으로 가고 싶어",
-            "상대방이 거부", "업체가 끝까지 거부", "대화가 안됨", "분쟁이 커짐",
+            "분쟁조정",
+            "조정신청",
+            "조정 접수",
+            "조정위원회",
+            "조정 결정",
+            "조정 결과",
+            "합의가 안돼",
+            "합의 안돼",
+            "합의 실패",
+            "중재",
+            "조정으로 가고 싶어",
+            "상대방이 거부",
+            "업체가 끝까지 거부",
+            "대화가 안됨",
+            "분쟁이 커짐",
         )
         adjust_mid = (
-            "분쟁", "다툼", "쟁점", "서로 주장", "책임 공방",
-            "민원 넣었는데 해결 안됨", "소비자원 조정 가능", "조정 절차", "조정 기간", "조정 서류",
+            "분쟁",
+            "다툼",
+            "쟁점",
+            "서로 주장",
+            "책임 공방",
+            "민원 넣었는데 해결 안됨",
+            "소비자원 조정 가능",
+            "조정 절차",
+            "조정 기간",
+            "조정 서류",
         )
         adjust_weak = ("조정 가능", "조정 대상", "조정 신청서", "조정")
 
         # B) 해결 (피해구제/조치)
         relief_strong = (
-            "배상", "손해배상", "보상", "위약금",
-            "하자", "불량", "파손", "누수", "고장",
-            "미배송", "배송지연", "오배송", "누락", "취소했는데 결제됨",
-            "계약해지", "청약철회", "철회", "해지", "취소 수수료",
-            "증빙", "영수증", "결제내역", "통화녹음", "사진", "진단서",
+            "배상",
+            "손해배상",
+            "보상",
+            "위약금",
+            "하자",
+            "불량",
+            "파손",
+            "누수",
+            "고장",
+            "미배송",
+            "배송지연",
+            "오배송",
+            "누락",
+            "취소했는데 결제됨",
+            "계약해지",
+            "청약철회",
+            "철회",
+            "해지",
+            "취소 수수료",
+            "증빙",
+            "영수증",
+            "결제내역",
+            "통화녹음",
+            "사진",
+            "진단서",
         )
         action_terms = (
-            "환불", "환급", "교환", "반품", "수리", "as", "취소", "해지", "철회",
+            "환불",
+            "환급",
+            "교환",
+            "반품",
+            "수리",
+            "as",
+            "취소",
+            "해지",
+            "철회",
             "청약철회",
         )
         relief_mid = (
-            "거부당함", "안해줌", "연락두절", "환불 거부", "거부",
+            "거부당함",
+            "안해줌",
+            "연락두절",
+            "환불 거부",
+            "거부",
         )
         relief_weak = ("어떻게 받아", "뭘 요구", "요구할 수 있어")
 
         # C) 상담 (안내/가능 여부)
         counsel_strong = (
-            "상담", "문의", "안내", "절차", "방법", "준비서류", "기간", "어디에 연락",
-            "가능한가요", "되나요", "해도 되나요", "권리", "의무", "주의사항", "유의점",
-            "제가 뭘 하면", "제가 무엇을 하면",
+            "상담",
+            "문의",
+            "안내",
+            "절차",
+            "방법",
+            "준비서류",
+            "기간",
+            "어디에 연락",
+            "가능한가요",
+            "되나요",
+            "해도 되나요",
+            "권리",
+            "의무",
+            "주의사항",
+            "유의점",
+            "제가 뭘 하면",
+            "제가 무엇을 하면",
         )
         counsel_request = (
-            "요청", "원해", "원합니다", "받고 싶", "받고싶", "해주", "해주세요",
-            "해 줘", "해줘", "가능", "될까", "할 수", "할수", "해주실",
+            "요청",
+            "원해",
+            "원합니다",
+            "받고 싶",
+            "받고싶",
+            "해주",
+            "해주세요",
+            "해 줘",
+            "해줘",
+            "가능",
+            "될까",
+            "할 수",
+            "할수",
+            "해주실",
         )
         counsel_mid = (
-            "환불 되나요", "불법인가요", "어떻게 해야", "기준", "규정",
+            "환불 되나요",
+            "불법인가요",
+            "어떻게 해야",
+            "기준",
+            "규정",
         )
         counsel_weak = ("정리해줘", "요약해줘", "선택지", "어떤 선택")
 
@@ -142,7 +228,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
         quotas = {k: int(raw[k]) for k in weights}
         remaining = top_k - sum(quotas.values())
         if remaining > 0:
-            frac = sorted(weights.keys(), key=lambda k: raw[k] - quotas[k], reverse=True)
+            frac = sorted(
+                weights.keys(), key=lambda k: raw[k] - quotas[k], reverse=True
+            )
             for k in frac:
                 if remaining <= 0:
                     break
@@ -156,7 +244,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
         # If guarantees exceed top_k, reduce lowest-score categories
         while sum(quotas.values()) > top_k:
-            lowest = sorted(quotas.keys(), key=lambda k: (scores.get(k, 0), quotas[k]))[0]
+            lowest = sorted(quotas.keys(), key=lambda k: (scores.get(k, 0), quotas[k]))[
+                0
+            ]
             if quotas[lowest] > 0:
                 quotas[lowest] -= 1
             else:
@@ -229,7 +319,6 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     dispute_quota = max(top_k - counsel_quota, 0)
 
         return counsel_quota, dispute_quota, ratio
-
 
     @staticmethod
     def _get_rank_mode_threshold() -> Tuple[str, float]:
@@ -382,7 +471,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
         confident: bool,
         winner_track: str,
         meta: Dict[str, Any],
-    ) -> Tuple[int, int, float, Dict[str, int], Optional[str], Optional[Dict[str, int]]]:
+    ) -> Tuple[
+        int, int, float, Dict[str, int], Optional[str], Optional[Dict[str, int]]
+    ]:
         counsel_quota, dispute_quota, ratio = self._track_quotas(
             top_k, confident, winner_track, scores, strong_hits
         )
@@ -540,7 +631,15 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
         relief_results: List[Dict],
         winner_track: str,
         search_fn,
-    ) -> Tuple[List[Dict], List[Dict], str, int, Tuple[float, float, float], Tuple[float, float, float], float]:
+    ) -> Tuple[
+        List[Dict],
+        List[Dict],
+        str,
+        int,
+        Tuple[float, float, float],
+        Tuple[float, float, float],
+        float,
+    ]:
         extra_counsel = 0
         best_counsel = self._best_rank_key(counsel_results)
         best_dispute = self._best_rank_key(adjust_results + relief_results)
@@ -652,7 +751,8 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         {
                             "key_type": key_type,
                             "key_value": key_value,
-                            "category": item.get("category") or metadata.get("category"),
+                            "category": item.get("category")
+                            or metadata.get("category"),
                             "source_url": item.get("source_url") or item.get("url"),
                         }
                     )
@@ -767,9 +867,13 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         remaining,
                     )
                     fill += chunk
-                    remaining = top_k - len(self._finalize_candidates(combined + fill, top_k))
+                    remaining = top_k - len(
+                        self._finalize_candidates(combined + fill, top_k)
+                    )
                 fill_dispute = len(fill)
-            combined = self._finalize_candidates(combined + fill, top_k, stage="track_fill")
+            combined = self._finalize_candidates(
+                combined + fill, top_k, stage="track_fill"
+            )
             after = len(combined)
             added = max(0, after - before)
             stage_reason = "no_candidates_added" if added == 0 else None
@@ -793,7 +897,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 remaining,
             )
             fill_relax = len(fill)
-            combined = self._finalize_candidates(combined + fill, top_k, stage="category_relax")
+            combined = self._finalize_candidates(
+                combined + fill, top_k, stage="category_relax"
+            )
             after = len(combined)
             added = max(0, after - before)
             stage_reason = "no_candidates_added" if added == 0 else None
@@ -829,7 +935,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 remaining,
             )
             fill_broaden = len(fill)
-            combined = self._finalize_candidates(combined + fill, top_k, stage="broaden")
+            combined = self._finalize_candidates(
+                combined + fill, top_k, stage="broaden"
+            )
             after = len(combined)
             added = max(0, after - before)
             stage_reason = "no_candidates_added" if added == 0 else None
@@ -840,10 +948,10 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
     async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
-        
+
         retriever = RDSRetriever(db_config, embed_url)
         retriever.connect()
-        
+
         try:
             filter_category = self._last_filter_category
             forced_combined = False
@@ -851,7 +959,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 forced_combined = True
                 filter_category = None
 
-            filter_dataset = getattr(self, "_last_filter_dataset", None) or self.default_dataset
+            filter_dataset = (
+                getattr(self, "_last_filter_dataset", None) or self.default_dataset
+            )
 
             def _search_rrf(
                 query_text: str,
@@ -907,19 +1017,26 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 getattr(self, "_last_query_analysis", {}) or {},
                 forced_combined,
             )
-            counsel_quota, dispute_quota, ratio, combined_quotas, _split_reason, _min_guard = (
-                self._decide_quotas(
-                    top_k,
-                    scores,
-                    strong_hits,
-                    track_meta["confident"],
-                    track_meta["winner_track"],
-                    track_meta,
-                )
+            (
+                counsel_quota,
+                dispute_quota,
+                ratio,
+                combined_quotas,
+                _split_reason,
+                _min_guard,
+            ) = self._decide_quotas(
+                top_k,
+                scores,
+                strong_hits,
+                track_meta["confident"],
+                track_meta["winner_track"],
+                track_meta,
             )
             winner_track = track_meta["winner_track"]
 
-            bonus_enabled = os.getenv("CASE_WINNER_TRACK_BONUS_ENABLED", "false").lower() == "true"
+            bonus_enabled = (
+                os.getenv("CASE_WINNER_TRACK_BONUS_ENABLED", "false").lower() == "true"
+            )
             if bonus_enabled:
                 try:
                     bonus_eps = float(os.getenv("CASE_WINNER_TRACK_BONUS_EPS", "1e-6"))
@@ -951,7 +1068,12 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 )
             )
 
-            combined, counsel_results, adjust_results, relief_results = await self._search_by_quotas(
+            (
+                combined,
+                counsel_results,
+                adjust_results,
+                relief_results,
+            ) = await self._search_by_quotas(
                 query,
                 filter_dataset,
                 counsel_quota,
@@ -1009,7 +1131,9 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     else:
                         in_winner = category in ("조정", "해결")
                     if in_winner and isinstance(item, dict):
-                        item["rrf_score"] = float(item.get("rrf_score") or 0.0) + bonus_eps
+                        item["rrf_score"] = (
+                            float(item.get("rrf_score") or 0.0) + bonus_eps
+                        )
             fill_policy = self._get_fill_policy()
             self.logger.info(
                 json.dumps(
@@ -1023,16 +1147,20 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     ensure_ascii=False,
                 )
             )
-            combined, fill_counsel, fill_dispute, fill_relax, fill_broaden = (
-                await self._fill_if_needed(
-                    query,
-                    filter_dataset,
-                    winner_track_after_gate,
-                    combined,
-                    top_k,
-                    _search_rrf,
-                    fill_policy=fill_policy,
-                )
+            (
+                combined,
+                fill_counsel,
+                fill_dispute,
+                fill_relax,
+                fill_broaden,
+            ) = await self._fill_if_needed(
+                query,
+                filter_dataset,
+                winner_track_after_gate,
+                combined,
+                top_k,
+                _search_rrf,
+                fill_policy=fill_policy,
             )
 
             final_counts = {
@@ -1053,9 +1181,15 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         "type": self.retrieval_source,
                         "keys": list(sample.keys()) if isinstance(sample, dict) else [],
                         "has_metadata": bool(sample_meta),
-                        "sample_category": sample.get("category") if isinstance(sample, dict) else None,
-                        "sample_dataset_type": sample.get("dataset_type") if isinstance(sample, dict) else None,
-                        "sample_source": sample.get("source_url") if isinstance(sample, dict) else None,
+                        "sample_category": sample.get("category")
+                        if isinstance(sample, dict)
+                        else None,
+                        "sample_dataset_type": sample.get("dataset_type")
+                        if isinstance(sample, dict)
+                        else None,
+                        "sample_source": sample.get("source_url")
+                        if isinstance(sample, dict)
+                        else None,
                         "sample_doc_id": sample_meta.get("doc_id"),
                     },
                     ensure_ascii=False,
@@ -1083,7 +1217,7 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
             return combined
         finally:
             retriever.close()
-    
+
     def _format_results(self, results: List[Dict]) -> List[Dict[str, Any]]:
         def _rank_norm(values: List[float]) -> List[float]:
             if not values:
@@ -1110,7 +1244,10 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
         def _scores(r_item: Any) -> Dict[str, float]:
             if isinstance(r_item, dict):
-                vec = r_item.get("vector_similarity", r_item.get("similarity", 0.0)) or 0.0
+                vec = (
+                    r_item.get("vector_similarity", r_item.get("similarity", 0.0))
+                    or 0.0
+                )
                 return {
                     "vec": float(vec),
                     "bm25": float(r_item.get("bm25_score") or 0.0),
@@ -1143,11 +1280,17 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 similarity = getattr(r, "similarity", 0)
                 chunk_id = r.chunk_id
                 category = getattr(r, "category", None) or metadata.get("category")
-                dataset_type = getattr(r, "dataset_type", None) or metadata.get("dataset_type")
+                dataset_type = getattr(r, "dataset_type", None) or metadata.get(
+                    "dataset_type"
+                )
 
-            doc_title = metadata.get("doc_title") or metadata.get("title") or source_file or chunk_id
+            doc_title = (
+                metadata.get("doc_title")
+                or metadata.get("title")
+                or source_file
+                or chunk_id
+            )
             doc_id = metadata.get("doc_id") or chunk_id
-            case_number = metadata.get("case_number")
             decision_date = metadata.get("decision_date")
 
             merged_metadata = dict(metadata)
@@ -1158,16 +1301,16 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 "source_year": r.get("source_year") if isinstance(r, dict) else None,
                 "rrf_score": r.get("rrf_score") if isinstance(r, dict) else None,
                 "bm25_score": r.get("bm25_score") if isinstance(r, dict) else None,
-                "vector_similarity": r.get("vector_similarity") if isinstance(r, dict) else None,
+                "vector_similarity": r.get("vector_similarity")
+                if isinstance(r, dict)
+                else None,
             }
             for key, value in extra_meta.items():
                 if value is not None and key not in merged_metadata:
                     merged_metadata[key] = value
 
             soft_score = (
-                0.6 * norm_vec[idx]
-                + 0.2 * norm_bm25[idx]
-                + 0.2 * norm_rrf[idx]
+                0.6 * norm_vec[idx] + 0.2 * norm_bm25[idx] + 0.2 * norm_rrf[idx]
             )
 
             formatted.append(
@@ -1186,27 +1329,35 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     "dataset_type": dataset_type,
                     "rrf_score": r.get("rrf_score") if isinstance(r, dict) else None,
                     "bm25_score": r.get("bm25_score") if isinstance(r, dict) else None,
-                    "vector_similarity": r.get("vector_similarity") if isinstance(r, dict) else None,
+                    "vector_similarity": r.get("vector_similarity")
+                    if isinstance(r, dict)
+                    else None,
                     "soft_score": soft_score,
                     "metadata": merged_metadata,
                 }
             )
         return formatted
-    
+
     def _build_sources(self, results: List[Dict]) -> List[Dict[str, Any]]:
         sources = []
         for i, r in enumerate(results):
             metadata = (r.get("metadata") or {}) if isinstance(r, dict) else {}
             dataset_type = r.get("dataset_type") if isinstance(r, dict) else None
-            source_type = dataset_type or metadata.get("dataset_type") or "case_combined"
+            source_type = (
+                dataset_type or metadata.get("dataset_type") or "case_combined"
+            )
             sources.append(
                 {
                     "type": source_type,
                     "index": i + 1,
                     "chunk_id": r.get("chunk_id") if isinstance(r, dict) else None,
                     "doc_id": metadata.get("doc_id") if isinstance(r, dict) else None,
-                    "doc_title": metadata.get("doc_title") if isinstance(r, dict) else None,
-                    "source_org": metadata.get("source_org") if isinstance(r, dict) else None,
+                    "doc_title": metadata.get("doc_title")
+                    if isinstance(r, dict)
+                    else None,
+                    "source_org": metadata.get("source_org")
+                    if isinstance(r, dict)
+                    else None,
                     "similarity": r.get("similarity", 0) if isinstance(r, dict) else 0,
                 }
             )
