@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """RDS retriever (direct SQL): dense, BM25, and hybrid RRF search."""
 
+import hashlib
+import json
 import logging
 import os
 import re
@@ -254,7 +256,7 @@ class RDSRetriever:
         result_limit: int = 10,
         rrf_k: int = 60,
     ) -> List[Dict]:
-        return self._search_hybrid_rrf_fn(
+        results = self._search_hybrid_rrf_fn(
             "search_hybrid_rrf_s2",
             query_text,
             filter_dataset,
@@ -264,6 +266,39 @@ class RDSRetriever:
             result_limit,
             rrf_k,
         )
+
+        if (
+            filter_dataset == "case"
+            and isinstance(filter_category, str)
+            and filter_category.strip()
+        ):
+            patched_count = 0
+            for doc in results:
+                if not isinstance(doc, dict):
+                    continue
+                current = doc.get("category")
+                if current not in (None, ""):
+                    continue
+                doc["category"] = filter_category
+                meta = doc.get("metadata") or {}
+                if meta.get("category") in (None, ""):
+                    meta["category"] = filter_category
+                    doc["metadata"] = meta
+                patched_count += 1
+            if patched_count > 0:
+                logger.info(
+                    json.dumps(
+                        {
+                            "event": "retriever_category_patch",
+                            "selected_fn": "s2",
+                            "filter_category": filter_category,
+                            "patched_count": patched_count,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        return results
 
     def search_hybrid_rrf_s2_v2(
         self,
@@ -300,7 +335,25 @@ class RDSRetriever:
             )
 
             results: List[Dict] = []
+            patched_count = 0
             for row in cur.fetchall():
+                # s2_v2 doc_id patch (metadata normalization)
+                metadata = row[11] if isinstance(row[11], dict) else {}
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                if metadata.get("doc_id") in (None, ""):
+                    doc_id = metadata.get("doc_id") or metadata.get("document_id")
+                    if not doc_id:
+                        doc_id = metadata.get("case_number") or metadata.get("case_no")
+                    if not doc_id:
+                        source_url = row[7]
+                        if source_url:
+                            doc_id = hashlib.sha1(source_url.encode("utf-8")).hexdigest()
+                    if not doc_id:
+                        doc_id = row[0]
+                    if doc_id:
+                        metadata["doc_id"] = doc_id
+                        patched_count += 1
                 results.append(
                     {
                         "chunk_id": row[0],
@@ -314,10 +367,21 @@ class RDSRetriever:
                         "source_file": row[8],
                         "printed_page": row[9],
                         "source_year": row[10],
-                        "metadata": row[11],
+                        "metadata": metadata,
                     }
                 )
 
+        if patched_count > 0:
+            logger.info(
+                json.dumps(
+                    {
+                        "event": "retriever_doc_id_patch",
+                        "selected_fn": "s2_v2",
+                        "patched_count": patched_count,
+                    },
+                    ensure_ascii=False,
+                )
+            )
         if results and logger.isEnabledFor(logging.DEBUG):
             logger.debug("hybrid_rrf_s2_v2: first_category=%s", results[0].get("category"))
 

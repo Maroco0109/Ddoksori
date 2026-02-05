@@ -117,6 +117,7 @@ class BaseRetrievalAgent(BaseAgent):
             )
             
         except Exception as e:
+            logger.exception(f"{self.agent_name} 검색 오류: {str(e)}")
             return self.report_to_supervisor(
                 status="failure",
                 result=None,

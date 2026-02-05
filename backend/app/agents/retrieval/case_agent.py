@@ -232,10 +232,63 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
 
 
     @staticmethod
+    def _get_rank_mode_threshold() -> Tuple[str, float]:
+        mode = os.getenv("CASE_RANK_MODE", "default").lower()
+        if mode == "stable":
+            return "stable", 0.01
+        if mode == "threshold":
+            try:
+                threshold = float(os.getenv("CASE_RANK_THRESHOLD", "0.01"))
+            except ValueError:
+                threshold = 0.01
+            return "threshold", threshold
+        return "default", 0.01
+
+    @staticmethod
+    def _get_fill_policy() -> Dict[str, Any]:
+        def _get_int(name: str, default: int) -> int:
+            value = os.getenv(name)
+            if value is None:
+                return default
+            try:
+                return int(value)
+            except ValueError:
+                return default
+
+        def _get_bool(name: str, default: bool) -> bool:
+            value = os.getenv(name)
+            if value is None:
+                return default
+            lowered = value.strip().lower()
+            if lowered in ("1", "true", "yes", "y", "on"):
+                return True
+            if lowered in ("0", "false", "no", "n", "off"):
+                return False
+            return default
+
+        max_stages = max(_get_int("CASE_FILL_MAX_STAGES", 3), 0)
+        enable_broaden = _get_bool("CASE_FILL_ENABLE_BROADEN", True)
+        max_db_calls = _get_int("CASE_FILL_MAX_DB_CALLS", 0)
+        if max_db_calls < 0:
+            max_db_calls = 0
+        return {
+            "max_stages": max_stages,
+            "enable_broaden": enable_broaden,
+            "max_db_calls": max_db_calls,
+        }
+
+    @staticmethod
     def _rank_key(item: Dict[str, Any]) -> Tuple[float, float, float]:
         rrf = float(item.get("rrf_score") or 0.0)
         vec = float(item.get("vector_similarity", item.get("similarity", 0.0)) or 0.0)
         bm25 = float(item.get("bm25_score") or 0.0)
+        mode, threshold = CaseRetrievalAgent._get_rank_mode_threshold()
+        if mode == "stable":
+            return (rrf, vec, bm25)
+        if mode == "threshold":
+            if rrf <= threshold:
+                return (vec, rrf, bm25)
+            return (rrf, vec, bm25)
         if rrf <= 0.01:
             return (vec, rrf, bm25)
         return (rrf, vec, bm25)
@@ -259,7 +312,531 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
         source_url = item.get("source_url") or item.get("url")
         chunk_id = item.get("chunk_id")
         return doc_id or case_number or source_url or chunk_id
-    
+
+    @staticmethod
+    def _dedup_key_with_type(item: Dict[str, Any]) -> Tuple[str, Any]:
+        metadata = item.get("metadata") or {}
+        doc_id = metadata.get("doc_id") or item.get("doc_id")
+        if doc_id:
+            return "doc_id", doc_id
+        case_number = metadata.get("case_number")
+        if case_number:
+            return "case_number", case_number
+        source_url = item.get("source_url") or item.get("url")
+        if source_url:
+            return "url", source_url
+        chunk_id = item.get("chunk_id")
+        return "chunk_id", chunk_id
+
+    @staticmethod
+    def _broaden_query(query: str, winner_track: str) -> str:
+        base = (query or "").strip()
+        if not base:
+            return base
+        suffix = ""
+        if winner_track == "상담":
+            suffix = " 상담 사례"
+        else:
+            suffix = " 분쟁조정 사례"
+        if suffix.strip() in base:
+            return base
+        return f"{base}{suffix}"
+
+    def _decide_tracks_and_scores(
+        self,
+        query: str,
+        query_analysis: Dict[str, Any],
+        forced_combined: bool,
+    ) -> Tuple[Dict[str, int], Dict[str, bool], Dict[str, Any]]:
+        scores, strong_hits = self._score_case_categories(query, query_analysis)
+        counsel_score = scores["상담"]
+        combined_score = scores["조정"] + scores["해결"]
+        score_gap = combined_score - counsel_score
+        denom = float(counsel_score + combined_score) + 1e-6
+        p_dispute = combined_score / denom
+        confidence = abs(p_dispute - 0.5) * 2
+        confident = confidence >= 0.8
+        if counsel_score >= combined_score:
+            winner_track = "상담"
+        else:
+            winner_track = "분쟁/구제"
+        if forced_combined:
+            confident = True
+            winner_track = "분쟁/구제"
+        meta = {
+            "counsel_score": counsel_score,
+            "combined_score": combined_score,
+            "score_gap": score_gap,
+            "p_dispute": p_dispute,
+            "confidence": confidence,
+            "confident": confident,
+            "winner_track": winner_track,
+        }
+        return scores, strong_hits, meta
+
+    def _decide_quotas(
+        self,
+        top_k: int,
+        scores: Dict[str, int],
+        strong_hits: Dict[str, bool],
+        confident: bool,
+        winner_track: str,
+        meta: Dict[str, Any],
+    ) -> Tuple[int, int, float, Dict[str, int], Optional[str], Optional[Dict[str, int]]]:
+        counsel_quota, dispute_quota, ratio = self._track_quotas(
+            top_k, confident, winner_track, scores, strong_hits
+        )
+
+        dispute_split_reason = None
+        min_split_guard = None
+        if dispute_quota > 0:
+            if scores["조정"] == 0 and scores["해결"] == 0:
+                combined_weights = {"조정": 1, "해결": 1}
+                dispute_split_reason = "score_zero"
+            else:
+                combined_weights = {
+                    "조정": max(scores["조정"], 1),
+                    "해결": max(scores["해결"], 1),
+                }
+                dispute_split_reason = "ratio_based"
+            combined_quotas = self._allocate_quotas(
+                dispute_quota,
+                combined_weights,
+                strong_hits,
+                scores,
+            )
+        else:
+            combined_quotas = {"조정": 0, "해결": 0}
+            dispute_split_reason = "no_dispute_quota"
+
+        guard_applied = {}
+        if dispute_quota > 0:
+            guard_value = min(3, dispute_quota)
+            for cat in ("조정", "해결"):
+                if strong_hits.get(cat) and combined_quotas.get(cat, 0) > 0:
+                    guard_applied[cat] = guard_value
+            if guard_applied:
+                min_split_guard = guard_applied
+                dispute_split_reason = "min_guard_applied"
+
+        if dispute_quota > 0 and (
+            combined_quotas.get("조정", 0) == 0 or combined_quotas.get("해결", 0) == 0
+        ):
+            zero_reason = "ratio_rounding"
+            if combined_quotas.get("조정", 0) == 0:
+                if scores["조정"] == 0:
+                    zero_reason = "adjust_score_zero"
+                elif dispute_quota <= 1:
+                    zero_reason = "quota_too_small"
+            if combined_quotas.get("해결", 0) == 0:
+                if scores["해결"] == 0:
+                    zero_reason = "relief_score_zero"
+                elif dispute_quota <= 1:
+                    zero_reason = "quota_too_small"
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_dispute_split",
+                        "dispute_quota": dispute_quota,
+                        "scores": {"조정": scores["조정"], "해결": scores["해결"]},
+                        "split": {
+                            "조정": combined_quotas.get("조정", 0),
+                            "해결": combined_quotas.get("해결", 0),
+                        },
+                        "reason": zero_reason,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+        self.logger.info(
+            json.dumps(
+                {
+                    "event": "case_quota_policy",
+                    "K": top_k,
+                    "confident": confident,
+                    "winner_track": winner_track,
+                    "ratio": ratio,
+                    "counsel_score": meta["counsel_score"],
+                    "combined_score": meta["combined_score"],
+                    "score_gap": meta["score_gap"],
+                    "p_dispute": meta["p_dispute"],
+                    "confidence": meta["confidence"],
+                    "category_scores": {
+                        "상담": float(scores["상담"]),
+                        "조정": float(scores["조정"]),
+                        "해결": float(scores["해결"]),
+                    },
+                    "dispute_split_reason": dispute_split_reason,
+                    "min_split_guard": min_split_guard,
+                    "quotas": {
+                        "counsel": counsel_quota,
+                        "dispute": dispute_quota,
+                    },
+                    "dispute_split": combined_quotas,
+                },
+                ensure_ascii=False,
+            )
+        )
+
+        return (
+            counsel_quota,
+            dispute_quota,
+            ratio,
+            combined_quotas,
+            dispute_split_reason,
+            min_split_guard,
+        )
+
+    async def _search_by_quotas(
+        self,
+        query: str,
+        filter_dataset: Optional[str],
+        counsel_quota: int,
+        combined_quotas: Dict[str, int],
+        search_fn,
+    ) -> Tuple[List[Dict], List[Dict], List[Dict], List[Dict]]:
+        combined: List[Dict] = []
+        counsel_results: List[Dict] = []
+        adjust_results: List[Dict] = []
+        relief_results: List[Dict] = []
+
+        if counsel_quota > 0:
+            counsel_results = await asyncio.to_thread(
+                search_fn,
+                query,
+                filter_dataset,
+                "상담",
+                counsel_quota,
+            )
+            combined += counsel_results
+
+        for cat in ("조정", "해결"):
+            quota = combined_quotas.get(cat, 0)
+            if quota <= 0:
+                continue
+            results = await asyncio.to_thread(
+                search_fn,
+                query,
+                filter_dataset,
+                cat,
+                quota,
+            )
+            if cat == "조정":
+                adjust_results = results
+            else:
+                relief_results = results
+            combined += results
+
+        return combined, counsel_results, adjust_results, relief_results
+
+    async def _apply_quality_gate(
+        self,
+        query: str,
+        filter_dataset: Optional[str],
+        combined: List[Dict],
+        counsel_results: List[Dict],
+        adjust_results: List[Dict],
+        relief_results: List[Dict],
+        winner_track: str,
+        search_fn,
+    ) -> Tuple[List[Dict], List[Dict], str, int, Tuple[float, float, float], Tuple[float, float, float], float]:
+        extra_counsel = 0
+        best_counsel = self._best_rank_key(counsel_results)
+        best_dispute = self._best_rank_key(adjust_results + relief_results)
+        delta = best_counsel[0] - best_dispute[0]
+        winner_track_after_gate = winner_track
+        if winner_track == "분쟁/구제":
+            if delta >= 0.05:
+                extra_limit = 2 if delta >= 0.15 else 1
+                extra = await asyncio.to_thread(
+                    search_fn,
+                    query,
+                    filter_dataset,
+                    "상담",
+                    extra_limit,
+                )
+                extra_counsel = len(extra)
+                if extra:
+                    counsel_results += extra
+                    combined += extra
+            if best_counsel[0] >= best_dispute[0] + 0.05:
+                winner_track_after_gate = "상담"
+            elif best_dispute[0] >= best_counsel[0] + 0.05:
+                winner_track_after_gate = "분쟁/구제"
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_quality_gate",
+                        "winner_track": winner_track,
+                        "winner_track_after_gate": winner_track_after_gate,
+                        "best_counsel": best_counsel,
+                        "best_dispute": best_dispute,
+                        "delta": delta,
+                        "extra_counsel": extra_counsel,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        return (
+            combined,
+            counsel_results,
+            winner_track_after_gate,
+            extra_counsel,
+            best_counsel,
+            best_dispute,
+            delta,
+        )
+
+    def _finalize_candidates(
+        self,
+        candidates: List[Dict],
+        limit: int,
+        stage: Optional[str] = None,
+    ) -> List[Dict]:
+        if not candidates:
+            if stage:
+                self.logger.info(
+                    json.dumps(
+                        {
+                            "event": "case_dedup_state",
+                            "stage": stage,
+                            "raw": 0,
+                            "deduped": 0,
+                            "removed": 0,
+                            "group_max": 0,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            return []
+        sorted_items = sorted(candidates, key=self._rank_key, reverse=True)
+        seen = set()
+        deduped = []
+        group_counts: Dict[Any, int] = {}
+        removed_items: List[Dict] = []
+        for item in sorted_items:
+            key = self._dedup_key(item)
+            group_counts[key] = group_counts.get(key, 0) + 1
+            if key in seen:
+                removed_items.append(item)
+                continue
+            seen.add(key)
+            deduped.append(item)
+            if len(deduped) >= limit:
+                break
+        if stage:
+            removed = len(sorted_items) - len(deduped)
+            group_max = max(group_counts.values()) if group_counts else 0
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_dedup_state",
+                        "stage": stage,
+                        "raw": len(sorted_items),
+                        "deduped": len(deduped),
+                        "removed": removed,
+                        "group_max": group_max,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            if removed_items:
+                samples = []
+                for item in removed_items[:3]:
+                    if not isinstance(item, dict):
+                        continue
+                    key_type, key_value = self._dedup_key_with_type(item)
+                    metadata = item.get("metadata") or {}
+                    samples.append(
+                        {
+                            "key_type": key_type,
+                            "key_value": key_value,
+                            "category": item.get("category") or metadata.get("category"),
+                            "source_url": item.get("source_url") or item.get("url"),
+                        }
+                    )
+                if samples:
+                    self.logger.info(
+                        json.dumps(
+                            {
+                                "event": "case_dedup_removed_samples",
+                                "stage": stage,
+                                "samples": samples,
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+        return deduped
+
+    async def _fill_if_needed(
+        self,
+        query: str,
+        filter_dataset: Optional[str],
+        winner_track_after_gate: str,
+        combined: List[Dict],
+        top_k: int,
+        search_fn,
+        fill_policy: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict], int, int, int, int]:
+        policy = fill_policy or self._get_fill_policy()
+        max_stages = int(policy.get("max_stages", 3))
+        enable_broaden = bool(policy.get("enable_broaden", True))
+        max_db_calls = int(policy.get("max_db_calls", 0))
+        if max_stages < 0:
+            max_stages = 0
+        if max_db_calls < 0:
+            max_db_calls = 0
+
+        combined = self._finalize_candidates(combined, top_k, stage="initial")
+
+        fill_counsel = 0
+        fill_dispute = 0
+        fill_relax = 0
+        fill_broaden = 0
+        db_calls_used = 0
+
+        def _log_stage(
+            stage: str,
+            stage_index: int,
+            before: int,
+            after: int,
+            added: int,
+            skipped: bool,
+            skipped_reason: Optional[str],
+        ) -> None:
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_fill_stage",
+                        "stage": stage,
+                        "stage_index": stage_index,
+                        "before": before,
+                        "after": after,
+                        "added": added,
+                        "still_missing": max(0, top_k - after),
+                        "db_calls_used": db_calls_used,
+                        "skipped": skipped,
+                        "skipped_reason": skipped_reason,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+        def _skip_reason(stage: str, stage_index: int, before: int) -> Optional[str]:
+            if before >= top_k:
+                return "not_needed"
+            if stage_index >= max_stages:
+                return "max_stages_reached"
+            if max_db_calls > 0 and db_calls_used >= max_db_calls:
+                return "db_call_budget_exhausted"
+            if stage == "broaden" and not enable_broaden:
+                return "broaden_disabled"
+            return None
+
+        # Stage 0: track_fill
+        stage = "track_fill"
+        stage_index = 0
+        before = len(combined)
+        skipped_reason = _skip_reason(stage, stage_index, before)
+        if skipped_reason:
+            _log_stage(stage, stage_index, before, before, 0, True, skipped_reason)
+        else:
+            remaining = top_k - len(combined)
+            if winner_track_after_gate == "상담":
+                db_calls_used += 1
+                fill = await asyncio.to_thread(
+                    search_fn,
+                    query,
+                    filter_dataset,
+                    "상담",
+                    remaining,
+                )
+                fill_counsel = len(fill)
+            else:
+                fill = []
+                for cat in ("조정", "해결"):
+                    if remaining <= 0:
+                        break
+                    db_calls_used += 1
+                    chunk = await asyncio.to_thread(
+                        search_fn,
+                        query,
+                        filter_dataset,
+                        cat,
+                        remaining,
+                    )
+                    fill += chunk
+                    remaining = top_k - len(self._finalize_candidates(combined + fill, top_k))
+                fill_dispute = len(fill)
+            combined = self._finalize_candidates(combined + fill, top_k, stage="track_fill")
+            after = len(combined)
+            added = max(0, after - before)
+            stage_reason = "no_candidates_added" if added == 0 else None
+            _log_stage(stage, stage_index, before, after, added, False, stage_reason)
+
+        # Stage 1: category_relax
+        stage = "category_relax"
+        stage_index = 1
+        before = len(combined)
+        skipped_reason = _skip_reason(stage, stage_index, before)
+        if skipped_reason:
+            _log_stage(stage, stage_index, before, before, 0, True, skipped_reason)
+        else:
+            remaining = top_k - len(combined)
+            db_calls_used += 1
+            fill = await asyncio.to_thread(
+                search_fn,
+                query,
+                filter_dataset,
+                None,
+                remaining,
+            )
+            fill_relax = len(fill)
+            combined = self._finalize_candidates(combined + fill, top_k, stage="category_relax")
+            after = len(combined)
+            added = max(0, after - before)
+            stage_reason = "no_candidates_added" if added == 0 else None
+            _log_stage(stage, stage_index, before, after, added, False, stage_reason)
+
+        # Stage 2: broaden
+        stage = "broaden"
+        stage_index = 2
+        before = len(combined)
+        skipped_reason = _skip_reason(stage, stage_index, before)
+        if skipped_reason:
+            _log_stage(stage, stage_index, before, before, 0, True, skipped_reason)
+        else:
+            broadened = self._broaden_query(query, winner_track_after_gate)
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_broaden_query",
+                        "winner_track": winner_track_after_gate,
+                        "original_query": query,
+                        "broadened_query": broadened,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            remaining = top_k - len(combined)
+            db_calls_used += 1
+            fill = await asyncio.to_thread(
+                search_fn,
+                broadened,
+                filter_dataset,
+                None,
+                remaining,
+            )
+            fill_broaden = len(fill)
+            combined = self._finalize_candidates(combined + fill, top_k, stage="broaden")
+            after = len(combined)
+            added = max(0, after - before)
+            stage_reason = "no_candidates_added" if added == 0 else None
+            _log_stage(stage, stage_index, before, after, added, False, stage_reason)
+
+        return combined, fill_counsel, fill_dispute, fill_relax, fill_broaden
+
     async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
         db_config = _get_db_config()
         embed_url = _get_embed_api_url()
@@ -325,119 +902,22 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 )
                 return results
 
-            scores, strong_hits = self._score_case_categories(
-                query, getattr(self, "_last_query_analysis", {}) or {}
+            scores, strong_hits, track_meta = self._decide_tracks_and_scores(
+                query,
+                getattr(self, "_last_query_analysis", {}) or {},
+                forced_combined,
             )
-            counsel_score = scores["상담"]
-            combined_score = scores["조정"] + scores["해결"]
-            score_gap = combined_score - counsel_score
-            denom = float(counsel_score + combined_score) + 1e-6
-            p_dispute = combined_score / denom
-            confidence = abs(p_dispute - 0.5) * 2
-            confident = confidence >= 0.8
-            if counsel_score >= combined_score:
-                winner_track = "상담"
-            else:
-                winner_track = "분쟁/구제"
-
-            if forced_combined:
-                confident = True
-                winner_track = "분쟁/구제"
-            counsel_quota, dispute_quota, ratio = self._track_quotas(
-                top_k, confident, winner_track, scores, strong_hits
-            )
-
-            dispute_split_reason = None
-            min_split_guard = None
-            if dispute_quota > 0:
-                if scores["조정"] == 0 and scores["해결"] == 0:
-                    combined_weights = {"조정": 1, "해결": 1}
-                    dispute_split_reason = "score_zero"
-                else:
-                    combined_weights = {
-                        "조정": max(scores["조정"], 1),
-                        "해결": max(scores["해결"], 1),
-                    }
-                    dispute_split_reason = "ratio_based"
-                combined_quotas = self._allocate_quotas(
-                    dispute_quota,
-                    combined_weights,
-                    strong_hits,
+            counsel_quota, dispute_quota, ratio, combined_quotas, _split_reason, _min_guard = (
+                self._decide_quotas(
+                    top_k,
                     scores,
-                )
-            else:
-                combined_quotas = {"조정": 0, "해결": 0}
-                dispute_split_reason = "no_dispute_quota"
-
-            guard_applied = {}
-            if dispute_quota > 0:
-                guard_value = min(3, dispute_quota)
-                for cat in ("조정", "해결"):
-                    if strong_hits.get(cat) and combined_quotas.get(cat, 0) > 0:
-                        guard_applied[cat] = guard_value
-                if guard_applied:
-                    min_split_guard = guard_applied
-                    dispute_split_reason = "min_guard_applied"
-
-            if dispute_quota > 0 and (
-                combined_quotas.get("조정", 0) == 0 or combined_quotas.get("해결", 0) == 0
-            ):
-                zero_reason = "ratio_rounding"
-                if combined_quotas.get("조정", 0) == 0:
-                    if scores["조정"] == 0:
-                        zero_reason = "adjust_score_zero"
-                    elif dispute_quota <= 1:
-                        zero_reason = "quota_too_small"
-                if combined_quotas.get("해결", 0) == 0:
-                    if scores["해결"] == 0:
-                        zero_reason = "relief_score_zero"
-                    elif dispute_quota <= 1:
-                        zero_reason = "quota_too_small"
-                self.logger.info(
-                    json.dumps(
-                        {
-                            "event": "case_dispute_split",
-                            "dispute_quota": dispute_quota,
-                            "scores": {"조정": scores["조정"], "해결": scores["해결"]},
-                            "split": {
-                                "조정": combined_quotas.get("조정", 0),
-                                "해결": combined_quotas.get("해결", 0),
-                            },
-                            "reason": zero_reason,
-                        },
-                        ensure_ascii=False,
-                    )
-                )
-
-            self.logger.info(
-                json.dumps(
-                    {
-                        "event": "case_quota_policy",
-                        "K": top_k,
-                        "confident": confident,
-                        "winner_track": winner_track,
-                        "ratio": ratio,
-                        "counsel_score": counsel_score,
-                        "combined_score": combined_score,
-                        "score_gap": score_gap,
-                        "p_dispute": p_dispute,
-                        "confidence": confidence,
-                        "category_scores": {
-                            "상담": float(scores["상담"]),
-                            "조정": float(scores["조정"]),
-                            "해결": float(scores["해결"]),
-                        },
-                        "dispute_split_reason": dispute_split_reason,
-                        "min_split_guard": min_split_guard,
-                        "quotas": {
-                            "counsel": counsel_quota,
-                            "dispute": dispute_quota,
-                        },
-                        "dispute_split": combined_quotas,
-                    },
-                    ensure_ascii=False,
+                    strong_hits,
+                    track_meta["confident"],
+                    track_meta["winner_track"],
+                    track_meta,
                 )
             )
+            winner_track = track_meta["winner_track"]
 
             bonus_enabled = os.getenv("CASE_WINNER_TRACK_BONUS_ENABLED", "false").lower() == "true"
             if bonus_enabled:
@@ -459,76 +939,43 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                 )
             )
 
-            combined: List[Dict] = []
-            counsel_results: List[Dict] = []
-            adjust_results: List[Dict] = []
-            relief_results: List[Dict] = []
-
-            if counsel_quota > 0:
-                counsel_results = await asyncio.to_thread(
-                    _search_rrf,
-                    query,
-                    filter_dataset,
-                    "상담",
-                    counsel_quota,
+            rank_mode, rank_threshold = self._get_rank_mode_threshold()
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_rank_key_mode",
+                        "mode": rank_mode,
+                        "threshold": rank_threshold,
+                    },
+                    ensure_ascii=False,
                 )
-                combined += counsel_results
+            )
 
-            for cat in ("조정", "해결"):
-                quota = combined_quotas.get(cat, 0)
-                if quota <= 0:
-                    continue
-                results = await asyncio.to_thread(
-                    _search_rrf,
-                    query,
-                    filter_dataset,
-                    cat,
-                    quota,
-                )
-                if cat == "조정":
-                    adjust_results = results
-                else:
-                    relief_results = results
-                combined += results
-
-            # Quality gate: if winner track top1 is weak, add counsel results.
-            extra_counsel = 0
-            best_counsel = self._best_rank_key(counsel_results)
-            best_dispute = self._best_rank_key(adjust_results + relief_results)
-            delta = best_counsel[0] - best_dispute[0]
-            winner_track_after_gate = winner_track
-            if winner_track == "분쟁/구제":
-                if delta >= 0.05:
-                    extra_limit = 2 if delta >= 0.15 else 1
-                    extra = await asyncio.to_thread(
-                        _search_rrf,
-                        query,
-                        filter_dataset,
-                        "상담",
-                        extra_limit,
-                    )
-                    extra_counsel = len(extra)
-                    if extra:
-                        counsel_results += extra
-                        combined += extra
-                if best_counsel[0] >= best_dispute[0] + 0.05:
-                    winner_track_after_gate = "상담"
-                elif best_dispute[0] >= best_counsel[0] + 0.05:
-                    winner_track_after_gate = "분쟁/구제"
-                self.logger.info(
-                    json.dumps(
-                        {
-                            "event": "case_quality_gate",
-                            "winner_track": winner_track,
-                            "winner_track_after_gate": winner_track_after_gate,
-                            "best_counsel": best_counsel,
-                            "best_dispute": best_dispute,
-                            "delta": delta,
-                            "extra_counsel": extra_counsel,
-                        },
-                        ensure_ascii=False,
-                    )
-                )
+            combined, counsel_results, adjust_results, relief_results = await self._search_by_quotas(
+                query,
+                filter_dataset,
+                counsel_quota,
+                combined_quotas,
+                _search_rrf,
+            )
+            (
+                combined,
+                counsel_results,
+                winner_track_after_gate,
+                extra_counsel,
+                best_counsel,
+                best_dispute,
+                delta,
+            ) = await self._apply_quality_gate(
+                query,
+                filter_dataset,
+                combined,
+                counsel_results,
+                adjust_results,
+                relief_results,
+                winner_track,
+                _search_rrf,
+            )
 
             self.logger.info(
                 json.dumps(
@@ -551,7 +998,7 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     },
                     ensure_ascii=False,
                 )
-                )
+            )
 
             if bonus_enabled and bonus_eps:
                 for item in combined:
@@ -563,117 +1010,30 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                         in_winner = category in ("조정", "해결")
                     if in_winner and isinstance(item, dict):
                         item["rrf_score"] = float(item.get("rrf_score") or 0.0) + bonus_eps
-
-            def _finalize_candidates(
-                candidates: List[Dict],
-                limit: int,
-                stage: Optional[str] = None,
-            ) -> List[Dict]:
-                if not candidates:
-                    if stage:
-                        self.logger.info(
-                            json.dumps(
-                                {
-                                    "event": "case_dedup_state",
-                                    "stage": stage,
-                                    "raw": 0,
-                                    "deduped": 0,
-                                    "removed": 0,
-                                    "group_max": 0,
-                                },
-                                ensure_ascii=False,
-                            )
-                        )
-                    return []
-                sorted_items = sorted(candidates, key=self._rank_key, reverse=True)
-                seen = set()
-                deduped = []
-                group_counts: Dict[Any, int] = {}
-                for item in sorted_items:
-                    key = self._dedup_key(item)
-                    group_counts[key] = group_counts.get(key, 0) + 1
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    deduped.append(item)
-                    if len(deduped) >= limit:
-                        break
-                if stage:
-                    removed = len(sorted_items) - len(deduped)
-                    group_max = max(group_counts.values()) if group_counts else 0
-                    self.logger.info(
-                        json.dumps(
-                            {
-                                "event": "case_dedup_state",
-                                "stage": stage,
-                                "raw": len(sorted_items),
-                                "deduped": len(deduped),
-                                "removed": removed,
-                                "group_max": group_max,
-                            },
-                            ensure_ascii=False,
-                        )
-                    )
-                return deduped
-
-            combined = _finalize_candidates(combined, top_k, stage="initial")
-            remaining = top_k - len(combined)
-
-            fill_counsel = 0
-            fill_dispute = 0
-            fill_relax = 0
-            fill_broaden = 0
-            if remaining > 0:
-                if winner_track_after_gate == "상담":
-                    fill = await asyncio.to_thread(
-                        _search_rrf,
-                        query,
-                        filter_dataset,
-                        "상담",
-                        remaining,
-                    )
-                    fill_counsel = len(fill)
-                else:
-                    fill = []
-                    for cat in ("조정", "해결"):
-                        if remaining <= 0:
-                            break
-                        chunk = await asyncio.to_thread(
-                            _search_rrf,
-                            query,
-                            filter_dataset,
-                            cat,
-                            remaining,
-                        )
-                        fill += chunk
-                        remaining = top_k - len(_finalize_candidates(combined + fill, top_k))
-                    fill_dispute = len(fill)
-                combined = _finalize_candidates(combined + fill, top_k, stage="track_fill")
-
-            remaining = top_k - len(combined)
-            if remaining > 0:
-                fill = await asyncio.to_thread(
-                    _search_rrf,
+            fill_policy = self._get_fill_policy()
+            self.logger.info(
+                json.dumps(
+                    {
+                        "event": "case_fill_policy",
+                        "max_stages": fill_policy.get("max_stages", 3),
+                        "enable_broaden": fill_policy.get("enable_broaden", True),
+                        "max_db_calls": fill_policy.get("max_db_calls", 0),
+                        "top_k": top_k,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            combined, fill_counsel, fill_dispute, fill_relax, fill_broaden = (
+                await self._fill_if_needed(
                     query,
                     filter_dataset,
-                    None,
-                    remaining,
-                )
-                fill_relax = len(fill)
-                combined = _finalize_candidates(combined + fill, top_k, stage="category_relax")
-                remaining = top_k - len(combined)
-
-            if remaining > 0:
-                broadened = self._broaden_query(query, winner_track_after_gate)
-                fill = await asyncio.to_thread(
+                    winner_track_after_gate,
+                    combined,
+                    top_k,
                     _search_rrf,
-                    broadened,
-                    filter_dataset,
-                    None,
-                    remaining,
+                    fill_policy=fill_policy,
                 )
-                fill_broaden = len(fill)
-                combined = _finalize_candidates(combined + fill, top_k, stage="broaden")
+            )
 
             final_counts = {
                 "상담": len(counsel_results) + fill_counsel,
