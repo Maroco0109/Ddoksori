@@ -179,6 +179,13 @@ def query_analysis_node(state: ChatState) -> Dict:
 
     logger.info(f"[QueryAnalysis] mode={mode}, query_type={query_type}")
 
+    # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
+    from .extractors import detect_dispute_reason
+
+    dispute_reason = detect_dispute_reason(normalized_query)
+    if dispute_reason != "unknown":
+        logger.info(f"[QueryAnalysis] dispute_reason={dispute_reason}")
+
     # v1 호환 결과 구조
     analysis_result: QueryAnalysisResult = {
         "query_type": query_type,
@@ -203,6 +210,8 @@ def query_analysis_node(state: ChatState) -> Dict:
         ),
         # === Adaptive RAG: 쿼리 복잡도 ===
         "query_complexity": query_complexity.value,
+        # === Dispute Reason: 단순변심 vs 하자 ===
+        "dispute_reason": dispute_reason,
     }
 
     # === PR-6: L2 캐시 저장 ===
@@ -441,6 +450,13 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     mode = classify_mode(query_type, needs_clarification, user_query)
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
+    # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
+    from .extractors import detect_dispute_reason
+
+    dispute_reason = detect_dispute_reason(normalized_query)
+    if dispute_reason != "unknown":
+        logger.info(f"[QueryAnalysis v2] dispute_reason={dispute_reason}")
+
     phase_result = {}
 
     logger.info(
@@ -463,6 +479,8 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
             "rewritten_query": expanded_queries[0] if expanded_queries else user_query,
             "search_queries": expanded_queries,
             "query_complexity": query_complexity.value,
+            # === Dispute Reason: 단순변심 vs 하자 ===
+            "dispute_reason": dispute_reason,
             # 온보딩 컨텍스트 (enriched)
             "onboarding_context": {
                 "purchase_item": enriched_onboarding.get("purchase_item"),
