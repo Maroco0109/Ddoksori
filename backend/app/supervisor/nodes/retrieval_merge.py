@@ -203,31 +203,8 @@ def _merge_to_retrieval_result(
         section_key = source_to_section.get(source)
 
         if section_key and result.get("documents"):
-            # Strict filtering: 유사도 점수가 임계값 이상인 문서만 포함
-            threshold = get_config().agent.get_similarity_threshold()
-            valid_docs = []
-
-            for doc in result["documents"]:
-                sim = doc.get("similarity", 0.0)
-                # DEBUG LOGGING
-                logger.info(
-                    f"[RetrievalMerge] Checking doc '{doc.get('doc_title', 'NoTitle')}' (sim={sim:.4f}) vs threshold={threshold}"
-                )
-
-                if sim >= threshold:
-                    valid_docs.append(doc)
-                else:
-                    logger.info(
-                        f"[RetrievalMerge] Dropped low similarity doc: {sim:.4f} < {threshold} ({source})"
-                    )
-
-            if valid_docs:
-                merged[section_key].extend(valid_docs)
-            else:
-                if result["documents"]:
-                    logger.info(
-                        f"[RetrievalMerge] All {len(result['documents'])} docs from {source} filtered (threshold={threshold})"
-                    )
+            # 해당 섹션에 문서 추가
+            merged[section_key].extend(result["documents"])
 
         # 에러 로깅
         if result.get("error"):

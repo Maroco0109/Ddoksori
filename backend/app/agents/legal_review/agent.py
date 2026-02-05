@@ -60,29 +60,6 @@ PROHIBITED_PATTERNS = [
     (r"법적\s*조언을\s*드리자면", "법적 조언을 드리자면"),
 ]
 
-# 엔진에서 제거하지만, 변형된 형태로 남아있는 헤더를 잡기 위한 금지 헤더 리스트
-FORBIDDEN_HEADERS = [
-    "[공감]",
-    "[가이드]",
-    "[출처]",
-    "[돌파 논리]",
-    "[사건 요약]",
-    "[상황 정리]",
-    "[법적 근거]",
-    "[근거 안내]",
-    "[절차 안내]",
-    "[법률]",
-    "[해결기준]",
-    "[유사사례]",
-    "[상황 공감]",
-    "[위로와 전환]",
-    "[사건 요약 정리]",
-    "[논리적 근거 안내]",
-    "[행정 절차 안내]",
-    "[전문 기관 연결]",
-    "[근거 및 이유 안내]",
-]
-
 # 출처 표시 패턴
 # 답변에 근거 자료가 인용되었는지 확인하는 패턴입니다.
 CITATION_PATTERNS = [
@@ -292,34 +269,6 @@ def _check_prohibited_expressions(answer: str) -> List[Tuple[str, str]]:
     return violations
 
 
-def _check_format_violations(answer: str) -> List[Tuple[str, str]]:
-    """
-    기계적인 형식 위반 사항을 체크합니다.
-    - 마크다운 볼드체(**) 사용
-    - 금지된 구조적 헤더 사용
-    - 치환되지 않은 템플릿 변수 사용
-    """
-    violations = []
-
-    # 1. 마크다운 볼드체(**) 체크
-    if "**" in answer:
-        violations.append(("형식 위반: 마크다운 볼드체(**) 포함", "**"))
-
-    # 2. 금지된 헤더 체크
-    for header in FORBIDDEN_HEADERS:
-        if header in answer:
-            violations.append((f"형식 위반: 금지된 헤더 '{header}' 포함", header))
-
-    # 3. 템플릿 변수 체크 ({...})
-    template_vars = re.findall(r"\{.*?\}", answer)
-    if template_vars:
-        # 3개까지만 보고
-        for var in template_vars[:3]:
-            violations.append(("형식 위반: 치환되지 않은 변수 포함", var))
-
-    return violations
-
-
 def _check_citation_presence(answer: str, has_sources: bool) -> bool:
     """
     답변에 출처/근거가 명시되어 있는지 확인합니다.
@@ -435,10 +384,6 @@ def review_node(state: ChatState) -> Dict:
 
     # 1. 금지 표현 검사
     prohibited_violations = _check_prohibited_expressions(draft_answer)
-
-    # 1.1 형식 위반 검사 (추가)
-    format_violations = _check_format_violations(draft_answer)
-    prohibited_violations.extend(format_violations)
 
     # 2. 출처 표시 검사
     has_sources = len(sources) > 0
@@ -705,10 +650,6 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
 
     # 1. 금지 표현 검사
     prohibited_violations = _check_prohibited_expressions(draft_answer)
-
-    # 1.1 형식 위반 검사 (추가)
-    format_violations = _check_format_violations(draft_answer)
-    prohibited_violations.extend(format_violations)
 
     # 2. 출처 표시 검사
     has_sources = len(sources) > 0
