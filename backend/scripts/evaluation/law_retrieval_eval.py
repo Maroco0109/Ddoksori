@@ -11,15 +11,31 @@ from typing import Dict, Iterable, List, Optional
 
 from dotenv import load_dotenv
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND_DIR = REPO_ROOT / "backend"
-ENV_PATH = REPO_ROOT / ".env"
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.agents.retrieval.tools.rds_retriever import hybrid_rrf_search  # noqa: E402
+# Load hybrid_rrf_search directly from file to avoid package import issues.
+from importlib.util import module_from_spec, spec_from_file_location  # noqa: E402
+
+_module_path = (
+    BACKEND_DIR
+    / "app"
+    / "agents"
+    / "retrieval"
+    / "cli_search_similar_chunks_direct_sql.py"
+)
+_spec = spec_from_file_location(
+    "cli_search_similar_chunks_direct_sql", str(_module_path)
+)
+if _spec is None or _spec.loader is None:
+    raise RuntimeError("Failed to load cli_search_similar_chunks_direct_sql.py")
+_module = module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+hybrid_rrf_search = _module.hybrid_rrf_search
 
 
 def _iter_jsonl(path: Path, start_line: int = 1, count: int = 0) -> Iterable[Dict]:
@@ -356,24 +372,24 @@ def main() -> None:
 
     if output_fh:
         summary = {
-            f"ExactHit@{args.top_k}": (
-                (total_exact_hit_any / total_queries) if total_queries else 0.0
-            ),
-            f"ArticleHit@{args.top_k}": (
-                (total_article_hit_any / total_queries) if total_queries else 0.0
-            ),
-            f"LawHit@{args.top_k}": (
-                (total_law_hit_any / total_queries) if total_queries else 0.0
-            ),
-            f"exact_recall@{args.top_k}": (
-                (total_exact_recall / total_queries) if total_queries else 0.0
-            ),
-            f"article_recall@{args.top_k}": (
-                (total_article_recall / total_queries) if total_queries else 0.0
-            ),
-            f"law_recall@{args.top_k}": (
-                (total_law_recall / total_queries) if total_queries else 0.0
-            ),
+            f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"LawHit@{args.top_k}": (total_law_hit_any / total_queries)
+            if total_queries
+            else 0.0,
+            f"exact_recall@{args.top_k}": (total_exact_recall / total_queries)
+            if total_queries
+            else 0.0,
+            f"article_recall@{args.top_k}": (total_article_recall / total_queries)
+            if total_queries
+            else 0.0,
+            f"law_recall@{args.top_k}": (total_law_recall / total_queries)
+            if total_queries
+            else 0.0,
             "total_queries": total_queries,
         }
         meta_row = {
@@ -394,24 +410,24 @@ def main() -> None:
             meta_fh.write(existing)
 
     summary = {
-        f"ExactHit@{args.top_k}": (
-            (total_exact_hit_any / total_queries) if total_queries else 0.0
-        ),
-        f"ArticleHit@{args.top_k}": (
-            (total_article_hit_any / total_queries) if total_queries else 0.0
-        ),
-        f"LawHit@{args.top_k}": (
-            (total_law_hit_any / total_queries) if total_queries else 0.0
-        ),
-        f"exact_recall@{args.top_k}": (
-            (total_exact_recall / total_queries) if total_queries else 0.0
-        ),
-        f"article_recall@{args.top_k}": (
-            (total_article_recall / total_queries) if total_queries else 0.0
-        ),
-        f"law_recall@{args.top_k}": (
-            (total_law_recall / total_queries) if total_queries else 0.0
-        ),
+        f"ExactHit@{args.top_k}": (total_exact_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"ArticleHit@{args.top_k}": (total_article_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"LawHit@{args.top_k}": (total_law_hit_any / total_queries)
+        if total_queries
+        else 0.0,
+        f"exact_recall@{args.top_k}": (total_exact_recall / total_queries)
+        if total_queries
+        else 0.0,
+        f"article_recall@{args.top_k}": (total_article_recall / total_queries)
+        if total_queries
+        else 0.0,
+        f"law_recall@{args.top_k}": (total_law_recall / total_queries)
+        if total_queries
+        else 0.0,
         "total_queries": total_queries,
     }
 

@@ -1,0 +1,1229 @@
+===== backend/app/agents/retrieval/base_retrieval_agent.py =====
+"""
+BaseRetrievalAgent - Retrieval Agent 공통 베이스 클래스
+
+4개의 Retrieval Agent(Law, Criteria, Case, Counsel)가 공유하는 공통 로직을 정의합니다.
+LLM: 2.4B (EXAONE), 역할: 쿼리 재작성
+"""
+
+import os
+from abc import abstractmethod
+from typing import Dict, Any, List, ClassVar, Optional
+
+from ..base import BaseAgent
+
+
+def _get_db_config() -> Dict[str, str]:
+    return {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': os.getenv('DB_PORT', '5432'),
+        'dbname': os.getenv('DB_NAME', 'ddoksori'),
+        'user': os.getenv('DB_USER', 'postgres'),
+        'password': os.getenv('DB_PASSWORD', 'postgres'),
+    }
+
+
+def _get_embed_api_url() -> str:
+    return os.getenv('EMBED_API_URL', 'http://localhost:8001/embed')
+
+
+class BaseRetrievalAgent(BaseAgent):
+    """Retrieval Agent 공통 베이스 - 검색 결과 포맷팅 및 에러 처리 공유"""
+    
+    required_inputs: ClassVar[List[str]] = ["user_query"]
+    provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
+    
+    default_top_k: ClassVar[int] = 3
+    
+    async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        error = self.validate_request(request)
+        if error:
+            return self.report_to_supervisor(status="failure", result=None, message=error)
+        
+        context = request.get("context", {})
+        user_query = context.get("user_query", "")
+        query_analysis = context.get("query_analysis", {})
+        
+        search_query = self._build_search_query(user_query, query_analysis)
+        top_k = request.get("params", {}).get("top_k", self.default_top_k)
+        
+        try:
+            results = await self._execute_search(search_query, top_k)
+            
+            if not results:
+                return self.report_to_supervisor(
+                    status="failure",
+                    result={"results": [], "sources": []},
+                    message=f"{self.agent_name}: 검색 결과 없음. 다른 키워드로 재시도 권장."
+                )
+            
+            formatted_results = self._format_results(results)
+            sources = self._build_sources(results)
+            
+            max_sim = max((r.get("similarity", 0) for r in formatted_results), default=0)
+            avg_sim = sum(r.get("similarity", 0) for r in formatted_results) / len(formatted_results) if formatted_results else 0
+            
+            return self.report_to_supervisor(
+                status="success",
+                result={
+                    "results": formatted_results,
+                    "sources": sources,
+                    "max_similarity": max_sim,
+                    "avg_similarity": avg_sim,
+                },
+                message=f"{self.agent_name}: {len(results)}건 검색 완료 (max_sim: {max_sim:.3f})"
+            )
+            
+        except Exception as e:
+            return self.report_to_supervisor(
+                status="failure",
+                result=None,
+                message=f"{self.agent_name} 검색 오류: {str(e)}"
+            )
+    
+    def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
+        rewritten = query_analysis.get("rewritten_query")
+        if rewritten and rewritten != user_query:
+            return rewritten
+        return user_query
+    
+    @abstractmethod
+    async def _execute_search(self, query: str, top_k: int) -> List[Any]:
+        """서브클래스에서 구현: 실제 검색 수행"""
+        pass
+    
+    @abstractmethod
+    def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """서브클래스에서 구현: 결과 포맷팅"""
+        pass
+    
+    @abstractmethod
+    def _build_sources(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """서브클래스에서 구현: 출처 정보 생성"""
+        pass
+
+
+__all__ = ["BaseRetrievalAgent", "_get_db_config", "_get_embed_api_url"]
+
+===== backend/app/agents/retrieval/case_agent.py =====
+"""CaseRetrievalAgent - 분쟁조정사례 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+
+import asyncio
+from typing import Dict, Any, List, ClassVar
+
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .tools.specialized_retrievers import CaseRetriever
+
+
+class CaseRetrievalAgent(BaseRetrievalAgent):
+    """분쟁조정사례(mediation_case) 검색 에이전트 - 법적 효력이 있는 분쟁조정 결과"""
+    
+    agent_name: ClassVar[str] = "retrieval_case"
+    agent_description: ClassVar[str] = "분쟁조정사례를 검색합니다. 유사한 분쟁 해결 선례가 필요할 때 호출됩니다."
+    
+    async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
+        db_config = _get_db_config()
+        embed_url = _get_embed_api_url()
+        
+        retriever = CaseRetriever(db_config, embed_url)
+        retriever.connect()
+        
+        try:
+            results = await asyncio.to_thread(retriever.search_disputes, query, top_k)
+            return results
+        finally:
+            retriever.close()
+    
+    def _format_results(self, results: List[Dict]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "chunk_id": r.get("chunk_id"),
+                "doc_id": r.get("doc_id"),
+                "chunk_type": r.get("chunk_type"),
+                "content": r.get("content"),
+                "doc_title": r.get("doc_title"),
+                "source_org": r.get("source_org"),
+                "url": r.get("url"),
+                "decision_date": r.get("decision_date"),
+                "similarity": r.get("similarity", 0),
+                "doc_similarity": r.get("doc_similarity"),
+                "doc_chunk_count": r.get("doc_chunk_count"),
+            }
+            for r in results
+        ]
+    
+    def _build_sources(self, results: List[Dict]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "mediation_case",
+                "index": i + 1,
+                "chunk_id": r.get("chunk_id"),
+                "doc_id": r.get("doc_id"),
+                "doc_title": r.get("doc_title"),
+                "source_org": r.get("source_org"),
+                "similarity": r.get("similarity", 0),
+            }
+            for i, r in enumerate(results)
+        ]
+
+
+case_retrieval_agent = CaseRetrievalAgent()
+
+__all__ = ["CaseRetrievalAgent", "case_retrieval_agent"]
+
+===== backend/app/agents/retrieval/counsel_agent.py =====
+"""CounselRetrievalAgent - 상담사례 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+
+import asyncio
+from typing import Dict, Any, List, ClassVar
+
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .tools.specialized_retrievers import CaseRetriever
+
+
+class CounselRetrievalAgent(BaseRetrievalAgent):
+    """상담사례(counsel_case) 검색 에이전트 - 참고용 상담 사례"""
+    
+    agent_name: ClassVar[str] = "retrieval_counsel"
+    agent_description: ClassVar[str] = "상담사례를 검색합니다. 비슷한 상담 기록이 필요할 때 호출됩니다."
+    
+    async def _execute_search(self, query: str, top_k: int) -> List[Dict]:
+        db_config = _get_db_config()
+        embed_url = _get_embed_api_url()
+        
+        retriever = CaseRetriever(db_config, embed_url)
+        retriever.connect()
+        
+        try:
+            results = await asyncio.to_thread(retriever.search_counsels, query, top_k)
+            return results
+        finally:
+            retriever.close()
+    
+    def _format_results(self, results: List[Dict]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "chunk_id": r.get("chunk_id"),
+                "doc_id": r.get("doc_id"),
+                "chunk_type": r.get("chunk_type"),
+                "content": r.get("content"),
+                "doc_title": r.get("doc_title"),
+                "source_org": r.get("source_org"),
+                "url": r.get("url"),
+                "decision_date": r.get("decision_date"),
+                "similarity": r.get("similarity", 0),
+            }
+            for r in results
+        ]
+    
+    def _build_sources(self, results: List[Dict]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "counsel_case",
+                "index": i + 1,
+                "chunk_id": r.get("chunk_id"),
+                "doc_id": r.get("doc_id"),
+                "doc_title": r.get("doc_title"),
+                "source_org": r.get("source_org"),
+                "similarity": r.get("similarity", 0),
+            }
+            for i, r in enumerate(results)
+        ]
+
+
+counsel_retrieval_agent = CounselRetrievalAgent()
+
+__all__ = ["CounselRetrievalAgent", "counsel_retrieval_agent"]
+
+===== backend/app/agents/retrieval/law_agent.py =====
+"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+
+import asyncio
+import logging
+import os
+from typing import Dict, Any, List, ClassVar
+
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .tools.specialized_retrievers import LawRetriever, LawSearchResult
+
+
+logger = logging.getLogger(__name__)
+
+
+class LawRetrievalAgent(BaseRetrievalAgent):
+    """법령(소비자보호법, 전자상거래법 등) 검색 에이전트"""
+    
+    agent_name: ClassVar[str] = "retrieval_law"
+    agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
+    
+
+    def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
+        """쿼리 재작성 함수 (gpt-4o-mini 임시 사용)"""
+        if not user_query or not user_query.strip():
+            return user_query
+
+        if not os.getenv("OPENAI_API_KEY"):
+            logger.info("[LawRetrievalAgent] OPENAI_API_KEY not set, skip LLM rewrite")
+            return user_query
+
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "당신은 사용자의 질문을 법령 용어로 꾸며서 내뱉는 답안기입니다. 법률에 대해 유사도 검색이 잘 수행될 수 있도록 다음의 문장을 바꾸세요. 단, '판결문'이 아닌 '법률'입니다. 문장:"},
+                    {"role": "user", "content": user_query},
+                ],
+                timeout=10,
+            )
+
+            rewritten = (response.choices[0].message.content or "").strip()
+            if rewritten and rewritten != user_query:
+                return rewritten
+
+        except ImportError:
+            logger.warning("[LawRetrievalAgent] OpenAI package not installed, skip LLM rewrite")
+        except Exception as e:
+            logger.warning(f"[LawRetrievalAgent] LLM rewrite failed: {e}")
+
+        return user_query
+
+    async def _execute_search(self, query: str, top_k: int) -> List[LawSearchResult]:
+        db_config = _get_db_config()
+        embed_url = _get_embed_api_url()
+        
+        retriever = LawRetriever(db_config, embed_url)
+        retriever.connect()
+        
+        try:
+            results = await asyncio.to_thread(retriever.search_two_stage, query, top_k)
+            return results
+        finally:
+            retriever.close()
+    
+    def _format_results(self, results: List[LawSearchResult]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "unit_id": r.unit_id,
+                "law_id": r.law_id,
+                "law_name": r.law_name,
+                "level": r.level,
+                "article_no": r.article_no,
+                "paragraph_no": r.paragraph_no,
+                "item_no": r.item_no,
+                "subitem_no": r.subitem_no,
+                "full_path": r.full_path,
+                "text": r.text,
+                "similarity": r.similarity,
+            }
+            for r in results
+        ]
+    
+    def _build_sources(self, results: List[LawSearchResult]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "law",
+                "index": i + 1,
+                "unit_id": r.unit_id,
+                "law_name": r.law_name,
+                "full_path": r.full_path,
+                "similarity": r.similarity,
+            }
+            for i, r in enumerate(results)
+        ]
+
+
+law_retrieval_agent = LawRetrievalAgent()
+
+__all__ = ["LawRetrievalAgent", "law_retrieval_agent"]
+
+===== backend/app/agents/retrieval/criteria_agent.py =====
+"""CriteriaRetrievalAgent - 분쟁조정기준 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+
+import asyncio
+import logging
+import os
+from typing import Dict, Any, List, ClassVar
+
+from .base_retrieval_agent import BaseRetrievalAgent, _get_db_config, _get_embed_api_url
+from .tools.specialized_retrievers import CriteriaRetriever, CriteriaSearchResult
+
+logger = logging.getLogger(__name__)
+
+
+class CriteriaRetrievalAgent(BaseRetrievalAgent):
+    """분쟁조정기준(공정위 고시, 품목별 기준) 검색 에이전트"""
+    
+    agent_name: ClassVar[str] = "retrieval_criteria"
+    agent_description: ClassVar[str] = "분쟁조정기준을 검색합니다. 환불/교환 기준이나 보상 규정이 필요할 때 호출됩니다."
+
+    def _build_search_query(self, user_query: str, query_analysis: Dict[str, Any]) -> str:
+        """쿼리 재작성 함수 (gpt-4o-mini 임시 사용)"""
+        if not user_query or not user_query.strip():
+            return user_query
+
+        if not os.getenv("OPENAI_API_KEY"):
+            logger.info("[CriteriaRetrievalAgent] OPENAI_API_KEY not set, skip LLM rewrite")
+            return user_query
+
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "당신은 사용자의 질문을 '분쟁조정 해결기준' 문서에서 잘 검색될 수 있게 변경해서 내뱉는 답안기입니다. 다음의 문장을 바꾸세요. 문장:"},
+                    {"role": "user", "content": user_query},
+                ],
+                timeout=10,
+            )
+
+            rewritten = (response.choices[0].message.content or "").strip()
+            if rewritten and rewritten != user_query:
+                return rewritten
+
+        except ImportError:
+            logger.warning("[CriteriaRetrievalAgent] OpenAI package not installed, skip LLM rewrite")
+        except Exception as e:
+            logger.warning(f"[CriteriaRetrievalAgent] LLM rewrite failed: {e}")
+
+        return user_query
+    
+    async def _execute_search(self, query: str, top_k: int) -> List[CriteriaSearchResult]:
+        db_config = _get_db_config()
+        embed_url = _get_embed_api_url()
+        
+        retriever = CriteriaRetriever(db_config, embed_url)
+        retriever.connect()
+        
+        try:
+            results = await asyncio.to_thread(retriever.search_two_stage, query, top_k)
+            return results
+        finally:
+            retriever.close()
+    
+    def _format_results(self, results: List[CriteriaSearchResult]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "unit_id": r.unit_id,
+                "source_id": r.source_id,
+                "source_label": r.source_label,
+                "category": r.category,
+                "industry": r.industry,
+                "item_group": r.item_group,
+                "item": r.item,
+                "dispute_type": r.dispute_type,
+                "unit_text": r.unit_text,
+                "similarity": r.similarity,
+            }
+            for r in results
+        ]
+    
+    def _build_sources(self, results: List[CriteriaSearchResult]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "criteria",
+                "index": i + 1,
+                "unit_id": r.unit_id,
+                "source_label": r.source_label,
+                "category": r.category,
+                "item": r.item,
+                "similarity": r.similarity,
+            }
+            for i, r in enumerate(results)
+        ]
+
+
+criteria_retrieval_agent = CriteriaRetrievalAgent()
+
+__all__ = ["CriteriaRetrievalAgent", "criteria_retrieval_agent"]
+
+===== backend/app/agents/retrieval/tools/specialized_retrievers.py =====
+"""
+똑소리 프로젝트 - 전문 검색기 (Specialized Retrievers)
+작성일: 2026-01-13
+법령, 기준, 사례의 2단계 계층 검색 지원
+Phase 2: 분쟁조정사례 메타데이터 실시간 LLM 추출 추가
+Phase 3: 문서 수준 유사도 검색 (Document-Level Similarity)
+"""
+
+import psycopg2
+import json
+import logging
+import os
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
+from dataclasses import dataclass, field
+from collections import defaultdict
+import requests
+
+if TYPE_CHECKING:
+    from .base import Document
+
+logger = logging.getLogger(__name__)
+
+# 메타데이터 추출 활성화 여부
+ENABLE_DISPUTE_METADATA_EXTRACTION = os.getenv('ENABLE_DISPUTE_METADATA_EXTRACTION', 'true').lower() == 'true'
+
+# Phase 3: 문서 수준 유사도 검색 활성화 여부
+ENABLE_DOCUMENT_LEVEL_SIMILARITY = os.getenv('ENABLE_DOCUMENT_LEVEL_SIMILARITY', 'true').lower() == 'true'
+# 문서 수준 유사도 계산을 위한 후보 청크 배수 (top_k * N개 검색)
+DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER = int(os.getenv('DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER', '5'))
+
+
+@dataclass
+class LawSearchResult:
+    """법령 검색 결과"""
+    unit_id: str
+    law_id: str
+    law_name: str
+    level: str  # article, paragraph, item, subitem
+    article_no: str
+    paragraph_no: Optional[str]
+    item_no: Optional[str]
+    subitem_no: Optional[str]
+    full_path: str  # 예: "제14조 제1항"
+    text: str
+    similarity: float
+
+
+@dataclass
+class CriteriaSearchResult:
+    """기준 검색 결과"""
+    unit_id: str
+    source_id: str
+    source_label: str
+    category: Optional[str]
+    industry: Optional[str]
+    item_group: Optional[str]
+    item: Optional[str]
+    dispute_type: Optional[str]
+    unit_text: str
+    similarity: float
+
+
+@dataclass
+class DocumentLevelResult:
+    """
+    문서 수준 유사도 검색 결과 (Phase 3)
+
+    하나의 문서(doc_id)에 속한 모든 청크의 유사도를 집계하여
+    문서 전체의 관련성을 평가
+    """
+    doc_id: str
+    doc_title: str
+    source_org: str
+    avg_similarity: float          # 모든 청크의 평균 유사도
+    max_similarity: float          # 가장 높은 청크 유사도
+    min_similarity: float          # 가장 낮은 청크 유사도
+    chunk_count: int               # 검색된 청크 수
+    total_doc_chunks: int          # 문서 전체 청크 수
+    best_chunk: Dict               # 가장 유사한 청크 정보
+    all_chunks: List[Dict] = field(default_factory=list)  # 검색된 모든 청크
+
+
+class LawRetriever:
+    """
+    법령 2단계 검색기
+
+    Stage 1: 항/호/목 (search_stage='stage2') 유사도 검색
+    Stage 2: 매칭된 노드의 상위 조(article) 찾기
+    """
+
+    def __init__(self, db_config: Dict[str, str], embed_api_url: str = "http://localhost:8001/embed"):
+        self.db_config = db_config
+        self.embed_api_url = embed_api_url
+        self.conn = None
+
+    def connect(self):
+        """데이터베이스 연결"""
+        self.conn = psycopg2.connect(**self.db_config)
+
+    def close(self):
+        """연결 종료"""
+        if self.conn:
+            self.conn.close()
+
+    def embed_query(self, query: str) -> List[float]:
+        """쿼리 임베딩 생성"""
+        try:
+            response = requests.post(
+                self.embed_api_url,
+                json={"texts": [query]},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()['embeddings'][0]
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"임베딩 API 오류: {e}")
+
+    def search_two_stage(self, query: str, top_k: int = 3) -> List[LawSearchResult]:
+        """
+        2단계 법령 검색
+
+        1단계: law_units에서 search_stage='stage2' (항/호/목) 벡터 검색
+        2단계: 매칭된 항/호/목의 상위 조(article) 정보 포함
+
+        Returns:
+            List[LawSearchResult]: 법령명, 조항호목, 본문 포함
+        """
+        query_embedding = self.embed_query(query)
+
+        with self.conn.cursor() as cur:
+            # 최적화: 벡터 검색 먼저 수행 후 조인
+            # pgvector 인덱스 활용을 위해 chunks 테이블에서 먼저 검색
+            cur.execute(
+                """
+                WITH vector_search AS (
+                    SELECT
+                        chunk_id,
+                        1 - (embedding <=> %s::vector) AS similarity
+                    FROM chunks
+                    WHERE embedding IS NOT NULL
+                      AND drop = FALSE
+                      AND chunk_id LIKE '%%|A%%'
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT %s
+                )
+                SELECT
+                    lu.doc_id,
+                    lu.law_id,
+                    l.law_name,
+                    lu.level,
+                    lu.article_no,
+                    lu.paragraph_no,
+                    lu.item_no,
+                    lu.subitem_no,
+                    lu.path,
+                    lu.text,
+                    vs.similarity
+                FROM vector_search vs
+                JOIN law_units lu ON vs.chunk_id = lu.doc_id
+                JOIN laws l ON lu.law_id = l.law_id
+                WHERE lu.search_stage = 'stage2'
+                ORDER BY vs.similarity DESC
+                """,
+                (query_embedding, query_embedding, top_k * 10)
+            )
+
+            results = []
+            seen_articles = set()  # 중복 조문 제거
+
+            for row in cur.fetchall():
+                # 동일 조문 중복 방지 (가장 유사한 항/호/목만 유지)
+                article_key = (row[1], row[4])  # (law_id, article_no)
+                if article_key in seen_articles:
+                    continue
+                seen_articles.add(article_key)
+
+                results.append(LawSearchResult(
+                    unit_id=row[0],
+                    law_id=row[1],
+                    law_name=row[2],
+                    level=row[3],
+                    article_no=row[4],
+                    paragraph_no=row[5],
+                    item_no=row[6],
+                    subitem_no=row[7],
+                    full_path=row[8] or self._build_path(row[4], row[5], row[6], row[7]),
+                    text=row[9],
+                    similarity=float(row[10])
+                ))
+
+                if len(results) >= top_k:
+                    break
+
+            return results
+
+    def _build_path(
+        self,
+        article_no: str,
+        paragraph_no: Optional[str],
+        item_no: Optional[str],
+        subitem_no: Optional[str]
+    ) -> str:
+        """조항호목 경로 문자열 생성"""
+        path_parts = []
+        if article_no:
+            path_parts.append(f"제{article_no}조" if not article_no.startswith("제") else article_no)
+        if paragraph_no:
+            path_parts.append(f"제{paragraph_no}항")
+        if item_no:
+            path_parts.append(f"제{item_no}호")
+        if subitem_no:
+            path_parts.append(f"{subitem_no}목")
+        return " ".join(path_parts)
+
+    def search_by_article(self, law_id: str, article_no: str) -> List[Dict]:
+        """특정 조문의 모든 하위 노드 조회"""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    lu.doc_id,
+                    lu.level,
+                    lu.paragraph_no,
+                    lu.item_no,
+                    lu.subitem_no,
+                    lu.path,
+                    lu.text
+                FROM law_units lu
+                WHERE
+                    lu.law_id = %s
+                    AND lu.article_no = %s
+                ORDER BY
+                    CASE lu.level
+                        WHEN 'article' THEN 1
+                        WHEN 'paragraph' THEN 2
+                        WHEN 'item' THEN 3
+                        WHEN 'subitem' THEN 4
+                    END,
+                    lu.paragraph_no, lu.item_no, lu.subitem_no
+                """,
+                (law_id, article_no)
+            )
+
+            return [
+                {
+                    'doc_id': row[0],
+                    'level': row[1],
+                    'paragraph_no': row[2],
+                    'item_no': row[3],
+                    'subitem_no': row[4],
+                    'path': row[5],
+                    'text': row[6]
+                }
+                for row in cur.fetchall()
+            ]
+
+    def invoke(self, query: str, top_k: int = 10, **kwargs) -> List['Document']:
+        from .base import to_documents
+        results = self.search_two_stage(query, top_k)
+        return to_documents(results)
+
+===== backend/app/orchestrator/graph_mas.py =====
+"""
+똑소리 프로젝트 - MAS Supervisor 그래프 정의
+
+[현재 운영] Phase 7에서 기본 그래프로 전환됨.
+
+포함된 그래프:
+- create_mas_supervisor_graph(): Hub-Spoke 패턴 Supervisor 그래프
+- 4개 Retrieval Agent 병렬 실행 (Fan-out/Fan-in)
+"""
+
+import os
+import logging
+import time
+from typing import Callable, Dict, Any, List
+
+from langgraph.graph import StateGraph, END
+from langgraph.types import Send
+
+from .state import ChatState
+from .graph import _create_timed_node
+from .checkpointer import get_checkpointer
+from .nodes.supervisor import SupervisorNode
+from .nodes.retrieval_merge import retrieval_merge_node_sync
+from .nodes.clarify import ask_clarification_node
+from ..agents.query_analysis.agent import query_analysis_node
+from ..agents.answer_generation.agent import generation_node
+from ..agents.legal_review.agent import review_node_wrapper
+from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Retrieval Agent 노드 팩토리
+# ============================================================================
+
+def _create_retrieval_agent_node(agent_type: str) -> Callable:
+    """
+    특정 타입의 Retrieval Agent 노드 함수를 생성합니다.
+
+    Args:
+        agent_type: 'law', 'criteria', 'case', 'counsel' 중 하나
+
+    Returns:
+        LangGraph 노드 함수
+    """
+    from ..agents.retrieval.law_agent import law_retrieval_agent
+    from ..agents.retrieval.criteria_agent import criteria_retrieval_agent
+    from ..agents.retrieval.case_agent import case_retrieval_agent
+    from ..agents.retrieval.counsel_agent import counsel_retrieval_agent
+
+    agent_map = {
+        'law': law_retrieval_agent,
+        'criteria': criteria_retrieval_agent,
+        'case': case_retrieval_agent,
+        'counsel': counsel_retrieval_agent,
+    }
+
+    agent = agent_map.get(agent_type)
+
+    async def retrieval_agent_node(state: ChatState) -> Dict[str, Any]:
+        """개별 Retrieval Agent 노드"""
+        start_time = time.time()
+
+        user_query = state.get('user_query', '')
+        query_analysis = state.get('query_analysis', {})
+
+        request = {
+            'context': {
+                'user_query': user_query,
+                'query_analysis': query_analysis,
+            },
+            'params': {'top_k': 3},
+        }
+
+        try:
+            result = await agent.process(request)
+            search_time_ms = (time.time() - start_time) * 1000
+
+            # IndividualRetrievalResult 형식으로 변환
+            individual_result = {
+                'source': agent_type,
+                'documents': result.get('result', {}).get('results', []),
+                'max_similarity': result.get('result', {}).get('max_similarity', 0.0),
+                'avg_similarity': result.get('result', {}).get('avg_similarity', 0.0),
+                'search_time_ms': search_time_ms,
+            }
+
+            if result.get('status') == 'failure':
+                individual_result['error'] = result.get('message', 'Unknown error')
+
+            logger.info(
+                f"[RetrievalAgent:{agent_type}] {len(individual_result['documents'])} docs, "
+                f"max_sim={individual_result['max_similarity']:.3f}, "
+                f"time={search_time_ms:.1f}ms"
+            )
+
+        except Exception as e:
+            individual_result = {
+                'source': agent_type,
+                'documents': [],
+                'max_similarity': 0.0,
+                'avg_similarity': 0.0,
+                'search_time_ms': (time.time() - start_time) * 1000,
+                'error': str(e),
+            }
+            logger.error(f"[RetrievalAgent:{agent_type}] Error: {e}")
+
+        # operator.add로 누적되도록 리스트로 반환
+        return {'individual_retrieval_results': [individual_result]}
+
+    return retrieval_agent_node
+
+
+# ============================================================================
+# MAS Supervisor 라우팅
+# ============================================================================
+
+def _route_mas_supervisor(state: ChatState):
+    """
+    MAS Supervisor의 결정을 기반으로 다음 노드를 결정합니다.
+
+    routing 맵:
+    - query_analyst → query_analysis 노드
+    - retrieval_team → Fan-out (4개 Agent 병렬 실행) - List[Send] 반환
+    - answer_drafter → generation 노드
+    - legal_reviewer → review 노드
+    - respond/None → output_guardrail
+
+    Args:
+        state: 현재 ChatState
+
+    Returns:
+        다음 노드 이름 (str) 또는 List[Send] (Fan-out)
+    """
+    supervisor_state = state.get('supervisor', {})
+    next_agent = supervisor_state.get('next_agent')
+
+    logger.info(f"[MAS Router] next_agent={next_agent}")
+
+    # retrieval_team → Fan-out (4개 Agent 병렬)
+    if next_agent == 'retrieval_team':
+        logger.info("[MAS Router] Fan-out to 4 retrieval agents")
+        return [
+            Send('retrieval_law', state),
+            Send('retrieval_criteria', state),
+            Send('retrieval_case', state),
+            Send('retrieval_counsel', state),
+        ]
+
+    # 라우팅 맵
+    routing_map = {
+        'query_analyst': 'query_analysis',
+        'answer_drafter': 'generation',
+        'legal_reviewer': 'review',
+    }
+
+    if next_agent in routing_map:
+        return routing_map[next_agent]
+
+    # respond 또는 None → 출력
+    return 'output_guardrail'
+
+
+# ============================================================================
+# MAS Supervisor 그래프 생성
+# ============================================================================
+
+def create_mas_supervisor_graph() -> StateGraph:
+    """
+    MAS Supervisor 그래프 생성 (Phase 5)
+
+    [Architecture - Hub-Spoke Pattern]
+
+    Entry → input_guardrail → supervisor ←→ [Agents] → output_guardrail → END
+
+    [Supervisor → Agent 라우팅]
+    - query_analyst → query_analysis 노드
+    - retrieval_team → Fan-out (4개 Retrieval Agent 병렬) → retrieval_merge
+    - answer_drafter → generation 노드
+    - legal_reviewer → review 노드
+
+    [Fan-out/Fan-in for Retrieval]
+    supervisor → fan_out → [law|criteria|case|counsel] → retrieval_merge → supervisor
+
+    [주요 특징]
+    1. ReAct 루프 제거 → Supervisor 기반 의사결정
+    2. 4개 Retrieval Agent 병렬 실행 (LangGraph Send API)
+    3. 규칙 기반 fallback으로 안정성 보장
+    4. 최대 10회 iteration 제한
+
+    Returns:
+        컴파일 전 StateGraph
+    """
+    graph = StateGraph(ChatState)
+
+    # === 노드 등록 ===
+
+    # 1. 가드레일
+    graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
+    graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
+
+    # 2. Supervisor (LLM 없이 규칙 기반으로 시작)
+    supervisor = SupervisorNode(llm=None)
+    graph.add_node('supervisor', supervisor.as_node())
+
+    # 3. 기능 에이전트
+    graph.add_node('query_analysis', _create_timed_node(query_analysis_node, 'query_analysis'))
+    graph.add_node('generation', _create_timed_node(generation_node, 'generation'))
+    graph.add_node('review', _create_timed_node(review_node_wrapper, 'review'))
+    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
+
+    # 4. Retrieval Agents (4개 병렬)
+    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+        node_fn = _create_retrieval_agent_node(agent_type)
+        graph.add_node(f'retrieval_{agent_type}', node_fn)
+
+    # 5. Retrieval Merge (Fan-in)
+    graph.add_node('retrieval_merge', retrieval_merge_node_sync)
+
+    # === 엣지 설정 ===
+
+    # Entry: input_guardrail
+    graph.set_entry_point('input_guardrail')
+
+    # input_guardrail → supervisor 또는 END
+    graph.add_conditional_edges(
+        'input_guardrail',
+        lambda state: END if state.get('guardrail_blocked') else 'supervisor',
+        {END: END, 'supervisor': 'supervisor'}
+    )
+
+    # supervisor → 다음 노드 (conditional routing)
+    # Fan-out: retrieval_team → List[Send] 반환으로 4개 Agent 병렬 실행
+    graph.add_conditional_edges(
+        'supervisor',
+        _route_mas_supervisor,
+        {
+            'query_analysis': 'query_analysis',
+            'retrieval_law': 'retrieval_law',
+            'retrieval_criteria': 'retrieval_criteria',
+            'retrieval_case': 'retrieval_case',
+            'retrieval_counsel': 'retrieval_counsel',
+            'generation': 'generation',
+            'review': 'review',
+            'output_guardrail': 'output_guardrail',
+        }
+    )
+
+    # 각 Retrieval Agent → retrieval_merge (Fan-in)
+    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+        graph.add_edge(f'retrieval_{agent_type}', 'retrieval_merge')
+
+    # retrieval_merge → supervisor (결과 보고)
+    graph.add_edge('retrieval_merge', 'supervisor')
+
+    # query_analysis → supervisor (결과 보고)
+    graph.add_edge('query_analysis', 'supervisor')
+
+    # generation → supervisor (결과 보고)
+
+===== backend/app/agents/retrieval/README.md =====
+# Retrieval Agent (정보 검색 에이전트)
+
+**최종 수정**: 2026-01-26 (Phase 7: MAS Supervisor 전환)
+
+## 1. 개요 (Overview)
+
+**Retrieval Agent**는 사용자의 질문에 답변하기 위해 필요한 근거(Evidence)를 외부 데이터베이스에서 찾아오는 역할을 합니다.
+
+### Phase 7 변경사항
+
+MAS Supervisor 아키텍처 전환으로, **단일 Retrieval Agent가 4개의 전문 Agent로 분리**되었습니다:
+
+| Agent | 데이터 | RAG 전략 | 최적화 포인트 |
+|-------|--------|---------|-------------|
+| **LawRetrievalAgent** | 법령 (체계적, 정형화) | 키워드 + 계층 필터 | 조항 번호 매칭, 정식 용어 |
+| **CriteriaRetrievalAgent** | 조정기준 (모호, 임계값 기반) | 범주 + 범위 탐색 | 분쟁 유형 분류, 금액 임계값 |
+| **CaseRetrievalAgent** | 분쟁사례 (서사형, 맥락) | 의미 유사도 + 유추 | 시나리오 매칭, 사건 유형 유사도 |
+| **CounselRetrievalAgent** | 상담사례 (대화형, 실무) | Q&A 포맷 + 의도 기반 | 대화 패턴, 문제 분류 |
+
+**왜 4개인가?** 단일 Retrieval Agent는 모든 데이터 타입에 최적화할 수 없음 → 각 데이터의 고유 특성에 맞춘 독립적 RAG 전략으로 정확도 극대화
+
+### 주요 책임
+
+1. **전문화된 검색**: 각 Agent가 담당 데이터 유형에 최적화된 검색 수행
+2. **병렬 실행**: LangGraph Fan-out/Fan-in으로 4개 Agent 동시 실행 (검색 시간 최대 4배 단축)
+3. **결과 병합**: `retrieval_merge_node`에서 4개 Agent 결과를 통합
+4. **메타데이터 구성**: 답변 생성 시 인용(Citation)에 사용할 출처 정보 구조화
+
+---
+
+## 2. 아키텍처 (Architecture)
+
+### 2.1 MAS Supervisor 아키텍처 (Phase 7 현재)
+
+```
+                              ┌─────────────────────────────────────┐
+                              │          [SUPERVISOR]                │
+                              │         (Central Brain)              │
+                              └───────────────┬─────────────────────┘
+                                              │
+                                              ▼
+                              ┌─────────────────────────────────────┐
+                              │        [Retrieval Fan-out]          │
+                              │   (4개 Agent 병렬 디스패치)          │
+                              └───────────────┬─────────────────────┘
+                                              │
+              ┌───────────────┬───────────────┼───────────────┬───────────────┐
+              ▼               ▼               ▼               ▼
+      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+      │     Law      │ │   Criteria   │ │     Case     │ │   Counsel    │
+      │   Retrieval  │ │   Retrieval  │ │   Retrieval  │ │   Retrieval  │
+      │    Agent     │ │    Agent     │ │    Agent     │ │    Agent     │
+      └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
+              │               │               │               │
+              └───────────────┴───────────────┼───────────────┴───────────────┘
+                                              │
+                                              ▼
+                              ┌─────────────────────────────────────┐
+                              │        [Retrieval Merge]            │
+                              │   (결과 통합 + 중복 제거)            │
+                              └───────────────┬─────────────────────┘
+                                              │
+                                              ▼
+                              ┌─────────────────────────────────────┐
+                              │          [SUPERVISOR]                │
+                              │      (다음 단계 결정)                │
+                              └─────────────────────────────────────┘
+```
+
+### 2.2 클래스 계층 구조
+
+```
+BaseAgent (app/agents/base.py)
+    │
+    └── BaseRetrievalAgent (base_retrieval_agent.py)
+            │
+            ├── LawRetrievalAgent (law_agent.py)
+            │
+            ├── CriteriaRetrievalAgent (criteria_agent.py)
+            │
+            ├── CaseRetrievalAgent (case_agent.py)
+            │
+            └── CounselRetrievalAgent (counsel_agent.py)
+```
+
+---
+
+## 3. 코드 구조 (Code Structure)
+
+```
+backend/app/agents/retrieval/
+├── __init__.py                  # 4개 Agent export
+├── base_retrieval_agent.py      # BaseRetrievalAgent 공통 베이스
+├── law_agent.py                 # LawRetrievalAgent (법령 검색)
+├── criteria_agent.py            # CriteriaRetrievalAgent (기준 검색)
+├── case_agent.py                # CaseRetrievalAgent (분쟁사례 검색)
+├── counsel_agent.py             # CounselRetrievalAgent (상담사례 검색)
+├── agent.py                     # [DEPRECATED] 레거시 통합 Retrieval
+├── tools/                       # 검색 도구 구현체
+│   ├── specialized_retrievers.py  # LawRetriever, CriteriaRetriever 등
+│   ├── hybrid_retriever.py        # Vector + Keyword (RRF)
+│   ├── rdb_retriever.py           # SQL 기반 정형 검색
+│   ├── embedding_client.py        # OpenAI 임베딩 클라이언트
+│   └── base.py                    # 검색 결과 데이터 클래스
+├── services/                    # 외부 서비스 연동
+│   ├── bge_m3_server.py           # BGE-M3 임베딩 서버
+│   ├── embedding_server.py        # 임베딩 서버 클라이언트
+│   └── splade_server.py           # SPLADE 스파스 임베딩
+└── metrics.py                   # 검색 품질 측정 지표
+```
+
+### 주요 클래스
+
+#### BaseRetrievalAgent
+
+```python
+class BaseRetrievalAgent(BaseAgent):
+    """4개 Retrieval Agent의 공통 베이스"""
+
+    required_inputs: ClassVar[List[str]] = ["user_query"]
+    provided_outputs: ClassVar[List[str]] = ["results", "sources", "max_similarity", "avg_similarity"]
+    default_top_k: ClassVar[int] = 3
+
+    async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Supervisor 요청 처리 → 표준 응답 형식 반환"""
+
+    @abstractmethod
+    async def _execute_search(self, query: str, top_k: int) -> List[Any]:
+        """서브클래스에서 구현: 실제 검색 수행"""
+
+    @abstractmethod
+    def _format_results(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """서브클래스에서 구현: 결과 포맷팅"""
+
+    @abstractmethod
+    def _build_sources(self, results: List[Any]) -> List[Dict[str, Any]]:
+        """서브클래스에서 구현: 출처 정보 생성"""
+```
+
+#### 전문 Agent 예시 (LawRetrievalAgent)
+
+```python
+class LawRetrievalAgent(BaseRetrievalAgent):
+    """법령(소비자보호법, 전자상거래법 등) 검색 에이전트"""
+
+    agent_name: ClassVar[str] = "retrieval_law"
+    agent_description: ClassVar[str] = "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
+
+    async def _execute_search(self, query: str, top_k: int) -> List[LawSearchResult]:
+        retriever = LawRetriever(db_config, embed_url)
+        return await asyncio.to_thread(retriever.search_two_stage, query, top_k)
+```
+
+---
+
+## 4. 검색 전략 (Retrieval Strategies)
+
+### 4.1 Agent별 검색 전략
+
+| Agent | Retriever | 검색 방식 | 특화 기능 |
+|-------|-----------|----------|----------|
+| **LawRetrievalAgent** | `LawRetriever` | Two-stage (조문 → 항/호) | 법령 계층 구조 탐색 |
+| **CriteriaRetrievalAgent** | `CriteriaRetriever` | Two-stage (표 → 항목) | 분쟁유형별 필터링 |
+| **CaseRetrievalAgent** | `CaseRetriever` | Hybrid (Vector + BM25) | 사건 유형 클러스터링 |
+| **CounselRetrievalAgent** | `CounselRetriever` | Hybrid (Vector + BM25) | Q&A 패턴 매칭 |
+
+### 4.2 공통 도구 (tools/)
+
+| 도구 | 설명 | 사용 Agent |
+|------|------|-----------|
+| **specialized_retrievers.py** | 도메인별 특화 Retriever | Law, Criteria |
+| **hybrid_retriever.py** | Dense + Sparse + RRF Fusion | Case, Counsel |
+| **rdb_retriever.py** | SQL 기반 정형 필터 | 공통 (필터 조건 시) |
+| **embedding_client.py** | OpenAI text-embedding-3-large | 공통 |
+
+---
+
+## 5. MAS Graph 통합
+
+### 5.1 Fan-out/Fan-in 노드
+
+MAS Supervisor 그래프에서 4개 Agent는 병렬로 실행됩니다:
+
+```python
+# graph_mas.py
+def _create_retrieval_agent_node(agent_type: str):
+    """4개 Retrieval Agent를 LangGraph 노드로 생성"""
+    agents = {
+        'law': law_retrieval_agent,
+        'criteria': criteria_retrieval_agent,
+        'case': case_retrieval_agent,
+        'counsel': counsel_retrieval_agent,
+    }
+    return agents[agent_type].as_node()
+
+# Fan-out: 4개 Agent 병렬 디스패치
+graph.add_node("retrieval_law", _create_retrieval_agent_node('law'))
+graph.add_node("retrieval_criteria", _create_retrieval_agent_node('criteria'))
+graph.add_node("retrieval_case", _create_retrieval_agent_node('case'))
+graph.add_node("retrieval_counsel", _create_retrieval_agent_node('counsel'))
+
+# Fan-in: 결과 병합
+graph.add_node("retrieval_merge", retrieval_merge_node)
+```
+
+### 5.2 결과 병합 (retrieval_merge_node)
+
+```python
+def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
+    """4개 Agent의 IndividualRetrievalResult를 RetrievalResult로 병합"""
+    individual_results = state.get("individual_retrieval_results", [])
+
+    merged = {
+        'disputes': [],
+        'counsels': [],
+        'laws': [],
+        'criteria': [],
+    }
+
+    for result in individual_results:
+        agent_type = result['agent_type']
+        if agent_type == 'retrieval_law':
+            merged['laws'].extend(result['results'])
+        elif agent_type == 'retrieval_criteria':
+            merged['criteria'].extend(result['results'])
+        # ... 나머지 병합 로직
+
+    return {'retrieval': merged, 'sources': build_sources(merged)}
+```
+
+---
+
+## 6. 테스트 방법 (Testing)
+
+### 6.1 테스트 구조
+
+```
+backend/scripts/testing/
+├── retrieval/                    # Retrieval 전용 테스트
+│   ├── test_search_plan_retriever.py   # 검색 계획 + 리트리버 선택
+│   ├── test_rdb_retriever.py           # SQL 기반 검색
+│   └── test_embedding_client.py        # 임베딩 클라이언트
+└── orchestrator/
+    ├── test_mas_graph.py               # MAS 그래프 구조 검증
+    └── test_e2e_queries.py             # E2E 통합 테스트
+```
+
+### 6.2 테스트 실행
+
+```bash
+# Retrieval 단위 테스트
+conda run -n dsr pytest backend/scripts/testing/retrieval/ -v
+
+# MAS 그래프 통합 테스트 (Retrieval Fan-out/Fan-in)
+conda run -n dsr pytest backend/scripts/testing/orchestrator/test_mas_graph.py -v
+
+# E2E 테스트 (전체 워크플로우)
+conda run -n dsr pytest backend/scripts/testing/orchestrator/test_e2e_queries.py -m unit -v
+```
+
+

@@ -38,6 +38,39 @@ DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER = int(
 
 
 @dataclass
+class LawSearchResult:
+    """법령 검색 결과"""
+
+    unit_id: str
+    law_id: str
+    law_name: str
+    level: str  # article, paragraph, item, subitem
+    article_no: str
+    paragraph_no: Optional[str]
+    item_no: Optional[str]
+    subitem_no: Optional[str]
+    full_path: str  # 예: "제14조 제1항"
+    text: str
+    similarity: float
+
+
+@dataclass
+class CriteriaSearchResult:
+    """기준 검색 결과"""
+
+    unit_id: str
+    source_id: str
+    source_label: str
+    category: Optional[str]
+    industry: Optional[str]
+    item_group: Optional[str]
+    item: Optional[str]
+    dispute_type: Optional[str]
+    unit_text: str
+    similarity: float
+
+
+@dataclass
 class DocumentLevelResult:
     """
     문서 수준 유사도 검색 결과 (Phase 3)
