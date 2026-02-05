@@ -27,17 +27,95 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
     )
 
+    async def _expand_for_law_search(
+        self, query: str, task_input: Dict[str, Any] | None
+    ) -> List[str]:
+        """
+        법령 검색 전용 쿼리 확장 (Phase 2-10)
+
+        자연어 쿼리를 법률 용어가 포함된 쿼리로 변환합니다.
+        """
+        try:
+            from app.agents.query_analysis.llm_expander import (
+                expand_query_for_law_search,
+            )
+
+            # task_input에서 추출된 정보 가져오기
+            item = ""
+            channel = ""
+            dispute_type = ""
+            keywords = []
+
+            if task_input:
+                keywords = task_input.get("agent_keywords") or []
+                metadata_filter = task_input.get("metadata_filter") or {}
+
+                # query_analysis에서 추출된 정보 활용
+                if "item" in metadata_filter:
+                    item = metadata_filter["item"]
+                if "channel" in metadata_filter:
+                    channel = metadata_filter["channel"]
+
+            # 쿼리에서 채널/분쟁유형 추론
+            if not channel:
+                if any(
+                    kw in query for kw in ["온라인", "인터넷", "쿠팡", "배달", "앱"]
+                ):
+                    channel = "온라인구매"
+                elif any(kw in query for kw in ["방문", "집으로"]):
+                    channel = "방문판매"
+
+            if not dispute_type:
+                if any(kw in query for kw in ["환불", "반품", "취소"]):
+                    dispute_type = "환불"
+                elif any(kw in query for kw in ["교환", "바꿔"]):
+                    dispute_type = "교환"
+                elif any(kw in query for kw in ["수리", "고장", "결함"]):
+                    dispute_type = "하자"
+
+            law_queries = await expand_query_for_law_search(
+                query=query,
+                item=item,
+                channel=channel,
+                dispute_type=dispute_type,
+                keywords=keywords,
+                timeout=5.0,  # LLM 타임아웃 증가 (3초 → 5초)
+            )
+
+            return law_queries
+
+        except Exception as e:
+            logger.warning(f"[LawAgent] Law-specific expansion failed: {e}")
+            return []
+
     async def _execute_search(
         self,
         query: str,
         top_k: int,
         task_input: Dict[str, Any] | None = None,
     ) -> List[SimilarChunkResult]:
+        # Phase 2-10: 법령 전용 쿼리 확장 적용
+        law_specific_queries = await self._expand_for_law_search(query, task_input)
+
+        # 기존 expanded_queries와 병합
         expanded_queries: List[str] = []
         if task_input:
             expanded_queries = task_input.get("expanded_queries") or []
-        if not expanded_queries:
-            expanded_queries = [query]
+
+        # 법령 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
+        all_queries = law_specific_queries.copy()
+        for eq in expanded_queries:
+            if eq not in all_queries:
+                all_queries.append(eq)
+        all_queries = all_queries[:6]  # 최대 6개로 제한
+
+        if not all_queries:
+            all_queries = [query]
+
+        logger.info(
+            f"[LawAgent] Using {len(all_queries)} queries: "
+            f"{all_queries[:3]}{'...' if len(all_queries) > 3 else ''}"
+        )
 
         db_config = _get_db_config()
 
@@ -52,7 +130,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         try:
             per_query_k = max(top_k, 12)
             all_results: List[List[SimilarChunkResult]] = []
-            for q in expanded_queries:
+            for q in all_queries:
                 results = await asyncio.to_thread(
                     retriever.hybrid_search,
                     q,
