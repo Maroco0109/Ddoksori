@@ -161,9 +161,14 @@ class TestAgentUnifiedRetrieverIntegration:
                 }
             )
 
-            mock_instance.hybrid_search.assert_called_once()
+            # Query Expansion으로 인해 hybrid_search가 여러 번 호출될 수 있음
+            # 최소 1번 이상 호출되었는지 확인
+            assert mock_instance.hybrid_search.call_count >= 1, (
+                f"Expected hybrid_search to be called at least once, "
+                f"but was called {mock_instance.hybrid_search.call_count} times"
+            )
             assert result["status"] == "success"
-            assert len(result["result"]["results"]) == 1
+            assert len(result["result"]["results"]) >= 1
 
     @pytest.mark.asyncio
     async def test_criteria_agent_uses_specialized_retriever(self):
