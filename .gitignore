@@ -92,3 +92,5 @@ frontend/.vite
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
+backend/backup.sql
+backup.sql
