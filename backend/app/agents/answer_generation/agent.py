@@ -31,7 +31,10 @@ from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 from .cache import get_answer_cache
 from .context_builder import ContextBuilder
 from .fallback import AnswerGenerationFallback
-from .template_loader import TemplateLoader
+from .template_loader import (
+    TemplateLoader,
+    extract_followup_from_response,
+)
 from .template_router import TemplateRouter
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
@@ -536,16 +539,24 @@ def _followup_detail_response(state: Dict, config=None) -> Dict:
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
     # Generate followup questions (캐시 응답에서도 생성)
-    query_analysis = state.get("query_analysis", {})
-    followup_generator = FollowupQuestionGenerator()
-    is_fallback = model_used in ("rule_based", "safe_fallback")
-    followup_result = followup_generator.generate_questions(
-        query_analysis=query_analysis,
-        retrieval=filtered_retrieval,
-        answer=draft_answer,
-        is_fallback=is_fallback,
-    )
-    followup_questions = followup_result.get("followup_questions", [])
+    # 1차: LLM 응답에서 동적으로 추출 시도
+    clean_answer, extracted_questions = extract_followup_from_response(draft_answer)
+    if extracted_questions:
+        # LLM이 생성한 질문이 있으면 사용하고 답변에서 제거
+        draft_answer = clean_answer
+        followup_questions = extracted_questions
+    else:
+        # 2차: 기존 generator로 fallback
+        query_analysis = state.get("query_analysis", {})
+        followup_generator = FollowupQuestionGenerator()
+        is_fallback = model_used in ("rule_based", "safe_fallback")
+        followup_result = followup_generator.generate_questions(
+            query_analysis=query_analysis,
+            retrieval=filtered_retrieval,
+            answer=draft_answer,
+            is_fallback=is_fallback,
+        )
+        followup_questions = followup_result.get("followup_questions", [])
 
     return {
         "draft_answer": draft_answer,
@@ -992,17 +1003,25 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
     # Phase 6: Generate followup questions
-    query_analysis = state.get("query_analysis", {})
-    followup_generator = FollowupQuestionGenerator()
-    is_fallback = model_used in ("rule_based", "safe_fallback")
-    followup_result = followup_generator.generate_questions(
-        query_analysis=query_analysis,
-        retrieval=retrieval,
-        answer=draft_answer,
-        is_fallback=is_fallback,
-        template_key=template_key,
-    )
-    followup_questions = followup_result.get("followup_questions", [])
+    # 1차: LLM 응답에서 동적으로 추출 시도
+    clean_answer, extracted_questions = extract_followup_from_response(draft_answer)
+    if extracted_questions:
+        # LLM이 생성한 질문이 있으면 사용하고 답변에서 제거
+        draft_answer = clean_answer
+        followup_questions = extracted_questions
+    else:
+        # 2차: 기존 generator로 fallback
+        query_analysis = state.get("query_analysis", {})
+        followup_generator = FollowupQuestionGenerator()
+        is_fallback = model_used in ("rule_based", "safe_fallback")
+        followup_result = followup_generator.generate_questions(
+            query_analysis=query_analysis,
+            retrieval=retrieval,
+            answer=draft_answer,
+            is_fallback=is_fallback,
+            template_key=template_key,
+        )
+        followup_questions = followup_result.get("followup_questions", [])
 
     if not retry_context:
         cache = get_answer_cache()
