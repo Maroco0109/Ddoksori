@@ -167,20 +167,9 @@ def _build_general_response(user_query: str) -> str:
     일반 대화(인사, 감사)에 대한 규칙 기반 응답 생성
     LLM 비용 절감을 위해 단순 패턴 매칭 사용.
     """
-    greetings = ["안녕", "반가", "hello", "hi"]
-    thanks = ["감사", "고마", "thanks", "thank"]
+    return """안녕하세요! 똑똑한 소비자지킴이 '똑소리'입니다. 저는 소비자 분쟁 해결을 위해 법령, 분쟁해결기준, 유사 사례 정보를 전문적으로 제공하고 있습니다.
 
-    query_lower = user_query.lower()
-
-    for g in greetings:
-        if g in query_lower:
-            return "안녕하세요! 저는 소비자 분쟁 상담을 도와드리는 똑소리입니다. 궁금하신 분쟁 관련 사항이 있으시면 말씀해 주세요."
-
-    for t in thanks:
-        if t in query_lower:
-            return "도움이 되셨다면 다행이에요. 추가로 궁금하신 사항이 있으시면 언제든 물어봐 주세요!"
-
-    return "네, 무엇을 도와드릴까요? 소비자 분쟁 관련 상담을 원하시면 자세한 상황을 알려주세요."
+환불 거부, 위약금 분쟁, 제품 하자 등 겪고 계신 문제를 구체적으로 말씀해 주시면 정확한 해결 방안을 안내해 드리겠습니다."""
 
 
 def _format_similar_cases(disputes: List[Dict], counsels: List[Dict]) -> str:

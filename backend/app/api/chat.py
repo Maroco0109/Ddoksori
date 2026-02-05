@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage
 
 from app.auth.dependencies import get_current_user_optional
 from app.auth.models import User
@@ -138,6 +139,7 @@ async def chat(
             chat_type=body.chat_type,
             onboarding=cast(Any, body.onboarding),
         )
+        initial_state["messages"] = [HumanMessage(content=body.message)]
 
         # 온보딩 데이터 영속화
         if body.onboarding and session_memory:
@@ -405,6 +407,7 @@ async def chat_stream_sse(
                 chat_type=body.chat_type,
                 onboarding=cast(Any, body.onboarding),
             )
+            initial_state["messages"] = [HumanMessage(content=body.message)]
 
             # 온보딩 데이터 영속화
             if body.onboarding and session_memory:
