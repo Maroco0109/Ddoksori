@@ -7,7 +7,7 @@ Query Extractors
 import logging
 import re
 from datetime import date, datetime
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from ...supervisor.state import OnboardingInfo
 
@@ -426,6 +426,177 @@ def determine_agency_hint(query: str) -> Optional[str]:
     return "KCA"
 
 
+def rewrite_query_for_scope_change(
+    query: str, product_scope_change: Dict[str, Any]
+) -> str:
+    """
+    제품 범위 변경이 감지되면 쿼리를 재작성합니다.
+
+    "모니터 말고 전자제품으로..."를 "TV 냉장고 노트북 스마트폰 하자 환불..."로 변환하여
+    벡터 검색이 더 다양한 결과를 반환하도록 합니다.
+
+    Args:
+        query: 원본 쿼리
+        product_scope_change: detect_product_scope_change() 결과
+
+    Returns:
+        재작성된 쿼리
+    """
+    expanded_category = product_scope_change.get("expanded_category")
+    negated_items = product_scope_change.get("negated_items", [])
+
+    if not expanded_category:
+        return query
+
+    # 카테고리별 대표 제품 예시 매핑
+    category_to_products = {
+        "전자기기": ["TV", "냉장고", "노트북", "스마트폰", "카메라", "태블릿"],
+        "가전제품": ["TV", "냉장고", "세탁기", "에어컨", "청소기", "전자레인지"],
+        "가구": ["침대", "소파", "책상", "의자", "옷장", "매트리스"],
+        "서비스": ["헬스장", "PT", "학원", "여행", "항공권", "웨딩"],
+        "의류잡화": ["옷", "신발", "가방", "지갑", "시계"],
+        "차량": ["자동차", "중고차", "오토바이", "자전거"],
+    }
+
+    modified = query
+
+    # Step 1: 부정 품목 제거 ("모니터 말고", "모니터 제외" 등)
+    for item in negated_items:
+        # "품목 말고", "품목말고" 패턴
+        modified = re.sub(
+            rf"{re.escape(item)}\s*말고\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*제외\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*대신\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*빼고\s*", "", modified, flags=re.IGNORECASE
+        )
+
+    # Step 2: 범위 확장 표현 제거 ("범위를 넓혀서", "더 넓게" 등)
+    expansion_patterns = [
+        r"범위를\s*넓혀서?",
+        r"더\s*넓게",
+        r"확장해?서?",
+        r"포괄적으로",
+        r"전자제품으?로?",  # "전자제품으로" 같은 중복 표현 제거
+        r"전자기기로?",
+        r"가전제품으?로?",
+    ]
+    for pattern in expansion_patterns:
+        modified = re.sub(pattern, "", modified, flags=re.IGNORECASE)
+
+    # Step 3: 중복 공백 제거
+    modified = re.sub(r"\s+", " ", modified).strip()
+
+    # Step 4: 구체적인 제품 예시 추가 (추상적 카테고리 대신)
+    product_examples = category_to_products.get(expanded_category, [])
+    if product_examples:
+        # 대표 제품 3-4개만 선택 (너무 많으면 쿼리가 길어짐)
+        selected_products = " ".join(product_examples[:4])
+        modified = f"{selected_products} {modified}"
+        logger.info(
+            f"[QueryRewrite] Category '{expanded_category}' → Products: {selected_products}"
+        )
+    else:
+        # Fallback: 카테고리 이름 사용
+        modified = f"{expanded_category} {modified}"
+
+    logger.info(f"[QueryRewrite] Original: '{query[:50]}...'")
+    logger.info(f"[QueryRewrite] Rewritten: '{modified[:60]}...'")
+
+    return modified
+
+
+def detect_product_scope_change(
+    query: str, onboarding: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    후속 질문에서 제품 범위 변경을 감지합니다.
+
+    예: "모니터 말고 전자제품으로 더 범위를 넓혀서"
+
+    Args:
+        query: 사용자 질문
+        onboarding: 온보딩 정보 (purchase_item 확인용)
+
+    Returns:
+        {
+            "should_ignore_product_filter": bool,  # 기존 제품 필터 무시 여부
+            "expanded_category": Optional[str],    # 확장된 카테고리 ("전자기기", "가전제품" 등)
+            "negated_items": List[str]             # 제외하려는 품목들
+        }
+    """
+    query_lower = query.lower()
+
+    logger.info(f"[ProductScopeChange] Checking query: '{query[:50]}...'")
+
+    # 1. 부정/변경 키워드 감지
+    negation_keywords = ["말고", "제외", "대신", "다른", "아니라", "빼고"]
+    has_negation = any(kw in query_lower for kw in negation_keywords)
+    logger.info(f"[ProductScopeChange] has_negation={has_negation}")
+
+    # 2. 범위 확장 키워드 감지
+    expansion_keywords = ["범위를 넓혀", "더 넓게", "확장", "포괄", "전반"]
+    has_expansion = any(kw in query_lower for kw in expansion_keywords)
+    logger.info(f"[ProductScopeChange] has_expansion={has_expansion}")
+
+    # 3. 넓은 카테고리 키워드 감지
+    broad_categories = {
+        "전자제품": "전자기기",
+        "전자기기": "전자기기",
+        "가전제품": "가전제품",
+        "가전": "가전제품",
+        "전기제품": "가전제품",
+    }
+
+    expanded_category = None
+    for keyword, category in broad_categories.items():
+        if keyword in query_lower:
+            expanded_category = category
+            logger.info(
+                f"[ProductScopeChange] Found category keyword '{keyword}' -> {category}"
+            )
+            break
+
+    # 4. 제외하려는 품목 추출
+    negated_items = []
+
+    # 4.1. onboarding에서 purchase_item 확인
+    if has_negation and onboarding:
+        purchase_item = onboarding.get("purchase_item", "")
+        if purchase_item and purchase_item.lower() in query_lower:
+            negated_items.append(purchase_item)
+
+    # 4.2. onboarding이 없어도 쿼리에서 일반적인 제품명 추출 시도
+    if has_negation and not negated_items:
+        # 일반적인 제품 키워드 추출 ("X 말고" 패턴)
+        for product in COMMON_PRODUCTS:
+            # "모니터 말고", "노트북 말고" 같은 패턴 감지
+            if f"{product} 말고" in query_lower or f"{product}말고" in query_lower:
+                negated_items.append(product)
+                break
+
+    # 결정: 제품 필터를 무시해야 하는가?
+    # 범위 확장 키워드나 넓은 카테고리가 있으면 필터 무시
+    should_ignore = (has_negation or has_expansion) and expanded_category is not None
+
+    logger.info(
+        f"[ProductScopeChange] Decision: should_ignore={should_ignore}, "
+        f"negation={has_negation}, expansion={has_expansion}, "
+        f"category={expanded_category}, negated={negated_items}"
+    )
+
+    return {
+        "should_ignore_product_filter": should_ignore,
+        "expanded_category": expanded_category,
+        "negated_items": negated_items,
+    }
+
+
 __all__ = [
     "extract_info_from_message",
     "get_missing_fields_description",
@@ -435,4 +606,6 @@ __all__ = [
     "determine_agency_hint",
     "compute_days_since_purchase",
     "determine_product_category",
+    "detect_product_scope_change",
+    "rewrite_query_for_scope_change",
 ]
