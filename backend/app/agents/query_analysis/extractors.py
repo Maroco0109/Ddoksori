@@ -31,15 +31,76 @@ def extract_dispute_type(text: str) -> Optional[str]:
     return None
 
 
+# Dispute Reason type definition
+DisputeReason = Literal["simple_change_of_mind", "defect", "unknown"]
+
+
 from .constants import (
     COMMON_PRODUCTS,
+    DEFECT_KEYWORDS,
     DISPUTE_VERBS,
     FIELD_KOREAN_NAMES,
     REQUIRED_DISPUTE_FIELDS,
+    SIMPLE_CHANGE_OF_MIND_KEYWORDS,
     VERB_SYNONYMS,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def detect_dispute_reason(query: str) -> DisputeReason:
+    """
+    사용자 질의에서 분쟁 사유를 감지합니다.
+
+    분쟁 사유:
+    - simple_change_of_mind (단순변심): 제품에 하자가 없지만 환불/교환 원하는 경우
+      예: "디자인이 마음에 안 들어요", "색상이 달라서 환불하고 싶어요"
+    - defect (하자): 제품에 결함, 고장, 불량 등이 있는 경우
+      예: "노트북이 고장났어요", "화면에 하자가 있어요"
+    - unknown: 분쟁 사유를 명확히 판단할 수 없는 경우
+
+    Args:
+        query: 사용자 질의 문자열
+
+    Returns:
+        DisputeReason: "simple_change_of_mind" | "defect" | "unknown"
+    """
+    query_lower = query.lower().replace(" ", "")
+
+    # 하자 키워드 체크 (공백 제거 버전으로 비교)
+    defect_match = False
+    for kw in DEFECT_KEYWORDS:
+        kw_normalized = kw.replace(" ", "")
+        if kw_normalized in query_lower:
+            defect_match = True
+            break
+
+    # 단순변심 키워드 체크 (공백 제거 버전으로 비교)
+    change_of_mind_match = False
+    for kw in SIMPLE_CHANGE_OF_MIND_KEYWORDS:
+        kw_normalized = kw.replace(" ", "")
+        if kw_normalized in query_lower:
+            change_of_mind_match = True
+            break
+
+    # 결과 결정
+    # 둘 다 매칭되면 하자 우선 (실제 하자가 있는 경우가 법적으로 더 보호받음)
+    if defect_match and change_of_mind_match:
+        logger.info(
+            "[detect_dispute_reason] Both keywords matched, prioritizing defect"
+        )
+        return "defect"
+    elif defect_match:
+        logger.info("[detect_dispute_reason] Detected: defect (하자)")
+        return "defect"
+    elif change_of_mind_match:
+        logger.info(
+            "[detect_dispute_reason] Detected: simple_change_of_mind (단순변심)"
+        )
+        return "simple_change_of_mind"
+    else:
+        logger.info("[detect_dispute_reason] Unknown dispute reason")
+        return "unknown"
 
 
 PRODUCT_CATEGORY_MAP = {
