@@ -12,6 +12,7 @@ import EditPost from './components/EditPost';
 export default function BoardPage() {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
   const [activeTab, setActiveTab] = useState<BoardCategoryId>('all');
   const [currentView, setCurrentView] = useState<'list' | 'write' | 'detail' | 'edit'>('list'); // 'list', 'write', 'detail', 'edit'
@@ -410,7 +411,7 @@ export default function BoardPage() {
       id: Date.now(),
       category: categoryDisplay,
       title: formData.title,
-      author: '현재사용자',
+      author: user?.name || user?.email || '사용자',
       date: new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1),
       views: 0,
       likes: 0,

@@ -26,15 +26,11 @@ from typing import Any, Dict, List
 from langchain_core.messages import AIMessage
 
 from ...domain import AGENCY_INFO
-from ..followup.generator import FollowupQuestionGenerator
 from ..retrieval.sufficiency import RetrievalSufficiencyChecker
 from .cache import get_answer_cache
 from .context_builder import ContextBuilder
 from .fallback import AnswerGenerationFallback
-from .template_loader import (
-    TemplateLoader,
-    extract_followup_from_response,
-)
+from .template_loader import TemplateLoader
 from .template_router import TemplateRouter
 
 # 제한된 영역(금융, 의료 등)에 대한 고정 응답 템플릿
@@ -168,43 +164,22 @@ def _get_llm_model() -> str:
 
 def _build_general_response(user_query: str) -> str:
     """
-    일반 대화(인사, 감사, 확인, 작별)에 대한 규칙 기반 응답 생성
+    일반 대화(인사, 감사)에 대한 규칙 기반 응답 생성
     LLM 비용 절감을 위해 단순 패턴 매칭 사용.
     """
-    query_lower = user_query.lower().strip()
+    greetings = ["안녕", "반가", "hello", "hi"]
+    thanks = ["감사", "고마", "thanks", "thank"]
 
-    # 1. 작별 인사 (먼저 체크 - "안녕히"가 "안녕"보다 먼저 매칭되어야 함)
-    goodbyes = ["bye", "안녕히", "잘가", "수고"]
-    for g in goodbyes:
-        if g in query_lower:
-            return "이용해 주셔서 감사합니다! 다음에 또 찾아주세요."
+    query_lower = user_query.lower()
 
-    # 2. 인사말 패턴 (확장)
-    greetings = ["안녕", "반가", "hello", "hi", "하이", "ㅎㅇ", "ㅎ2"]
     for g in greetings:
         if g in query_lower:
-            return (
-                "안녕하세요! 저는 소비자 분쟁 상담을 도와드리는 **똑소리**입니다.\n\n"
-                "궁금하신 분쟁 관련 사항이 있으시면 편하게 말씀해 주세요.\n\n"
-                "예를 들어:\n"
-                '- "노트북 환불 가능한가요?"\n'
-                '- "헬스장 계약 취소하고 싶어요"\n'
-                '- "청약철회 기간이 어떻게 되나요?"'
-            )
+            return "안녕하세요! 저는 소비자 분쟁 상담을 도와드리는 똑소리입니다. 궁금하신 분쟁 관련 사항이 있으시면 말씀해 주세요."
 
-    # 3. 감사 패턴
-    thanks = ["감사", "고마", "thanks", "thank"]
     for t in thanks:
         if t in query_lower:
-            return "도움이 되셨다면 다행이에요! 추가로 궁금하신 사항이 있으시면 언제든 물어봐 주세요."
+            return "도움이 되셨다면 다행이에요. 추가로 궁금하신 사항이 있으시면 언제든 물어봐 주세요!"
 
-    # 4. 확인/동의 패턴
-    confirmations = ["네", "예", "알겠", "오케이", "ok", "ㅇㅇ", "ㅇㅋ"]
-    for c in confirmations:
-        if query_lower == c or query_lower.startswith(c + " "):
-            return "네, 추가로 궁금하신 점이 있으시면 말씀해 주세요!"
-
-    # 5. 기본 응답
     return "네, 무엇을 도와드릴까요? 소비자 분쟁 관련 상담을 원하시면 자세한 상황을 알려주세요."
 
 
@@ -538,33 +513,13 @@ def _followup_detail_response(state: Dict, config=None) -> Dict:
     cited_cases = _extract_cited_cases(filtered_retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")
 
-    # Generate followup questions (캐시 응답에서도 생성)
-    # 1차: LLM 응답에서 동적으로 추출 시도
-    clean_answer, extracted_questions = extract_followup_from_response(draft_answer)
-    if extracted_questions:
-        # LLM이 생성한 질문이 있으면 사용하고 답변에서 제거
-        draft_answer = clean_answer
-        followup_questions = extracted_questions
-    else:
-        # 2차: 기존 generator로 fallback
-        query_analysis = state.get("query_analysis", {})
-        followup_generator = FollowupQuestionGenerator()
-        is_fallback = model_used in ("rule_based", "safe_fallback")
-        followup_result = followup_generator.generate_questions(
-            query_analysis=query_analysis,
-            retrieval=filtered_retrieval,
-            answer=draft_answer,
-            is_fallback=is_fallback,
-        )
-        followup_questions = followup_result.get("followup_questions", [])
-
     return {
         "draft_answer": draft_answer,
         "claim_evidence_map": claim_evidence_map,
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": 0.8,  # 캐시 사용이므로 고정값
-        "followup_questions": followup_questions,
+        "followup_questions": [],
         "response_depth": "detail",
         "available_details": None,
         "retrieval": filtered_retrieval,  # retrieval state도 업데이트
@@ -673,7 +628,6 @@ def _build_generation_result(
     model_used: str = None,
     cache_hit: bool = False,
     clarifying_questions: List = None,
-    is_fallback: bool = False,
     **kwargs,
 ) -> Dict:
     """통합 결과 생성 헬퍼"""
@@ -694,7 +648,6 @@ def _build_generation_result(
         "messages": [AIMessage(content=answer)],
         "generation_model_used": model_used,
         "_cache_hit": cache_hit,
-        "is_fallback": is_fallback,
     }
     if clarifying_questions:
         result["clarifying_questions"] = clarifying_questions
@@ -800,7 +753,6 @@ def _check_sufficiency(state: Dict, retrieval: Dict, start_time: float) -> tuple
             retrieval_confidence=retrieval_confidence,
             clarifying_questions=suf_result.clarifying_questions,
             model_used="sufficiency_insufficient",
-            is_fallback=True,
         )
         return (result, retrieval_confidence)
 
@@ -873,7 +825,7 @@ def _render_and_generate(
         mode: 현재 모드 (NEED_RAG 등)
 
     Returns:
-        (draft_answer, model_used, claim_evidence_map, template_key) 튜플
+        (draft_answer, model_used, claim_evidence_map) 튜플
     """
     query_analysis = state.get("query_analysis", {})
     query_type = query_analysis.get("query_type", "dispute")
@@ -901,6 +853,16 @@ def _render_and_generate(
     template_key = router.select_template(state)
     context = ctx_builder.build(state)
 
+    # DEBUG: 검색 결과 전달 확인
+    logger.info(f"[Generation DEBUG] retrieval keys: {list(retrieval.keys())}")
+    logger.info(f"[Generation DEBUG] laws count: {len(retrieval.get('laws', []))}")
+    logger.info(f"[Generation DEBUG] criteria count: {len(retrieval.get('criteria', []))}")
+    logger.info(f"[Generation DEBUG] disputes count: {len(retrieval.get('disputes', []))}")
+    logger.info(f"[Generation DEBUG] counsels count: {len(retrieval.get('counsels', []))}")
+    logger.info(f"[Generation DEBUG] law_data preview: {context.get('law_data', '')[:200]}...")
+    logger.info(f"[Generation DEBUG] criteria_data preview: {context.get('criteria_data', '')[:200]}...")
+    logger.info(f"[Generation DEBUG] case_data preview: {context.get('case_data', '')[:200]}...")
+
     if template_key == "fallback":
         context["logic_from_gold_set"] = router.get_fallback_reason(state)
 
@@ -924,7 +886,7 @@ def _render_and_generate(
         )
     )
 
-    return (draft_answer, model_used, claim_evidence_map, template_key)
+    return (draft_answer, model_used, claim_evidence_map)
 
 
 async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
@@ -952,14 +914,24 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
 
     start_time = time.time()
 
+    # DEBUG: 노드 진입 확인
+    retrieval = state.get("retrieval") or {}  # None인 경우 빈 dict 사용
+    logger.info(f"[generation_node_v2] === 답변 생성 노드 시작 ===")
+    logger.info(f"[generation_node_v2] retrieval keys: {list(retrieval.keys()) if retrieval else 'EMPTY'}")
+    if retrieval:
+        logger.info(f"[generation_node_v2] laws: {len(retrieval.get('laws', []))}, criteria: {len(retrieval.get('criteria', []))}, disputes: {len(retrieval.get('disputes', []))}, counsels: {len(retrieval.get('counsels', []))}")
+    else:
+        logger.info(f"[generation_node_v2] retrieval is empty (NO_RETRIEVAL mode)")
+
     # Phase 0: 빠른 탈출
     early_result = _try_early_exit(state, config, start_time)
     if early_result is not None:
+        logger.info(f"[generation_node_v2] Early exit triggered")
         return early_result
 
     user_query = state.get("user_query", "")
-    query_analysis = state.get("query_analysis", {})
-    retrieval = state.get("retrieval", {})
+    query_analysis = state.get("query_analysis") or {}
+    retrieval = state.get("retrieval") or {}  # None인 경우 빈 dict 사용
     retry_context = state.get("retry_context")
     query_type = query_analysis.get("query_type", "dispute")
     onboarding = state.get("onboarding") or {}
@@ -994,34 +966,19 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     retry_supplement = (
         _build_retry_prompt_supplement(retry_context) if retry_context else None
     )
-    draft_answer, model_used, claim_evidence_map, template_key = _render_and_generate(
+    draft_answer, model_used, claim_evidence_map = _render_and_generate(
         state, user_query, retrieval, onboarding, retry_supplement, mode
     )
 
     # Phase 5: Post-processing
+    # 5.1: 답변 형식 후처리 (헤더 줄바꿈, 번호 추가, 출처 보강)
+    from .postprocessor import postprocess_answer
+    logger.info(f"[generation_node_v2] Before postprocess - source section exists: {'[출처]' in draft_answer}")
+    draft_answer = postprocess_answer(draft_answer, retrieval)
+    logger.info(f"[generation_node_v2] After postprocess - answer length: {len(draft_answer)}")
+
     cited_cases = _extract_cited_cases(retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")
-
-    # Phase 6: Generate followup questions
-    # 1차: LLM 응답에서 동적으로 추출 시도
-    clean_answer, extracted_questions = extract_followup_from_response(draft_answer)
-    if extracted_questions:
-        # LLM이 생성한 질문이 있으면 사용하고 답변에서 제거
-        draft_answer = clean_answer
-        followup_questions = extracted_questions
-    else:
-        # 2차: 기존 generator로 fallback
-        query_analysis = state.get("query_analysis", {})
-        followup_generator = FollowupQuestionGenerator()
-        is_fallback = model_used in ("rule_based", "safe_fallback")
-        followup_result = followup_generator.generate_questions(
-            query_analysis=query_analysis,
-            retrieval=retrieval,
-            answer=draft_answer,
-            is_fallback=is_fallback,
-            template_key=template_key,
-        )
-        followup_questions = followup_result.get("followup_questions", [])
 
     if not retry_context:
         cache = get_answer_cache()
@@ -1043,7 +1000,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         "cited_cases": cited_cases,
         "has_sufficient_evidence": has_evidence,
         "retrieval_confidence": retrieval_confidence,
-        "followup_questions": followup_questions,
+        "followup_questions": [],
         "response_depth": "full",
         "available_details": None,
         "generation_time_ms": (time.time() - start_time) * 1000,

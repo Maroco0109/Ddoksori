@@ -53,7 +53,7 @@ export default function HomePage() {
       >
         {/* 배경 이미지 */}
         <img
-          src="/web_main.png"
+          src="/web_main_large.png"
           alt="똑소리 메인 배경"
           className="w-full h-auto block"
         />
@@ -88,21 +88,21 @@ export default function HomePage() {
         {/* 배경 이미지들 (반응형으로 개수 조절) */}
         {/* 두 번째 이미지 - 모든 화면 */}
         <img
-          src="/web_main.png"
+          src="/web_main_large.png"
           alt="똑소리 배경"
           className="w-full h-auto block"
         />
-        {/* 세 번째 이미지 - 태블릿 이하 (1024px 미만) */}
+        {/* 세 번째 이미지 - 모바일 전용 (768px 미만) */}
         <img
-          src="/web_main.png"
-          alt="똑소리 배경"
-          className="w-full h-auto block lg:hidden"
-        />
-        {/* 네 번째 이미지 - 모바일만 (768px 미만) */}
-        <img
-          src="/web_main.png"
+          src="/web_main_large.png"
           alt="똑소리 배경"
           className="w-full h-auto block md:hidden"
+        />
+        {/* 네 번째 이미지 - 작은 모바일 전용 (640px 미만) */}
+        <img
+          src="/web_main_large.png"
+          alt="똑소리 배경"
+          className="w-full h-auto block sm:hidden"
         />
 
         {/* 콘텐츠를 이미지 위에 오버레이 */}

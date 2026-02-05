@@ -133,7 +133,7 @@ class UserDB:
                         VALUES (%s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (provider, provider_user_id) DO UPDATE SET
                             email = EXCLUDED.email,
-                            name = EXCLUDED.name,
+                            -- name은 업데이트하지 않음 (사용자가 설정한 닉네임 유지)
                             avatar_url = EXCLUDED.avatar_url,
                             last_login_at = NOW()
                         RETURNING *
@@ -270,6 +270,49 @@ class UserDB:
                 conn.close()
 
         await asyncio.to_thread(_update)
+
+    async def update_name(self, user_id: str, name: str) -> User:
+        """
+        사용자 이름(닉네임)을 업데이트합니다.
+
+        Args:
+            user_id: 사용자 ID
+            name: 새로운 이름
+
+        Returns:
+            User 모델 인스턴스
+
+        Raises:
+            psycopg2.Error: DB 오류
+        """
+
+        def _update():
+            conn = self._get_connection()
+            try:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET name = %s
+                        WHERE user_id = %s
+                        RETURNING *
+                        """,
+                        (name, user_id),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise ValueError(f"User not found: {user_id}")
+                conn.commit()
+                logger.info(f"[UserDB] 사용자 이름 업데이트: user_id={user_id}, name={name}")
+                return User(**dict(row))
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"[UserDB] 사용자 이름 업데이트 실패: {e}")
+                raise
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_update)
 
     async def delete_user(self, user_id: str) -> None:
         """

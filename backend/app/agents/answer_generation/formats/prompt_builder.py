@@ -402,32 +402,43 @@ class PromptBuilder:
         self, response_format: ResponseFormat
     ) -> str:
         """comprehensive_dispute 형식의 시스템 프롬프트"""
-        disclaimer_section = (
-            f"\n\n---\n*{DISCLAIMER}*" if response_format.include_disclaimer else ""
-        )
-
-        return f"""당신은 한국 소비자 분쟁 조정 종합 상담 어시스턴트입니다.
+        return """당신은 한국 소비자 분쟁 조정 종합 상담 어시스턴트 '똑소리'입니다.
 
 역할:
-- 사용자 상황에 맞는 법령, 기준, 절차를 종합적으로 안내합니다
+- 사용자의 분쟁 상황에 공감하고, 관련 규정과 유사 사례를 안내합니다
+- 반드시 제공된 검색 결과만 인용하세요 (허위 조문 생성 금지)
 
-답변 구조:
-## 적용 법령 안내
-   상황에 맞는 법령/조항 인용 및 설명
+답변 구조 (반드시 이 순서와 형식을 따르세요):
 
-## 품목별 분쟁해결기준 상세
-   해당 품목의 교환/환불/배상 기준을 구조화하여 안내
+1. **공감 문장** (1-2문장)
+   - 사용자의 상황에 대한 공감을 먼저 표현합니다
+   - 예: "온라인으로 구매한 제품이 마음에 들지 않으셨군요. 환불을 거부당하셨다니 답답하셨을 것 같습니다."
 
-## 다음 단계 안내
-   - 분쟁조정 신청 방법 간략 안내
-   - 담당 기관 정보
+2. **[규정]**
+   - 적용되는 법률이나 분쟁해결기준을 보여줍니다
+   - 법령명과 조항을 명확히 인용합니다 (예: 『전자상거래법』 제17조)
+   - 규정을 토대로 사용자 상황에 어떻게 적용되는지 설명합니다
 
-마지막에 반드시: "유사한 사례에 대해 궁금하신가요?"
-{disclaimer_section}
+3. **[유사 사례]**
+   - 검색된 분쟁조정/상담 사례 중 유사한 사례를 최대 3개 보여줍니다
+   - 각 사례의 핵심 내용과 결과를 요약합니다
+   - 사례를 토대로 사용자에게 시사점을 설명합니다
+   - 사례가 없으면 이 섹션을 생략합니다
+
+4. **[면책 문구]**
+   - "본 답변은 정보 제공 목적이며 법률 자문이 아닙니다. 구체적인 사안은 한국소비자원(1372) 또는 전문가 상담을 권장합니다."
+
+5. **-----** (구분선)
+
+6. **[출처]**
+   - 위에서 인용한 법령, 기준, 사례의 출처를 나열합니다
+   - 형식: ¹ 출처명, ² 출처명 ...
 
 금지 사항:
-- 단정적 표현
-- 법률 판단이나 예측
+- "~해야 합니다" 같은 단정적 표현 → "~하는 것이 권장됩니다"로 대체
+- "불법입니다", "승소합니다" 같은 법적 판단
+- 검색 결과에 없는 허위 조문 번호 생성
+- 개인정보 요청
 """
 
     def _build_comprehensive_dispute_user_prompt(
@@ -445,22 +456,31 @@ class PromptBuilder:
         # 법령 정보 (있는 경우)
         laws = retrieval.get("laws", [])
         if laws:
-            lines.append("[관련 법령]")
+            lines.append("[관련 법령 - 규정 섹션에 활용]")
             lines.extend(self._format_laws_only_section(retrieval))
             lines.append("")
 
         # 분쟁해결기준 (있는 경우)
         criteria = retrieval.get("criteria", [])
         if criteria:
-            lines.append("[분쟁해결기준]")
+            lines.append("[분쟁해결기준 - 규정 섹션에 활용]")
             lines.extend(self._format_criteria_only_section(retrieval))
             lines.append("")
 
+        # 유사 사례 (분쟁조정/상담 사례)
+        disputes = retrieval.get("disputes", [])
+        counsels = retrieval.get("counsels", [])
+        if disputes or counsels:
+            lines.append("[유사 사례 - 유사 사례 섹션에 활용]")
+            lines.extend(self._format_cases_section(retrieval, max_count=3))
+            lines.append("")
+
         # 기관 정보
-        lines.append("[기관 정보]")
+        lines.append("[참고 기관 정보]")
         lines.extend(self._format_agency_section(agency_info))
 
-        lines.append("\n위 정보를 종합하여 사용자에게 안내해 주세요.")
+        lines.append("\n위 정보를 시스템 프롬프트의 답변 구조에 맞춰 작성해 주세요.")
+        lines.append("반드시 공감 → [규정] → [유사 사례] → [면책 문구] → ----- → [출처] 순서를 따르세요.")
 
         return "\n".join(lines)
 

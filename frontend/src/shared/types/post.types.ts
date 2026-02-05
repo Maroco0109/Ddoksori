@@ -40,7 +40,7 @@ export interface Reply {
 
 export interface PostFormData {
   category: PostCategory;
-  subCategory?: string; // 분쟁해결사례 공유의 경우 서브 카테고리
+  subCategory?: string;
   title: string;
   content: string;
 }

@@ -5,9 +5,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-
-# Production에서는 상대 경로 사용 (nginx 프록시 통해 백엔드로 전달)
-ENV VITE_API_BASE_URL=""
 RUN npm run build
 
 # Production stage

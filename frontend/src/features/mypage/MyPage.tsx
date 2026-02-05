@@ -3,21 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useChatStore } from '@/features/chat/chat.store';
 import { ROUTES } from '@/shared/config/routes';
-import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare, Edit2, Check, X } from 'lucide-react';
+import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare, Edit2, Check, X, Trash2 } from 'lucide-react';
 import { formatDateTime } from '@/shared/lib/date';
 import { DISPLAY_TO_CATEGORY_MAP, CATEGORY_LABELS } from '@/shared/config/categories';
+import type { ChatSession } from '@/shared/types';
 
 export default function MyPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
+  const setUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
   const chatSessions = useChatStore((state) => state.chatSessions);
   const setCurrentSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setActiveChatType = useChatStore((state) => state.setActiveChatType);
+  const deleteChatSession = useChatStore((state) => state.deleteChatSession);
 
   // 닉네임 관련 상태
-  const [nickname, setNickname] = useState(user?.nickname || '현재사용자');
+  const [nickname, setNickname] = useState(user?.name || user?.email || '사용자');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState(nickname);
 
@@ -74,7 +78,7 @@ export default function MyPage() {
     setTempNickname(value);
   };
 
-  const handleSaveNickname = () => {
+  const handleSaveNickname = async () => {
     if (!tempNickname.trim()) {
       alert('닉네임을 입력해주세요.');
       return;
@@ -86,10 +90,39 @@ export default function MyPage() {
       return;
     }
 
-    // TODO: 백엔드 API 연동 시 닉네임 업데이트 API 호출
-    setNickname(tempNickname);
-    setIsEditingNickname(false);
-    alert('닉네임이 변경되었습니다.');
+    try {
+      // 백엔드 API 호출
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${BACKEND_URL}/api/users/me/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: tempNickname }),
+      });
+
+      if (!response.ok) {
+        throw new Error('닉네임 업데이트에 실패했습니다.');
+      }
+
+      const data = await response.json();
+
+      // auth store 업데이트
+      if (user && data.user) {
+        setUser({
+          ...user,
+          name: data.user.name,
+        });
+      }
+
+      setNickname(tempNickname);
+      setIsEditingNickname(false);
+      alert('닉네임이 변경되었습니다.');
+    } catch (error) {
+      console.error('[MyPage] 닉네임 업데이트 실패:', error);
+      alert('닉네임 변경에 실패했습니다. 다시 시도해주세요.');
+    }
   };
 
   const handleCancelNicknameEdit = () => {
@@ -146,6 +179,38 @@ export default function MyPage() {
     setCurrentSessionId(sessionId);
     setActiveChatType(chatType);
     navigate(ROUTES.CHAT);
+  };
+
+  const handleDeleteChat = (e: React.MouseEvent, sessionId: string, sessionTitle: string) => {
+    e.stopPropagation();
+
+    const confirmDelete = window.confirm(
+      `"${sessionTitle}"\n\n이 상담 내역을 삭제하시겠습니까?\n삭제된 내역은 복구할 수 없습니다.`
+    );
+
+    if (confirmDelete) {
+      deleteChatSession(sessionId, isAuthenticated);
+    }
+  };
+
+  // 상담 내역 미리보기 텍스트 추출 함수
+  const getSessionPreviewText = (session: ChatSession): string => {
+    if (session.type === 'dispute') {
+      // 분쟁 상담의 경우 "● 분쟁 상세 :" 부분을 추출
+      const userMessage = session.messages?.find((msg) => msg.type === 'user');
+      if (userMessage?.content) {
+        const disputeDetailMatch = userMessage.content.match(/● 분쟁 상세\s*:\s*(.+?)(\n|$)/);
+        if (disputeDetailMatch && disputeDetailMatch[1]) {
+          return disputeDetailMatch[1].trim();
+        }
+      }
+      // 분쟁 상세를 찾지 못한 경우 두 번째 메시지(AI 응답) 사용
+      return session.messages?.[1]?.content || '대화 내용이 없습니다';
+    } else {
+      // 일반 상담은 첫 번째 사용자 메시지 또는 두 번째 메시지 사용
+      const userMessage = session.messages?.find((msg) => msg.type === 'user');
+      return userMessage?.content || session.messages?.[1]?.content || '대화 내용이 없습니다';
+    }
   };
 
   const getProviderName = (provider: string) => {
@@ -402,40 +467,51 @@ export default function MyPage() {
           <>
             <div className="space-y-3">
               {paginatedChatSessions.map((session) => (
-                <button
+                <div
                   key={session.id}
-                  onClick={() => handleChatClick(session.id, session.type)}
-                  className="w-full bg-gray-50 hover:bg-gray-100 rounded-xl p-4 transition-all text-left border-2 border-transparent hover:border-deep-teal"
+                  className="w-full bg-gray-50 hover:bg-gray-100 rounded-xl p-4 transition-all border-2 border-transparent hover:border-deep-teal relative group"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span
-                          className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            session.type === 'dispute'
-                              ? 'bg-deep-teal/20 text-dark-navy'
-                              : 'bg-mint-green/20 text-dark-navy'
-                          }`}
-                        >
-                          {session.type === 'dispute' ? '분쟁 상담' : '일반 상담'}
-                        </span>
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Calendar size={12} />
-                          {formatDateTime(session.createdAt)}
-                        </span>
+                  <button
+                    onClick={() => handleChatClick(session.id, session.type)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span
+                            className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              session.type === 'dispute'
+                                ? 'bg-deep-teal/20 text-dark-navy'
+                                : 'bg-mint-green/20 text-dark-navy'
+                            }`}
+                          >
+                            {session.type === 'dispute' ? '분쟁 상담' : '일반 상담'}
+                          </span>
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <Calendar size={12} />
+                            {formatDateTime(session.createdAt)}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-dark-navy mb-1 truncate">{session.title}</h4>
+                        <p className="text-sm text-gray-purple line-clamp-2">
+                          {getSessionPreviewText(session)}
+                        </p>
                       </div>
-                      <h4 className="font-semibold text-dark-navy mb-1 truncate">{session.title}</h4>
-                      <p className="text-sm text-gray-purple line-clamp-2">
-                        {session.messages?.[0]?.content || '대화 내용이 없습니다'}
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-deep-teal rounded-full flex items-center justify-center">
-                        <MessageCircle size={20} className="text-white" />
+                      <div className="flex-shrink-0">
+                        <div className="w-10 h-10 bg-deep-teal rounded-full flex items-center justify-center">
+                          <MessageCircle size={20} className="text-white" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteChat(e, session.id, session.title)}
+                    className="absolute top-4 right-4 p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all opacity-0 group-hover:opacity-100"
+                    title="상담 내역 삭제"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               ))}
             </div>
             <Pagination currentPage={chatPage} totalPages={chatTotalPages} onPageChange={setChatPage} />

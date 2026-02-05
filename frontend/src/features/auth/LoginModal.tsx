@@ -1,6 +1,4 @@
 import { useUIStore } from '@/store';
-import { useAuthStore } from '@/features/auth/auth.store';
-import { useChatStore } from '@/features/chat/chat.store';
 
 // Google 로고 SVG
 const GoogleIcon = () => (
@@ -21,8 +19,6 @@ const NaverIcon = () => (
 
 export default function LoginModal() {
   const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
-  const login = useAuthStore((state) => state.login);
-  const loadChatSessions = useChatStore((state) => state.loadChatSessions);
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -32,22 +28,6 @@ export default function LoginModal() {
 
   const handleNaverLogin = () => {
     window.location.href = `${BACKEND_URL}/auth/naver`;
-  };
-
-  // 개발 환경에서만 사용할 테스트 로그인 함수
-  const handleTestLogin = () => {
-    const dummyUser = {
-      id: 'test-user-123',
-      email: 'test@example.com',
-      name: '테스트 사용자',
-      avatar: 'https://via.placeholder.com/100',
-      provider: 'google',
-    };
-    const dummyToken = 'test-jwt-token-12345';
-
-    login(dummyUser, dummyToken);
-    loadChatSessions(true);
-    setIsAuthModalOpen(false);
   };
 
   return (
@@ -96,27 +76,6 @@ export default function LoginModal() {
             <NaverIcon />
             <span>네이버로 계속하기</span>
           </button>
-
-          {/* 개발 환경에서만 보이는 테스트 로그인 버튼 */}
-          {import.meta.env.DEV && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300"></div>
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-2 text-gray-500">개발 전용</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleTestLogin}
-                className="w-full rounded-lg border-2 border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
-              >
-                <span>🧪 테스트 로그인</span>
-              </button>
-            </>
-          )}
         </div>
 
         <p className="text-[11px] text-gray-500 mt-5 leading-relaxed">

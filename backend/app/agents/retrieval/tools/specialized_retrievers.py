@@ -38,39 +38,6 @@ DOCUMENT_SIMILARITY_CANDIDATE_MULTIPLIER = int(
 
 
 @dataclass
-class LawSearchResult:
-    """법령 검색 결과"""
-
-    unit_id: str
-    law_id: str
-    law_name: str
-    level: str  # article, paragraph, item, subitem
-    article_no: str
-    paragraph_no: Optional[str]
-    item_no: Optional[str]
-    subitem_no: Optional[str]
-    full_path: str  # 예: "제14조 제1항"
-    text: str
-    similarity: float
-
-
-@dataclass
-class CriteriaSearchResult:
-    """기준 검색 결과"""
-
-    unit_id: str
-    source_id: str
-    source_label: str
-    category: Optional[str]
-    industry: Optional[str]
-    item_group: Optional[str]
-    item: Optional[str]
-    dispute_type: Optional[str]
-    unit_text: str
-    similarity: float
-
-
-@dataclass
 class DocumentLevelResult:
     """
     문서 수준 유사도 검색 결과 (Phase 3)
@@ -102,7 +69,6 @@ class LawRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 
@@ -182,7 +148,7 @@ class LawRetriever:
                     source_file=row.get("source_file"),
                     printed_page=row.get("printed_page"),
                     source_year=row.get("source_year"),
-                    metadata=metadata,
+                    metadata=metadata or None,
                     vector_similarity=float(row.get("vector_similarity", 0.0)),
                     rrf_score=float(row.get("rrf_score", 0.0)),
                 )
@@ -254,7 +220,6 @@ class CriteriaRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 
@@ -292,7 +257,7 @@ class CriteriaRetriever:
         rds = RDSInternalRetriever(self.db_config)
         rds.connect()
         try:
-            doc_types = document_types or ["시행규칙", "별표"]
+            doc_types = document_types or ["행정규칙", "별표"]
             rows, _sql_ms = rds.search_hybrid_rrf_2(
                 query_text=query,
                 filter_dataset="law_guide",
@@ -304,11 +269,6 @@ class CriteriaRetriever:
 
         results: List[SimilarChunkResult] = []
         for row in rows:
-            if not isinstance(row, dict):
-                logger.warning(
-                    "[CriteriaRetriever] Skipping non-dict row: %s", type(row)
-                )
-                continue
             metadata = row.get("metadata")
             if isinstance(metadata, str):
                 try:
@@ -347,177 +307,11 @@ class CriteriaRetriever:
                     source_file=row.get("source_file"),
                     printed_page=row.get("printed_page"),
                     source_year=row.get("source_year"),
-                    metadata=metadata,
+                    metadata=metadata or None,
                     vector_similarity=float(row.get("vector_similarity", 0.0)),
                     rrf_score=float(row.get("rrf_score", 0.0)),
                 )
             )
-
-        return results
-
-    def criteria_search(
-        self,
-        query: str,
-        top_k: int = 3,
-        document_types: Optional[List[str]] = None,
-        category_set: Optional[Dict[str, str]] = None,
-        rrf_k: int = 60,
-    ) -> List[SimilarChunkResult]:
-        """분류 세트 기반 criteria 검색 (DB 필터 포함 hybrid RRF)"""
-        if not self.conn:
-            raise RuntimeError(
-                "Database connection is not initialized. Call connect() first."
-            )
-
-        rds = RDSInternalRetriever(self.db_config)
-        query_embedding = rds.embed_query(query)
-
-        filter_dataset = "law_guide"
-        filter_document_type = document_types or ["시행규칙", "별표"]
-        subcategory = (category_set or {}).get("subcategory_name")
-        subcategory_like = None
-        if subcategory:
-            subcategory_like = subcategory if "%" in subcategory else f"%{subcategory}%"
-
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                WITH bm25_results AS (
-                    SELECT
-                        vc.chunk_id,
-                        ts_rank_cd(
-                            '{0.1, 0.2, 0.4, 0.6}',
-                            vc.text_tsv,
-                            websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
-                        )::FLOAT as score,
-                        ROW_NUMBER() OVER (
-                            ORDER BY ts_rank_cd(
-                                '{0.1, 0.2, 0.4, 0.6}',
-                                vc.text_tsv,
-                                websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
-                            ) DESC
-                        ) as rank
-                    FROM vector_chunks vc
-                    WHERE
-                        vc.text_tsv @@ websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
-                        AND ts_rank_cd(
-                            '{0.1, 0.2, 0.4, 0.6}',
-                            vc.text_tsv,
-                            websearch_to_tsquery('simple', regexp_replace(%s, '\\s+', ' OR ', 'g'))
-                        ) >= 0.02
-                        AND vc.chunk_type IN ('자식_청크', '손자_청크', '별표3_품질보증')
-                        AND ( %s IS NULL OR vc.dataset_type = %s )
-                        AND ( %s IS NULL OR vc.document_type = ANY(%s) )
-                        AND ( %s IS NULL OR vc.metadata ->> '소분류' LIKE %s )
-                    ORDER BY score DESC
-                    LIMIT 100
-                ),
-                vector_results AS (
-                    SELECT
-                        vc.chunk_id,
-                        (1 - (vc.embedding <=> %s::vector))::FLOAT as similarity,
-                        ROW_NUMBER() OVER (ORDER BY vc.embedding <=> %s::vector) as rank
-                    FROM vector_chunks vc
-                    WHERE
-                        vc.chunk_type IN ('자식_청크', '손자_청크', '별표3_품질보증')
-                        AND ( %s IS NULL OR vc.dataset_type = %s )
-                        AND ( %s IS NULL OR vc.document_type = ANY(%s) )
-                        AND ( %s IS NULL OR vc.metadata ->> '소분류' LIKE %s )
-                    ORDER BY vc.embedding <=> %s::vector
-                    LIMIT 100
-                ),
-                rrf_combined AS (
-                    SELECT
-                        COALESCE(b.chunk_id, v.chunk_id) as chunk_id,
-                        (COALESCE(1.0 / (%s + b.rank), 0) +
-                         COALESCE(1.0 / (%s + v.rank), 0))::FLOAT as rrf_score,
-                        COALESCE(b.score, 0)::FLOAT as bm25_score,
-                        COALESCE(v.similarity, 0)::FLOAT as vector_similarity
-                    FROM bm25_results b
-                    FULL OUTER JOIN vector_results v ON b.chunk_id = v.chunk_id
-                )
-                SELECT
-                    vc.chunk_id,
-                    vc.dataset_type,
-                    vc.text,
-                    rc.rrf_score,
-                    rc.bm25_score,
-                    rc.vector_similarity,
-                    vc.law_name,
-                    vc.chunk_type,
-                    vc.category,
-                    vc.document_type,
-                    vc.source_url,
-                    vc.source_file,
-                    vc.printed_page,
-                    vc.source_year,
-                    vc.metadata
-                FROM rrf_combined rc
-                JOIN vector_chunks vc ON rc.chunk_id = vc.chunk_id
-                ORDER BY rc.rrf_score DESC
-                LIMIT %s
-                """,
-                (
-                    query,
-                    query,
-                    query,
-                    query,
-                    filter_dataset,
-                    filter_dataset,
-                    filter_document_type,
-                    filter_document_type,
-                    subcategory_like,
-                    subcategory_like,
-                    query_embedding,
-                    query_embedding,
-                    filter_dataset,
-                    filter_dataset,
-                    filter_document_type,
-                    filter_document_type,
-                    subcategory_like,
-                    subcategory_like,
-                    query_embedding,
-                    rrf_k,
-                    rrf_k,
-                    top_k,
-                ),
-            )
-
-            results: List[SimilarChunkResult] = []
-            for row in cur.fetchall():
-                if not isinstance(row, (tuple, list)):
-                    logger.warning(
-                        "[CriteriaRetriever.criteria_search] Skipping non-tuple row: %s",
-                        type(row),
-                    )
-                    continue
-                metadata = row[14]
-                if isinstance(metadata, str):
-                    try:
-                        metadata = json.loads(metadata)
-                    except Exception:
-                        metadata = None
-                metadata = metadata if isinstance(metadata, dict) else {}
-
-                results.append(
-                    SimilarChunkResult(
-                        chunk_id=row[0],
-                        dataset_type=row[1] or "",
-                        text=row[2] or "",
-                        similarity=float(row[3] or 0.0),
-                        law_name=row[6],
-                        chunk_type=row[7],
-                        category=row[8],
-                        document_type=row[9],
-                        source_url=row[10],
-                        source_file=row[11],
-                        printed_page=row[12],
-                        source_year=row[13],
-                        metadata=metadata,
-                        vector_similarity=float(row[5] or 0.0),
-                        rrf_score=float(row[3] or 0.0),
-                    )
-                )
 
         return results
 
@@ -554,6 +348,65 @@ class CriteriaRetriever:
         }
         return labels.get(doc_type, doc_type)
 
+    def search_by_category(
+        self,
+        category: Optional[str] = None,
+        industry: Optional[str] = None,
+        item_group: Optional[str] = None,
+        top_k: int = 10,
+    ) -> List[SimilarChunkResult]:
+        """카테고리/산업/품목그룹으로 기준 검색"""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    cu.unit_id,
+                    cu.source_id,
+                    c.source_label,
+                    cu.category,
+                    cu.industry,
+                    cu.item_group,
+                    cu.item,
+                    cu.dispute_type,
+                    cu.unit_text,
+                    1.0 AS similarity
+                FROM criteria_units cu
+                JOIN criteria c ON cu.source_id = c.source_id
+                WHERE
+                    (%s IS NULL OR cu.category = %s)
+                    AND (%s IS NULL OR cu.industry = %s)
+                    AND (%s IS NULL OR cu.item_group = %s)
+                LIMIT %s
+                """,
+                (category, category, industry, industry, item_group, item_group, top_k),
+            )
+
+            return [
+                SimilarChunkResult(
+                    chunk_id=row[0],
+                    dataset_type="criteria",
+                    text=row[8],
+                    similarity=float(row[9]),
+                    law_name=None,
+                    chunk_type=None,
+                    category=row[3],
+                    document_type=None,
+                    source_url=None,
+                    source_file=None,
+                    printed_page=None,
+                    source_year=None,
+                    metadata={
+                        "source_id": row[1],
+                        "source_label": row[2],
+                        "industry": row[4],
+                        "item_group": row[5],
+                        "item": row[6],
+                        "dispute_type": row[7],
+                    },
+                )
+                for row in cur.fetchall()
+            ]
+
     def invoke(self, query: str, top_k: int = 10, **kwargs) -> List["Document"]:
         from .base import to_documents
 
@@ -568,7 +421,6 @@ class CaseRetriever:
         embed_api_url: Optional[str] = None,  # deprecated, kept for compatibility
     ):
         self.db_config = db_config
-        self.embed_api_url = embed_api_url  # PR-4: 누락된 속성 저장
         self.conn = None
         self._rds_retriever: Optional[RDSInternalRetriever] = None
 

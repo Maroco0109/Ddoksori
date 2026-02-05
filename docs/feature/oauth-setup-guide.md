@@ -350,9 +350,9 @@ grep -i "oauth.*error" backend/logs/app.log | tail -100
 
 ### 내부 문서
 
-- **전체 아키텍처**: `/path/to/project/docs/feature/conversational-chatbot-transformation.md`
-- **Quick Start Guide**: `/path/to/project/docs/guides/conversational-chatbot-quickstart.md`
-- **E2E 테스트**: `/path/to/project/docs/testing/e2e-test-guide.md`
+- **전체 아키텍처**: `/docs/feature/conversational-chatbot-transformation.md`
+- **Quick Start Guide**: `/docs/guides/conversational-chatbot-quickstart.md`
+- **E2E 테스트**: `/docs/testing/e2e-test-guide.md`
 
 ---
 

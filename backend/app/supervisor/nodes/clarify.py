@@ -290,25 +290,6 @@ def ask_clarification_node(state: ChatState) -> Dict[str, Any]:
     query_analysis = state.get("query_analysis") or {}
     query_type = query_analysis.get("query_type")
 
-    # 매우 짧은 쿼리 (1-4자)는 상세 정보 요청
-    user_query = state.get("user_query", "")
-    if len(user_query.strip()) <= 4 and query_type in ("dispute", "criteria"):
-        short_query_questions = [
-            "어떤 제품이나 서비스와 관련된 문의인가요?",
-            "구체적으로 어떤 상황에서 문제가 발생했나요?",
-            "현재 원하시는 해결 방법이 있으신가요? (예: 환불, 교환, 수리 등)",
-        ]
-        response = _build_clarification_response(short_query_questions)
-        logger.info(
-            f"[Clarify] Very short dispute/criteria query detected: '{user_query}' (length: {len(user_query.strip())})"
-        )
-        return {
-            "final_answer": response,
-            "clarifying_questions": short_query_questions,
-            "awaiting_user_choice": True,
-            "messages": [AIMessage(content=response)],
-        }
-
     if query_type == "ambiguous":
         user_query = state.get("user_query", "")
         if len(user_query.strip()) <= 5:

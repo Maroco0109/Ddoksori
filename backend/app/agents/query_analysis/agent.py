@@ -55,11 +55,13 @@ from .expanders import (
 from .extractors import (
     check_missing_onboarding_fields,
     detect_dispute_reason,
+    detect_product_scope_change,
     determine_agency_hint,
     extract_info_from_message,
     extract_keywords,
     get_missing_fields_description,
     normalize_query,
+    rewrite_query_for_scope_change,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,11 +133,6 @@ def query_analysis_node(state: ChatState) -> Dict:
 
     # Step 3: 키워드 추출
     keywords = extract_keywords(normalized_query)
-    # 온보딩 purchase_item을 keywords에 포함 (검색 에이전트 전달용)
-    if onboarding and onboarding.get("purchase_item"):
-        purchase_item = str(onboarding.get("purchase_item")).strip()
-        if purchase_item and purchase_item not in keywords:
-            keywords.append(purchase_item)
 
     # Step 4: 기관 추천 힌트 및 Restricted 도메인 감지
     restricted_domain = (
@@ -175,16 +172,17 @@ def query_analysis_node(state: ChatState) -> Dict:
     )
 
     # 라우팅 모드 결정 (clarification 제거됨)
-    # query_type이 'general'이면 classify_mode에서 'NO_RETRIEVAL'을 반환함
     mode = classify_mode(query_type, False, user_query)
 
     logger.info(f"[QueryAnalysis] mode={mode}, query_type={query_type}")
 
     # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
-
     dispute_reason = detect_dispute_reason(normalized_query)
     if dispute_reason != "unknown":
         logger.info(f"[QueryAnalysis] dispute_reason={dispute_reason}")
+
+    # Step 8.6: 제품 범위 변경 감지 (후속 질문에서 범위 확장/변경)
+    product_scope_change = detect_product_scope_change(normalized_query, onboarding)
 
     # v1 호환 결과 구조
     analysis_result: QueryAnalysisResult = {
@@ -212,6 +210,8 @@ def query_analysis_node(state: ChatState) -> Dict:
         "query_complexity": query_complexity.value,
         # === Dispute Reason: 단순변심 vs 하자 ===
         "dispute_reason": dispute_reason,
+        # === Product Scope Change: 제품 범위 변경 감지 ===
+        "product_scope_change": product_scope_change,
     }
 
     # === PR-6: L2 캐시 저장 ===
@@ -288,11 +288,45 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # Step 2: 질의 유형 분류 (Hybrid: Rule + LLM Fallback)
     from .classifiers import classify_query_type_with_confidence
+    from .llm_classifier import llm_classify
 
     query_type, rule_confidence = classify_query_type_with_confidence(normalized_query)
     logger.info(
         f"[QueryAnalysis v2] Rule-based classification: query_type={query_type}, confidence={rule_confidence:.2f}"
     )
+
+    # LLM Fallback: confidence < 0.7이면 LLM으로 2차 분류
+    llm_used = False
+    if rule_confidence < 0.7:
+        logger.info(
+            f"[QueryAnalysis v2] Low confidence ({rule_confidence:.2f}), trying LLM fallback..."
+        )
+        try:
+            llm_result = await llm_classify(normalized_query)
+            if llm_result:
+                llm_type, llm_confidence, llm_reasoning = llm_result
+                logger.info(
+                    f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}, "
+                    f"reasoning='{llm_reasoning[:100]}'"
+                )
+                if llm_confidence > rule_confidence:
+                    logger.info(
+                        f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
+                    )
+                    query_type = llm_type
+                    llm_used = True
+                else:
+                    logger.info(
+                        f"[QueryAnalysis v2] Rule-based confidence higher, keeping: {query_type}({rule_confidence:.2f})"
+                    )
+        except Exception as e:
+            logger.warning(
+                f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}"
+            )
+    else:
+        logger.info(
+            f"[QueryAnalysis v2] High confidence ({rule_confidence:.2f}), skipping LLM fallback"
+        )
 
     # Step 2.5: 쿼리 복잡도 분류 (Adaptive RAG)
     query_complexity = classify_query_complexity(normalized_query)
@@ -313,71 +347,28 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
             intent = "information_search"
             query_type = "dispute"
 
+    # Step 3.5: 제품 범위 변경 감지 (Early - 쿼리 확장 전)
+    product_scope_change = detect_product_scope_change(normalized_query, onboarding)
+
+    # Step 3.6: 쿼리 재작성 (if scope change detected)
+    query_for_expansion = normalized_query
+    if product_scope_change.get("should_ignore_product_filter"):
+        query_for_expansion = rewrite_query_for_scope_change(normalized_query, product_scope_change)
+        logger.info(
+            f"[QueryAnalysis v2] Query rewritten for scope expansion: "
+            f"'{normalized_query[:30]}...' → '{query_for_expansion[:30]}...'"
+        )
+
     # Step 4: 키워드 추출
-    keywords = extract_keywords(normalized_query)
-    # 온보딩 purchase_item을 keywords에 포함 (검색 에이전트 전달용)
-    if onboarding and onboarding.get("purchase_item"):
-        purchase_item = str(onboarding.get("purchase_item")).strip()
-        if purchase_item and purchase_item not in keywords:
-            keywords.append(purchase_item)
+    keywords = extract_keywords(query_for_expansion)
 
-    # Step 5: LLM 호출 병렬화 (llm_classify + expand_query_with_llm_v2)
-    # 성능 최적화: 두 LLM 호출을 asyncio.gather로 병렬 실행 (6초 → 3초)
-    import asyncio
-
-    from .llm_classifier import llm_classify
-
-    async def _maybe_llm_classify(query: str, confidence: float):
-        """조건부 LLM 분류 - confidence < 0.7일 때만 실행"""
-        if confidence < 0.7:
-            try:
-                logger.info(
-                    f"[QueryAnalysis v2] Low confidence ({confidence:.2f}), trying LLM fallback..."
-                )
-                return await llm_classify(query)
-            except Exception as e:
-                logger.warning(f"[QueryAnalysis v2] LLM fallback failed: {e}")
-                return None
-        logger.info(
-            f"[QueryAnalysis v2] High confidence ({confidence:.2f}), skipping LLM fallback"
-        )
-        return None
-
-    # 병렬 실행 (keywords, intent는 이미 계산됨)
-    llm_result, expanded_queries = await asyncio.gather(
-        _maybe_llm_classify(normalized_query, rule_confidence),
-        expand_query_with_llm_v2(
-            query=normalized_query,
-            keywords=keywords,
-            intent=intent,
-            use_fallback=True,
-        ),
-        return_exceptions=True,  # 한 쪽 실패해도 다른 쪽 계속
+    # Step 5: LLM 기반 쿼리 확장 (v2 핵심) - 재작성된 쿼리로 확장
+    expanded_queries = await expand_query_with_llm_v2(
+        query=query_for_expansion,
+        keywords=keywords,
+        intent=intent,
+        use_fallback=True,
     )
-
-    # 예외 처리
-    if isinstance(llm_result, Exception):
-        logger.warning(f"[QueryAnalysis v2] LLM classify exception: {llm_result}")
-        llm_result = None
-    if isinstance(expanded_queries, Exception):
-        logger.warning(
-            f"[QueryAnalysis v2] Query expansion exception: {expanded_queries}"
-        )
-        expanded_queries = [normalized_query]  # fallback
-
-    # LLM 결과 처리
-    llm_used = False
-    if llm_result:
-        llm_type, llm_confidence, llm_reasoning = llm_result
-        logger.info(
-            f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}"
-        )
-        if llm_confidence > rule_confidence:
-            logger.info(
-                f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
-            )
-            query_type = llm_type
-            llm_used = True
 
     # Step 5.5: 멀티턴 컨텍스트 보강 (짧은 후속 질문)
     last_turn = state.get("_last_turn_context") or {}
@@ -446,15 +437,15 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     logger.info(
         f"[QueryAnalysis v2] Before classify_mode: query_type={query_type}, intent={intent}"
     )
-    # query_type이 'general'이면 classify_mode에서 'NO_RETRIEVAL'을 반환함
     mode = classify_mode(query_type, needs_clarification, user_query)
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
     # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
-
     dispute_reason = detect_dispute_reason(normalized_query)
     if dispute_reason != "unknown":
         logger.info(f"[QueryAnalysis v2] dispute_reason={dispute_reason}")
+
+    # Note: product_scope_change는 Step 3.5에서 이미 감지되었음 (쿼리 확장 전)
 
     phase_result = {}
 
@@ -480,17 +471,8 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
             "query_complexity": query_complexity.value,
             # === Dispute Reason: 단순변심 vs 하자 ===
             "dispute_reason": dispute_reason,
-            # 온보딩 컨텍스트 (enriched)
-            "onboarding_context": {
-                "purchase_item": enriched_onboarding.get("purchase_item"),
-                "purchase_item_category": enriched_onboarding.get("product_category"),
-                "days_since_purchase": enriched_onboarding.get("days_since_purchase"),
-                "within_withdrawal_period": (
-                    enriched_onboarding.get("days_since_purchase", 999) <= 14
-                    if enriched_onboarding.get("days_since_purchase") is not None
-                    else None
-                ),
-            },
+            # === Product Scope Change: 제품 범위 변경 감지 ===
+            "product_scope_change": product_scope_change,
         },
         "mode": mode,
         "query_complexity": query_complexity.value,
@@ -500,6 +482,13 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     # enriched_onboarding이 변경되었다면 state에 반영
     if enriched_onboarding and enriched_onboarding != onboarding:
         result["onboarding"] = enriched_onboarding
+
+    # Product scope change가 감지되면 재작성된 쿼리를 state에 반영 (retrieval에서 사용)
+    if product_scope_change.get("should_ignore_product_filter") and query_for_expansion != normalized_query:
+        result["user_query"] = query_for_expansion
+        logger.info(
+            f"[QueryAnalysis v2] State user_query updated for retrieval: '{query_for_expansion[:50]}...'"
+        )
 
     return result
 

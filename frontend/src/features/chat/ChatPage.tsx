@@ -284,11 +284,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeFormData(formDataForBackend);
 
     // 폼 데이터를 메시지로 변환
-    const platformInfo = disputeForm.platform ? `\n플랫폼: ${disputeForm.platform}` : '';
+    const platformInfo = disputeForm.platform ? `\n● 플랫폼 : ${disputeForm.platform}` : '';
     const formMessage: MessageWithCitations = {
       id: disputeMessages.length + 1,
       type: 'user' as const,
-      content: `[분쟁 정보]\n구매일자: ${disputeForm.purchaseDate}\n구매처: ${disputeForm.purchasePlace}${platformInfo}\n구매품목: ${disputeForm.purchaseItem}\n구매금액: ${disputeForm.purchaseAmount}원\n분쟁 상세: ${disputeForm.disputeDetail}`,
+      content: `[분쟁 정보]\n● 구매일자 : ${disputeForm.purchaseDate}\n● 구매처 : ${disputeForm.purchasePlace}${platformInfo}\n● 구매품목 : ${disputeForm.purchaseItem}\n● 구매금액 : ${disputeForm.purchaseAmount}원\n● 분쟁 상세 : ${disputeForm.disputeDetail}`,
       timestamp: new Date()
     };
 
@@ -296,20 +296,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setIsFormSubmitted(true);
     setStoreChatType('dispute');
     setActiveChatType('dispute');
-    setIsDisputeLoading(true);
 
-    // Create placeholder AI message for streaming
+    // AI 메시지 ID 미리 생성 (placeholder 없이)
     const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
 
     try {
-      const response = await chatMutation.mutateAsync({
+      // PR-7: Use SSE streaming API for real-time progress
+      const response = await startDisputeStream({
         message: formMessage.content,
         chat_type: 'dispute',
         top_k: 5,
@@ -323,106 +316,19 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         },
       });
 
-      let streamedText = '';
-      await simulateStreaming(response.answer, (chunk) => {
-        streamedText += chunk;
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: streamedText } : msg
-          )
-        );
-      });
-
-      const citations = extractCitations(response.answer, response.sources);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? { 
-                ...msg, 
-                content: response.answer, 
-                citations,
-                isRestricted: response.is_restricted,
-                agencyCode: response.agency_code,
-                agencyInfo: response.agency_info,
-              }
-            : msg
-        )
-      );
-
-      if (!response.has_sufficient_evidence && response.clarifying_questions.length > 0 && !response.is_restricted) {
-        const warningMessage: MessageWithCitations = {
-          id: aiMessageId + 1,
-          type: 'ai' as const,
-          content: '',
-          timestamp: new Date(),
-          hasSafetyWarning: true,
-          clarifyingQuestions: response.clarifying_questions,
-        };
-        setDisputeMessages((prev) => [...prev, warningMessage]);
-      }
-    } catch (error) {
-      console.error('Chat API error:', error);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
-    } finally {
-      setIsDisputeLoading(false);
-    }
-  };
-
-  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
-  const handleDisputeSend = async () => {
-    if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
-
-    const newMessage: MessageWithCitations = {
-      id: disputeMessages.length + 1,
-      type: 'user' as const,
-      content: disputeInputValue,
-      timestamp: new Date()
-    };
-
-    setDisputeMessages([...disputeMessages, newMessage]);
-    setDisputeInputValue('');
-
-    // Create placeholder AI message
-    const aiMessageId = disputeMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setDisputeMessages((prev) => [...prev, placeholderAI]);
-
-    try {
-      // PR-7: Use SSE streaming API for real-time progress
-      const response = await startDisputeStream({
-        message: newMessage.content,
-        chat_type: 'dispute',
-        top_k: 5,
-      });
-
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
-        setDisputeMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId
-              ? {
-                  ...msg,
-                  content: response.answer,
-                  citations,
-                }
-              : msg
-          )
-        );
+        const aiMessage: MessageWithCitations = {
+          id: aiMessageId,
+          type: 'ai' as const,
+          content: response.answer,
+          timestamp: new Date(),
+          citations,
+          isRestricted: response.is_restricted,
+          agencyCode: response.agency_code,
+          agencyInfo: response.agency_info,
+        };
+        setDisputeMessages((prev) => [...prev, aiMessage]);
 
         if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
           const warningMessage: MessageWithCitations = {
@@ -438,17 +344,131 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       }
     } catch (error) {
       console.error('Chat API error:', error);
-      setDisputeMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
+      const errorMessage: MessageWithCitations = {
+        id: aiMessageId,
+        type: 'ai' as const,
+        content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        timestamp: new Date(),
+      };
+      setDisputeMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  /**
+   * Phase 2-16: 입력 텍스트에서 불필요한 대화 히스토리 제거
+   * 사용자가 실수로 이전 답변을 복사해서 붙여넣은 경우를 방지
+   */
+  const cleanUserInput = (input: string): string => {
+    const text = input.trim();
+
+    // 답변 템플릿 헤더 패턴
+    const answerHeaders = [
+      '[답변 요약]',
+      '[규정]',
+      '[유사 사례]',
+      '[주의 사항]',
+      '[출처]',
+      '[이전 대화]',
+    ];
+
+    // 텍스트가 답변 템플릿 헤더로 시작하는지 확인
+    const startsWithTemplate = answerHeaders.some(header => text.startsWith(header));
+
+    if (!startsWithTemplate) {
+      return text; // 정상적인 사용자 질문
+    }
+
+    // 템플릿이 포함된 경우: 마지막 줄에서 실제 질문 추출
+    const lines = text.split('\n');
+
+    // 뒤에서부터 유효한 사용자 질문 찾기
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+
+      // 빈 줄이나 템플릿 요소 건너뛰기
+      if (!line) continue;
+      if (line.startsWith('#') || line.startsWith('-') || line.startsWith('●')) continue;
+      if (line.startsWith('[') && line.endsWith(']')) continue;
+      if (/^\d+\./.test(line)) continue; // 번호 리스트
+      if (line.startsWith('*') || line.startsWith('¹') || line.startsWith('²')) continue;
+
+      // 의미있는 질문 (최소 5글자)
+      if (line.length >= 5) {
+        console.warn('[ChatPage] Detected conversation history in input, extracted:', line.substring(0, 50));
+        return line;
+      }
+    }
+
+    // 추출 실패 시 원본 반환
+    return text;
+  };
+
+  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
+  const handleDisputeSend = async () => {
+    if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
+
+    // DEBUG: 원본 입력값 로깅
+    console.log('[ChatPage] Original disputeInputValue (length=' + disputeInputValue.length + '):', disputeInputValue.substring(0, 100));
+
+    // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
+    const cleanedInput = cleanUserInput(disputeInputValue);
+
+    // DEBUG: 정제 후 로깅
+    console.log('[ChatPage] Cleaned input (length=' + cleanedInput.length + '):', cleanedInput.substring(0, 100));
+
+    const newMessage: MessageWithCitations = {
+      id: disputeMessages.length + 1,
+      type: 'user' as const,
+      content: cleanedInput,
+      timestamp: new Date()
+    };
+
+    setDisputeMessages([...disputeMessages, newMessage]);
+    setDisputeInputValue('');
+
+    // AI 메시지 ID 미리 생성 (placeholder 없이)
+    const aiMessageId = disputeMessages.length + 2;
+
+    try {
+      // PR-7: Use SSE streaming API for real-time progress
+      const response = await startDisputeStream({
+        message: cleanedInput,
+        chat_type: 'dispute',
+        top_k: 5,
+      });
+
+      if (response) {
+        const citations = extractCitations(response.answer, response.sources);
+        const aiMessage: MessageWithCitations = {
+          id: aiMessageId,
+          type: 'ai' as const,
+          content: response.answer,
+          timestamp: new Date(),
+          citations,
+        };
+        setDisputeMessages((prev) => [...prev, aiMessage]);
+
+        if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
+          const warningMessage: MessageWithCitations = {
+            id: aiMessageId + 1,
+            type: 'ai' as const,
+            content: '',
+            timestamp: new Date(),
+            hasSafetyWarning: true,
+            clarifyingQuestions: response.clarifying_questions,
+          };
+          setDisputeMessages((prev) => [...prev, warningMessage]);
+        }
+      }
+    } catch (error) {
+      console.error('Chat API error:', error);
+      const errorMessage: MessageWithCitations = {
+        id: aiMessageId,
+        type: 'ai' as const,
+        content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        timestamp: new Date(),
+      };
+      setDisputeMessages((prev) => [...prev, errorMessage]);
     }
   };
 
@@ -456,10 +476,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleGeneralSend = async () => {
     if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
+    // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
+    const cleanedInput = cleanUserInput(generalInputValue);
+
     const newMessage: MessageWithCitations = {
       id: generalMessages.length + 1,
       type: 'user' as const,
-      content: generalInputValue,
+      content: cleanedInput,
       timestamp: new Date()
     };
 
@@ -468,37 +491,27 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setActiveChatType('general');
     setStoreChatType('general');
 
-    // Create placeholder AI message
+    // AI 메시지 ID 미리 생성 (placeholder 없이)
     const aiMessageId = generalMessages.length + 2;
-    const placeholderAI: MessageWithCitations = {
-      id: aiMessageId,
-      type: 'ai' as const,
-      content: '',
-      timestamp: new Date(),
-    };
-    setGeneralMessages((prev) => [...prev, placeholderAI]);
 
     try {
       // PR-7: Use SSE streaming API for real-time progress
       const response = await startGeneralStream({
-        message: newMessage.content,
+        message: cleanedInput,
         chat_type: 'general',
         top_k: 5,
       });
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
-        setGeneralMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId
-              ? {
-                  ...msg,
-                  content: response.answer,
-                  citations,
-                }
-              : msg
-          )
-        );
+        const aiMessage: MessageWithCitations = {
+          id: aiMessageId,
+          type: 'ai' as const,
+          content: response.answer,
+          timestamp: new Date(),
+          citations,
+        };
+        setGeneralMessages((prev) => [...prev, aiMessage]);
 
         if (response.awaiting_user_choice && response.clarifying_questions && response.clarifying_questions.length > 0) {
           const warningMessage: MessageWithCitations = {
@@ -514,17 +527,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       }
     } catch (error) {
       console.error('Chat API error:', error);
-      setGeneralMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId
-            ? {
-                ...msg,
-                content:
-                  '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-              }
-            : msg
-        )
-      );
+      const errorMessage: MessageWithCitations = {
+        id: aiMessageId,
+        type: 'ai' as const,
+        content: '죄송합니다. 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        timestamp: new Date(),
+      };
+      setGeneralMessages((prev) => [...prev, errorMessage]);
     }
   };
 

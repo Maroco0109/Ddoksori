@@ -1,4 +1,9 @@
-"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)
+
+Phase 2-10: 법령 전용 쿼리 확장 적용
+- 자연어 → 법률 용어 변환 (환불 → 청약철회)
+- 관련 법률명 자동 추가 (전자상거래법 등)
+"""
 
 import asyncio
 import logging
@@ -27,67 +32,6 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
     )
 
-    async def _expand_for_law_search(
-        self, query: str, task_input: Dict[str, Any] | None
-    ) -> List[str]:
-        """
-        법령 검색 전용 쿼리 확장 (Phase 2-10)
-
-        자연어 쿼리를 법률 용어가 포함된 쿼리로 변환합니다.
-        """
-        try:
-            from app.agents.query_analysis.llm_expander import (
-                expand_query_for_law_search,
-            )
-
-            # task_input에서 추출된 정보 가져오기
-            item = ""
-            channel = ""
-            dispute_type = ""
-            keywords = []
-
-            if task_input:
-                keywords = task_input.get("agent_keywords") or []
-                metadata_filter = task_input.get("metadata_filter") or {}
-
-                # query_analysis에서 추출된 정보 활용
-                if "item" in metadata_filter:
-                    item = metadata_filter["item"]
-                if "channel" in metadata_filter:
-                    channel = metadata_filter["channel"]
-
-            # 쿼리에서 채널/분쟁유형 추론
-            if not channel:
-                if any(
-                    kw in query for kw in ["온라인", "인터넷", "쿠팡", "배달", "앱"]
-                ):
-                    channel = "온라인구매"
-                elif any(kw in query for kw in ["방문", "집으로"]):
-                    channel = "방문판매"
-
-            if not dispute_type:
-                if any(kw in query for kw in ["환불", "반품", "취소"]):
-                    dispute_type = "환불"
-                elif any(kw in query for kw in ["교환", "바꿔"]):
-                    dispute_type = "교환"
-                elif any(kw in query for kw in ["수리", "고장", "결함"]):
-                    dispute_type = "하자"
-
-            law_queries = await expand_query_for_law_search(
-                query=query,
-                item=item,
-                channel=channel,
-                dispute_type=dispute_type,
-                keywords=keywords,
-                timeout=5.0,  # LLM 타임아웃 증가 (3초 → 5초)
-            )
-
-            return law_queries
-
-        except Exception as e:
-            logger.warning(f"[LawAgent] Law-specific expansion failed: {e}")
-            return []
-
     async def _execute_search(
         self,
         query: str,
@@ -114,7 +58,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
 
         logger.info(
             f"[LawAgent] Using {len(all_queries)} queries: "
-            f"{all_queries[:3]}{'...' if len(all_queries) > 3 else ''}"
+            f"law_specific={len(law_specific_queries)}, original={len(expanded_queries)}"
         )
 
         db_config = _get_db_config()
@@ -188,6 +132,63 @@ class LawRetrievalAgent(BaseRetrievalAgent):
             return filtered
         finally:
             retriever.close()
+
+    async def _expand_for_law_search(
+        self, query: str, task_input: Dict[str, Any] | None
+    ) -> List[str]:
+        """
+        법령 검색 전용 쿼리 확장 (Phase 2-10)
+
+        자연어 쿼리를 법률 용어가 포함된 쿼리로 변환합니다.
+        """
+        try:
+            from app.agents.query_analysis.llm_expander import expand_query_for_law_search
+
+            # task_input에서 추출된 정보 가져오기
+            item = ""
+            channel = ""
+            dispute_type = ""
+            keywords = []
+
+            if task_input:
+                keywords = task_input.get("agent_keywords") or []
+                metadata_filter = task_input.get("metadata_filter") or {}
+
+                # query_analysis에서 추출된 정보 활용
+                if "item" in metadata_filter:
+                    item = metadata_filter["item"]
+                if "channel" in metadata_filter:
+                    channel = metadata_filter["channel"]
+
+            # 쿼리에서 채널/분쟁유형 추론
+            if not channel:
+                if any(kw in query for kw in ["온라인", "인터넷", "쿠팡", "배달", "앱"]):
+                    channel = "온라인구매"
+                elif any(kw in query for kw in ["방문", "집으로"]):
+                    channel = "방문판매"
+
+            if not dispute_type:
+                if any(kw in query for kw in ["환불", "반품", "취소"]):
+                    dispute_type = "환불"
+                elif any(kw in query for kw in ["교환", "바꿔"]):
+                    dispute_type = "교환"
+                elif any(kw in query for kw in ["수리", "고장", "결함"]):
+                    dispute_type = "하자"
+
+            law_queries = await expand_query_for_law_search(
+                query=query,
+                item=item,
+                channel=channel,
+                dispute_type=dispute_type,
+                keywords=keywords,
+                timeout=5.0,  # LLM 타임아웃 증가 (3초 → 5초)
+            )
+
+            return law_queries
+
+        except Exception as e:
+            logger.warning(f"[LawAgent] Law-specific expansion failed: {e}")
+            return []
 
     def _format_results(self, results: List[SimilarChunkResult]) -> List[LawDocument]:
         formatted: List[LawDocument] = []

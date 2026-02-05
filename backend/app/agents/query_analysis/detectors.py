@@ -308,6 +308,15 @@ def is_meta_conversational(query: str) -> bool:
     """
     query_lower = query.lower().strip()
 
+    # [분쟁 정보] 형식의 질문은 실제 분쟁 상담이므로 meta_conversational이 아님
+    if "[분쟁 정보]" in query or "분쟁 정보" in query_lower:
+        return False
+
+    # 분쟁 의도 키워드가 있으면 meta_conversational이 아님
+    from .constants import DISPUTE_INTENT_KEYWORDS
+    if any(kw in query_lower for kw in DISPUTE_INTENT_KEYWORDS):
+        return False
+
     # 키워드 매칭 (우선)
     if any(kw in query_lower for kw in META_CONVERSATIONAL_KEYWORDS):
         logger.info(f"[QueryAnalysis] Meta-conversational by keyword: '{query[:30]}'")

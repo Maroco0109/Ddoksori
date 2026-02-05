@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
 
 from app.auth.dependencies import get_current_user_optional
 from app.auth.models import User
@@ -62,9 +61,6 @@ KNOWN_GRAPH_NODES = {
     "retrieval_criteria",
     "retrieval_case",
     "retrieval_merge",
-    "memory_save",
-    "inject_cached_retrieval",
-    "clarify",  # PR-4: 역질문 노드
 }
 
 
@@ -142,7 +138,6 @@ async def chat(
             chat_type=body.chat_type,
             onboarding=cast(Any, body.onboarding),
         )
-        initial_state["messages"] = [HumanMessage(content=body.message)]
 
         # 온보딩 데이터 영속화
         if body.onboarding and session_memory:
@@ -410,7 +405,6 @@ async def chat_stream_sse(
                 chat_type=body.chat_type,
                 onboarding=cast(Any, body.onboarding),
             )
-            initial_state["messages"] = [HumanMessage(content=body.message)]
 
             # 온보딩 데이터 영속화
             if body.onboarding and session_memory:
@@ -523,6 +517,14 @@ async def chat_stream_sse(
                     chain_name = event.get("name", "")
                     node_output = event.get("data", {}).get("output", {})
 
+                    # DEBUG: output_guardrail 노드의 출력 확인
+                    if chain_name == "output_guardrail" and isinstance(node_output, dict):
+                        og_answer = node_output.get("final_answer", "")
+                        logger.info(f"[SSE DEBUG] output_guardrail returned final_answer length: {len(og_answer) if og_answer else 'None/Empty'}")
+                        if og_answer and "[출처]" in og_answer:
+                            source_idx = og_answer.find("[출처]")
+                            logger.info(f"[SSE DEBUG] output_guardrail source: {og_answer[source_idx:source_idx+150]}...")
+
                     if (
                         isinstance(node_output, dict)
                         and chain_name in KNOWN_GRAPH_NODES
@@ -542,8 +544,19 @@ async def chat_stream_sse(
             if final_state:
                 answer = final_state.get("final_answer", "")
 
+                # DEBUG: SSE 전송 전 final_answer 확인
+                logger.info(f"[SSE DEBUG] final_state keys: {list(final_state.keys())}")
+                logger.info(f"[SSE DEBUG] final_answer length: {len(answer) if answer else 'None/Empty'}")
+                if answer and "[출처]" in answer:
+                    source_idx = answer.find("[출처]")
+                    logger.info(f"[SSE DEBUG] Source section: {answer[source_idx:source_idx+200]}...")
+
+                # DEBUG: full_answer 상태 확인
+                logger.info(f"[SSE DEBUG] full_answer (streamed) length: {len(full_answer)}")
+
                 # Fallback: final_answer가 비어있을 때 토큰 누적 답변 사용
                 if not answer and full_answer:
+                    logger.warning("[SSE DEBUG] final_answer is empty, using full_answer fallback")
                     review_executed = bool(final_state.get("review"))
                     if review_executed:
                         review_answer = (final_state.get("review", {}) or {}).get(
@@ -577,6 +590,17 @@ async def chat_stream_sse(
                     await session_memory.add_turn(role="assistant", content=answer)
 
                 complete_event = {"type": "complete", "data": response_data}
+
+                # DEBUG: 최종 SSE 전송 데이터 확인
+                sent_answer = response_data.get("answer", "")
+                logger.info(f"[SSE DEBUG] Sending answer length: {len(sent_answer)}")
+                if "[출처]" in sent_answer:
+                    source_idx = sent_answer.find("[출처]")
+                    logger.info(f"[SSE DEBUG] Sent source section: {sent_answer[source_idx:source_idx+200]}...")
+                else:
+                    logger.warning("[SSE DEBUG] No [출처] section in sent answer!")
+                    logger.info(f"[SSE DEBUG] Full answer preview: {sent_answer[:300]}...")
+
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
 
                 # 에이전트 트레이스 로깅

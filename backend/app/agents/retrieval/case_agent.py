@@ -54,8 +54,11 @@ class CaseRetrievalAgent(BaseRetrievalAgent):
                     "title": r.doc_title,
                     "source_org": r.source_org,
                     "url": r.url,
+                    "source_file": r.source_file,
+                    "printed_page": r.printed_page,
                     "decision_date": r.decision_date,
                     "similarity": r.similarity,
+                    "metadata": r.metadata,  # 메타데이터 추가
                 }
             )
         return formatted

@@ -47,8 +47,6 @@ class FollowupQuestionGenerator:
         retrieval: Dict,
         answer: str,
         format_id: Optional[str] = None,
-        is_fallback: bool = False,
-        template_key: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         """
         후속 질문과 명확화 질문을 생성합니다.
@@ -66,8 +64,6 @@ class FollowupQuestionGenerator:
                 - agency: Dict
             answer: 생성된 답변
             format_id: 답변 형식 식별자 (format 기반 필터링에 사용)
-            is_fallback: fallback 모드 여부 (rule_based, safe_fallback 사용 시)
-            template_key: 프롬프트 템플릿 키 (solution, action, execution 등)
 
         Returns:
             {
@@ -88,28 +84,12 @@ class FollowupQuestionGenerator:
             }
         """
         # 1. 컨텍스트 구축
-        context = self._build_context(
-            query_analysis, retrieval, answer, format_id, is_fallback
-        )
+        context = self._build_context(query_analysis, retrieval, answer, format_id)
 
-        # 2. 프롬프트 파일에서 동적 추출 시도 (inquiry, reject 제외)
-        if template_key:
-            # Lazy import to avoid circular dependency
-            from ..answer_generation.template_loader import extract_followup_questions
-
-            prompt_questions = extract_followup_questions(template_key)
-            if prompt_questions:
-                return {
-                    "followup_questions": prompt_questions,
-                    "clarifying_questions": self._generate_clarifying_questions(
-                        context
-                    ),
-                }
-
-        # 3. 기존 로직으로 후속 질문 생성
+        # 2. 후속 질문 생성
         followup_questions = self._generate_followup_questions(context)
 
-        # 4. 명확화 질문 생성
+        # 3. 명확화 질문 생성
         clarifying_questions = self._generate_clarifying_questions(context)
 
         return {
@@ -123,7 +103,6 @@ class FollowupQuestionGenerator:
         retrieval: Dict,
         answer: str,
         format_id: Optional[str] = None,
-        is_fallback: bool = False,
     ) -> Dict:
         """
         템플릿 매칭을 위한 컨텍스트를 구축합니다.
@@ -143,8 +122,6 @@ class FollowupQuestionGenerator:
         criteria = retrieval.get("criteria", [])
         agency = retrieval.get("agency", {})
 
-        # 온보딩 컨텍스트에서 enriched 데이터 접근
-        onboarding_ctx = query_analysis.get("onboarding_context", {})
         missing_fields = query_analysis.get("missing_fields", [])
 
         return {
@@ -158,62 +135,15 @@ class FollowupQuestionGenerator:
             # 답변 내용 분석
             "no_timeline_mentioned": self._check_no_timeline(answer),
             "no_procedure_mentioned": self._check_no_procedure(answer),
-            # 온보딩에 이미 있는 정보는 질문하지 않음
-            "has_purchase_date": bool(onboarding_ctx.get("days_since_purchase")),
-            "has_purchase_item": bool(onboarding_ctx.get("purchase_item")),
-            "has_item_category": bool(onboarding_ctx.get("purchase_item_category")),
-            # 답변에서 다룬 내용도 질문하지 않음
-            "answered_refund_period": "청약철회" in answer or "14일" in answer,
-            "answered_warranty": "품질보증" in answer or "보증기간" in answer,
-            # 누락된 정보 (legacy fallback: 온보딩 컨텍스트 없으면 사용)
-            "missing_purchase_date": (
-                "purchase_date" in missing_fields
-                and not onboarding_ctx.get("days_since_purchase")
-            ),
-            "missing_product_name": (
-                "product_name" in missing_fields
-                and not onboarding_ctx.get("purchase_item")
-            ),
+            # 누락된 정보
+            "missing_purchase_date": "purchase_date" in missing_fields,
+            "missing_product_name": "product_name" in missing_fields,
             "missing_issue_detail": "issue_detail" in missing_fields,
             "missing_seller_response": "seller_response" in missing_fields,
             "missing_amount": "amount" in missing_fields,
             # 답변 형식
             "format_id": format_id,
-            # Fallback 여부 (rule_based 또는 safe_fallback 사용 시)
-            "is_fallback": is_fallback,
         }
-
-    def _select_questions_by_context(self, context: Dict) -> List[str]:
-        """상황에 따라 적절한 질문 선택 (우선순위 로직)"""
-        has_criteria = context.get("has_criteria", False)
-        has_laws = context.get("has_laws", False)
-        has_cases = context.get("has_cases", False)
-        is_fallback = context.get("is_fallback", False)
-
-        # Case 1: 이상한 말 (fallback) - 3개 버튼
-        if is_fallback:
-            return [
-                "특정 품목의 환불 기준이 궁금하신가요?",
-                "관련 법령을 확인해 드릴까요?",
-                "유사한 분쟁 사례를 찾아볼까요?",
-            ]
-
-        # Case 2: 기준만 제공됨 - 2개 버튼
-        if has_criteria and not has_laws and not has_cases:
-            return [
-                "이 기준의 법적 근거가 궁금하신가요?",
-                "유사한 분쟁 사례를 확인해 보시겠어요?",
-            ]
-
-        # Case 3: 품목만 질의 - 2개 버튼
-        if context.get("product_only", False):
-            return [
-                "관련 법령을 확인해 드릴까요?",
-                "비슷한 사례를 찾아볼까요?",
-            ]
-
-        # Default: 빈 리스트 반환 (기존 템플릿 기반 로직 사용)
-        return []
 
     def _generate_followup_questions(self, context: Dict) -> List[str]:
         """
@@ -225,11 +155,6 @@ class FollowupQuestionGenerator:
         Returns:
             후속 질문 목록 (최대 max_followup_questions개)
         """
-        # 0. 상황별 템플릿 우선 적용 (fallback, 기준만, 품목만)
-        context_based = self._select_questions_by_context(context)
-        if context_based:
-            return context_based
-
         dispute_type = context.get("dispute_type", "일반")
         format_id = context.get("format_id")
 

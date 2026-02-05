@@ -1,4 +1,4 @@
-﻿# Law Agent LLM 재작성 디버그 노트
+﻿# Law Agent LLM 재작성 디버그 노트(트러블 슈팅)
 
 ## 요약
 - "??" 출력은 **PowerShell here-string에서 한글 리터럴이 깨지는 문제** 때문에 발생했다.
@@ -13,8 +13,6 @@
 - 유니코드 이스케이프를 사용한 직접 테스트는 정상 한글을 반환함.
 - 사용한 쿼리 문자열 예시:
   - `"\uc804\uc790\uc0c1\uac70\ub798 \ud658\ubd88 \uaddc\uc815 \uc54c\ub824\uc918"`
-- 결과 저장 위치:
-  - `C:\SKN_19\final_project\LLM\law_agent_rewrite_result.txt`
 
 ## 코드 변경
 - `backend\app\agents\retrieval\law_agent.py`

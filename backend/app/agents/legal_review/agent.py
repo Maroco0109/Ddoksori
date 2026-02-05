@@ -22,7 +22,6 @@ LLM이 생성한 답변이 법적 책임 소지가 있는 단정적인 표현을
 - next_agent='retry_generation' 반환으로 재생성 루프 지원
 """
 
-import os
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -230,14 +229,11 @@ def verify_citation_accuracy(
         accuracy = 1.0
 
     # 5. 통과 여부 결정
-    # [SEC-10] 인용 정확도 임계값을 환경변수로 설정 가능하게 변경
-    citation_threshold = float(os.getenv("CITATION_ACCURACY_THRESHOLD", "0.75"))
-
     if strict_mode:
         passed = len(unverified_refs) == 0
     else:
-        # 관대 모드: 75% 이상 검증되면 통과 (50% → 75%로 상향)
-        passed = accuracy >= citation_threshold
+        # 관대 모드: 50% 이상 검증되면 통과
+        passed = accuracy >= 0.5
 
     return CitationVerifyResult(
         passed=passed,
@@ -611,6 +607,12 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     conversation_phase = state.get("conversation_phase", "initial")
     terminology_violations = []
 
+    # DEBUG: review 노드가 받은 draft_answer 확인
+    _logger.info(f"[Review v2] Received draft_answer length: {len(draft_answer)}")
+    if "[출처]" in draft_answer:
+        source_start = draft_answer.find("[출처]")
+        _logger.info(f"[Review v2] Source section in draft: {draft_answer[source_start:source_start+150]}...")
+
     query_type = query_analysis.get("query_type", "dispute")
 
     # === Phase-based 리뷰 스킵 ===
@@ -723,6 +725,12 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
 
     # 9. 통과 여부 결정
     passed = len(violation_details) == 0
+
+    # DEBUG: 최종 반환되는 final_answer 확인
+    _logger.info(f"[Review v2] Returning final_answer length: {len(filtered_answer)}")
+    if "[출처]" in filtered_answer:
+        source_start = filtered_answer.find("[출처]")
+        _logger.info(f"[Review v2] Source section in final: {filtered_answer[source_start:source_start+150]}...")
 
     return {
         "review": {

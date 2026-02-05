@@ -63,32 +63,37 @@ docs/guides/_archive
 
 # documents
 docs/_archive
-# docs/plans
-docs/plans/manus
 
 
 # Data
 backend/data/counsel/
 backend/data/criteria/
 backend/data/dispute/
-backend/data/law/raw
+backend/data/law
 backend/data/evaluation
 backend/data/golden_set
+backend/app/database
 
-
-# Backup Data
-backup.sql
-backup_v2.sql
-backup_v3.sql
-
+# Test
+frontend/test-results
+frontend/e2e
+frontend/playwright-report
+frontend/vitest.config.ts
+backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
+backend/app/agents/answer_generation/tests
+frontend/.vite
 
 # Agents
-Agents
 .agent
 .claude
 .sisyphus
+.omc
 .cursorrules
 AGENTS.md
 CLAUDE.md
 AI_MEMO.md
+
+# 분석 및 전략 문서 (깃허브 제외)
+backend/에이전트분석.md
+DB및에이전트개선전략.md
 발표용써머리.md
