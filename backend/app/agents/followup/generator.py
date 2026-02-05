@@ -48,6 +48,7 @@ class FollowupQuestionGenerator:
         answer: str,
         format_id: Optional[str] = None,
         is_fallback: bool = False,
+        template_key: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         """
         후속 질문과 명확화 질문을 생성합니다.
@@ -65,6 +66,8 @@ class FollowupQuestionGenerator:
                 - agency: Dict
             answer: 생성된 답변
             format_id: 답변 형식 식별자 (format 기반 필터링에 사용)
+            is_fallback: fallback 모드 여부 (rule_based, safe_fallback 사용 시)
+            template_key: 프롬프트 템플릿 키 (solution, action, execution 등)
 
         Returns:
             {
@@ -89,10 +92,24 @@ class FollowupQuestionGenerator:
             query_analysis, retrieval, answer, format_id, is_fallback
         )
 
-        # 2. 후속 질문 생성
+        # 2. 프롬프트 파일에서 동적 추출 시도 (inquiry, reject 제외)
+        if template_key:
+            # Lazy import to avoid circular dependency
+            from ..answer_generation.template_loader import extract_followup_questions
+
+            prompt_questions = extract_followup_questions(template_key)
+            if prompt_questions:
+                return {
+                    "followup_questions": prompt_questions,
+                    "clarifying_questions": self._generate_clarifying_questions(
+                        context
+                    ),
+                }
+
+        # 3. 기존 로직으로 후속 질문 생성
         followup_questions = self._generate_followup_questions(context)
 
-        # 3. 명확화 질문 생성
+        # 4. 명확화 질문 생성
         clarifying_questions = self._generate_clarifying_questions(context)
 
         return {

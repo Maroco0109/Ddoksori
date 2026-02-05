@@ -8,8 +8,9 @@ Implements singleton caching for performance.
 import logging
 import re
 import threading
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 _template_lock = threading.Lock()
@@ -145,3 +146,67 @@ class TemplateLoader:
             )
 
         return template
+
+
+# Module-level constants for followup extraction
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+_DYNAMIC_TEMPLATES = {"inquiry", "reject"}
+_TEMPLATE_TO_FILE = {
+    "solution": "solution_template.md",
+    "action": "action_guide_template.md",
+    "execution": "execution_guide_template.md",
+    "fallback": "fallback_template.md",
+}
+_FOLLOWUP_SECTION_RE = re.compile(r"## 🔘 버튼형 역질문.*?\n([\s\S]*?)(?=\n##|\Z)")
+
+
+@lru_cache(maxsize=16)
+def extract_followup_questions(template_key: str) -> List[str]:
+    """
+    프롬프트 파일에서 '🔘 버튼형 역질문' 섹션의 질문들을 추출합니다.
+
+    Args:
+        template_key: 템플릿 키 (예: "solution", "action", "execution")
+
+    Returns:
+        추가 질문 리스트 (최대 3개)
+
+    Note:
+        - inquiry 템플릿은 LLM이 동적으로 질문을 생성하므로 빈 배열 반환
+        - reject 템플릿은 base_persona의 대체 질문 사용하므로 빈 배열 반환
+    """
+    # inquiry와 reject는 동적 생성이므로 제외 (기존 로직 사용)
+    if template_key in _DYNAMIC_TEMPLATES:
+        return []  # 빈 배열 → generator의 기존 로직으로 fallback
+
+    filename = _TEMPLATE_TO_FILE.get(template_key)
+    if not filename:
+        return []
+
+    filepath = _PROMPTS_DIR / filename
+    if not filepath.exists():
+        logger.warning(f"Template file not found for followup extraction: {filepath}")
+        return []
+
+    try:
+        content = filepath.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to read template for followup extraction: {e}")
+        return []
+
+    # "🔘 버튼형 역질문" 섹션 찾기
+    match = _FOLLOWUP_SECTION_RE.search(content)
+    if not match:
+        return []
+
+    section = match.group(1).strip()
+
+    # 각 줄에서 질문 추출 (빈 줄, 주석, 괄호 안내 제외)
+    questions = []
+    for line in section.split("\n"):
+        line = line.strip()
+        # 빈 줄, 괄호로 시작하는 안내문, 주석 제외
+        if line and not line.startswith("(") and not line.startswith("#"):
+            questions.append(line)
+
+    return questions[:3]  # 최대 3개

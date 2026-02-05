@@ -862,7 +862,7 @@ def _render_and_generate(
         mode: 현재 모드 (NEED_RAG 등)
 
     Returns:
-        (draft_answer, model_used, claim_evidence_map) 튜플
+        (draft_answer, model_used, claim_evidence_map, template_key) 튜플
     """
     query_analysis = state.get("query_analysis", {})
     query_type = query_analysis.get("query_type", "dispute")
@@ -913,7 +913,7 @@ def _render_and_generate(
         )
     )
 
-    return (draft_answer, model_used, claim_evidence_map)
+    return (draft_answer, model_used, claim_evidence_map, template_key)
 
 
 async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
@@ -983,7 +983,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     retry_supplement = (
         _build_retry_prompt_supplement(retry_context) if retry_context else None
     )
-    draft_answer, model_used, claim_evidence_map = _render_and_generate(
+    draft_answer, model_used, claim_evidence_map, template_key = _render_and_generate(
         state, user_query, retrieval, onboarding, retry_supplement, mode
     )
 
@@ -1000,6 +1000,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
         retrieval=retrieval,
         answer=draft_answer,
         is_fallback=is_fallback,
+        template_key=template_key,
     )
     followup_questions = followup_result.get("followup_questions", [])
 
