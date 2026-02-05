@@ -589,7 +589,8 @@ DEFECT_KEYWORDS: List[str] = [
     "휨",
     "휘어",
     "누수",
-    "새",  # 물이 새
+    "물이 새",  # water leaking (구체적)
+    "샌다",  # leaks
     "소음",
     "이상한 소리",
     "이상 소리",

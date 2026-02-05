@@ -54,6 +54,7 @@ from .expanders import (
 )
 from .extractors import (
     check_missing_onboarding_fields,
+    detect_dispute_reason,
     determine_agency_hint,
     extract_info_from_message,
     extract_keywords,
@@ -180,7 +181,6 @@ def query_analysis_node(state: ChatState) -> Dict:
     logger.info(f"[QueryAnalysis] mode={mode}, query_type={query_type}")
 
     # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
-    from .extractors import detect_dispute_reason
 
     dispute_reason = detect_dispute_reason(normalized_query)
     if dispute_reason != "unknown":
@@ -451,7 +451,6 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
     # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)
-    from .extractors import detect_dispute_reason
 
     dispute_reason = detect_dispute_reason(normalized_query)
     if dispute_reason != "unknown":
