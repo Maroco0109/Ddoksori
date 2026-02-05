@@ -449,9 +449,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   };
 
-  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
-  const handleDisputeSend = async () => {
-    if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
+  // 분쟁 상담 메시지 전송 공통 함수
+  const sendDisputeMessage = useCallback(async (messageContent: string) => {
+    if (!messageContent.trim() || disputeStreamingState.isStreaming) return;
 
     // 세션 ID를 스트림 시작 전에 확정
     if (!sessionId) {
@@ -461,9 +461,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       setStoreChatType('dispute');
       if (onSessionCreate) onSessionCreate(newId);
     }
-
-    const messageContent = disputeInputValue;
-    setDisputeInputValue('');
 
     const userMsgId = ++messageIdCounterRef.current;
     const aiPlaceholderId = ++messageIdCounterRef.current;
@@ -538,6 +535,26 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         )
       );
     }
+  }, [
+    disputeStreamingState.isStreaming,
+    sessionId,
+    setSessionId,
+    setStoreSessionId,
+    setStoreChatType,
+    onSessionCreate,
+    setDisputeMessages,
+    startDisputeStream,
+    setBackendSessionId,
+  ]);
+
+  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
+  const handleDisputeSend = async () => {
+    if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
+
+    const messageContent = disputeInputValue;
+    setDisputeInputValue('');
+
+    await sendDisputeMessage(messageContent);
   };
 
   // 일반 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
@@ -634,9 +651,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   };
 
   // 추가 질문 클릭 핸들러
-  const handleDisputeFollowupSelect = useCallback((question: string) => {
-    setDisputeInputValue(question);
-  }, []);
+  const handleDisputeFollowupSelect = useCallback(async (question: string) => {
+    await sendDisputeMessage(question);
+  }, [sendDisputeMessage]);
 
   const handleGeneralFollowupSelect = useCallback((question: string) => {
     setGeneralInputValue(question);
