@@ -157,7 +157,13 @@ _TEMPLATE_TO_FILE = {
     "execution": "execution_guide_template.md",
     "fallback": "fallback_template.md",
 }
-_FOLLOWUP_SECTION_RE = re.compile(r"## 🔘 버튼형 역질문.*?\n([\s\S]*?)(?=\n##|\Z)")
+_FOLLOWUP_SECTION_RE = re.compile(r"## 🔘 추가 안내.*?\n([\s\S]*?)(?=\n##|\Z)")
+
+# LLM 응답에서 추가 질문 추출용 패턴
+_RESPONSE_FOLLOWUP_PATTERN = re.compile(
+    r"추가로 궁금하신 점이 있으시면[:\s]*\n((?:\s*-\s*.+\n?)+)",
+    re.MULTILINE,
+)
 
 
 @lru_cache(maxsize=16)
@@ -210,3 +216,54 @@ def extract_followup_questions(template_key: str) -> List[str]:
             questions.append(line)
 
     return questions[:3]  # 최대 3개
+
+
+def extract_followup_from_response(response: str) -> tuple:
+    """
+    LLM 응답에서 추가 질문을 추출하고 답변에서 제거합니다.
+
+    LLM이 "추가로 궁금하신 점이 있으시면:" 형식으로 생성한 질문을
+    답변 텍스트에서 분리하여 별도의 followup_questions로 반환합니다.
+
+    Args:
+        response: LLM이 생성한 전체 응답 텍스트
+
+    Returns:
+        tuple: (clean_answer, followup_questions)
+            - clean_answer: 질문 섹션이 제거된 깔끔한 답변 텍스트
+            - followup_questions: 추출된 질문 리스트 (최대 3개)
+
+    Example:
+        >>> response = '''
+        ... 환불 받으실 수 있습니다.
+        ...
+        ... 추가로 궁금하신 점이 있으시면:
+        ... - 더 쉽게 설명해 드릴까요?
+        ... - 메시지 초안을 작성해 드릴까요?
+        ... '''
+        >>> answer, questions = extract_followup_from_response(response)
+        >>> print(answer)  # "환불 받으실 수 있습니다."
+        >>> print(questions)  # ["더 쉽게 설명해 주세요?", "메시지 초안을 작성해 주세요?"]
+    """
+    match = _RESPONSE_FOLLOWUP_PATTERN.search(response)
+    if not match:
+        return response, []
+
+    # 질문 추출
+    questions_block = match.group(1)
+    questions = []
+    for line in questions_block.strip().split("\n"):
+        line = line.strip()
+        if line.startswith("- "):
+            q = line[2:].strip()
+            # "~해 드릴까요?" → "~해 주세요" 변환 (버블 UI용 - 더 자연스러운 요청 형태)
+            q = q.replace("드릴까요?", "주세요").replace("드릴게요?", "주세요")
+            # 물음표 정규화
+            if not q.endswith("?"):
+                q = q.rstrip(".") + "?"
+            questions.append(q)
+
+    # 답변에서 질문 섹션 제거
+    clean_answer = response[: match.start()].rstrip()
+
+    return clean_answer, questions[:3]
