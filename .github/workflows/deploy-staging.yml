@@ -61,20 +61,35 @@ jobs:
             fi
             echo "ECR_REGISTRY: $ECR_REGISTRY"
 
-            # === AWS Secrets Manager에서 REDIS_PASSWORD 가져오기 ===
+            # === AWS Secrets Manager에서 환경변수 가져오기 ===
+            echo "Fetching secrets from AWS Secrets Manager..."
+
+            # infra secrets (REDIS_PASSWORD)
+            INFRA_SECRET=$(aws secretsmanager get-secret-value \
+              --secret-id "ddoksori/${SECRETS_ENV:-staging}/infra" \
+              --region ap-northeast-2 \
+              --query 'SecretString' \
+              --output text 2>/dev/null || echo '{}')
+
+            # app secrets (JWT, OAuth)
+            APP_SECRET=$(aws secretsmanager get-secret-value \
+              --secret-id "ddoksori/${SECRETS_ENV:-staging}/app" \
+              --region ap-northeast-2 \
+              --query 'SecretString' \
+              --output text 2>/dev/null || echo '{}')
+
+            # [SEC-FIX] jq로 JSON 파싱 (shell injection 방지)
+            # jq가 없으면 설치
+            if ! command -v jq &> /dev/null; then
+              echo "Installing jq..."
+              sudo apt-get update -qq && sudo apt-get install -y -qq jq
+            fi
+
+            # REDIS_PASSWORD (from infra or .env)
             if [ -z "$REDIS_PASSWORD" ]; then
-              echo "Fetching REDIS_PASSWORD from AWS Secrets Manager..."
-              SECRET_JSON=$(aws secretsmanager get-secret-value \
-                --secret-id "ddoksori/${SECRETS_ENV:-staging}/infra" \
-                --region ap-northeast-2 \
-                --query 'SecretString' \
-                --output text 2>/dev/null || echo '{}')
-
-              REDIS_PASSWORD=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('REDIS_PASSWORD',''))" 2>/dev/null)
-
+              REDIS_PASSWORD=$(echo "$INFRA_SECRET" | jq -r '.REDIS_PASSWORD // ""' 2>/dev/null)
               if [ -z "$REDIS_PASSWORD" ]; then
-                echo "ERROR: REDIS_PASSWORD not found in Secrets Manager"
-                echo "Please add REDIS_PASSWORD to ddoksori/staging/infra secret"
+                echo "ERROR: REDIS_PASSWORD not found in Secrets Manager (ddoksori/staging/infra)"
                 exit 1
               fi
               export REDIS_PASSWORD
@@ -82,6 +97,35 @@ jobs:
             else
               echo "REDIS_PASSWORD already set from .env"
             fi
+
+            # JWT_SECRET_KEY (필수 - SEC-01)
+            if [ -z "$JWT_SECRET_KEY" ]; then
+              JWT_SECRET_KEY=$(echo "$APP_SECRET" | jq -r '.JWT_SECRET_KEY // ""' 2>/dev/null)
+              if [ -z "$JWT_SECRET_KEY" ]; then
+                echo "ERROR: JWT_SECRET_KEY not found in Secrets Manager (ddoksori/staging/app)"
+                exit 1
+              fi
+              export JWT_SECRET_KEY
+              echo "JWT_SECRET_KEY loaded from Secrets Manager"
+            else
+              echo "JWT_SECRET_KEY already set from .env"
+            fi
+
+            # OAuth secrets (optional - 경고만)
+            # [SEC-FIX] jq --arg로 변수 전달하여 shell injection 방지
+            for VAR in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET NAVER_CLIENT_ID NAVER_CLIENT_SECRET; do
+              if [ -z "$(eval echo \$$VAR)" ]; then
+                VALUE=$(echo "$APP_SECRET" | jq -r --arg key "$VAR" '.[$key] // ""' 2>/dev/null)
+                if [ -n "$VALUE" ]; then
+                  export "$VAR=$VALUE"
+                  echo "$VAR loaded from Secrets Manager"
+                else
+                  echo "WARNING: $VAR not found (OAuth login may not work)"
+                fi
+              else
+                echo "$VAR already set from .env"
+              fi
+            done
 
             # ECR 로그인
             echo "Logging into ECR..."
