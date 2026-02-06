@@ -47,7 +47,16 @@ class RDSInternalRetriever:
             self.conn.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large), Redis 캐시 지원"""
+        model_name = "text-embedding-3-large"
+
+        # 캐시 조회
+        from app.common.cache import EmbeddingCache
+
+        cached = EmbeddingCache.get_embedding(query, model_name)
+        if cached is not None:
+            return cached
+
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -60,11 +69,16 @@ class RDSInternalRetriever:
             self._openai_client = OpenAI()
 
         response = self._openai_client.embeddings.create(
-            model="text-embedding-3-large",
+            model=model_name,
             input=[query],
             dimensions=1536,
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # 캐시 저장
+        EmbeddingCache.set_embedding(query, model_name, embedding)
+
+        return embedding
 
     def dense_search(
         self,
