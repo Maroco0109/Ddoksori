@@ -39,7 +39,9 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         task_input: Dict[str, Any] | None = None,
     ) -> List[SimilarChunkResult]:
         # Phase 2-10: 분쟁해결기준 전용 쿼리 확장 적용
-        criteria_specific_queries = await self._expand_for_criteria_search(query, task_input)
+        criteria_specific_queries = await self._expand_for_criteria_search(
+            query, task_input
+        )
 
         # 기존 expanded_queries와 병합
         expanded_queries: List[str] = []
@@ -56,12 +58,18 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             # "종묘" 검색 → 정확한 결과 10개
             # 다른 5개 쿼리 → 엉뚱한 결과들 → RRF에서 종묘 결과 순위 하락
             all_queries = [keyword_query]
-            logger.info(f"[CriteriaAgent] Using KEYWORD-ONLY strategy: '{keyword_query}'")
-            logger.info("[CriteriaAgent] Skipping other queries to prevent RRF pollution")
+            logger.info(
+                f"[CriteriaAgent] Using KEYWORD-ONLY strategy: '{keyword_query}'"
+            )
+            logger.info(
+                "[CriteriaAgent] Skipping other queries to prevent RRF pollution"
+            )
         else:
             # 키워드 추출 실패시 원본 + 확장 쿼리 사용
             all_queries = [query]
-            logger.info("[CriteriaAgent] No keyword extracted, using multi-query strategy")
+            logger.info(
+                "[CriteriaAgent] No keyword extracted, using multi-query strategy"
+            )
 
             # 분쟁해결기준 전용 쿼리 추가
             for cq in criteria_specific_queries:
@@ -307,15 +315,45 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
 
         # 3. 한글 2~4자 명사 추출 (조사 제거)
         # "종묘에" → "종묘"
-        noun_pattern = r"\b([가-힣]{2,4})(?:을|를|이|가|은|는|에|에서|으로|로|와|과|도)\b"
+        noun_pattern = (
+            r"\b([가-힣]{2,4})(?:을|를|이|가|은|는|에|에서|으로|로|와|과|도)\b"
+        )
         nouns = re.findall(noun_pattern, query)
 
         # 불용어 제거
         stopwords = {
-            "관련", "분쟁", "생겼", "어떻게", "해결", "있는", "알려", "주세",
-            "가능", "되나", "인가", "뭐야", "무엇", "어떤", "이런", "저런",
-            "그런", "하는", "되는", "하고", "싶어", "같은", "있어", "없어",
-            "때문", "경우", "상황", "문제", "사항", "내용", "기준", "해결",
+            "관련",
+            "분쟁",
+            "생겼",
+            "어떻게",
+            "해결",
+            "있는",
+            "알려",
+            "주세",
+            "가능",
+            "되나",
+            "인가",
+            "뭐야",
+            "무엇",
+            "어떤",
+            "이런",
+            "저런",
+            "그런",
+            "하는",
+            "되는",
+            "하고",
+            "싶어",
+            "같은",
+            "있어",
+            "없어",
+            "때문",
+            "경우",
+            "상황",
+            "문제",
+            "사항",
+            "내용",
+            "기준",
+            "해결",
         }
 
         for noun in nouns:

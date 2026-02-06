@@ -244,13 +244,16 @@ def get_withdrawal_period(transaction_type: str) -> Dict[str, any]:
         },
     }
 
-    return periods.get(transaction_type, {
-        "period": 7,
-        "unit": "일",
-        "law": "소비자기본법",
-        "article": "-",
-        "note": "일반적인 청약철회 기간",
-    })
+    return periods.get(
+        transaction_type,
+        {
+            "period": 7,
+            "unit": "일",
+            "law": "소비자기본법",
+            "article": "-",
+            "note": "일반적인 청약철회 기간",
+        },
+    )
 
 
 __all__ = [

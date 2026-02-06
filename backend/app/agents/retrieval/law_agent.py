@@ -44,7 +44,7 @@ class LawRetrievalAgent(BaseRetrievalAgent):
 
         try:
             # PRIORITY 1: 조문 번호 직접 검색 (chunk_id 패턴 매칭)
-            article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+            article_pattern = r"([\w가-힣]+법?)\s*제?(\d+)조"
             article_match = re.search(article_pattern, query)
 
             direct_results: List[SimilarChunkResult] = []
@@ -208,7 +208,9 @@ class LawRetrievalAgent(BaseRetrievalAgent):
 
             # 쿼리에서 채널/분쟁유형 추론
             if not channel:
-                if any(kw in query for kw in ["온라인", "인터넷", "쿠팡", "배달", "앱"]):
+                if any(
+                    kw in query for kw in ["온라인", "인터넷", "쿠팡", "배달", "앱"]
+                ):
                     channel = "온라인구매"
                 elif any(kw in query for kw in ["방문", "집으로"]):
                     channel = "방문판매"

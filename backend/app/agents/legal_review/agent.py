@@ -611,7 +611,9 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     _logger.info(f"[Review v2] Received draft_answer length: {len(draft_answer)}")
     if "[출처]" in draft_answer:
         source_start = draft_answer.find("[출처]")
-        _logger.info(f"[Review v2] Source section in draft: {draft_answer[source_start:source_start+150]}...")
+        _logger.info(
+            f"[Review v2] Source section in draft: {draft_answer[source_start : source_start + 150]}..."
+        )
 
     query_type = query_analysis.get("query_type", "dispute")
 
@@ -730,7 +732,9 @@ async def review_node_v2(state: Dict, config: Optional[Dict] = None) -> Dict:
     _logger.info(f"[Review v2] Returning final_answer length: {len(filtered_answer)}")
     if "[출처]" in filtered_answer:
         source_start = filtered_answer.find("[출처]")
-        _logger.info(f"[Review v2] Source section in final: {filtered_answer[source_start:source_start+150]}...")
+        _logger.info(
+            f"[Review v2] Source section in final: {filtered_answer[source_start : source_start + 150]}..."
+        )
 
     return {
         "review": {

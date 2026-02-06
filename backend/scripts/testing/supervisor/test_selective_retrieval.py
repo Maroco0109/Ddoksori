@@ -27,9 +27,9 @@ class TestQueryTypeToRetrievers:
         """law 쿼리는 law retriever만 사용"""
         assert QUERY_TYPE_TO_RETRIEVERS["law"] == ["law"]
 
-    def test_criteria_query_maps_to_law_and_criteria(self):
-        """criteria 쿼리는 law + criteria 사용"""
-        assert QUERY_TYPE_TO_RETRIEVERS["criteria"] == ["law", "criteria"]
+    def test_criteria_query_maps_to_criteria_only(self):
+        """criteria 쿼리는 criteria만 사용 (context bleeding 방지)"""
+        assert QUERY_TYPE_TO_RETRIEVERS["criteria"] == ["criteria"]
 
     def test_dispute_query_maps_to_all(self):
         """dispute 쿼리는 전체 retriever 사용"""

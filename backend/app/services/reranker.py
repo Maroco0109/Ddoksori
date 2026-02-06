@@ -180,9 +180,7 @@ def rerank_results_sync(
 
     asyncio 이벤트 루프 외부에서 사용할 때 유용합니다.
     """
-    return asyncio.run(
-        rerank_results(query, results, top_n, text_field, min_score)
-    )
+    return asyncio.run(rerank_results(query, results, top_n, text_field, min_score))
 
 
 __all__ = [

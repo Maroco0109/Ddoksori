@@ -251,7 +251,9 @@ class LawRetriever:
                         f"{law_name} {article_number}"
                     )
                     for idx, r in enumerate(results):
-                        logger.info(f"[LawRetriever] Direct match {idx}: chunk_id={r.chunk_id}, text_preview={r.text[:50] if r.text else 'NO_TEXT'}...")
+                        logger.info(
+                            f"[LawRetriever] Direct match {idx}: chunk_id={r.chunk_id}, text_preview={r.text[:50] if r.text else 'NO_TEXT'}..."
+                        )
 
                 return results
 

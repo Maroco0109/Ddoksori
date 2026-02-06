@@ -31,6 +31,7 @@ class AnswerGenerationFallback:
     def _get_fallback_chain(cls):
         """환경 설정에서 primary 모델을 가져와 폴백 체인 구성"""
         from ...common.config import get_config
+
         config = get_config()
         primary_model = config.models.draft_agent  # .env의 MODEL_DRAFT_AGENT
 

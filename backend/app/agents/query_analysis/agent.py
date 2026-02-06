@@ -355,7 +355,9 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     # Step 3.6: 쿼리 재작성 (if scope change detected)
     query_for_expansion = normalized_query
     if product_scope_change.get("should_ignore_product_filter"):
-        query_for_expansion = rewrite_query_for_scope_change(normalized_query, product_scope_change)
+        query_for_expansion = rewrite_query_for_scope_change(
+            normalized_query, product_scope_change
+        )
         logger.info(
             f"[QueryAnalysis v2] Query rewritten for scope expansion: "
             f"'{normalized_query[:30]}...' → '{query_for_expansion[:30]}...'"
@@ -450,7 +452,9 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
                 previous_query = msg.get("content", "")
                 break
         if previous_query:
-            logger.info(f"[QueryAnalysis v2] Previous query: '{previous_query[:50]}...'")
+            logger.info(
+                f"[QueryAnalysis v2] Previous query: '{previous_query[:50]}...'"
+            )
 
     # 후속 질문 리스트 (Progressive Disclosure용)
     previous_followups = last_turn.get("followup_questions", [])
@@ -460,7 +464,7 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         needs_clarification,
         user_query,
         previous_followups=previous_followups,
-        previous_query=previous_query
+        previous_query=previous_query,
     )
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
@@ -508,7 +512,10 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         result["onboarding"] = enriched_onboarding
 
     # Product scope change가 감지되면 재작성된 쿼리를 state에 반영 (retrieval에서 사용)
-    if product_scope_change.get("should_ignore_product_filter") and query_for_expansion != normalized_query:
+    if (
+        product_scope_change.get("should_ignore_product_filter")
+        and query_for_expansion != normalized_query
+    ):
         result["user_query"] = query_for_expansion
         logger.info(
             f"[QueryAnalysis v2] State user_query updated for retrieval: '{query_for_expansion[:50]}...'"

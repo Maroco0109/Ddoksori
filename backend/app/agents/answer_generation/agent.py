@@ -856,12 +856,24 @@ def _render_and_generate(
     # DEBUG: 검색 결과 전달 확인
     logger.info(f"[Generation DEBUG] retrieval keys: {list(retrieval.keys())}")
     logger.info(f"[Generation DEBUG] laws count: {len(retrieval.get('laws', []))}")
-    logger.info(f"[Generation DEBUG] criteria count: {len(retrieval.get('criteria', []))}")
-    logger.info(f"[Generation DEBUG] disputes count: {len(retrieval.get('disputes', []))}")
-    logger.info(f"[Generation DEBUG] counsels count: {len(retrieval.get('counsels', []))}")
-    logger.info(f"[Generation DEBUG] law_data preview: {context.get('law_data', '')[:200]}...")
-    logger.info(f"[Generation DEBUG] criteria_data preview: {context.get('criteria_data', '')[:200]}...")
-    logger.info(f"[Generation DEBUG] case_data preview: {context.get('case_data', '')[:200]}...")
+    logger.info(
+        f"[Generation DEBUG] criteria count: {len(retrieval.get('criteria', []))}"
+    )
+    logger.info(
+        f"[Generation DEBUG] disputes count: {len(retrieval.get('disputes', []))}"
+    )
+    logger.info(
+        f"[Generation DEBUG] counsels count: {len(retrieval.get('counsels', []))}"
+    )
+    logger.info(
+        f"[Generation DEBUG] law_data preview: {context.get('law_data', '')[:200]}..."
+    )
+    logger.info(
+        f"[Generation DEBUG] criteria_data preview: {context.get('criteria_data', '')[:200]}..."
+    )
+    logger.info(
+        f"[Generation DEBUG] case_data preview: {context.get('case_data', '')[:200]}..."
+    )
 
     if template_key == "fallback":
         context["logic_from_gold_set"] = router.get_fallback_reason(state)
@@ -917,9 +929,13 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     # DEBUG: 노드 진입 확인
     retrieval = state.get("retrieval") or {}  # None인 경우 빈 dict 사용
     logger.info("[generation_node_v2] === 답변 생성 노드 시작 ===")
-    logger.info(f"[generation_node_v2] retrieval keys: {list(retrieval.keys()) if retrieval else 'EMPTY'}")
+    logger.info(
+        f"[generation_node_v2] retrieval keys: {list(retrieval.keys()) if retrieval else 'EMPTY'}"
+    )
     if retrieval:
-        logger.info(f"[generation_node_v2] laws: {len(retrieval.get('laws', []))}, criteria: {len(retrieval.get('criteria', []))}, disputes: {len(retrieval.get('disputes', []))}, counsels: {len(retrieval.get('counsels', []))}")
+        logger.info(
+            f"[generation_node_v2] laws: {len(retrieval.get('laws', []))}, criteria: {len(retrieval.get('criteria', []))}, disputes: {len(retrieval.get('disputes', []))}, counsels: {len(retrieval.get('counsels', []))}"
+        )
     else:
         logger.info("[generation_node_v2] retrieval is empty (NO_RETRIEVAL mode)")
 
@@ -974,9 +990,14 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     # Phase 5: Post-processing
     # 5.1: 답변 형식 후처리 (헤더 줄바꿈, 번호 추가, 출처 보강)
     from .postprocessor import postprocess_answer
-    logger.info(f"[generation_node_v2] Before postprocess - source section exists: {'[출처]' in draft_answer}")
+
+    logger.info(
+        f"[generation_node_v2] Before postprocess - source section exists: {'[출처]' in draft_answer}"
+    )
     draft_answer = postprocess_answer(draft_answer, retrieval, query_type)
-    logger.info(f"[generation_node_v2] After postprocess - answer length: {len(draft_answer)}")
+    logger.info(
+        f"[generation_node_v2] After postprocess - answer length: {len(draft_answer)}"
+    )
 
     cited_cases = _extract_cited_cases(retrieval)
     has_evidence = model_used not in ("rule_based", "safe_fallback")

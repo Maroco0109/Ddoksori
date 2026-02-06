@@ -48,23 +48,27 @@ def _deduplicate_documents(documents: List[Dict[str, Any]]) -> List[Dict[str, An
 
     seen: Dict[str, Dict[str, Any]] = {}
     for doc in documents:
-        chunk_id = doc.get('chunk_id') or doc.get('doc_id')
+        chunk_id = doc.get("chunk_id") or doc.get("doc_id")
         if not chunk_id:
             continue
 
-        score = doc.get('rrf_score', 0) or doc.get('similarity', 0)
+        score = doc.get("rrf_score", 0) or doc.get("similarity", 0)
         existing = seen.get(chunk_id)
 
         if existing is None:
             seen[chunk_id] = doc
         else:
-            existing_score = existing.get('rrf_score', 0) or existing.get('similarity', 0)
+            existing_score = existing.get("rrf_score", 0) or existing.get(
+                "similarity", 0
+            )
             if score > existing_score:
                 seen[chunk_id] = doc
 
     # RRF 점수 기준 내림차순 정렬
     result = list(seen.values())
-    result.sort(key=lambda x: x.get('rrf_score', 0) or x.get('similarity', 0), reverse=True)
+    result.sort(
+        key=lambda x: x.get("rrf_score", 0) or x.get("similarity", 0), reverse=True
+    )
     return result
 
 
@@ -72,8 +76,8 @@ def _sort_by_rrf_score(documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """RRF 점수 기준 내림차순 정렬"""
     return sorted(
         documents,
-        key=lambda x: x.get('rrf_score', 0) or x.get('similarity', 0),
-        reverse=True
+        key=lambda x: x.get("rrf_score", 0) or x.get("similarity", 0),
+        reverse=True,
     )
 
 
@@ -103,14 +107,14 @@ async def _apply_reranking(
             return merged
 
         # 각 섹션별 재랭킹
-        for section_key in ['laws', 'criteria', 'disputes', 'counsels']:
+        for section_key in ["laws", "criteria", "disputes", "counsels"]:
             docs = merged.get(section_key, [])
             if docs:
                 reranked = await rerank_results(
                     query=query,
                     results=docs,
                     top_n=top_n_per_section,
-                    text_field='content',
+                    text_field="content",
                 )
                 merged[section_key] = reranked
                 logger.debug(
@@ -129,7 +133,7 @@ async def _apply_reranking(
 
 
 def _calculate_merged_statistics(
-    individual_results: List[IndividualRetrievalResult]
+    individual_results: List[IndividualRetrievalResult],
 ) -> Dict[str, float]:
     """
     개별 결과들의 통계 계산
@@ -142,22 +146,22 @@ def _calculate_merged_statistics(
     """
     all_similarities = []
     for result in individual_results:
-        if result.get('max_similarity'):
-            all_similarities.append(result['max_similarity'])
-        if result.get('avg_similarity'):
-            all_similarities.append(result['avg_similarity'])
+        if result.get("max_similarity"):
+            all_similarities.append(result["max_similarity"])
+        if result.get("avg_similarity"):
+            all_similarities.append(result["avg_similarity"])
 
     if not all_similarities:
-        return {'max_similarity': 0.0, 'avg_similarity': 0.0}
+        return {"max_similarity": 0.0, "avg_similarity": 0.0}
 
     return {
-        'max_similarity': max(all_similarities),
-        'avg_similarity': sum(all_similarities) / len(all_similarities),
+        "max_similarity": max(all_similarities),
+        "avg_similarity": sum(all_similarities) / len(all_similarities),
     }
 
 
 def _merge_to_retrieval_result(
-    individual_results: List[IndividualRetrievalResult]
+    individual_results: List[IndividualRetrievalResult],
 ) -> RetrievalResult:
     """
     개별 결과를 RetrievalResult 4섹션 구조로 병합
@@ -170,37 +174,37 @@ def _merge_to_retrieval_result(
     """
     # 4섹션 초기화
     merged: RetrievalResult = {
-        'agency': {},
-        'disputes': [],
-        'counsels': [],
-        'laws': [],
-        'criteria': [],
-        'max_similarity': 0.0,
-        'avg_similarity': 0.0,
+        "agency": {},
+        "disputes": [],
+        "counsels": [],
+        "laws": [],
+        "criteria": [],
+        "max_similarity": 0.0,
+        "avg_similarity": 0.0,
     }
 
     # 소스별 매핑
     source_to_section = {
-        'law': 'laws',
-        'criteria': 'criteria',
-        'case': 'disputes',  # case → disputes 섹션
-        'counsel': 'counsels',
+        "law": "laws",
+        "criteria": "criteria",
+        "case": "disputes",  # case → disputes 섹션
+        "counsel": "counsels",
     }
 
     for result in individual_results:
-        source = result.get('source', '')
+        source = result.get("source", "")
         section_key = source_to_section.get(source)
 
-        if section_key and result.get('documents'):
+        if section_key and result.get("documents"):
             # 해당 섹션에 문서 추가
-            merged[section_key].extend(result['documents'])
+            merged[section_key].extend(result["documents"])
 
         # 에러 로깅
-        if result.get('error'):
+        if result.get("error"):
             logger.warning(f"[RetrievalMerge] {source} agent error: {result['error']}")
 
     # Phase 2-1: 각 섹션별 중복 제거 및 RRF 점수 기준 정렬
-    for section_key in ['laws', 'criteria', 'disputes', 'counsels']:
+    for section_key in ["laws", "criteria", "disputes", "counsels"]:
         original_count = len(merged[section_key])
         merged[section_key] = _deduplicate_documents(merged[section_key])
         dedup_count = len(merged[section_key])
@@ -211,14 +215,14 @@ def _merge_to_retrieval_result(
 
     # 통계 계산
     stats = _calculate_merged_statistics(individual_results)
-    merged['max_similarity'] = stats['max_similarity']
-    merged['avg_similarity'] = stats['avg_similarity']
+    merged["max_similarity"] = stats["max_similarity"]
+    merged["avg_similarity"] = stats["avg_similarity"]
 
     return merged
 
 
 def _update_supervisor_state(
-    current_supervisor: Optional[Dict[str, Any]]
+    current_supervisor: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """
     Supervisor 상태 업데이트: completed_tasks에 'retrieval' 추가
@@ -232,23 +236,23 @@ def _update_supervisor_state(
     if current_supervisor is None:
         # 초기 상태 생성
         return {
-            'current_phase': 'drafting',
-            'agent_messages': [],
-            'pending_tasks': [],
-            'completed_tasks': ['retrieval'],
-            'supervisor_reasoning': 'Retrieval completed',
-            'next_agent': None,
-            'iteration_count': 0,
+            "current_phase": "drafting",
+            "agent_messages": [],
+            "pending_tasks": [],
+            "completed_tasks": ["retrieval"],
+            "supervisor_reasoning": "Retrieval completed",
+            "next_agent": None,
+            "iteration_count": 0,
         }
 
-    completed = list(current_supervisor.get('completed_tasks', []))
-    if 'retrieval' not in completed:
-        completed.append('retrieval')
+    completed = list(current_supervisor.get("completed_tasks", []))
+    if "retrieval" not in completed:
+        completed.append("retrieval")
 
     return {
         **current_supervisor,
-        'current_phase': 'drafting',
-        'completed_tasks': completed,
+        "current_phase": "drafting",
+        "completed_tasks": completed,
     }
 
 
@@ -270,7 +274,7 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     start_time = time.time()
 
     # 개별 결과 가져오기
-    individual_results = state.get('individual_retrieval_results', [])
+    individual_results = state.get("individual_retrieval_results", [])
 
     logger.info(f"[RetrievalMerge] Merging {len(individual_results)} agent results")
 
@@ -285,30 +289,32 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
 
     # 출처 목록 생성 (sources 필드용)
     sources = []
-    for section_key in ['laws', 'criteria', 'disputes', 'counsels']:
+    for section_key in ["laws", "criteria", "disputes", "counsels"]:
         for doc in merged.get(section_key, []):
-            if doc.get('chunk_id') or doc.get('doc_id'):
-                sources.append({
-                    'type': section_key,
-                    'id': doc.get('chunk_id') or doc.get('doc_id'),
-                    'title': doc.get('title', ''),
-                    'similarity': doc.get('similarity', 0.0),
-                })
+            if doc.get("chunk_id") or doc.get("doc_id"):
+                sources.append(
+                    {
+                        "type": section_key,
+                        "id": doc.get("chunk_id") or doc.get("doc_id"),
+                        "title": doc.get("title", ""),
+                        "similarity": doc.get("similarity", 0.0),
+                    }
+                )
 
     # Supervisor 상태 업데이트
-    updated_supervisor = _update_supervisor_state(state.get('supervisor'))
+    updated_supervisor = _update_supervisor_state(state.get("supervisor"))
 
     elapsed = time.time() - start_time
     logger.info(
-        f"[RetrievalMerge] Completed in {elapsed*1000:.1f}ms: "
+        f"[RetrievalMerge] Completed in {elapsed * 1000:.1f}ms: "
         f"laws={len(merged['laws'])}, criteria={len(merged['criteria'])}, "
         f"disputes={len(merged['disputes'])}, counsels={len(merged['counsels'])}"
     )
 
     return {
-        'retrieval': merged,
-        'sources': sources,
-        'supervisor': updated_supervisor,
+        "retrieval": merged,
+        "sources": sources,
+        "supervisor": updated_supervisor,
     }
 
 
@@ -319,7 +325,8 @@ def retrieval_merge_node_sync(state: ChatState) -> Dict[str, Any]:
     LangGraph 노드로 직접 사용 가능한 동기 버전입니다.
     """
     import asyncio
+
     return asyncio.run(retrieval_merge_node(state))
 
 
-__all__ = ['retrieval_merge_node', 'retrieval_merge_node_sync']
+__all__ = ["retrieval_merge_node", "retrieval_merge_node_sync"]

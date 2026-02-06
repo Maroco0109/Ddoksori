@@ -20,7 +20,10 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 class UpdateProfileRequest(BaseModel):
     """프로필 업데이트 요청 모델"""
-    name: str = Field(..., min_length=1, max_length=50, description="사용자 이름(닉네임)")
+
+    name: str = Field(
+        ..., min_length=1, max_length=50, description="사용자 이름(닉네임)"
+    )
 
 
 @router.get("/me/posts")
@@ -69,7 +72,9 @@ async def update_my_profile(
         user_db = UserDB()
         updated_user = await user_db.update_name(current_user.user_id, request.name)
 
-        logger.info(f"[Users] 프로필 업데이트 성공: user_id={current_user.user_id}, name={request.name}")
+        logger.info(
+            f"[Users] 프로필 업데이트 성공: user_id={current_user.user_id}, name={request.name}"
+        )
 
         return {
             "success": True,
@@ -79,8 +84,10 @@ async def update_my_profile(
                 "name": updated_user.name,
                 "avatar_url": updated_user.avatar_url,
                 "provider": updated_user.provider,
-            }
+            },
         }
     except Exception as e:
-        logger.error(f"[Users] 프로필 업데이트 실패: user_id={current_user.user_id}, error={e}")
+        logger.error(
+            f"[Users] 프로필 업데이트 실패: user_id={current_user.user_id}, error={e}"
+        )
         raise HTTPException(status_code=500, detail="프로필 업데이트에 실패했습니다.")

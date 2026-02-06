@@ -137,7 +137,9 @@ def classify_mode(
             response_mode = "legacy"
 
         if response_mode != "legacy":
-            if is_followup_with_context(query, previous_followups, threshold, previous_query):
+            if is_followup_with_context(
+                query, previous_followups, threshold, previous_query
+            ):
                 logger.info("[QueryAnalysis] Followup matched → FOLLOWUP_WITH_CONTEXT")
                 return "FOLLOWUP_WITH_CONTEXT"
 

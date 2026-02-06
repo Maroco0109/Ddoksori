@@ -50,14 +50,22 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
     final_answer = state.get("final_answer") or ""
 
     # DEBUG: 입력 값 확인
-    logger.info(f"[OutputGuardrail] draft_answer length: {len(draft_answer) if draft_answer else 'None'}")
-    logger.info(f"[OutputGuardrail] final_answer length: {len(final_answer) if final_answer else 'None'}")
+    logger.info(
+        f"[OutputGuardrail] draft_answer length: {len(draft_answer) if draft_answer else 'None'}"
+    )
+    logger.info(
+        f"[OutputGuardrail] final_answer length: {len(final_answer) if final_answer else 'None'}"
+    )
     if "[출처]" in draft_answer:
         source_start = draft_answer.find("[출처]")
-        logger.info(f"[OutputGuardrail] Source in draft: {draft_answer[source_start:source_start+100]}...")
+        logger.info(
+            f"[OutputGuardrail] Source in draft: {draft_answer[source_start : source_start + 100]}..."
+        )
     if "[출처]" in final_answer:
         source_start = final_answer.find("[출처]")
-        logger.info(f"[OutputGuardrail] Source in final: {final_answer[source_start:source_start+100]}...")
+        logger.info(
+            f"[OutputGuardrail] Source in final: {final_answer[source_start : source_start + 100]}..."
+        )
 
     # 우선순위: final_answer > draft_answer
     if not final_answer:
@@ -101,10 +109,14 @@ def output_guardrail_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # DEBUG: 최종 반환 값 확인
     returned_answer = updates.get("final_answer", "")
-    logger.info(f"[OutputGuardrail] Returning final_answer length: {len(returned_answer)}")
+    logger.info(
+        f"[OutputGuardrail] Returning final_answer length: {len(returned_answer)}"
+    )
     if "[출처]" in returned_answer:
         source_start = returned_answer.find("[출처]")
-        logger.info(f"[OutputGuardrail] Final source section: {returned_answer[source_start:source_start+100]}...")
+        logger.info(
+            f"[OutputGuardrail] Final source section: {returned_answer[source_start : source_start + 100]}..."
+        )
 
     return {**updates, "guardrail_blocked": False}
 

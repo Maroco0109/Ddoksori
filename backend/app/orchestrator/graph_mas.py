@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Phase 2-2: Supervisor LLM 설정
 # ============================================================================
 
+
 def _create_supervisor_llm():
     """
     환경 변수 기반 Supervisor LLM 생성
@@ -82,7 +83,9 @@ def _create_supervisor_llm():
         return AsyncLLMWrapper(llm)
 
     except ImportError:
-        logger.warning("[SupervisorLLM] langchain_openai 미설치. 규칙 기반 모드로 전환.")
+        logger.warning(
+            "[SupervisorLLM] langchain_openai 미설치. 규칙 기반 모드로 전환."
+        )
         return None
     except Exception as e:
         logger.error(f"[SupervisorLLM] LLM 초기화 실패: {e}. 규칙 기반 모드로 전환.")
@@ -92,6 +95,7 @@ def _create_supervisor_llm():
 # ============================================================================
 # Retrieval Agent 노드 팩토리
 # ============================================================================
+
 
 def _create_retrieval_agent_node(agent_type: str) -> Callable:
     """
@@ -109,10 +113,10 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
     from ..agents.retrieval.law_agent import law_retrieval_agent
 
     agent_map = {
-        'law': law_retrieval_agent,
-        'criteria': criteria_retrieval_agent,
-        'case': case_retrieval_agent,
-        'counsel': counsel_retrieval_agent,
+        "law": law_retrieval_agent,
+        "criteria": criteria_retrieval_agent,
+        "case": case_retrieval_agent,
+        "counsel": counsel_retrieval_agent,
     }
 
     agent = agent_map.get(agent_type)
@@ -121,15 +125,15 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
         """개별 Retrieval Agent 노드"""
         start_time = time.time()
 
-        user_query = state.get('user_query', '')
-        query_analysis = state.get('query_analysis', {})
+        user_query = state.get("user_query", "")
+        query_analysis = state.get("query_analysis", {})
 
         request = {
-            'context': {
-                'user_query': user_query,
-                'query_analysis': query_analysis,
+            "context": {
+                "user_query": user_query,
+                "query_analysis": query_analysis,
             },
-            'params': {'top_k': 3},
+            "params": {"top_k": 3},
         }
 
         try:
@@ -138,15 +142,15 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
 
             # IndividualRetrievalResult 형식으로 변환
             individual_result = {
-                'source': agent_type,
-                'documents': result.get('result', {}).get('results', []),
-                'max_similarity': result.get('result', {}).get('max_similarity', 0.0),
-                'avg_similarity': result.get('result', {}).get('avg_similarity', 0.0),
-                'search_time_ms': search_time_ms,
+                "source": agent_type,
+                "documents": result.get("result", {}).get("results", []),
+                "max_similarity": result.get("result", {}).get("max_similarity", 0.0),
+                "avg_similarity": result.get("result", {}).get("avg_similarity", 0.0),
+                "search_time_ms": search_time_ms,
             }
 
-            if result.get('status') == 'failure':
-                individual_result['error'] = result.get('message', 'Unknown error')
+            if result.get("status") == "failure":
+                individual_result["error"] = result.get("message", "Unknown error")
 
             logger.info(
                 f"[RetrievalAgent:{agent_type}] {len(individual_result['documents'])} docs, "
@@ -156,17 +160,17 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
 
         except Exception as e:
             individual_result = {
-                'source': agent_type,
-                'documents': [],
-                'max_similarity': 0.0,
-                'avg_similarity': 0.0,
-                'search_time_ms': (time.time() - start_time) * 1000,
-                'error': str(e),
+                "source": agent_type,
+                "documents": [],
+                "max_similarity": 0.0,
+                "avg_similarity": 0.0,
+                "search_time_ms": (time.time() - start_time) * 1000,
+                "error": str(e),
             }
             logger.error(f"[RetrievalAgent:{agent_type}] Error: {e}")
 
         # operator.add로 누적되도록 리스트로 반환
-        return {'individual_retrieval_results': [individual_result]}
+        return {"individual_retrieval_results": [individual_result]}
 
     return retrieval_agent_node
 
@@ -174,6 +178,7 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
 # ============================================================================
 # MAS Supervisor 라우팅
 # ============================================================================
+
 
 def _route_mas_supervisor(state: ChatState):
     """
@@ -192,38 +197,39 @@ def _route_mas_supervisor(state: ChatState):
     Returns:
         다음 노드 이름 (str) 또는 List[Send] (Fan-out)
     """
-    supervisor_state = state.get('supervisor', {})
-    next_agent = supervisor_state.get('next_agent')
+    supervisor_state = state.get("supervisor", {})
+    next_agent = supervisor_state.get("next_agent")
 
     logger.info(f"[MAS Router] next_agent={next_agent}")
 
     # retrieval_team → Fan-out (4개 Agent 병렬)
-    if next_agent == 'retrieval_team':
+    if next_agent == "retrieval_team":
         logger.info("[MAS Router] Fan-out to 4 retrieval agents")
         return [
-            Send('retrieval_law', state),
-            Send('retrieval_criteria', state),
-            Send('retrieval_case', state),
-            Send('retrieval_counsel', state),
+            Send("retrieval_law", state),
+            Send("retrieval_criteria", state),
+            Send("retrieval_case", state),
+            Send("retrieval_counsel", state),
         ]
 
     # 라우팅 맵
     routing_map = {
-        'query_analyst': 'query_analysis',
-        'answer_drafter': 'generation',
-        'legal_reviewer': 'review',
+        "query_analyst": "query_analysis",
+        "answer_drafter": "generation",
+        "legal_reviewer": "review",
     }
 
     if next_agent in routing_map:
         return routing_map[next_agent]
 
     # respond 또는 None → 출력
-    return 'output_guardrail'
+    return "output_guardrail"
 
 
 # ============================================================================
 # MAS Supervisor 그래프 생성
 # ============================================================================
+
 
 def create_mas_supervisor_graph() -> StateGraph:
     """
@@ -256,80 +262,92 @@ def create_mas_supervisor_graph() -> StateGraph:
     # === 노드 등록 ===
 
     # 1. 가드레일
-    graph.add_node('input_guardrail', _create_timed_node(input_guardrail_node, 'input_guardrail'))
-    graph.add_node('output_guardrail', _create_timed_node(output_guardrail_node, 'output_guardrail'))
+    graph.add_node(
+        "input_guardrail", _create_timed_node(input_guardrail_node, "input_guardrail")
+    )
+    graph.add_node(
+        "output_guardrail",
+        _create_timed_node(output_guardrail_node, "output_guardrail"),
+    )
 
     # 2. Supervisor (환경 변수 기반 LLM 활성화)
     supervisor_llm = _create_supervisor_llm()
     supervisor = SupervisorNode(llm=supervisor_llm)
-    graph.add_node('supervisor', supervisor.as_node())
+    graph.add_node("supervisor", supervisor.as_node())
 
     # 3. 기능 에이전트
-    graph.add_node('query_analysis', _create_timed_node(query_analysis_node, 'query_analysis'))
-    graph.add_node('generation', _create_timed_node(generation_node, 'generation'))
-    graph.add_node('review', _create_timed_node(review_node_wrapper, 'review'))
-    graph.add_node('ask_clarification', _create_timed_node(ask_clarification_node, 'ask_clarification'))
+    graph.add_node(
+        "query_analysis", _create_timed_node(query_analysis_node, "query_analysis")
+    )
+    graph.add_node("generation", _create_timed_node(generation_node, "generation"))
+    graph.add_node("review", _create_timed_node(review_node_wrapper, "review"))
+    graph.add_node(
+        "ask_clarification",
+        _create_timed_node(ask_clarification_node, "ask_clarification"),
+    )
 
     # 4. Retrieval Agents (4개 병렬)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
+    for agent_type in ["law", "criteria", "case", "counsel"]:
         node_fn = _create_retrieval_agent_node(agent_type)
-        graph.add_node(f'retrieval_{agent_type}', node_fn)
+        graph.add_node(f"retrieval_{agent_type}", node_fn)
 
     # 5. Retrieval Merge (Fan-in)
-    graph.add_node('retrieval_merge', retrieval_merge_node_sync)
+    graph.add_node("retrieval_merge", retrieval_merge_node_sync)
 
     # === 엣지 설정 ===
 
     # Entry: input_guardrail
-    graph.set_entry_point('input_guardrail')
+    graph.set_entry_point("input_guardrail")
 
     # input_guardrail → supervisor 또는 END
     graph.add_conditional_edges(
-        'input_guardrail',
-        lambda state: END if state.get('guardrail_blocked') else 'supervisor',
-        {END: END, 'supervisor': 'supervisor'}
+        "input_guardrail",
+        lambda state: END if state.get("guardrail_blocked") else "supervisor",
+        {END: END, "supervisor": "supervisor"},
     )
 
     # supervisor → 다음 노드 (conditional routing)
     # Fan-out: retrieval_team → List[Send] 반환으로 4개 Agent 병렬 실행
     graph.add_conditional_edges(
-        'supervisor',
+        "supervisor",
         _route_mas_supervisor,
         {
-            'query_analysis': 'query_analysis',
-            'retrieval_law': 'retrieval_law',
-            'retrieval_criteria': 'retrieval_criteria',
-            'retrieval_case': 'retrieval_case',
-            'retrieval_counsel': 'retrieval_counsel',
-            'generation': 'generation',
-            'review': 'review',
-            'output_guardrail': 'output_guardrail',
-        }
+            "query_analysis": "query_analysis",
+            "retrieval_law": "retrieval_law",
+            "retrieval_criteria": "retrieval_criteria",
+            "retrieval_case": "retrieval_case",
+            "retrieval_counsel": "retrieval_counsel",
+            "generation": "generation",
+            "review": "review",
+            "output_guardrail": "output_guardrail",
+        },
     )
 
     # 각 Retrieval Agent → retrieval_merge (Fan-in)
-    for agent_type in ['law', 'criteria', 'case', 'counsel']:
-        graph.add_edge(f'retrieval_{agent_type}', 'retrieval_merge')
+    for agent_type in ["law", "criteria", "case", "counsel"]:
+        graph.add_edge(f"retrieval_{agent_type}", "retrieval_merge")
 
     # retrieval_merge → supervisor (결과 보고)
-    graph.add_edge('retrieval_merge', 'supervisor')
+    graph.add_edge("retrieval_merge", "supervisor")
 
     # query_analysis → supervisor (결과 보고)
-    graph.add_edge('query_analysis', 'supervisor')
+    graph.add_edge("query_analysis", "supervisor")
 
     # generation → supervisor (결과 보고)
-    graph.add_edge('generation', 'supervisor')
+    graph.add_edge("generation", "supervisor")
 
     # review → supervisor (결과 보고)
-    graph.add_edge('review', 'supervisor')
+    graph.add_edge("review", "supervisor")
 
     # output_guardrail → END
-    graph.add_edge('output_guardrail', END)
+    graph.add_edge("output_guardrail", END)
 
     # ask_clarification → END
-    graph.add_edge('ask_clarification', END)
+    graph.add_edge("ask_clarification", END)
 
-    logger.info("[MAS Graph] Created MAS Supervisor graph with Fan-out/Fan-in architecture")
+    logger.info(
+        "[MAS Graph] Created MAS Supervisor graph with Fan-out/Fan-in architecture"
+    )
 
     return graph
 

@@ -480,7 +480,9 @@ class PromptBuilder:
         lines.extend(self._format_agency_section(agency_info))
 
         lines.append("\n위 정보를 시스템 프롬프트의 답변 구조에 맞춰 작성해 주세요.")
-        lines.append("반드시 공감 → [규정] → [유사 사례] → [면책 문구] → ----- → [출처] 순서를 따르세요.")
+        lines.append(
+            "반드시 공감 → [규정] → [유사 사례] → [면책 문구] → ----- → [출처] 순서를 따르세요."
+        )
 
         return "\n".join(lines)
 

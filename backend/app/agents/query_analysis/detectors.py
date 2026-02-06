@@ -314,6 +314,7 @@ def is_meta_conversational(query: str) -> bool:
 
     # 분쟁 의도 키워드가 있으면 meta_conversational이 아님
     from .constants import DISPUTE_INTENT_KEYWORDS
+
     if any(kw in query_lower for kw in DISPUTE_INTENT_KEYWORDS):
         return False
 
@@ -387,7 +388,7 @@ def is_followup_with_context(
     query_normalized = query.strip()
 
     # 조문 번호 패턴 감지 (법률 제XX조)
-    article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+    article_pattern = r"([\w가-힣]+법?)\s*제?(\d+)조"
     current_article_match = re.search(article_pattern, query_normalized)
 
     # 품목 변경 감지 (화제 전환)

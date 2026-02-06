@@ -303,7 +303,9 @@ class UserDB:
                     if not row:
                         raise ValueError(f"User not found: {user_id}")
                 conn.commit()
-                logger.info(f"[UserDB] 사용자 이름 업데이트: user_id={user_id}, name={name}")
+                logger.info(
+                    f"[UserDB] 사용자 이름 업데이트: user_id={user_id}, name={name}"
+                )
                 return User(**dict(row))
             except Exception as e:
                 conn.rollback()

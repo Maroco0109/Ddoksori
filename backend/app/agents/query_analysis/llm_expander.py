@@ -318,6 +318,7 @@ async def expand_query_for_law_search(
         content = response.choices[0].message.content.strip()
 
         import json
+
         llm_queries = json.loads(content)
 
         if isinstance(llm_queries, list):
@@ -365,7 +366,8 @@ def _generate_law_queries_rule_based(
     # ============================================================
     # 패턴: "민법 756조", "전자상거래법 제17조", "소비자기본법 제4조" 등
     import re
-    article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+
+    article_pattern = r"([\w가-힣]+법?)\s*제?(\d+)조"
     article_match = re.search(article_pattern, query)
 
     if article_match:
@@ -411,7 +413,11 @@ def _generate_law_queries_rule_based(
 
     # 2. 상황별 관련 법률 추가
     for situation, laws in SITUATION_TO_LAWS.items():
-        if situation in query_lower or situation in channel or situation in dispute_type:
+        if (
+            situation in query_lower
+            or situation in channel
+            or situation in dispute_type
+        ):
             law_names.extend(laws[:2])
 
     # ============================================================
@@ -419,8 +425,13 @@ def _generate_law_queries_rule_based(
     # ============================================================
 
     # 온라인/통신판매 + 환불/취소 → 전자상거래법 제17조 청약철회
-    is_online = any(kw in query_lower for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매", "앱", "웹", "사이트"])
-    is_refund = any(kw in query_lower for kw in ["환불", "취소", "반품", "철회", "안해줘", "거부"])
+    is_online = any(
+        kw in query_lower
+        for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매", "앱", "웹", "사이트"]
+    )
+    is_refund = any(
+        kw in query_lower for kw in ["환불", "취소", "반품", "철회", "안해줘", "거부"]
+    )
 
     if is_online and is_refund:
         # 가장 중요한 쿼리: 전자상거래법 제17조 직접 검색
@@ -471,7 +482,9 @@ def _generate_law_queries_rule_based(
 
     if item and legal_terms and len(queries) < 5:
         item_legal = LEGAL_TERM_MAPPING.get(item, [item])
-        queries.append(f"{item_legal[0] if item_legal else item} {legal_terms[0]} 소비자보호")
+        queries.append(
+            f"{item_legal[0] if item_legal else item} {legal_terms[0]} 소비자보호"
+        )
 
     # 기본 폴백
     if not queries:
@@ -489,7 +502,9 @@ def _generate_law_queries_rule_based(
             seen.add(q)
             unique_queries.append(q)
 
-    logger.info(f"[Rule-based Law Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}")
+    logger.info(
+        f"[Rule-based Law Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}"
+    )
 
     return unique_queries[:5]
 
@@ -613,7 +628,9 @@ def _generate_criteria_queries_rule_based(
 
     # item 파라미터로 카테고리 찾기
     if detected_item and not criteria_categories:
-        criteria_categories = PRODUCT_TO_CRITERIA_CATEGORY.get(detected_item, [detected_item])
+        criteria_categories = PRODUCT_TO_CRITERIA_CATEGORY.get(
+            detected_item, [detected_item]
+        )
 
     # 2. 분쟁유형에서 기준 키워드 추출
     criteria_keywords = []
@@ -633,7 +650,9 @@ def _generate_criteria_queries_rule_based(
             detected_dispute = "해지"
 
     if detected_dispute:
-        criteria_keywords = DISPUTE_TYPE_TO_CRITERIA.get(detected_dispute, [detected_dispute])
+        criteria_keywords = DISPUTE_TYPE_TO_CRITERIA.get(
+            detected_dispute, [detected_dispute]
+        )
 
     # ============================================================
     # 3. 핵심 쿼리 생성
@@ -642,7 +661,9 @@ def _generate_criteria_queries_rule_based(
     # 품목 + 분쟁유형 조합 (가장 중요)
     if criteria_categories and criteria_keywords:
         queries.append(f"{criteria_categories[0]} {criteria_keywords[0]} 분쟁해결기준")
-        queries.append(f"{criteria_categories[0]} {criteria_keywords[0]} 소비자분쟁해결기준")
+        queries.append(
+            f"{criteria_categories[0]} {criteria_keywords[0]} 소비자분쟁해결기준"
+        )
 
     # 품목 기반 검색
     if criteria_categories:
@@ -655,7 +676,9 @@ def _generate_criteria_queries_rule_based(
         queries.append(f"소비자분쟁해결기준 {criteria_keywords[0]}")
 
     # 전자상거래 특화 (온라인 구매인 경우)
-    is_online = any(kw in query_lower for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매"])
+    is_online = any(
+        kw in query_lower for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매"]
+    )
     if is_online:
         queries.append("전자상거래 청약철회 분쟁해결기준")
         queries.append("통신판매 환불 기준 7일")
@@ -687,7 +710,9 @@ def _generate_criteria_queries_rule_based(
             seen.add(q)
             unique_queries.append(q)
 
-    logger.info(f"[Rule-based Criteria Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}")
+    logger.info(
+        f"[Rule-based Criteria Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}"
+    )
 
     return unique_queries[:5]
 

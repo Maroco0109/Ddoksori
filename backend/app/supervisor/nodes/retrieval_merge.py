@@ -97,7 +97,17 @@ PRODUCT_CATEGORY_MAP = {
         "호텔",
         "숙박",
     ],
-    "의류잡화": ["의류", "잡화", "의류잡화", "옷", "신발", "가방", "지갑", "시계", "악세서리"],
+    "의류잡화": [
+        "의류",
+        "잡화",
+        "의류잡화",
+        "옷",
+        "신발",
+        "가방",
+        "지갑",
+        "시계",
+        "악세서리",
+    ],
     "차량": ["차량", "자동차", "중고차", "오토바이", "자전거", "킥보드", "전동킥보드"],
 }
 
@@ -360,7 +370,9 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     # Post-retrieval product relevance filtering
     # Check if user changed product scope in follow-up question
     product_scope_change = query_analysis.get("product_scope_change") or {}
-    should_ignore_filter = product_scope_change.get("should_ignore_product_filter", False)
+    should_ignore_filter = product_scope_change.get(
+        "should_ignore_product_filter", False
+    )
     negated_items = product_scope_change.get("negated_items", [])
 
     logger.info(
@@ -422,9 +434,7 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
                         )
                 # else: keep all results to maintain minimum coverage
     elif should_ignore_filter:
-        logger.info(
-            "[RetrievalMerge] Product filter ignored (scope change detected)"
-        )
+        logger.info("[RetrievalMerge] Product filter ignored (scope change detected)")
         # Apply category-level filtering if expanded category is specified
         if product_category:
             logger.info(

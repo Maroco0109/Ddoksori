@@ -86,7 +86,9 @@ class QueryAnalysisResult(TypedDict, total=False):
     dispute_reason: Optional[str]  # change_of_mind, defect, unknown
 
     # === Product Scope Change: 제품 범위 변경 감지 ===
-    product_scope_change: Optional[Dict[str, Any]]  # {should_ignore_product_filter, expanded_category, negated_items}
+    product_scope_change: Optional[
+        Dict[str, Any]
+    ]  # {should_ignore_product_filter, expanded_category, negated_items}
 
 
 class RetrievalResult(TypedDict, total=False):

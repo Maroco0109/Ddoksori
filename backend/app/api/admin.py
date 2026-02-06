@@ -309,4 +309,8 @@ async def clear_all_caches(admin: Admin = Depends(get_current_admin)):
 
     results = clear_all_supervisor_caches()
     await AdminDB().log_action(admin.id, "clear_all_caches", "system")
-    return {"success": True, "cleared": results, "message": "모든 캐시가 초기화되었습니다."}
+    return {
+        "success": True,
+        "cleared": results,
+        "message": "모든 캐시가 초기화되었습니다.",
+    }

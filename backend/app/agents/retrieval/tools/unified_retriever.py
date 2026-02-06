@@ -150,7 +150,9 @@ def filter_by_threshold(
 
     # 최소 결과 수 보장
     if len(filtered) < min_results and len(results) >= min_results:
-        sorted_results = sorted(results, key=lambda x: x.rrf_score or x.similarity, reverse=True)
+        sorted_results = sorted(
+            results, key=lambda x: x.rrf_score or x.similarity, reverse=True
+        )
         return sorted_results[:min_results]
 
     return filtered if filtered else results[:min_results]
@@ -454,7 +456,9 @@ class UnifiedRetriever:
 
             # DEBUG: printed_page 값 확인
             if i < 3:  # 첫 3개만 로그
-                logger.info(f"[UnifiedRetriever] Row {i}: printed_page={printed_page}, source_file={source_file}, doc_title={title[:50] if title else 'None'}")
+                logger.info(
+                    f"[UnifiedRetriever] Row {i}: printed_page={printed_page}, source_file={source_file}, doc_title={title[:50] if title else 'None'}"
+                )
 
             results.append(
                 SearchResult(

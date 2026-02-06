@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Phase 2-2: Supervisor LLM 설정
 # ============================================================================
 
+
 def _create_supervisor_llm():
     """
     환경 변수 기반 Supervisor LLM 생성
@@ -79,7 +80,9 @@ def _create_supervisor_llm():
         return AsyncLLMWrapper(llm)
 
     except ImportError:
-        logger.warning("[SupervisorLLM] langchain_openai 미설치. 규칙 기반 모드로 전환.")
+        logger.warning(
+            "[SupervisorLLM] langchain_openai 미설치. 규칙 기반 모드로 전환."
+        )
         return None
     except Exception as e:
         logger.error(f"[SupervisorLLM] LLM 초기화 실패: {e}. 규칙 기반 모드로 전환.")

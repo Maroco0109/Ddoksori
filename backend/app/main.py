@@ -103,6 +103,7 @@ async def startup_event():
     # 템플릿 캐시 초기화 (개발 중 템플릿 변경 반영)
     try:
         from app.agents.answer_generation.template_loader import TemplateLoader
+
         TemplateLoader.reload_templates()
         logger.info("[Startup] Template cache cleared - will reload fresh templates")
     except Exception as e:

@@ -61,7 +61,9 @@ class TemplateRouter:
             logger.info(f"General info template selected for chat_type={chat_type}")
             return "general_info"
         elif chat_type != "dispute":
-            logger.info(f"Rejecting: chat_type={chat_type} (expected 'dispute' or 'general')")
+            logger.info(
+                f"Rejecting: chat_type={chat_type} (expected 'dispute' or 'general')"
+            )
             return "reject"
 
         # Rule 2a: High amount check

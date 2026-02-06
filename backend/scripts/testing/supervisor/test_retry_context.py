@@ -267,7 +267,7 @@ class TestGenerationNodeV2RetryContext:
         assert not mock_cache_instance.get.called
 
         # 재생성된 답변 사용
-        assert result["draft_answer"] == "재생성 답변"
+        assert result["draft_answer"].startswith("재생성 답변")
 
 
 class TestFallbackRetrySupplementPropagation:
