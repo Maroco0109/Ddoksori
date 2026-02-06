@@ -48,10 +48,26 @@ class ContextBuilder:
         """
         retrieval = state.get("retrieval", {}) or {}
         onboarding = state.get("onboarding", {}) or {}
-        query_analysis = state.get("query_analysis", {}) or {}
         user_query = state.get("user_query", "") or ""
+        query_analysis = state.get("query_analysis", {}) or {}
+        # Phase 2-16: 대화 히스토리 추가
+        conversation_history = state.get("conversation_history", []) or []
 
         logger.info("Building template context from retrieval state")
+
+        # 분쟁 사유 (단순변심 vs 하자) - query_analysis에서 추출
+        dispute_reason = query_analysis.get("dispute_reason", "unknown")
+        # 한글 변환
+        dispute_reason_kr = {
+            "simple_change_of_mind": "단순변심 (제품 하자 없음, 디자인/색상 불만족 등)",
+            "defect": "제품 하자 (고장, 불량, 결함 등)",
+            "unknown": "분쟁 사유 미확인",
+        }.get(dispute_reason, "분쟁 사유 미확인")
+
+        # Phase 2-16: 대화 히스토리를 텍스트로 변환 (최근 3턴)
+        conversation_history_text = self._build_conversation_history_text(
+            conversation_history, max_turns=3
+        )
 
         context = {
             "user_query": user_query,
@@ -63,7 +79,10 @@ class ContextBuilder:
             "case_data": self._build_case_data(
                 retrieval.get("disputes", []), retrieval.get("counsels", [])
             ),
-            "user_situation": self._build_user_situation(query_analysis),
+            # 분쟁 사유 (유사 사례 필터링용)
+            "dispute_reason": dispute_reason_kr,
+            # Phase 2-16: 대화 히스토리
+            "conversation_history": conversation_history_text,
         }
 
         # Sanitize values to prevent template variable injection
@@ -75,10 +94,43 @@ class ContextBuilder:
             f"Built context with {len(context)} variables: "
             f"laws={len(retrieval.get('laws', []))}, "
             f"criteria={len(retrieval.get('criteria', []))}, "
-            f"cases={len(retrieval.get('disputes', [])) + len(retrieval.get('counsels', []))}"
+            f"cases={len(retrieval.get('disputes', [])) + len(retrieval.get('counsels', []))}, "
+            f"dispute_reason={dispute_reason}"
         )
 
         return context
+
+    def _build_conversation_history_text(
+        self, history: List[Dict[str, Any]], max_turns: int = 3
+    ) -> str:
+        """
+        Phase 2-16: 대화 히스토리를 텍스트로 변환 (후속 질문 컨텍스트)
+
+        Args:
+            history: 대화 히스토리 리스트 (각 항목: {'role': str, 'content': str})
+            max_turns: 포함할 최대 턴 수
+
+        Returns:
+            포맷팅된 대화 히스토리 텍스트 (비어있으면 빈 문자열)
+        """
+        if not history:
+            return ""
+
+        recent = history[-max_turns:] if len(history) > max_turns else history
+        if not recent:
+            return ""
+
+        lines = ["[이전 대화]"]
+        for turn in recent:
+            if isinstance(turn, dict):
+                role = turn.get("role", "user")
+                content = turn.get("content", "")[:200]  # 최대 200자로 제한
+            else:
+                continue
+            prefix = "사용자" if role == "user" else "AI"
+            lines.append(f"{prefix}: {content}")
+        lines.append("")
+        return "\n".join(lines)
 
     def _build_law_data(self, laws: List[Dict[str, Any]]) -> str:
         """
@@ -98,18 +150,35 @@ class ContextBuilder:
 
         formatted_laws = []
         for law in laws:
-            law_name = law.get("law_name", "정보 없음")
+            # MAS agents put law_name in metadata, legacy format has it at top level
+            metadata = law.get("metadata") or {}
+            law_name = (
+                law.get("law_name")
+                or metadata.get("law_name")
+                or law.get("doc_title")
+                or "정보 없음"
+            )
             content = law.get("content", "내용 없음")
 
-            # Extract article number from multiple possible fields
-            article = _get_field(law, "article")
+            # Extract article number from multiple possible fields (including metadata)
+            article = (
+                _get_field(law, "article")
+                or metadata.get("article")
+                or metadata.get("조문번호")
+                or ""
+            )
             # Strip "제" and "조" prefixes/suffixes
             article_num = article.replace("제", "").replace("조", "").strip()
             if not article_num:
                 article_num = "정보 없음"
 
-            # Extract title from multiple possible fields
-            title = _get_field(law, "title", "제목 없음")
+            # Extract title from multiple possible fields (including metadata)
+            title = (
+                _get_field(law, "title")
+                or metadata.get("title")
+                or metadata.get("조문제목")
+                or "제목 없음"
+            )
 
             formatted_block = (
                 f"『{law_name}』 제{article_num}조 ({title})\n내용: {content}"
@@ -133,10 +202,22 @@ class ContextBuilder:
 
         formatted_criteria = []
         for criterion in criteria:
-            source_label = criterion.get("source_label", "정보 없음")
-            category = criterion.get("category", "")
-            item = criterion.get("item", "")
-            unit_text = criterion.get("unit_text", "")
+            # MAS agents put fields in metadata, legacy format has them at top level
+            metadata = criterion.get("metadata") or {}
+            source_label = (
+                criterion.get("source_label")
+                or metadata.get("source_label")
+                or criterion.get("doc_title")
+                or "소비자분쟁해결기준"
+            )
+            category = (
+                criterion.get("category")
+                or metadata.get("category")
+                or metadata.get("품목분류")
+                or ""
+            )
+            item = criterion.get("item") or metadata.get("item") or ""
+            unit_text = criterion.get("unit_text") or metadata.get("unit_text") or ""
             content = criterion.get("content", "내용 없음")
 
             # Build title from available fields
@@ -176,7 +257,30 @@ class ContextBuilder:
             if source_org:
                 title = f"[{source_org}] {title}"
 
+            # Include URL or source reference for citations
+            url = case.get("url", "")
+            doc_id = case.get("doc_id", "")
+            decision_date = case.get("decision_date", "")
+            source_file = case.get("source_file", "")
+            printed_page = case.get("printed_page")
+
+            # Build source reference
+            source_ref_parts = []
+            if url:
+                source_ref_parts.append(f"URL: {url}")
+            if source_file:
+                page_info = f" (p.{printed_page})" if printed_page else ""
+                source_ref_parts.append(f"PDF: {source_file}{page_info}")
+            if doc_id and not url and not source_file:
+                source_ref_parts.append(f"문서ID: {doc_id}")
+            if decision_date:
+                source_ref_parts.append(f"결정일: {decision_date}")
+
+            source_ref = " | ".join(source_ref_parts) if source_ref_parts else ""
+
             formatted_block = f"『{title}』\n내용: {content}"
+            if source_ref:
+                formatted_block += f"\n출처정보: {source_ref}"
             formatted_cases.append(formatted_block)
 
         return "\n\n".join(formatted_cases)
@@ -214,53 +318,6 @@ class ContextBuilder:
             return max([int(n) for n in numbers])
 
         return 0
-
-    def _build_user_situation(self, query_analysis: Dict[str, Any]) -> str:
-        """
-        Build user situation section from onboarding_context in query_analysis.
-
-        Args:
-            query_analysis: Query analysis result containing onboarding_context
-
-        Returns:
-            Formatted user situation string or empty string if no context available
-        """
-        onboarding_ctx = query_analysis.get("onboarding_context", {})
-        if not onboarding_ctx:
-            return ""
-
-        lines = []
-        purchase_item = onboarding_ctx.get("purchase_item")
-        purchase_item_category = onboarding_ctx.get("purchase_item_category")
-        days = onboarding_ctx.get("days_since_purchase")
-        within_withdrawal = onboarding_ctx.get("within_withdrawal_period")
-
-        # Only build section if we have meaningful data
-        if not any([purchase_item, days is not None]):
-            return ""
-
-        lines.append("## 사용자 상황")
-
-        if purchase_item:
-            lines.append(f"- 구매 품목: {purchase_item}")
-
-        if purchase_item_category:
-            lines.append(f"- 품목 분류: {purchase_item_category}")
-
-        if days is not None:
-            lines.append(f"- 구입 후 경과: {days}일")
-
-            # Provide specific guidance based on elapsed days
-            if within_withdrawal:
-                lines.append("- 청약철회 가능 여부: **가능** (14일 이내)")
-                lines.append("  → 전자상거래법에 따라 청약철회를 요청할 수 있습니다.")
-            else:
-                lines.append("- 청약철회 가능 여부: **불가** (14일 초과)")
-                lines.append(
-                    "  → 제품 하자나 품질보증기간 내 하자 발생 시 교환/환불 가능"
-                )
-
-        return "\n".join(lines)
 
     @staticmethod
     def extract_case_info(case: Dict[str, Any]) -> Dict[str, str]:

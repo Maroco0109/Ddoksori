@@ -1,4 +1,9 @@
-"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)"""
+"""LawRetrievalAgent - 법령 검색 전용 에이전트. LLM: 2.4B (EXAONE)
+
+Phase 2-10: 법령 전용 쿼리 확장 적용
+- 자연어 → 법률 용어 변환 (환불 → 청약철회)
+- 관련 법률명 자동 추가 (전자상거래법 등)
+"""
 
 import asyncio
 import logging
@@ -26,6 +31,151 @@ class LawRetrievalAgent(BaseRetrievalAgent):
     agent_description: ClassVar[str] = (
         "관련 법령 조항을 검색합니다. 법률적 근거가 필요할 때 호출됩니다."
     )
+
+    async def _execute_search(
+        self,
+        query: str,
+        top_k: int,
+        task_input: Dict[str, Any] | None = None,
+    ) -> List[SimilarChunkResult]:
+        db_config = _get_db_config()
+        retriever = LawRetriever(db_config)
+        retriever.connect()
+
+        try:
+            # PRIORITY 1: 조문 번호 직접 검색 (chunk_id 패턴 매칭)
+            article_pattern = r"([\w가-힣]+법?)\s*제?(\d+)조"
+            article_match = re.search(article_pattern, query)
+
+            direct_results: List[SimilarChunkResult] = []
+            if article_match:
+                law_name_part = article_match.group(1)
+                article_num = article_match.group(2)
+
+                # 법률명 정규화 ("법" suffix가 없으면 추가)
+                if not law_name_part.endswith("법"):
+                    law_name_part = law_name_part + "법"
+
+                logger.info(
+                    f"[LawAgent] Article pattern detected: {law_name_part} 제{article_num}조, "
+                    f"attempting direct chunk_id lookup"
+                )
+
+                direct_results = retriever.direct_search_by_article_number(
+                    law_name_part, article_num
+                )
+
+                if direct_results:
+                    logger.info(
+                        f"[LawAgent] Direct lookup SUCCESS: found {len(direct_results)} chunks"
+                    )
+                    # Direct match gets top priority - assign high RRF scores
+                    for idx, result in enumerate(direct_results):
+                        result.similarity = 10.0 - idx * 0.1  # Very high base score
+                        result.rrf_score = 10.0 - idx * 0.1
+
+                    # If we found direct matches, we can return early or supplement with hybrid search
+                    if len(direct_results) >= top_k:
+                        return direct_results[:top_k]
+
+            # PRIORITY 2: Hybrid search with query expansion
+            # Phase 2-10: 법령 전용 쿼리 확장 적용
+            law_specific_queries = await self._expand_for_law_search(query, task_input)
+
+            # 기존 expanded_queries와 병합
+            expanded_queries: List[str] = []
+            if task_input:
+                expanded_queries = task_input.get("expanded_queries") or []
+
+            # 법령 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
+            all_queries = law_specific_queries.copy()
+            for eq in expanded_queries:
+                if eq not in all_queries:
+                    all_queries.append(eq)
+            all_queries = all_queries[:6]  # 최대 6개로 제한
+
+            if not all_queries:
+                all_queries = [query]
+
+            logger.info(
+                f"[LawAgent] Using {len(all_queries)} queries: "
+                f"law_specific={len(law_specific_queries)}, original={len(expanded_queries)}"
+            )
+
+            document_types = None
+            if task_input:
+                metadata_filter = task_input.get("metadata_filter") or {}
+                document_types = metadata_filter.get("document_types") or None
+            per_query_k = max(top_k, 12)
+            all_results: List[List[SimilarChunkResult]] = []
+            for q in all_queries:
+                results = await asyncio.to_thread(
+                    retriever.hybrid_search,
+                    q,
+                    per_query_k,
+                    document_types,
+                )
+                all_results.append(results)
+
+            fused_scores: Dict[str, float] = {}
+            fused_results: Dict[str, SimilarChunkResult] = {}
+            from app.common.config import get_config
+
+            rrf_k = get_config().retrieval.rrf_k_python
+
+            # Merge direct results first (highest priority)
+            for result in direct_results:
+                chunk_id = result.chunk_id
+                fused_scores[chunk_id] = result.similarity
+                fused_results[chunk_id] = result
+
+            # Then merge hybrid search results
+            for results in all_results:
+                for rank, result in enumerate(results, start=1):
+                    chunk_id = result.chunk_id
+                    # Don't overwrite direct match scores
+                    if chunk_id in direct_results:
+                        continue
+                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (
+                        1.0 / (rrf_k + rank)
+                    )
+                    if chunk_id not in fused_results:
+                        fused_results[chunk_id] = result
+
+            for chunk_id, score in fused_scores.items():
+                fused_results[chunk_id].similarity = score
+
+            ranked = sorted(
+                fused_results.values(),
+                key=lambda r: r.similarity,
+                reverse=True,
+            )
+            # Filter deleted articles and limit to 2 per law/article key.
+            filtered: List[SimilarChunkResult] = []
+            seen_per_article: Dict[str, int] = {}
+            for result in ranked:
+                text = result.text or ""
+                if re.search(r"\(\).*삭제\s*<", text, re.DOTALL):
+                    continue
+
+                chunk_id = result.chunk_id or ""
+                parts = chunk_id.split("_")
+                if len(parts) >= 2:
+                    article_key = f"{parts[0]}_{parts[1]}"
+                else:
+                    article_key = chunk_id
+
+                count = seen_per_article.get(article_key, 0)
+                if count >= 2:
+                    continue
+                seen_per_article[article_key] = count + 1
+                filtered.append(result)
+                if len(filtered) >= top_k:
+                    break
+
+            return filtered
+        finally:
+            retriever.close()
 
     async def _expand_for_law_search(
         self, query: str, task_input: Dict[str, Any] | None
@@ -87,107 +237,6 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         except Exception as e:
             logger.warning(f"[LawAgent] Law-specific expansion failed: {e}")
             return []
-
-    async def _execute_search(
-        self,
-        query: str,
-        top_k: int,
-        task_input: Dict[str, Any] | None = None,
-    ) -> List[SimilarChunkResult]:
-        # Phase 2-10: 법령 전용 쿼리 확장 적용
-        law_specific_queries = await self._expand_for_law_search(query, task_input)
-
-        # 기존 expanded_queries와 병합
-        expanded_queries: List[str] = []
-        if task_input:
-            expanded_queries = task_input.get("expanded_queries") or []
-
-        # 법령 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
-        all_queries = law_specific_queries.copy()
-        for eq in expanded_queries:
-            if eq not in all_queries:
-                all_queries.append(eq)
-        all_queries = all_queries[:6]  # 최대 6개로 제한
-
-        if not all_queries:
-            all_queries = [query]
-
-        logger.info(
-            f"[LawAgent] Using {len(all_queries)} queries: "
-            f"{all_queries[:3]}{'...' if len(all_queries) > 3 else ''}"
-        )
-
-        db_config = _get_db_config()
-
-        document_types = None
-        if task_input:
-            metadata_filter = task_input.get("metadata_filter") or {}
-            document_types = metadata_filter.get("document_types") or None
-
-        retriever = LawRetriever(db_config)
-        retriever.connect()
-
-        try:
-            per_query_k = max(top_k, 12)
-            all_results: List[List[SimilarChunkResult]] = []
-            for q in all_queries:
-                results = await asyncio.to_thread(
-                    retriever.hybrid_search,
-                    q,
-                    per_query_k,
-                    document_types,
-                )
-                all_results.append(results)
-
-            fused_scores: Dict[str, float] = {}
-            fused_results: Dict[str, SimilarChunkResult] = {}
-            from app.common.config import get_config
-
-            rrf_k = get_config().retrieval.rrf_k_python
-
-            for results in all_results:
-                for rank, result in enumerate(results, start=1):
-                    chunk_id = result.chunk_id
-                    fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (
-                        1.0 / (rrf_k + rank)
-                    )
-                    if chunk_id not in fused_results:
-                        fused_results[chunk_id] = result
-
-            for chunk_id, score in fused_scores.items():
-                fused_results[chunk_id].similarity = score
-
-            ranked = sorted(
-                fused_results.values(),
-                key=lambda r: r.similarity,
-                reverse=True,
-            )
-            # Filter deleted articles and limit to 2 per law/article key.
-            filtered: List[SimilarChunkResult] = []
-            seen_per_article: Dict[str, int] = {}
-            for result in ranked:
-                text = result.text or ""
-                if re.search(r"\(\).*삭제\s*<", text, re.DOTALL):
-                    continue
-
-                chunk_id = result.chunk_id or ""
-                parts = chunk_id.split("_")
-                if len(parts) >= 2:
-                    article_key = f"{parts[0]}_{parts[1]}"
-                else:
-                    article_key = chunk_id
-
-                count = seen_per_article.get(article_key, 0)
-                if count >= 2:
-                    continue
-                seen_per_article[article_key] = count + 1
-                filtered.append(result)
-                if len(filtered) >= top_k:
-                    break
-
-            return filtered
-        finally:
-            retriever.close()
 
     def _format_results(self, results: List[SimilarChunkResult]) -> List[LawDocument]:
         formatted: List[LawDocument] = []

@@ -44,7 +44,7 @@ ehthumbs.db
 Thumbs.db
 nul
 
-# Claude Code (AI 도구 설정)
+# AI 도구 설정
 .claude/
 
 # Testing

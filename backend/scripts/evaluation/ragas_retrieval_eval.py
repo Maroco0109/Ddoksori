@@ -178,12 +178,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if load_dotenv:
-        # Load backend/.env so OPENAI_API_KEY is available
+        # Load root .env so OPENAI_API_KEY is available
         # __file__ = backend/scripts/evaluation/... -> go up 4 to repo root
         repo_root = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         )
-        env_path = os.path.join(repo_root, "backend", ".env")
+        env_path = os.path.join(repo_root, ".env")
         load_dotenv(env_path)
 
     rows = load_rows(args.input, args.max_rows, args.shuffle, args.seed)

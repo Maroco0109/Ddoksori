@@ -80,6 +80,7 @@ def classify_mode(
     query: str,
     previous_followups: list = None,
     previous_available_details: dict = None,
+    previous_query: str = None,
 ) -> RoutingMode:
     """
     분석된 정보를 바탕으로 오케스트레이터의 라우팅 경로를 결정합니다.
@@ -89,6 +90,9 @@ def classify_mode(
     - NEED_RAG: 정보 검색이 필요함
     - RESTRICTED_DOMAIN: 전문기관 도메인 (유사 사례 검색 + 전문기관 안내)
     - FOLLOWUP_WITH_CONTEXT: 이전 턴 후속 질문 매칭 (캐시 재사용)
+
+    Args:
+        previous_query: 이전 턴의 사용자 쿼리 (품목 변경 감지용)
     """
     logger.info(
         f"[classify_mode] Input: query_type={query_type}, needs_clarification={needs_clarification}, "
@@ -133,7 +137,9 @@ def classify_mode(
             response_mode = "legacy"
 
         if response_mode != "legacy":
-            if is_followup_with_context(query, previous_followups, threshold):
+            if is_followup_with_context(
+                query, previous_followups, threshold, previous_query
+            ):
                 logger.info("[QueryAnalysis] Followup matched → FOLLOWUP_WITH_CONTEXT")
                 return "FOLLOWUP_WITH_CONTEXT"
 

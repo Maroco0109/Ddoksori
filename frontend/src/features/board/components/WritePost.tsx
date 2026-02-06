@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
+import { CATEGORY_LABELS, POST_CATEGORIES } from '@/shared/config/categories';
 import type { BoardPostForm } from '../board.types';
-import type { PostCategory } from '@/shared/types';
 
 interface WritePostProps {
   onBack: () => void;
@@ -49,7 +49,7 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
     }
 
     onSubmit({
-      category: formData.category as PostCategory,
+      category: formData.category as BoardPostForm['category'],
       subCategory: formData.subCategory || undefined,
       title: formData.title,
       content: formData.content,
@@ -59,7 +59,7 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
   const handleCategoryChange = (categoryId: string) => {
     setFormData({
       ...formData,
-      category: categoryId as PostCategory,
+      category: categoryId,
       subCategory: '' // 카테고리 변경 시 서브 카테고리 초기화
     });
   };

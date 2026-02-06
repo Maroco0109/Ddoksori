@@ -88,6 +88,12 @@ class SearchResult:
     decision_date: Optional[str] = None  # From metadata['decision_date']
     collected_at: Optional[str] = None  # Document collection timestamp
 
+    # PDF source information
+    source_file: Optional[str] = (
+        None  # PDF 파일명 (예: "2010년 소비자분쟁 해결사례집.pdf")
+    )
+    printed_page: Optional[int] = None  # 인쇄 페이지 번호
+
     # RRF score (preserved separately from similarity for debugging)
     rrf_score: Optional[float] = None
 
