@@ -2,18 +2,15 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '@/shared/api/client';
 import type { Report, ReportSearchParams } from '@/shared/types/admin';
+import { useAdminStore } from '../admin.store';
+import { getMockData } from '../mockData';
 
-/**
- * 신고 관리 페이지
- *
- * SEC-34: 테스트 토큰 조건 분기 제거
- * 모든 데이터는 백엔드 API를 통해서만 조회/수정됩니다.
- */
 export default function AdminReportsPage() {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const adminToken = useAdminStore((state) => state.adminToken);
 
   const [searchFilters, setSearchFilters] = useState<ReportSearchParams>({
     type: undefined,
@@ -36,9 +33,14 @@ export default function AdminReportsPage() {
   const fetchReports = async () => {
     setIsLoading(true);
     try {
-      // SEC-34: 백엔드 API만 사용
-      const data = await apiClient.get<Report[]>('/api/admin/reports', searchFilters);
-      setReports(data);
+      // 테스트 모드인 경우 mock 데이터 사용
+      if (adminToken === 'test-token-1234') {
+        const data = getMockData('/api/admin/reports', searchFilters);
+        setReports(data);
+      } else {
+        const data = await apiClient.get<Report[]>('/api/admin/reports', searchFilters);
+        setReports(data);
+      }
     } catch (error) {
       console.error('신고 목록 로딩 실패:', error);
     } finally {
@@ -52,23 +54,36 @@ export default function AdminReportsPage() {
     adminNote?: string
   ) => {
     try {
-      await apiClient.put(`/api/admin/reports/${reportId}/status`, {
-        status: newStatus,
-        adminNote,
-      });
-      alert('신고 처리 상태가 변경되었습니다.');
-      fetchReports();
-      setSelectedReport(null);
-    } catch {
+      // 테스트 모드에서는 시뮬레이션만
+      if (adminToken === 'test-token-1234') {
+        alert('신고 처리 상태가 변경되었습니다. (테스트 모드)');
+        fetchReports();
+        setSelectedReport(null);
+      } else {
+        await apiClient.put(`/api/admin/reports/${reportId}/status`, {
+          status: newStatus,
+          adminNote,
+        });
+        alert('신고 처리 상태가 변경되었습니다.');
+        fetchReports();
+        setSelectedReport(null);
+      }
+    } catch (error) {
       alert('상태 변경에 실패했습니다.');
     }
   };
 
   const handleViewReportDetail = async (reportId: number) => {
     try {
-      const report = await apiClient.get<Report>(`/api/admin/reports/${reportId}`);
-      setSelectedReport(report);
-    } catch {
+      // 테스트 모드인 경우 mock 데이터 사용
+      if (adminToken === 'test-token-1234') {
+        const report = getMockData(`/api/admin/reports/${reportId}`);
+        setSelectedReport(report);
+      } else {
+        const report = await apiClient.get<Report>(`/api/admin/reports/${reportId}`);
+        setSelectedReport(report);
+      }
+    } catch (error) {
       alert('신고 내용을 불러올 수 없습니다.');
     }
   };

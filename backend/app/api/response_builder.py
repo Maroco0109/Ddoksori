@@ -43,8 +43,8 @@ def build_chat_response_data(
         "session_id": session_id,
         "answer": answer,
         "sources": _build_sources(disputes, counsels, laws, criteria),
-        "clarifying_questions": final_state.get("clarifying_questions", []),
-        "followup_questions": final_state.get("followup_questions", []),
+        "clarifying_questions": [],  # PR-41: 추천 질문 제거
+        "followup_questions": [],  # PR-41: 추천 질문 제거
         "has_sufficient_evidence": final_state.get("has_sufficient_evidence", True),
         "domain": _build_domain(agency_info),
         "similar_cases": _build_similar_cases(disputes, counsels),
@@ -72,6 +72,9 @@ def _build_sources(
                 "content": d.get("content", ""),
                 "case_uid": d.get("case_uid"),
                 "product_name": d.get("product_name"),
+                "url": d.get("url", ""),  # URL 추가
+                "source_file": d.get("source_file", ""),  # PDF 파일명
+                "printed_page": d.get("printed_page"),  # 페이지 번호
             }
         )
 
@@ -83,6 +86,9 @@ def _build_sources(
                 "source_org": c.get("source_org", ""),
                 "similarity": c.get("similarity", 0),
                 "content": c.get("content", ""),
+                "url": c.get("url", ""),  # URL 추가
+                "source_file": c.get("source_file", ""),  # PDF 파일명
+                "printed_page": c.get("printed_page"),  # 페이지 번호
             }
         )
 
@@ -156,6 +162,9 @@ def _build_similar_cases(
                 "doc_title": d.get("doc_title"),
                 "source_org": d.get("source_org"),
                 "similarity": d.get("similarity", 0),
+                "url": d.get("url", ""),  # URL 추가
+                "source_file": d.get("source_file", ""),
+                "printed_page": d.get("printed_page"),
             }
             for d in disputes
         ],
@@ -164,6 +173,9 @@ def _build_similar_cases(
                 "doc_title": c.get("doc_title"),
                 "source_org": c.get("source_org"),
                 "similarity": c.get("similarity", 0),
+                "url": c.get("url", ""),  # URL 추가
+                "source_file": c.get("source_file", ""),
+                "printed_page": c.get("printed_page"),
             }
             for c in counsels
         ],

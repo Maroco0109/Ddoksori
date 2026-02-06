@@ -274,31 +274,12 @@ class SupervisorNode:
 
         query_analysis = state.get("query_analysis")
         mode = state.get("mode", "NEED_RAG")
-        user_query = state.get("user_query", "")
 
         logger.info(
             f"[SupervisorNode] decide_next_action: mode={mode}, "
             f"query_analysis={'present' if query_analysis else 'absent'}, "
             f"iteration={iteration}"
         )
-
-        # PR-4: 매우 짧은 쿼리(5자 이하)는 무조건 clarify로 라우팅
-        # LLM 판단에 의존하지 않고 프로그래밍적으로 강제
-        chat_type = state.get("chat_type", "dispute")
-        if (
-            chat_type == "dispute"
-            and len(user_query.strip()) <= 5
-            and iteration == 0  # 첫 번째 반복에서만
-        ):
-            logger.info(
-                f"[SupervisorNode] 매우 짧은 쿼리 감지: '{user_query}' ({len(user_query.strip())}자) → clarify"
-            )
-            return {
-                "action": "clarify",
-                "target_agent": "clarify",
-                "request": {},
-                "reasoning": f"사용자 질문이 {len(user_query.strip())}자로 너무 짧아 명확화 필요",
-            }
 
         # Query Analysis가 없으면 먼저 수행
         supervisor_state = state.get("supervisor") or {}
@@ -507,7 +488,6 @@ class SupervisorNode:
 {self._format_agents()}
 
 ## 중요 규칙 (반드시 준수)
-0. 사용자 질문이 너무 짧거나(5자 이하) 모호하면 → clarify 먼저 (예: "환불", "교환", "어떻게")
 1. "질의 분석"이 없으면 → query_analyst 호출 필수
 2. "검색 결과"가 없으면 → retrieval_team 호출 필수
 3. "답변 초안"이 없으면 → answer_drafter 호출 필수
@@ -517,17 +497,9 @@ class SupervisorNode:
 ## 출력 형식 (반드시 JSON으로 응답)
 {{
     "action": "call_agent" | "respond" | "clarify",
-    "target_agent": "agent_name",  // clarify 액션일 때는 "clarify"로 설정
+    "target_agent": "agent_name",
     "request": {{}},
     "reasoning": "판단 근거"
-}}
-
-예시 (짧은 쿼리 clarify):
-{{
-    "action": "clarify",
-    "target_agent": "clarify",
-    "request": {{}},
-    "reasoning": "사용자 질문이 2자('환불')로 너무 짧아 명확화 필요"
 }}
 """
 

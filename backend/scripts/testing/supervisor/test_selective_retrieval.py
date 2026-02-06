@@ -27,9 +27,9 @@ class TestQueryTypeToRetrievers:
         """law 쿼리는 law retriever만 사용"""
         assert QUERY_TYPE_TO_RETRIEVERS["law"] == ["law"]
 
-    def test_criteria_query_maps_to_law_and_criteria(self):
-        """criteria 쿼리는 law + criteria 사용"""
-        assert QUERY_TYPE_TO_RETRIEVERS["criteria"] == ["law", "criteria"]
+    def test_criteria_query_maps_to_criteria_only(self):
+        """criteria 쿼리는 criteria만 사용 (context bleeding 방지)"""
+        assert QUERY_TYPE_TO_RETRIEVERS["criteria"] == ["criteria"]
 
     def test_dispute_query_maps_to_all(self):
         """dispute 쿼리는 전체 retriever 사용"""
@@ -61,10 +61,7 @@ class TestRetrieverTypesInQueryAnalysis:
 
         async def run_test():
             return await graph.ainvoke(
-                {
-                    "messages": [{"role": "user", "content": "안녕"}],
-                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                },
+                {"messages": [{"role": "user", "content": "안녕"}]},
                 config={"configurable": {"thread_id": "test-retriever-types"}},
             )
 
@@ -94,10 +91,7 @@ class TestSelectiveFanOut:
 
         async def run_test():
             return await graph.ainvoke(
-                {
-                    "messages": [{"role": "user", "content": query}],
-                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                },
+                {"messages": [{"role": "user", "content": query}]},
                 config={"configurable": {"thread_id": f"test-selective-{query[:5]}"}},
             )
 

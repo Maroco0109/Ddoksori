@@ -46,6 +46,7 @@ load_dotenv()
 
 from rag import StructuredRetriever
 from rag.evaluation import RetrievalMetrics, aggregate_results
+
 from utils.embedding_connection import get_embedding_api_url
 
 

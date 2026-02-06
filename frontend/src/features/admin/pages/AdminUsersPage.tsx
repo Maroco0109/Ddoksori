@@ -2,18 +2,15 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '@/shared/api/client';
 import type { AdminUser, UserSearchParams } from '@/shared/types/admin';
+import { useAdminStore } from '../admin.store';
+import { getMockData } from '../mockData';
 
-/**
- * 회원 관리 페이지
- *
- * SEC-34: 테스트 토큰 조건 분기 제거
- * 모든 데이터는 백엔드 API를 통해서만 조회/수정됩니다.
- */
 export default function AdminUsersPage() {
   const [searchParams] = useSearchParams();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const adminToken = useAdminStore((state) => state.adminToken);
 
   const [searchFilters, setSearchFilters] = useState<UserSearchParams>({
     searchKeyword: '',
@@ -37,9 +34,14 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      // SEC-34: 백엔드 API만 사용
-      const data = await apiClient.get<AdminUser[]>('/api/admin/users', searchFilters);
-      setUsers(data);
+      // 테스트 모드인 경우 mock 데이터 사용
+      if (adminToken === 'test-token-1234') {
+        const data = getMockData('/api/admin/users', searchFilters);
+        setUsers(data);
+      } else {
+        const data = await apiClient.get<AdminUser[]>('/api/admin/users', searchFilters);
+        setUsers(data);
+      }
     } catch (error) {
       console.error('회원 목록 로딩 실패:', error);
     } finally {
@@ -64,19 +66,31 @@ export default function AdminUsersPage() {
     }
 
     try {
-      await apiClient.put(`/api/admin/users/${userId}/status`, { status: newStatus });
-      alert('사용자 상태가 변경되었습니다.');
-      fetchUsers();
-    } catch {
+      // 테스트 모드에서는 시뮬레이션만
+      if (adminToken === 'test-token-1234') {
+        alert('사용자 상태가 변경되었습니다. (테스트 모드)');
+        fetchUsers();
+      } else {
+        await apiClient.put(`/api/admin/users/${userId}/status`, { status: newStatus });
+        alert('사용자 상태가 변경되었습니다.');
+        fetchUsers();
+      }
+    } catch (error) {
       alert('상태 변경에 실패했습니다.');
     }
   };
 
   const handleViewUserDetail = async (userId: string) => {
     try {
-      const user = await apiClient.get<AdminUser>(`/api/admin/users/${userId}`);
-      setSelectedUser(user);
-    } catch {
+      // 테스트 모드인 경우 mock 데이터 사용
+      if (adminToken === 'test-token-1234') {
+        const user = getMockData(`/api/admin/users/${userId}`);
+        setSelectedUser(user);
+      } else {
+        const user = await apiClient.get<AdminUser>(`/api/admin/users/${userId}`);
+        setSelectedUser(user);
+      }
+    } catch (error) {
       alert('사용자 정보를 불러올 수 없습니다.');
     }
   };

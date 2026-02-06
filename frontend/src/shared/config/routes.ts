@@ -4,7 +4,6 @@ export const ROUTES = {
   CHAT: '/chat',
   BOARD: '/board',
   MYPAGE: '/mypage',
-  AUTH_CALLBACK: '/auth/callback',
   ADMIN_LOGIN: '/admin/login',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_POSTS: '/admin/posts',

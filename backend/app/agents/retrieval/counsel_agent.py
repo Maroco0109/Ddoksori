@@ -59,6 +59,7 @@ class CounselRetrievalAgent(BaseRetrievalAgent):
                     "url": r.url,
                     "decision_date": r.decision_date,
                     "similarity": r.similarity,
+                    "metadata": r.metadata,  # 메타데이터 추가
                 }
             )
         return formatted

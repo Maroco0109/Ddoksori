@@ -27,6 +27,21 @@ SAFE_FALLBACK_MESSAGE = """일시적인 오류가 발생했습니다.
 class AnswerGenerationFallback:
     """답변 생성 폴백 체인"""
 
+    @classmethod
+    def _get_fallback_chain(cls):
+        """환경 설정에서 primary 모델을 가져와 폴백 체인 구성"""
+        from ...common.config import get_config
+
+        config = get_config()
+        primary_model = config.models.draft_agent  # .env의 MODEL_DRAFT_AGENT
+
+        return [
+            (primary_model, "OpenAI"),
+            ("gpt-4o-mini", "OpenAI"),
+            ("rule_based", "Local"),
+        ]
+
+    # 하위 호환성을 위해 FALLBACK_CHAIN 속성 유지 (deprecated)
     FALLBACK_CHAIN = [
         ("gpt-4o", "OpenAI"),
         ("gpt-4o-mini", "OpenAI"),
@@ -53,7 +68,7 @@ class AnswerGenerationFallback:
         """
         last_error = None
 
-        for model, provider in cls.FALLBACK_CHAIN:
+        for model, provider in cls._get_fallback_chain():
             try:
                 if model == "rule_based":
                     answer = cls._rule_based_generation(retrieval, agency_info)
@@ -227,7 +242,7 @@ class AnswerGenerationFallback:
         last_error = None
         full_answer = ""
 
-        for model, provider in cls.FALLBACK_CHAIN:
+        for model, provider in cls._get_fallback_chain():
             try:
                 # rule_based 처리
                 if model == "rule_based":

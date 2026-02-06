@@ -258,140 +258,6 @@ LAW_QUERY_EXPANSION_USER_PROMPT = """다음 소비자 질문을 법령 검색에
 JSON 배열 형식으로 법령 검색 쿼리 3-5개를 반환하세요:"""
 
 
-def _generate_law_queries_rule_based(
-    query: str,
-    item: str,
-    channel: str,
-    dispute_type: str,
-    keywords: List[str],
-) -> List[str]:
-    """
-    규칙 기반 법률 쿼리 생성 (LLM 폴백용)
-
-    핵심 전략: 자주 사용되는 법률 조문을 직접 검색하는 쿼리 생성
-    """
-    queries = []
-    legal_terms = []
-    law_names = []
-
-    query_lower = query.lower()
-    keywords_str = " ".join(keywords).lower()
-
-    # 1. 일상어 → 법률 용어 변환
-    for word, terms in LEGAL_TERM_MAPPING.items():
-        if word in query_lower or word in keywords_str:
-            legal_terms.extend(terms[:2])
-
-    # 2. 상황별 관련 법률 추가
-    for situation, laws in SITUATION_TO_LAWS.items():
-        if (
-            situation in query_lower
-            or situation in channel
-            or situation in dispute_type
-        ):
-            law_names.extend(laws[:2])
-
-    # ============================================================
-    # 3. 핵심 케이스별 직접 쿼리 생성 (가장 중요!)
-    # ============================================================
-
-    # 온라인/통신판매 + 환불/취소 → 전자상거래법 제17조 청약철회
-    is_online = any(
-        kw in query_lower
-        for kw in [
-            "온라인",
-            "인터넷",
-            "쿠팡",
-            "배달",
-            "통신판매",
-            "앱",
-            "웹",
-            "사이트",
-        ]
-    )
-    is_refund = any(
-        kw in query_lower for kw in ["환불", "취소", "반품", "철회", "안해줘", "거부"]
-    )
-
-    if is_online and is_refund:
-        # 가장 중요한 쿼리: 전자상거래법 제17조 직접 검색
-        queries.append("전자상거래법 제17조 청약철회")
-        queries.append("전자상거래 등에서의 소비자보호에 관한 법률 청약철회권")
-        queries.append("통신판매 청약철회 7일 이내")
-        law_names = ["전자상거래법"]
-        legal_terms = ["청약철회", "제17조", "청약철회권"]
-
-    # 온라인 구매만 (환불 언급 없어도)
-    elif is_online:
-        queries.append("전자상거래법 통신판매 소비자보호")
-        if "전자상거래법" not in law_names:
-            law_names.append("전자상거래법")
-        if "청약철회" not in legal_terms:
-            legal_terms.append("청약철회")
-
-    # 환불/취소만 (채널 불명)
-    elif is_refund:
-        queries.append("청약철회권 계약해제 소비자")
-        queries.append("전자상거래법 제17조 청약철회")
-        if "청약철회" not in legal_terms:
-            legal_terms.append("청약철회")
-            legal_terms.append("제17조")
-
-    # 방문판매
-    if any(kw in query_lower for kw in ["방문", "집으로 와서", "직접 와서"]):
-        queries.append("방문판매법 청약철회 14일")
-        queries.append("방문판매 등에 관한 법률 제8조")
-
-    # 할부거래
-    if any(kw in query_lower for kw in ["할부", "분할", "월납"]):
-        queries.append("할부거래법 청약철회 항변권")
-
-    # 결함/하자
-    if any(
-        kw in query_lower for kw in ["결함", "불량", "고장", "하자", "손상", "파손"]
-    ):
-        queries.append("하자담보책임 민법 소비자보호")
-        queries.append("제조물책임법 결함")
-
-    # ============================================================
-    # 4. 일반적인 쿼리 조합 생성
-    # ============================================================
-    if law_names and legal_terms and len(queries) < 4:
-        queries.append(f"{law_names[0]} {' '.join(legal_terms[:3])}")
-
-    if legal_terms and len(queries) < 5:
-        queries.append(f"{' '.join(legal_terms[:4])} 소비자")
-
-    if item and legal_terms and len(queries) < 5:
-        item_legal = LEGAL_TERM_MAPPING.get(item, [item])
-        queries.append(
-            f"{item_legal[0] if item_legal else item} {legal_terms[0]} 소비자보호"
-        )
-
-    # 기본 폴백
-    if not queries:
-        queries = [
-            "전자상거래법 청약철회 통신판매",
-            "소비자보호법 환불 청약철회",
-            "소비자기본법 피해구제",
-        ]
-
-    # 중복 제거
-    seen = set()
-    unique_queries = []
-    for q in queries:
-        if q not in seen:
-            seen.add(q)
-            unique_queries.append(q)
-
-    logger.info(
-        f"[Rule-based Law Queries] Generated {len(unique_queries)} queries: "
-        f"{unique_queries[:3]}"
-    )
-
-    return unique_queries[:5]
-
-
 async def expand_query_for_law_search(
     query: str,
     item: str = "",
@@ -476,12 +342,392 @@ async def expand_query_for_law_search(
     return rule_based_queries
 
 
+def _generate_law_queries_rule_based(
+    query: str,
+    item: str,
+    channel: str,
+    dispute_type: str,
+    keywords: List[str],
+) -> List[str]:
+    """
+    규칙 기반 법률 쿼리 생성 (LLM 폴백용)
+
+    핵심 전략: 자주 사용되는 법률 조문을 직접 검색하는 쿼리 생성
+    """
+    queries = []
+    legal_terms = []
+    law_names = []
+
+    query_lower = query.lower()
+    keywords_str = " ".join(keywords).lower()
+
+    # ============================================================
+    # 0. 조문 번호 직접 지정 패턴 감지 (최우선 처리!)
+    # ============================================================
+    # 패턴: "민법 756조", "전자상거래법 제17조", "소비자기본법 제4조" 등
+    import re
+
+    article_pattern = r"([\w가-힣]+법?)\s*제?(\d+)조"
+    article_match = re.search(article_pattern, query)
+
+    if article_match:
+        law_name_part = article_match.group(1)
+        article_num = article_match.group(2)
+
+        # 조문 번호가 명시된 경우, 원본 쿼리를 우선 사용하고 변형 최소화
+        # 중요: DB 텍스트가 "제N조"로 시작하므로 이 형식을 최우선으로!
+        queries.append(f"제{article_num}조")  # 1순위: DB text와 직접 매칭
+        queries.append(f"{law_name_part} 제{article_num}조")  # 2순위: 법령명 + 조문
+        queries.append(query)  # 3순위: 원본 그대로
+
+        # 추가 검색 패턴: "756조" (제 없이)
+        queries.append(f"{article_num}조")
+
+        # 법령명이 약칭인 경우 정식 명칭 추가
+        law_full_names = {
+            "민법": "민법",
+            "상법": "상법",
+            "전자상거래법": "전자상거래 등에서의 소비자보호에 관한 법률",
+            "소비자기본법": "소비자기본법",
+            "제조물책임법": "제조물책임법",
+        }
+
+        for short_name, full_name in law_full_names.items():
+            if short_name in law_name_part:
+                if full_name != law_name_part:  # 중복 방지
+                    queries.append(f"{full_name} 제{article_num}조")
+                break
+
+        logger.info(
+            f"[Article-specific query] Detected: {law_name_part} 제{article_num}조, "
+            f"generated queries={queries[:4]}"
+        )
+
+        # 조문 번호가 명시된 경우, 다른 불필요한 확장을 하지 않음
+        return queries[:5]
+
+    # 1. 일상어 → 법률 용어 변환
+    for word, terms in LEGAL_TERM_MAPPING.items():
+        if word in query_lower or word in keywords_str:
+            legal_terms.extend(terms[:2])
+
+    # 2. 상황별 관련 법률 추가
+    for situation, laws in SITUATION_TO_LAWS.items():
+        if (
+            situation in query_lower
+            or situation in channel
+            or situation in dispute_type
+        ):
+            law_names.extend(laws[:2])
+
+    # ============================================================
+    # 3. 핵심 케이스별 직접 쿼리 생성 (가장 중요!)
+    # ============================================================
+
+    # 온라인/통신판매 + 환불/취소 → 전자상거래법 제17조 청약철회
+    is_online = any(
+        kw in query_lower
+        for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매", "앱", "웹", "사이트"]
+    )
+    is_refund = any(
+        kw in query_lower for kw in ["환불", "취소", "반품", "철회", "안해줘", "거부"]
+    )
+
+    if is_online and is_refund:
+        # 가장 중요한 쿼리: 전자상거래법 제17조 직접 검색
+        queries.append("전자상거래법 제17조 청약철회")
+        queries.append("전자상거래 등에서의 소비자보호에 관한 법률 청약철회권")
+        queries.append("통신판매 청약철회 7일 이내")
+        law_names = ["전자상거래법"]
+        legal_terms = ["청약철회", "제17조", "청약철회권"]
+
+    # 온라인 구매만 (환불 언급 없어도)
+    elif is_online:
+        queries.append("전자상거래법 통신판매 소비자보호")
+        if "전자상거래법" not in law_names:
+            law_names.append("전자상거래법")
+        if "청약철회" not in legal_terms:
+            legal_terms.append("청약철회")
+
+    # 환불/취소만 (채널 불명)
+    elif is_refund:
+        queries.append("청약철회권 계약해제 소비자")
+        queries.append("전자상거래법 제17조 청약철회")
+        if "청약철회" not in legal_terms:
+            legal_terms.append("청약철회")
+            legal_terms.append("제17조")
+
+    # 방문판매
+    if any(kw in query_lower for kw in ["방문", "집으로 와서", "직접 와서"]):
+        queries.append("방문판매법 청약철회 14일")
+        queries.append("방문판매 등에 관한 법률 제8조")
+
+    # 할부거래
+    if any(kw in query_lower for kw in ["할부", "분할", "월납"]):
+        queries.append("할부거래법 청약철회 항변권")
+
+    # 결함/하자
+    if any(kw in query_lower for kw in ["결함", "불량", "고장", "하자"]):
+        queries.append("하자담보책임 민법 소비자보호")
+        queries.append("제조물책임법 결함")
+
+    # ============================================================
+    # 4. 일반적인 쿼리 조합 생성
+    # ============================================================
+    if law_names and legal_terms and len(queries) < 4:
+        queries.append(f"{law_names[0]} {' '.join(legal_terms[:3])}")
+
+    if legal_terms and len(queries) < 5:
+        queries.append(f"{' '.join(legal_terms[:4])} 소비자")
+
+    if item and legal_terms and len(queries) < 5:
+        item_legal = LEGAL_TERM_MAPPING.get(item, [item])
+        queries.append(
+            f"{item_legal[0] if item_legal else item} {legal_terms[0]} 소비자보호"
+        )
+
+    # 기본 폴백
+    if not queries:
+        queries = [
+            "전자상거래법 청약철회 통신판매",
+            "소비자보호법 환불 청약철회",
+            "소비자기본법 피해구제",
+        ]
+
+    # 중복 제거
+    seen = set()
+    unique_queries = []
+    for q in queries:
+        if q not in seen:
+            seen.add(q)
+            unique_queries.append(q)
+
+    logger.info(
+        f"[Rule-based Law Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}"
+    )
+
+    return unique_queries[:5]
+
+
+# ============================================================================
+# 분쟁해결기준 검색 전용 쿼리 확장 (Phase 2-10)
+# ============================================================================
+
+# 품목별 분쟁해결기준 카테고리 매핑
+PRODUCT_TO_CRITERIA_CATEGORY = {
+    # 전자제품
+    "노트북": ["컴퓨터", "전자제품", "정보통신기기", "휴대용컴퓨터"],
+    "컴퓨터": ["컴퓨터", "전자제품", "정보통신기기"],
+    "핸드폰": ["이동전화기", "휴대전화", "정보통신기기", "이동통신단말장치"],
+    "스마트폰": ["이동전화기", "휴대전화", "정보통신기기"],
+    "TV": ["텔레비전", "전자제품", "영상기기"],
+    "냉장고": ["냉장고", "가전제품", "주방가전"],
+    "세탁기": ["세탁기", "가전제품", "생활가전"],
+    "에어컨": ["에어컨", "가전제품", "계절가전"],
+    # 의류/패션
+    "옷": ["의류", "섬유제품", "패션"],
+    "신발": ["신발", "의류", "패션잡화"],
+    "가방": ["가방", "잡화", "패션잡화"],
+    # 가구/생활
+    "가구": ["가구", "생활용품"],
+    "침대": ["가구", "침구", "생활용품"],
+    "소파": ["가구", "생활용품"],
+    # 서비스
+    "헬스장": ["체육시설", "스포츠센터", "휘트니스"],
+    "피트니스": ["체육시설", "스포츠센터", "휘트니스"],
+    "학원": ["교육서비스", "학원"],
+    "여행": ["여행", "관광", "여행서비스"],
+    "이사": ["이사", "포장이사", "운송서비스"],
+    # 자동차
+    "자동차": ["자동차", "승용차", "차량"],
+    "중고차": ["중고자동차", "자동차"],
+}
+
+# 분쟁유형별 기준 키워드 매핑
+DISPUTE_TYPE_TO_CRITERIA = {
+    "환불": ["환급", "청약철회", "계약해제", "대금환급", "구입가 환급"],
+    "교환": ["교환", "제품교환", "동종제품 교환", "대체급부"],
+    "수리": ["수리", "무상수리", "수리비", "하자보수", "A/S"],
+    "보상": ["보상", "손해배상", "배상", "피해보상"],
+    "해지": ["해지", "중도해지", "계약해지", "위약금"],
+    "품질": ["품질불량", "하자", "성능불량", "품질보증"],
+}
+
+# 분쟁해결기준 특화 키워드
+CRITERIA_KEYWORDS = [
+    "분쟁해결기준",
+    "소비자분쟁해결기준",
+    "품목별 기준",
+    "보상기준",
+    "환급기준",
+    "교환기준",
+    "수리기준",
+]
+
+
+async def expand_query_for_criteria_search(
+    query: str,
+    item: str = "",
+    channel: str = "",
+    dispute_type: str = "",
+    keywords: List[str] = None,
+    timeout: float = 5.0,
+) -> List[str]:
+    """
+    분쟁해결기준 검색에 특화된 쿼리 확장 (Phase 2-10)
+
+    품목별 분쟁해결기준을 효과적으로 검색하기 위한 쿼리 변환
+
+    Args:
+        query: 원본 사용자 쿼리
+        item: 품목 (예: 노트북, 핸드폰)
+        channel: 구매채널 (예: 온라인, 방문판매)
+        dispute_type: 분쟁유형 (예: 환불, 교환)
+        keywords: 추출된 키워드 목록
+        timeout: LLM 호출 타임아웃 (초)
+
+    Returns:
+        분쟁해결기준 검색에 최적화된 쿼리 목록
+    """
+    keywords = keywords or []
+
+    # 규칙 기반 쿼리 생성 (빠르고 안정적)
+    rule_based_queries = _generate_criteria_queries_rule_based(
+        query, item, channel, dispute_type, keywords
+    )
+
+    return rule_based_queries
+
+
+def _generate_criteria_queries_rule_based(
+    query: str,
+    item: str,
+    channel: str,
+    dispute_type: str,
+    keywords: List[str],
+) -> List[str]:
+    """
+    규칙 기반 분쟁해결기준 쿼리 생성
+
+    핵심 전략: 품목 카테고리 + 분쟁유형으로 직접 검색
+    """
+    queries = []
+    query_lower = query.lower()
+
+    # 1. 품목에서 분쟁해결기준 카테고리 추출
+    criteria_categories = []
+    detected_item = item
+
+    # 쿼리에서 품목 감지
+    if not detected_item:
+        for product, categories in PRODUCT_TO_CRITERIA_CATEGORY.items():
+            if product in query_lower:
+                detected_item = product
+                criteria_categories = categories
+                break
+
+    # item 파라미터로 카테고리 찾기
+    if detected_item and not criteria_categories:
+        criteria_categories = PRODUCT_TO_CRITERIA_CATEGORY.get(
+            detected_item, [detected_item]
+        )
+
+    # 2. 분쟁유형에서 기준 키워드 추출
+    criteria_keywords = []
+    detected_dispute = dispute_type
+
+    # 쿼리에서 분쟁유형 감지
+    if not detected_dispute:
+        if any(kw in query_lower for kw in ["환불", "반품", "취소"]):
+            detected_dispute = "환불"
+        elif any(kw in query_lower for kw in ["교환", "바꿔"]):
+            detected_dispute = "교환"
+        elif any(kw in query_lower for kw in ["수리", "고장", "A/S", "as"]):
+            detected_dispute = "수리"
+        elif any(kw in query_lower for kw in ["보상", "배상", "피해"]):
+            detected_dispute = "보상"
+        elif any(kw in query_lower for kw in ["해지", "탈퇴", "취소"]):
+            detected_dispute = "해지"
+
+    if detected_dispute:
+        criteria_keywords = DISPUTE_TYPE_TO_CRITERIA.get(
+            detected_dispute, [detected_dispute]
+        )
+
+    # ============================================================
+    # 3. 핵심 쿼리 생성
+    # ============================================================
+
+    # 품목 + 분쟁유형 조합 (가장 중요)
+    if criteria_categories and criteria_keywords:
+        queries.append(f"{criteria_categories[0]} {criteria_keywords[0]} 분쟁해결기준")
+        queries.append(
+            f"{criteria_categories[0]} {criteria_keywords[0]} 소비자분쟁해결기준"
+        )
+
+    # 품목 기반 검색
+    if criteria_categories:
+        queries.append(f"{criteria_categories[0]} 분쟁해결기준 보상")
+        if len(criteria_categories) > 1:
+            queries.append(f"{criteria_categories[1]} 품목별 기준")
+
+    # 분쟁유형 기반 검색
+    if criteria_keywords:
+        queries.append(f"소비자분쟁해결기준 {criteria_keywords[0]}")
+
+    # 전자상거래 특화 (온라인 구매인 경우)
+    is_online = any(
+        kw in query_lower for kw in ["온라인", "인터넷", "쿠팡", "배달", "통신판매"]
+    )
+    if is_online:
+        queries.append("전자상거래 청약철회 분쟁해결기준")
+        queries.append("통신판매 환불 기준 7일")
+
+    # 품질보증 관련
+    if any(kw in query_lower for kw in ["품질", "하자", "불량", "고장"]):
+        queries.append("품질보증기간 하자 분쟁해결기준")
+
+    # 기본 폴백
+    if not queries:
+        if detected_item:
+            queries = [
+                f"{detected_item} 분쟁해결기준",
+                f"{detected_item} 환불 교환 기준",
+                "소비자분쟁해결기준 품목별",
+            ]
+        else:
+            queries = [
+                "소비자분쟁해결기준 환불 교환",
+                "품목별 분쟁해결기준",
+                "청약철회 분쟁해결기준",
+            ]
+
+    # 중복 제거
+    seen = set()
+    unique_queries = []
+    for q in queries:
+        if q not in seen:
+            seen.add(q)
+            unique_queries.append(q)
+
+    logger.info(
+        f"[Rule-based Criteria Queries] Generated {len(unique_queries)} queries: {unique_queries[:3]}"
+    )
+
+    return unique_queries[:5]
+
+
 __all__ = [
     "expand_query_with_llm",
     "expand_query_with_llm_sync",
-    "expand_query_for_law_search",
     "QUERY_EXPANSION_SYSTEM_PROMPT",
     "QUERY_EXPANSION_USER_PROMPT",
+    # Phase 2-10: 법령 검색 전용 확장
+    "expand_query_for_law_search",
     "LEGAL_TERM_MAPPING",
     "SITUATION_TO_LAWS",
+    # Phase 2-10: 분쟁해결기준 검색 전용 확장
+    "expand_query_for_criteria_search",
+    "PRODUCT_TO_CRITERIA_CATEGORY",
+    "DISPUTE_TYPE_TO_CRITERIA",
 ]

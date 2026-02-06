@@ -9,6 +9,7 @@
 """
 
 import logging
+import os
 import time
 from typing import Any, Callable, Dict
 
@@ -26,24 +27,80 @@ from .state import ChatState
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# Phase 2-2: Supervisor LLM 설정
+# ============================================================================
+
+
+def _create_supervisor_llm():
+    """
+    환경 변수 기반 Supervisor LLM 생성
+
+    환경 변수:
+    - SUPERVISOR_LLM_ENABLED: "true"로 설정 시 LLM 활성화
+    - SUPERVISOR_LLM_MODEL: 사용할 모델 (기본: gpt-4o-mini)
+
+    Returns:
+        LLM 클라이언트 또는 None (비활성화 시)
+    """
+    enabled = os.getenv("SUPERVISOR_LLM_ENABLED", "false").lower() == "true"
+
+    if not enabled:
+        logger.info("[SupervisorLLM] LLM 비활성화 (SUPERVISOR_LLM_ENABLED != true)")
+        return None
+
+    model = os.getenv("SUPERVISOR_LLM_MODEL", "gpt-4o-mini")
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        logger.warning("[SupervisorLLM] OPENAI_API_KEY 미설정. 규칙 기반 모드로 전환.")
+        return None
+
+    try:
+        from langchain_openai import ChatOpenAI
+
+        class AsyncLLMWrapper:
+            """LangChain ChatOpenAI를 Supervisor LLM 프로토콜로 래핑"""
+
+            def __init__(self, chat_model):
+                self.chat_model = chat_model
+
+            async def generate(self, prompt: str) -> str:
+                response = await self.chat_model.ainvoke(prompt)
+                return response.content
+
+        llm = ChatOpenAI(
+            model=model,
+            temperature=0,
+            max_tokens=300,
+            api_key=api_key,
+        )
+
+        logger.info(f"[SupervisorLLM] LLM 활성화: model={model}")
+        return AsyncLLMWrapper(llm)
+
+    except ImportError:
+        logger.warning(
+            "[SupervisorLLM] langchain_openai 미설치. 규칙 기반 모드로 전환."
+        )
+        return None
+    except Exception as e:
+        logger.error(f"[SupervisorLLM] LLM 초기화 실패: {e}. 규칙 기반 모드로 전환.")
+        return None
+
+
 # === PR-6: 캐시 관련 함수 ===
 from .cache import SupervisorResponseCache
 
 
 def _cache_check_node(state: ChatState) -> Dict[str, Any]:
     """L1 캐시 체크 노드 (Phase 3-E: 턴 번호 포함하여 반복 답변 방지)"""
-    messages = state.get("messages", [])
-    if not messages:
-        return {"_cache_hit": False}
+    # FIX: Use user_query from state directly, not from messages[-1]
+    # messages[-1] could be the AI's previous answer on turn 2+
+    user_query = state.get("user_query", "")
 
-    # Extract user_query from messages
-    last_msg = messages[-1]
-    if hasattr(last_msg, "content"):
-        user_query = last_msg.content
-    elif isinstance(last_msg, dict):
-        user_query = last_msg.get("content", "")
-    else:
-        user_query = str(last_msg)
+    if not user_query:
+        return {"_cache_hit": False}
 
     session_id = state.get("session_id")
     total_turn_count = state.get("total_turn_count", 0)
@@ -64,12 +121,10 @@ def _cache_check_node(state: ChatState) -> Dict[str, Any]:
         return {
             "_cache_hit": True,
             "_cached_response": cached,
-            "user_query": user_query,  # Save extracted user_query to state
         }
 
     return {
         "_cache_hit": False,
-        "user_query": user_query,  # Save extracted user_query to state
     }
 
 
@@ -194,17 +249,12 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 "categories": ["조정", "해결", "상담"],
             }
 
-        # query_analysis에서 onboarding_context 가져오기
-        query_analysis = state.get("query_analysis") or {}
-        onboarding_context = query_analysis.get("onboarding_context") or {}
-
         retrieval_task_input = {
             "expanded_queries": expanded_queries,
             "agent_keywords": keywords,
             "metadata_filter": metadata_filter,
             "top_k": 10,
             "ignore_threshold": agent_type in ("law", "criteria"),
-            "onboarding_context": onboarding_context,
         }
 
         request = {
@@ -216,24 +266,12 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
         }
 
         try:
-            if agent is None:
-                raise ValueError(f"Agent '{agent_type}' not found in agent_map")
-
             result = await agent.process(request)
             search_time_ms = (time.time() - start_time) * 1000
 
-            # 방어적 체크: result가 None인 경우 처리
-            if result is None:
-                logger.warning(
-                    f"[RetrievalAgent_v2:{agent_type}] agent.process() returned None"
-                )
-                result = {
-                    "status": "failure",
-                    "message": "Agent returned None",
-                    "result": None,
-                }
-
+            # result["result"]가 None일 수 있으므로 방어적 처리
             result_data = result.get("result") or {}
+
             individual_result = {
                 "source": agent_type,
                 "documents": result_data.get("results", []),
@@ -252,8 +290,6 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
             )
 
         except Exception as e:
-            import traceback
-
             individual_result = {
                 "source": agent_type,
                 "documents": [],
@@ -262,9 +298,7 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
                 "search_time_ms": (time.time() - start_time) * 1000,
                 "error": str(e),
             }
-            logger.error(
-                f"[RetrievalAgent_v2:{agent_type}] Error: {e}\n{traceback.format_exc()}"
-            )
+            logger.error(f"[RetrievalAgent_v2:{agent_type}] Error: {e}")
 
         return {"individual_retrieval_results": [individual_result]}
 
@@ -334,7 +368,6 @@ def _route_mas_supervisor(state: ChatState):
         "query_analyst": "query_analysis",
         "answer_drafter": "generation",
         "legal_reviewer": "review",
-        "clarify": "clarify",  # PR-4: 역질문 노드 라우팅
     }
 
     if next_agent in routing_map:
@@ -372,8 +405,9 @@ def create_mas_supervisor_graph() -> StateGraph:
         _create_timed_node(output_guardrail_node, "output_guardrail"),
     )
 
-    # v2: Supervisor (추후 LLM 기반으로 변경)
-    supervisor = SupervisorNode(llm=None)
+    # v2: Supervisor (환경 변수 기반 LLM 활성화)
+    supervisor_llm = _create_supervisor_llm()
+    supervisor = SupervisorNode(llm=supervisor_llm)
     graph.add_node("supervisor", _create_timed_node(supervisor.as_node(), "supervisor"))
 
     graph.add_node("query_analysis", _create_timed_node(qa_node, "query_analysis"))
@@ -399,14 +433,6 @@ def create_mas_supervisor_graph() -> StateGraph:
         _create_timed_node(_inject_cached_retrieval_node, "inject_cached_retrieval"),
     )
 
-    # PR-4: Clarify node for short/ambiguous queries
-    from .nodes.clarify import ask_clarification_node
-
-    graph.add_node(
-        "clarify",
-        _create_timed_node(ask_clarification_node, "clarify"),
-    )
-
     # === 엣지 설정 ===
     graph.set_entry_point("cache_check")
 
@@ -423,7 +449,7 @@ def create_mas_supervisor_graph() -> StateGraph:
         {END: END, "supervisor": "supervisor"},
     )
 
-    # v2 라우팅 (Phase 3-C: inject_cached_retrieval 추가, PR-4: clarify 추가)
+    # v2 라우팅 (Phase 3-C: inject_cached_retrieval 추가)
     graph.add_conditional_edges(
         "supervisor",
         _route_mas_supervisor,
@@ -436,7 +462,6 @@ def create_mas_supervisor_graph() -> StateGraph:
             "review": "review",
             "output_guardrail": "output_guardrail",
             "inject_cached_retrieval": "inject_cached_retrieval",
-            "clarify": "clarify",  # PR-4: 역질문 노드
         },
     )
 
@@ -453,9 +478,6 @@ def create_mas_supervisor_graph() -> StateGraph:
 
     # Phase 3-C: inject_cached_retrieval → generation
     graph.add_edge("inject_cached_retrieval", "generation")
-
-    # PR-4: clarify → output_guardrail (역질문 응답 후 종료)
-    graph.add_edge("clarify", "output_guardrail")
 
     logger.info("[MAS Graph v2] Created MAS Supervisor v2 graph")
 

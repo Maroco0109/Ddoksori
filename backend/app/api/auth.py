@@ -28,9 +28,8 @@ OAuth 2.0 소셜 로그인 API 엔드포인트를 제공합니다.
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -46,114 +45,47 @@ from app.middleware.rate_limiter import RateLimits, limiter
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# [SEC-11] OAuth state 저장소 설정
-# Redis 사용 가능 시 Redis, 아니면 인메모리 fallback
-OAUTH_STATE_PREFIX = "oauth_state"
-STATE_TTL_SECONDS = 600  # 10분
-
-# 인메모리 fallback 저장소 (Redis 불가 시 사용)
-_oauth_states_fallback: Dict[str, datetime] = {}
-
-
-def _get_oauth_redis() -> Optional[object]:
-    """OAuth용 Redis 클라이언트 조회 (캐시 활성화 여부와 무관)."""
-    # OAuth state는 보안상 항상 Redis 사용 시도
-    if os.getenv("REDIS_HOST"):
-        try:
-            import redis
-
-            client = redis.Redis(
-                host=os.getenv("REDIS_HOST", "localhost"),
-                port=int(os.getenv("REDIS_PORT", "6379")),
-                db=int(os.getenv("REDIS_DB", "0")),
-                password=os.getenv("REDIS_PASSWORD"),  # SEC-40: Redis authentication
-                decode_responses=True,
-                socket_connect_timeout=2,
-                socket_timeout=2,
-            )
-            client.ping()
-            return client
-        except Exception as e:
-            logger.warning(f"[Auth] Redis connection failed, using fallback: {e}")
-            return None
-    return None
+# 인메모리 OAuth state 저장소 (TTL 관리)
+# 프로덕션에서는 Redis 사용 권장, 단일 인스턴스에서는 충분
+_oauth_states: Dict[str, datetime] = {}
+STATE_TTL_MINUTES = 10
 
 
 def _store_state(state: str) -> None:
-    """OAuth state를 저장합니다. (Redis 우선, 인메모리 fallback)"""
-    redis = _get_oauth_redis()
-
-    if redis:
-        try:
-            # [SEC-11] Redis에 state 저장 (TTL 자동 만료)
-            key = f"{OAUTH_STATE_PREFIX}:{state}"
-            redis.setex(key, STATE_TTL_SECONDS, "1")
-            logger.debug(f"[Auth] OAuth state stored in Redis: {state[:8]}...")
-            return
-        except Exception as e:
-            logger.warning(f"[Auth] Redis store failed, using fallback: {e}")
-
-    # Fallback: 인메모리
-    _oauth_states_fallback[state] = datetime.now() + timedelta(
-        seconds=STATE_TTL_SECONDS
-    )
-    logger.debug(f"[Auth] OAuth state stored in memory: {state[:8]}...")
+    """OAuth state를 저장합니다."""
+    _oauth_states[state] = datetime.now() + timedelta(minutes=STATE_TTL_MINUTES)
 
 
 def _verify_and_remove_state(state: str) -> bool:
-    """OAuth state를 검증하고 삭제합니다. (Redis 우선, 인메모리 fallback)"""
-    redis = _get_oauth_redis()
-
-    if redis:
-        try:
-            # [SEC-11] Redis에서 state 검증 및 삭제 (atomic)
-            key = f"{OAUTH_STATE_PREFIX}:{state}"
-            # GET + DELETE를 atomic하게 처리
-            pipe = redis.pipeline()
-            pipe.get(key)
-            pipe.delete(key)
-            results = pipe.execute()
-
-            exists = results[0] is not None
-            if exists:
-                logger.debug(f"[Auth] OAuth state verified from Redis: {state[:8]}...")
-            else:
-                logger.warning(f"[Auth] OAuth state not found in Redis: {state[:8]}...")
-            return exists
-        except Exception as e:
-            logger.warning(f"[Auth] Redis verify failed, checking fallback: {e}")
-
-    # Fallback: 인메모리
-    if state not in _oauth_states_fallback:
+    """OAuth state를 검증하고 삭제합니다."""
+    if state not in _oauth_states:
         return False
 
     # 만료 확인
-    if datetime.now() > _oauth_states_fallback[state]:
-        del _oauth_states_fallback[state]
+    if datetime.now() > _oauth_states[state]:
+        del _oauth_states[state]
         return False
 
     # 사용 후 삭제 (일회용)
-    del _oauth_states_fallback[state]
+    del _oauth_states[state]
     return True
 
 
 def _cleanup_expired_states() -> None:
-    """만료된 인메모리 state를 정리합니다. (Redis는 TTL로 자동 관리)"""
+    """만료된 state를 정리합니다."""
     now = datetime.now()
-    expired_keys = [k for k, v in _oauth_states_fallback.items() if now > v]
+    expired_keys = [k for k, v in _oauth_states.items() if now > v]
     for key in expired_keys:
-        del _oauth_states_fallback[key]
+        del _oauth_states[key]
 
 
-# 백그라운드 정리 태스크 (5분마다) - 인메모리 fallback용
+# 백그라운드 정리 태스크 (5분마다)
 async def _periodic_state_cleanup():
-    """주기적으로 만료된 인메모리 state를 정리합니다."""
+    """주기적으로 만료된 state를 정리합니다."""
     while True:
         await asyncio.sleep(300)  # 5분
         _cleanup_expired_states()
-        logger.debug(
-            f"[Auth] OAuth state 정리 완료: {len(_oauth_states_fallback)}개 남음"
-        )
+        logger.debug(f"[Auth] OAuth state 정리 완료: {len(_oauth_states)}개 남음")
 
 
 # ============================================================
@@ -216,7 +148,6 @@ async def google_callback(
         auth_response = await auth_service.handle_google_callback(code)
 
         # 프론트엔드로 리다이렉트 (토큰을 URL fragment로 전달)
-        # [SEC-03] 보안: query parameter 대신 fragment(#) 사용하여 서버 로그 노출 방지
         config = get_config().auth
         redirect_params = {
             "access_token": auth_response.access_token,
@@ -224,7 +155,7 @@ async def google_callback(
             "expires_in": auth_response.expires_in,
         }
         redirect_url = (
-            f"{config.frontend_url}/auth/callback#{urlencode(redirect_params)}"
+            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
         )
 
         logger.info(f"[Auth] Google 콜백 성공: user_id={auth_response.user.user_id}")
@@ -232,8 +163,7 @@ async def google_callback(
 
     except Exception as e:
         logger.error(f"[Auth] Google 콜백 실패: {e}", exc_info=True)
-        # [SEC-03] 보안: 원시 예외 대신 일반 에러 메시지 사용
-        error_url = f"{get_config().auth.frontend_url}/auth/callback#error=auth_failed"
+        error_url = f"{get_config().auth.frontend_url}/auth/error?error={str(e)}"
         return RedirectResponse(error_url)
 
 
@@ -297,7 +227,6 @@ async def naver_callback(
         auth_response = await auth_service.handle_naver_callback(code)
 
         # 프론트엔드로 리다이렉트 (토큰을 URL fragment로 전달)
-        # [SEC-03] 보안: query parameter 대신 fragment(#) 사용하여 서버 로그 노출 방지
         config = get_config().auth
         redirect_params = {
             "access_token": auth_response.access_token,
@@ -305,7 +234,7 @@ async def naver_callback(
             "expires_in": auth_response.expires_in,
         }
         redirect_url = (
-            f"{config.frontend_url}/auth/callback#{urlencode(redirect_params)}"
+            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
         )
 
         logger.info(f"[Auth] Naver 콜백 성공: user_id={auth_response.user.user_id}")
@@ -313,8 +242,7 @@ async def naver_callback(
 
     except Exception as e:
         logger.error(f"[Auth] Naver 콜백 실패: {e}", exc_info=True)
-        # [SEC-03] 보안: 원시 예외 대신 일반 에러 메시지 사용
-        error_url = f"{get_config().auth.frontend_url}/auth/callback#error=auth_failed"
+        error_url = f"{get_config().auth.frontend_url}/auth/error?error={str(e)}"
         return RedirectResponse(error_url)
 
 
