@@ -186,7 +186,9 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         자연어 쿼리를 법률 용어가 포함된 쿼리로 변환합니다.
         """
         try:
-            from app.agents.query_analysis.llm_expander import expand_query_for_law_search
+            from app.agents.query_analysis.llm_expander import (
+                expand_query_for_law_search,
+            )
 
             # task_input에서 추출된 정보 가져오기
             item = ""

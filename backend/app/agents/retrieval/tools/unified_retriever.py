@@ -53,7 +53,7 @@ def determine_rrf_k(query: str, query_analysis: Optional[Dict] = None) -> int:
 
     for pattern in law_patterns:
         if re.search(pattern, query):
-            logger.debug(f"[RRF-k] Law pattern matched: k=40")
+            logger.debug("[RRF-k] Law pattern matched: k=40")
             return 40
 
     # 2. query_analysis 기반 판단
@@ -62,17 +62,17 @@ def determine_rrf_k(query: str, query_analysis: Optional[Dict] = None) -> int:
         query_type = query_analysis.get("query_type", "")
 
         if query_type == "law_direct":
-            logger.debug(f"[RRF-k] query_type=law_direct: k=40")
+            logger.debug("[RRF-k] query_type=law_direct: k=40")
             return 40
         elif query_type == "criteria":
-            logger.debug(f"[RRF-k] query_type=criteria: k=50")
+            logger.debug("[RRF-k] query_type=criteria: k=50")
             return 50
         elif mode in ["case_search", "general"]:
             logger.debug(f"[RRF-k] mode={mode}: k=80")
             return 80
 
     # 3. 기본값
-    logger.debug(f"[RRF-k] Default: k=60")
+    logger.debug("[RRF-k] Default: k=60")
     return 60
 
 
@@ -240,7 +240,6 @@ class UnifiedRetriever:
             )
 
         # Phase 2-1: 동적 RRF k 결정
-        from ....common.config import get_config
 
         if rrf_k is not None:
             effective_rrf_k = rrf_k

@@ -379,8 +379,8 @@ def is_followup_with_context(
         return False
 
     import difflib
-    import re
     import logging
+    import re
 
     logger = logging.getLogger(__name__)
 

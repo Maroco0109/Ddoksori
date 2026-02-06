@@ -13,7 +13,7 @@
 import logging
 import re
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import psycopg2
 
@@ -51,12 +51,15 @@ def _get_pdf_url_from_db(source_file: str) -> Optional[str]:
         cursor = conn.cursor()
 
         # 직접 매칭
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT download_url
             FROM pdf_url_mapping
             WHERE source_file = %s
               AND is_active = TRUE
-        """, (source_file,))
+        """,
+            (source_file,),
+        )
 
         result = cursor.fetchone()
 
@@ -68,12 +71,15 @@ def _get_pdf_url_from_db(source_file: str) -> Optional[str]:
         # .json 확장자 제거 후 매칭
         if source_file.endswith(".json"):
             base_name = source_file[:-5]  # .json 제거
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT download_url
                 FROM pdf_url_mapping
                 WHERE source_file = %s
                   AND is_active = TRUE
-            """, (base_name,))
+            """,
+                (base_name,),
+            )
 
             result = cursor.fetchone()
 
@@ -87,7 +93,9 @@ def _get_pdf_url_from_db(source_file: str) -> Optional[str]:
         return None
 
     except Exception as e:
-        logger.error(f"[Postprocessor] Failed to get PDF URL from DB for {source_file}: {e}")
+        logger.error(
+            f"[Postprocessor] Failed to get PDF URL from DB for {source_file}: {e}"
+        )
         return None
 
 
@@ -150,8 +158,10 @@ def postprocess_answer(
     # 최종 출처 섹션 확인
     if "[출처]" in answer:
         source_start = answer.find("[출처]")
-        source_preview = answer[source_start:source_start+200]
-        logger.info(f"[Postprocessor] Final source section preview: {source_preview}...")
+        source_preview = answer[source_start : source_start + 200]
+        logger.info(
+            f"[Postprocessor] Final source section preview: {source_preview}..."
+        )
 
     logger.info("[Postprocessor] Answer format corrected")
     return answer
@@ -198,8 +208,16 @@ def _remove_superscripts(answer: str) -> str:
     """
     # 유니코드 윗첨자 매핑 (제거용)
     superscript_map = {
-        '⁰': '', '¹': '', '²': '', '³': '', '⁴': '',
-        '⁵': '', '⁶': '', '⁷': '', '⁸': '', '⁹': ''
+        "⁰": "",
+        "¹": "",
+        "²": "",
+        "³": "",
+        "⁴": "",
+        "⁵": "",
+        "⁶": "",
+        "⁷": "",
+        "⁸": "",
+        "⁹": "",
     }
 
     for sup, replacement in superscript_map.items():
@@ -223,25 +241,28 @@ def _fix_header_format(answer: str) -> str:
 
     for header in headers:
         # 패턴 1: [헤더](공백)(내용) → [헤더]\n\n(내용)
-        pattern1 = re.escape(header) + r' +(.+)'
+        pattern1 = re.escape(header) + r" +(.+)"
 
         def replace1(match):
             original = match.group(0)
             content = match.group(1)
             result = header + "\n\n" + content
-            logger.info(f"[HeaderFix] Pattern1 {header}: '{original[:60]}...' → '{result[:60]}...'")
+            logger.info(
+                f"[HeaderFix] Pattern1 {header}: '{original[:60]}...' → '{result[:60]}...'"
+            )
             return result
 
         answer = re.sub(pattern1, replace1, answer)
 
         # 패턴 2: [헤더]\n(내용) → [헤더]\n\n(내용)
-        pattern2 = re.escape(header) + r'\n(?!\n)(.)'
+        pattern2 = re.escape(header) + r"\n(?!\n)(.)"
 
         def replace2(match):
-            original = match.group(0)
             first_char = match.group(1)
             result = header + "\n\n" + first_char
-            logger.info(f"[HeaderFix] Pattern2 {header}: original has single \\n, adding double \\n\\n")
+            logger.info(
+                f"[HeaderFix] Pattern2 {header}: original has single \\n, adding double \\n\\n"
+            )
             return result
 
         answer = re.sub(pattern2, replace2, answer)
@@ -261,7 +282,7 @@ def _separate_bullets(answer: str) -> str:
     # 패턴: (줄바꿈이 아닌 문자)(공백)(●) → (문자)\n\n●
     # 단, 줄 시작의 ●는 건드리지 않음
     old_answer = answer
-    answer = re.sub(r'([^\n])\s+(●)', r'\1\n\n\2', answer)
+    answer = re.sub(r"([^\n])\s+(●)", r"\1\n\n\2", answer)
 
     if old_answer != answer:
         logger.info("[Postprocessor] Separated bullets on the same line")
@@ -292,7 +313,9 @@ def _fix_case_numbering(answer: str) -> str:
         header = match.group(1)
         content = match.group(2)
 
-        logger.info(f"[Postprocessor] Found case section, content length: {len(content)}")
+        logger.info(
+            f"[Postprocessor] Found case section, content length: {len(content)}"
+        )
 
         # 내용이 비어있거나 공백만 있으면 그대로 반환
         if not content.strip():
@@ -339,7 +362,9 @@ def _fix_case_numbering(answer: str) -> str:
     return answer
 
 
-def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "dispute") -> str:
+def _enhance_sources(
+    answer: str, retrieval: Dict[str, Any], query_type: str = "dispute"
+) -> str:
     """
     [출처] 섹션에 법령, 기준, 사례의 출처 정보를 보강합니다.
 
@@ -357,7 +382,9 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
     counsels = retrieval.get("counsels", [])
     all_cases = disputes + counsels
 
-    logger.info(f"[Postprocessor] Source enhancement: query_type={query_type}, {len(laws)} laws, {len(criteria)} criteria, {len(disputes)} disputes, {len(counsels)} counsels")
+    logger.info(
+        f"[Postprocessor] Source enhancement: query_type={query_type}, {len(laws)} laws, {len(criteria)} criteria, {len(disputes)} disputes, {len(counsels)} counsels"
+    )
 
     # 출처 항목 수집
     source_entries = []
@@ -366,9 +393,13 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
     for i, law in enumerate(laws):
         law_name = law.get("metadata", {}).get("law_name") or law.get("law_name", "")
         chunk_id = law.get("chunk_id", "")
-        source_url = law.get("metadata", {}).get("source_url") or law.get("source_url", "")
+        source_url = law.get("metadata", {}).get("source_url") or law.get(
+            "source_url", ""
+        )
 
-        logger.info(f"[Postprocessor] Law {i}: law_name={law_name}, chunk_id={chunk_id[:30] if chunk_id else 'None'}, url={'YES' if source_url else 'NO'}")
+        logger.info(
+            f"[Postprocessor] Law {i}: law_name={law_name}, chunk_id={chunk_id[:30] if chunk_id else 'None'}, url={'YES' if source_url else 'NO'}"
+        )
 
         if not law_name and not chunk_id:
             continue
@@ -382,7 +413,9 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
         article_number = ""
         if chunk_id and "_" in chunk_id:
             # "민법_제756조" → "제756조"
-            article_number = chunk_id.split("_", 1)[1] if len(chunk_id.split("_")) > 1 else ""
+            article_number = (
+                chunk_id.split("_", 1)[1] if len(chunk_id.split("_")) > 1 else ""
+            )
 
         if law_name:
             if article_number:
@@ -402,9 +435,13 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
     # 2. 기준 출처 추가
     for i, criterion in enumerate(criteria):
         source_label = criterion.get("metadata", {}).get("source_label") or ""
-        source_url = criterion.get("metadata", {}).get("source_url") or criterion.get("source_url", "")
+        source_url = criterion.get("metadata", {}).get("source_url") or criterion.get(
+            "source_url", ""
+        )
 
-        logger.info(f"[Postprocessor] Criteria {i}: label={source_label[:30] if source_label else 'None'}, url={'YES' if source_url else 'NO'}")
+        logger.info(
+            f"[Postprocessor] Criteria {i}: label={source_label[:30] if source_label else 'None'}, url={'YES' if source_url else 'NO'}"
+        )
 
         if not source_label:
             continue
@@ -430,7 +467,9 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
         # 기타: 중간 임계값
         CASE_SIMILARITY_THRESHOLD = 0.60
 
-    logger.info(f"[Postprocessor] Case similarity threshold: {CASE_SIMILARITY_THRESHOLD} (query_type={query_type})")
+    logger.info(
+        f"[Postprocessor] Case similarity threshold: {CASE_SIMILARITY_THRESHOLD} (query_type={query_type})"
+    )
 
     for i, case in enumerate(all_cases):
         title = case.get("doc_title") or case.get("title", "")
@@ -440,11 +479,15 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
         printed_page = case.get("printed_page")
         similarity = case.get("similarity", 0.0)
 
-        logger.info(f"[Postprocessor] Case {i}: title={title[:30] if title else 'None'}, similarity={similarity:.3f}, url={'YES' if url else 'NO'}, source_file={'YES' if source_file else 'NO'}, printed_page={printed_page}")
+        logger.info(
+            f"[Postprocessor] Case {i}: title={title[:30] if title else 'None'}, similarity={similarity:.3f}, url={'YES' if url else 'NO'}, source_file={'YES' if source_file else 'NO'}, printed_page={printed_page}"
+        )
 
         # 유사도가 임계값보다 낮으면 출처에서 제외
         if similarity < CASE_SIMILARITY_THRESHOLD:
-            logger.info(f"[Postprocessor] Case {i} excluded: similarity {similarity:.3f} < threshold {CASE_SIMILARITY_THRESHOLD}")
+            logger.info(
+                f"[Postprocessor] Case {i} excluded: similarity {similarity:.3f} < threshold {CASE_SIMILARITY_THRESHOLD}"
+            )
             continue
 
         if not title:
@@ -457,17 +500,25 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
                 entry = f"● [{source_org} - {title}]({url})"
             else:
                 entry = f"● [{title}]({url})"
-            logger.info(f"[Postprocessor] URL source entry added")
+            logger.info("[Postprocessor] URL source entry added")
         elif source_file:
             # PDF 파일 정보 (.json 확장자는 .pdf로 변경)
-            display_file = source_file.replace(".json", ".pdf") if source_file.endswith(".json") else source_file
+            display_file = (
+                source_file.replace(".json", ".pdf")
+                if source_file.endswith(".json")
+                else source_file
+            )
 
             # 페이지 번호가 있으면 페이지 번호 사용, 없으면 사례 번호 사용
             if printed_page:
                 page_info = f", p.{printed_page}"
             else:
                 # 사례 번호 찾기 (metadata에서)
-                metadata = case.get("metadata", {}) if isinstance(case.get("metadata"), dict) else {}
+                metadata = (
+                    case.get("metadata", {})
+                    if isinstance(case.get("metadata"), dict)
+                    else {}
+                )
                 case_number = metadata.get("번호") or metadata.get("case_number")
                 if case_number:
                     page_info = f", 사례 #{case_number}"
@@ -483,17 +534,23 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
                     entry = f"● [{source_org}] 『{title}』 ([{display_file}]({pdf_url}){page_info})"
                 else:
                     entry = f"● 『{title}』 ([{display_file}]({pdf_url}){page_info})"
-                logger.info(f"[Postprocessor] PDF source entry with URL added - url: {pdf_url[:50]}...")
+                logger.info(
+                    f"[Postprocessor] PDF source entry with URL added - url: {pdf_url[:50]}..."
+                )
             else:
                 # URL이 없으면 기존 형식 유지
                 if source_org:
                     entry = f"● [{source_org}] 『{title}』 ({display_file}{page_info})"
                 else:
                     entry = f"● 『{title}』 ({display_file}{page_info})"
-                logger.info(f"[Postprocessor] PDF source entry added (no URL) - page_info: '{page_info}' (printed_page={printed_page})")
+                logger.info(
+                    f"[Postprocessor] PDF source entry added (no URL) - page_info: '{page_info}' (printed_page={printed_page})"
+                )
         else:
             # URL도 PDF도 없으면 기본 형식 (하지만 기록은 함)
-            logger.info(f"[Postprocessor] No URL/PDF for case: {title[:50] if title else 'untitled'}")
+            logger.info(
+                f"[Postprocessor] No URL/PDF for case: {title[:50] if title else 'untitled'}"
+            )
             if source_org:
                 entry = f"● [{source_org}] {title}"
             else:
@@ -529,7 +586,9 @@ def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "
         if old_answer != answer:
             logger.info("[Postprocessor] Source section replaced successfully")
         else:
-            logger.warning("[Postprocessor] Source section replacement FAILED - pattern not matched")
+            logger.warning(
+                "[Postprocessor] Source section replacement FAILED - pattern not matched"
+            )
             # 패턴이 매칭 안되면 강제로 끝에 추가
             answer = answer.rstrip() + "\n\n[출처]\n\n" + "\n\n".join(source_entries)
             logger.info("[Postprocessor] Appended source section at end")

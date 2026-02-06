@@ -55,7 +55,7 @@ def get_reranker():
 
         logger.info(f"[Reranker] Loading model: {RERANKER_MODEL}")
         _reranker = CrossEncoder(RERANKER_MODEL)
-        logger.info(f"[Reranker] Model loaded successfully")
+        logger.info("[Reranker] Model loaded successfully")
         return _reranker
 
     except ImportError:

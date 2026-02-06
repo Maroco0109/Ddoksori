@@ -8,24 +8,24 @@
 - 4개 Retrieval Agent 병렬 실행 (Fan-out/Fan-in)
 """
 
-import os
 import logging
+import os
 import time
-from typing import Callable, Dict, Any, List
+from typing import Any, Callable, Dict
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
-from .state import ChatState
-from .graph import _create_timed_node
-from .checkpointer import get_checkpointer
-from .nodes.supervisor import SupervisorNode
-from .nodes.retrieval_merge import retrieval_merge_node_sync
-from .nodes.clarify import ask_clarification_node
-from ..agents.query_analysis.agent import query_analysis_node
 from ..agents.answer_generation.agent import generation_node
 from ..agents.legal_review.agent import review_node_wrapper
+from ..agents.query_analysis.agent import query_analysis_node
 from ..guardrail.nodes import input_guardrail_node, output_guardrail_node
+from .checkpointer import get_checkpointer
+from .graph import _create_timed_node
+from .nodes.clarify import ask_clarification_node
+from .nodes.retrieval_merge import retrieval_merge_node_sync
+from .nodes.supervisor import SupervisorNode
+from .state import ChatState
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +103,10 @@ def _create_retrieval_agent_node(agent_type: str) -> Callable:
     Returns:
         LangGraph 노드 함수
     """
-    from ..agents.retrieval.law_agent import law_retrieval_agent
-    from ..agents.retrieval.criteria_agent import criteria_retrieval_agent
     from ..agents.retrieval.case_agent import case_retrieval_agent
     from ..agents.retrieval.counsel_agent import counsel_retrieval_agent
+    from ..agents.retrieval.criteria_agent import criteria_retrieval_agent
+    from ..agents.retrieval.law_agent import law_retrieval_agent
 
     agent_map = {
         'law': law_retrieval_agent,

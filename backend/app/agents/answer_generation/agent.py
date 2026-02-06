@@ -916,17 +916,17 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
 
     # DEBUG: 노드 진입 확인
     retrieval = state.get("retrieval") or {}  # None인 경우 빈 dict 사용
-    logger.info(f"[generation_node_v2] === 답변 생성 노드 시작 ===")
+    logger.info("[generation_node_v2] === 답변 생성 노드 시작 ===")
     logger.info(f"[generation_node_v2] retrieval keys: {list(retrieval.keys()) if retrieval else 'EMPTY'}")
     if retrieval:
         logger.info(f"[generation_node_v2] laws: {len(retrieval.get('laws', []))}, criteria: {len(retrieval.get('criteria', []))}, disputes: {len(retrieval.get('disputes', []))}, counsels: {len(retrieval.get('counsels', []))}")
     else:
-        logger.info(f"[generation_node_v2] retrieval is empty (NO_RETRIEVAL mode)")
+        logger.info("[generation_node_v2] retrieval is empty (NO_RETRIEVAL mode)")
 
     # Phase 0: 빠른 탈출
     early_result = _try_early_exit(state, config, start_time)
     if early_result is not None:
-        logger.info(f"[generation_node_v2] Early exit triggered")
+        logger.info("[generation_node_v2] Early exit triggered")
         return early_result
 
     user_query = state.get("user_query", "")

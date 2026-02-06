@@ -10,6 +10,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from ...supervisor.state import OnboardingInfo
+from .constants import DEFECT_KEYWORDS, SIMPLE_CHANGE_OF_MIND_KEYWORDS
 
 # Local implementation of extract_dispute_type (moved from conversation_manager)
 DISPUTE_TYPE_MAPPING = {
@@ -53,7 +54,6 @@ def detect_dispute_reason(query: str) -> DisputeReason:
         DisputeReason: "simple_change_of_mind" | "defect" | "unknown"
     """
     # 임시 import - circular import 방지 (constants는 이미 위에서 import됨)
-    from .constants import DEFECT_KEYWORDS, SIMPLE_CHANGE_OF_MIND_KEYWORDS
 
     query_lower = query.lower().replace(" ", "")
 
@@ -76,26 +76,28 @@ def detect_dispute_reason(query: str) -> DisputeReason:
     # 결과 결정
     # 둘 다 매칭되면 하자 우선 (실제 하자가 있는 경우가 법적으로 더 보호받음)
     if defect_match and change_of_mind_match:
-        logger.info(f"[detect_dispute_reason] Both keywords matched, prioritizing defect")
+        logger.info(
+            "[detect_dispute_reason] Both keywords matched, prioritizing defect"
+        )
         return "defect"
     elif defect_match:
-        logger.info(f"[detect_dispute_reason] Detected: defect (하자)")
+        logger.info("[detect_dispute_reason] Detected: defect (하자)")
         return "defect"
     elif change_of_mind_match:
-        logger.info(f"[detect_dispute_reason] Detected: simple_change_of_mind (단순변심)")
+        logger.info(
+            "[detect_dispute_reason] Detected: simple_change_of_mind (단순변심)"
+        )
         return "simple_change_of_mind"
     else:
-        logger.info(f"[detect_dispute_reason] Unknown dispute reason")
+        logger.info("[detect_dispute_reason] Unknown dispute reason")
         return "unknown"
 
 
 from .constants import (
     COMMON_PRODUCTS,
-    DEFECT_KEYWORDS,
     DISPUTE_VERBS,
     FIELD_KOREAN_NAMES,
     REQUIRED_DISPUTE_FIELDS,
-    SIMPLE_CHANGE_OF_MIND_KEYWORDS,
     VERB_SYNONYMS,
 )
 
@@ -424,18 +426,19 @@ def extract_user_question_from_conversation(text: str) -> str:
         실제 사용자 질문
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     text = text.strip()
 
     # 답변 템플릿 헤더 패턴 (마크다운 섹션)
     answer_section_headers = [
-        r'\[답변 요약\]',
-        r'\[규정\]',
-        r'\[유사 사례\]',
-        r'\[주의 사항\]',
-        r'\[출처\]',
-        r'\[이전 대화\]',
+        r"\[답변 요약\]",
+        r"\[규정\]",
+        r"\[유사 사례\]",
+        r"\[주의 사항\]",
+        r"\[출처\]",
+        r"\[이전 대화\]",
     ]
 
     # 텍스트가 답변 템플릿 헤더로 시작하는지 확인
@@ -456,14 +459,14 @@ def extract_user_question_from_conversation(text: str) -> str:
     )
 
     # 전략 1: 마지막 줄에서 질문 추출 (가장 안전)
-    lines = text.split('\n')
+    lines = text.split("\n")
 
     # 전략 1: [출처] 섹션 이후의 텍스트를 먼저 확인 (사용자 질문이 가장 마지막에 위치)
-    source_section_idx = text.find('[출처]')
+    source_section_idx = text.find("[출처]")
     if source_section_idx != -1:
         # [출처] 이후의 모든 텍스트 추출
         after_sources = text[source_section_idx:]
-        lines_after_sources = after_sources.split('\n')
+        lines_after_sources = after_sources.split("\n")
 
         # [출처] 섹션을 건너뛰고 그 이후의 일반 텍스트 찾기
         for line in lines_after_sources:
@@ -471,11 +474,11 @@ def extract_user_question_from_conversation(text: str) -> str:
             # 빈 줄 또는 출처 링크 건너뛰기
             if not line:
                 continue
-            if line.startswith('[출처]'):
+            if line.startswith("[출처]"):
                 continue
-            if line.startswith('●') or line.startswith('-'):
+            if line.startswith("●") or line.startswith("-"):
                 continue
-            if line.startswith('[') or line.startswith('http'):
+            if line.startswith("[") or line.startswith("http"):
                 continue
 
             # 의미있는 사용자 질문 (10글자 이상)
@@ -491,28 +494,26 @@ def extract_user_question_from_conversation(text: str) -> str:
         # 빈 줄이나 마크다운 헤더, 출처 표시 등은 건너뛰기
         if not line:
             continue
-        if line.startswith('#') or line.startswith('-') or line.startswith('●'):
+        if line.startswith("#") or line.startswith("-") or line.startswith("●"):
             continue
-        if line.startswith('[') and line.endswith(']'):
+        if line.startswith("[") and line.endswith("]"):
             continue
-        if re.match(r'^\d+\.', line):  # 번호 매겨진 리스트
+        if re.match(r"^\d+\.", line):  # 번호 매겨진 리스트
             continue
-        if line.startswith('*') or line.startswith('¹') or line.startswith('²'):
+        if line.startswith("*") or line.startswith("¹") or line.startswith("²"):
             continue
-        if line.startswith('http'):  # URL 건너뛰기
+        if line.startswith("http"):  # URL 건너뛰기
             continue
 
         # 남은 줄이 의미있는 질문인지 확인 (최소 5글자 이상)
         if len(line) >= 5:
-            logger.info(
-                f"[QueryAnalysis] Extracted user question: '{line[:100]}...'"
-            )
+            logger.info(f"[QueryAnalysis] Extracted user question: '{line[:100]}...'")
             return line
 
     # 추출 실패 시 원본 반환 (최악의 경우)
     logger.error(
-        f"[QueryAnalysis] Failed to extract user question from conversation history. "
-        f"Using original text."
+        "[QueryAnalysis] Failed to extract user question from conversation history. "
+        "Using original text."
     )
     return text
 
@@ -525,10 +526,13 @@ def normalize_query(query: str) -> str:
     NOTE: 대화 히스토리가 포함된 경우 실제 사용자 질문만 추출합니다.
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     # DEBUG: 원본 쿼리 로깅
-    logger.info(f"[normalize_query] INPUT query (length={len(query)}): '{query[:200]}...'")
+    logger.info(
+        f"[normalize_query] INPUT query (length={len(query)}): '{query[:200]}...'"
+    )
 
     # 1단계: 대화 히스토리에서 실제 사용자 질문 추출 (방어 로직)
     normalized = extract_user_question_from_conversation(query)
@@ -536,9 +540,11 @@ def normalize_query(query: str) -> str:
 
     # DEBUG: 추출 결과 로깅
     if normalized != query.strip():
-        logger.info(f"[normalize_query] EXTRACTED query (length={len(normalized)}): '{normalized[:200]}...'")
+        logger.info(
+            f"[normalize_query] EXTRACTED query (length={len(normalized)}): '{normalized[:200]}...'"
+        )
     else:
-        logger.info(f"[normalize_query] No extraction needed (normal query)")
+        logger.info("[normalize_query] No extraction needed (normal query)")
 
     # 2단계: 불필요한 접미사 제거
     suffix_patterns = [
@@ -656,10 +662,18 @@ def rewrite_query_for_scope_change(
     # Step 1: 부정 품목 제거 ("모니터 말고", "모니터 제외" 등)
     for item in negated_items:
         # "품목 말고", "품목말고" 패턴
-        modified = re.sub(rf"{re.escape(item)}\s*말고\s*", "", modified, flags=re.IGNORECASE)
-        modified = re.sub(rf"{re.escape(item)}\s*제외\s*", "", modified, flags=re.IGNORECASE)
-        modified = re.sub(rf"{re.escape(item)}\s*대신\s*", "", modified, flags=re.IGNORECASE)
-        modified = re.sub(rf"{re.escape(item)}\s*빼고\s*", "", modified, flags=re.IGNORECASE)
+        modified = re.sub(
+            rf"{re.escape(item)}\s*말고\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*제외\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*대신\s*", "", modified, flags=re.IGNORECASE
+        )
+        modified = re.sub(
+            rf"{re.escape(item)}\s*빼고\s*", "", modified, flags=re.IGNORECASE
+        )
 
     # Step 2: 범위 확장 표현 제거 ("범위를 넓혀서", "더 넓게" 등)
     expansion_patterns = [
@@ -690,12 +704,8 @@ def rewrite_query_for_scope_change(
         # Fallback: 카테고리 이름 사용
         modified = f"{expanded_category} {modified}"
 
-    logger.info(
-        f"[QueryRewrite] Original: '{query[:50]}...'"
-    )
-    logger.info(
-        f"[QueryRewrite] Rewritten: '{modified[:60]}...'"
-    )
+    logger.info(f"[QueryRewrite] Original: '{query[:50]}...'")
+    logger.info(f"[QueryRewrite] Rewritten: '{modified[:60]}...'")
 
     return modified
 
@@ -746,7 +756,9 @@ def detect_product_scope_change(
     for keyword, category in broad_categories.items():
         if keyword in query_lower:
             expanded_category = category
-            logger.info(f"[ProductScopeChange] Found category keyword '{keyword}' -> {category}")
+            logger.info(
+                f"[ProductScopeChange] Found category keyword '{keyword}' -> {category}"
+            )
             break
 
     # 4. 제외하려는 품목 추출
@@ -762,6 +774,7 @@ def detect_product_scope_change(
     if has_negation and not negated_items:
         # 일반적인 제품 키워드 추출 ("X 말고" 패턴)
         from .constants import COMMON_PRODUCTS
+
         for product in COMMON_PRODUCTS:
             # "모니터 말고", "노트북 말고" 같은 패턴 감지
             if f"{product} 말고" in query_lower or f"{product}말고" in query_lower:

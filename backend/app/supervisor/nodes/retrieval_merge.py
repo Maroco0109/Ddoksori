@@ -423,7 +423,7 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
                 # else: keep all results to maintain minimum coverage
     elif should_ignore_filter:
         logger.info(
-            f"[RetrievalMerge] Product filter ignored (scope change detected)"
+            "[RetrievalMerge] Product filter ignored (scope change detected)"
         )
         # Apply category-level filtering if expanded category is specified
         if product_category:

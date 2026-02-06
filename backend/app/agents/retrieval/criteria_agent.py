@@ -57,11 +57,11 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             # 다른 5개 쿼리 → 엉뚱한 결과들 → RRF에서 종묘 결과 순위 하락
             all_queries = [keyword_query]
             logger.info(f"[CriteriaAgent] Using KEYWORD-ONLY strategy: '{keyword_query}'")
-            logger.info(f"[CriteriaAgent] Skipping other queries to prevent RRF pollution")
+            logger.info("[CriteriaAgent] Skipping other queries to prevent RRF pollution")
         else:
             # 키워드 추출 실패시 원본 + 확장 쿼리 사용
             all_queries = [query]
-            logger.info(f"[CriteriaAgent] No keyword extracted, using multi-query strategy")
+            logger.info("[CriteriaAgent] No keyword extracted, using multi-query strategy")
 
             # 분쟁해결기준 전용 쿼리 추가
             for cq in criteria_specific_queries:
@@ -345,7 +345,9 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         분쟁유형을 기준 키워드로 변환합니다.
         """
         try:
-            from app.agents.query_analysis.llm_expander import expand_query_for_criteria_search
+            from app.agents.query_analysis.llm_expander import (
+                expand_query_for_criteria_search,
+            )
 
             # task_input에서 추출된 정보 가져오기
             item = ""

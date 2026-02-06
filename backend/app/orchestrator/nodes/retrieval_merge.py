@@ -20,9 +20,9 @@ Supervisor → Fan-out → [Law|Criteria|Case|Counsel] → retrieval_merge → S
 import logging
 import os
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from ..state import ChatState, RetrievalResult, IndividualRetrievalResult
+from ..state import ChatState, IndividualRetrievalResult, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ async def _apply_reranking(
         재랭킹된 RetrievalResult
     """
     try:
-        from ...services.reranker import rerank_results, RERANKER_ENABLED
+        from ...services.reranker import RERANKER_ENABLED, rerank_results
 
         if not RERANKER_ENABLED:
             return merged

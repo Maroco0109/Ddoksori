@@ -12,7 +12,7 @@ Phase 2-3: 소비자법 도메인 특화 프롬프트
     )
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 # ============================================================
 # 시스템 프롬프트 - 소비자법 전문가 페르소나

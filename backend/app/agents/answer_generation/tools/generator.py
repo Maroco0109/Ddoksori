@@ -533,7 +533,7 @@ class RAGGenerator:
             # 외부 템플릿이 제공된 경우: 템플릿에 이미 모든 데이터와 지시사항 포함
             # 간단한 user_prompt만 사용 (충돌 방지)
             if user_prompt is None:
-                user_prompt = f"위 지시사항에 따라 답변을 생성해주세요."
+                user_prompt = "위 지시사항에 따라 답변을 생성해주세요."
 
         if retry_supplement:
             system_prompt += f"\n\n## 재생성 지침\n{retry_supplement}"

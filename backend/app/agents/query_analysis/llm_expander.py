@@ -334,7 +334,7 @@ async def expand_query_for_law_search(
             return all_queries[:6]
 
     except asyncio.TimeoutError:
-        logger.warning(f"[LLM Law Expander] Timeout, using rule-based only")
+        logger.warning("[LLM Law Expander] Timeout, using rule-based only")
     except Exception as e:
         logger.warning(f"[LLM Law Expander] Error: {e}, using rule-based only")
 
