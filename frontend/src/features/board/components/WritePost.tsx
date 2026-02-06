@@ -31,8 +31,8 @@ export default function WritePost({ onBack, onSubmit }: WritePostProps) {
   ];
 
   const subCategories = [
-    { id: 'before-mediation', name: '조정 이전 단계에서 해결' },
-    { id: 'through-mediation', name: '조정을 통한 해결' }
+    { id: 'pre-mediation', name: '조정 이전 단계에서 해결' },
+    { id: 'mediation', name: '조정을 통한 해결' }
   ];
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

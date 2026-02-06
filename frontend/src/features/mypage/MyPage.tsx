@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useChatStore } from '@/features/chat/chat.store';
 import { ROUTES } from '@/shared/config/routes';
-import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare, Edit2, Check, X, Trash2 } from 'lucide-react';
+import { User, LogOut, MessageCircle, Calendar, FileText, Eye, ThumbsUp, ChevronLeft, ChevronRight, MessageSquare, Edit2, Check, X, Trash2, Loader2 } from 'lucide-react';
 import { formatDateTime } from '@/shared/lib/date';
 import { DISPLAY_TO_CATEGORY_MAP, CATEGORY_LABELS } from '@/shared/config/categories';
 import type { ChatSession } from '@/shared/types';
+import { myPageService, type MyPostItem, type MyCommentedPostItem } from '@/shared/api/board.service';
 
 export default function MyPage() {
   const navigate = useNavigate();
@@ -181,7 +182,7 @@ export default function MyPage() {
     navigate(ROUTES.CHAT);
   };
 
-  const handleDeleteChat = (e: React.MouseEvent, sessionId: string, sessionTitle: string) => {
+  const handleDeleteChat = async (e: React.MouseEvent, sessionId: string, sessionTitle: string) => {
     e.stopPropagation();
 
     const confirmDelete = window.confirm(
@@ -189,7 +190,13 @@ export default function MyPage() {
     );
 
     if (confirmDelete) {
-      deleteChatSession(sessionId, isAuthenticated);
+      try {
+        await deleteChatSession(sessionId, isAuthenticated);
+        console.log(`[MyPage] Successfully deleted session: ${sessionId}`);
+      } catch (error) {
+        console.error('[MyPage] Failed to delete session:', error);
+        alert('세션 삭제에 실패했습니다. 다시 시도해주세요.');
+      }
     }
   };
 
@@ -245,51 +252,59 @@ export default function MyPage() {
     return categoryId ? CATEGORY_LABELS[categoryId] : displayCategory;
   };
 
-  // 테스트용 자유게시판 작성 글 (TODO: 실제 구현 시 로컬스토리지나 API에서 가져오기)
-  const myBoardPosts = [
-    {
-      id: 4,
-      category: '무엇이든/물어보세요',
-      title: '환불 절차가 궁금합니다',
-      date: '2025.12.17',
-      views: 567,
-      likes: 89,
-      comments: 34,
-    },
-    {
-      id: 3,
-      category: '소비자/꿀팁/노하우',
-      title: '소비자분쟁 조정 신청할 때 꼭 알아야 할 3가지',
-      date: '2025.12.18',
-      views: 456,
-      likes: 78,
-      comments: 23,
-    },
-  ];
+  // API 상태
+  const [myBoardPosts, setMyBoardPosts] = useState<MyPostItem[]>([]);
+  const [myPostsTotal, setMyPostsTotal] = useState(0);
+  const [myPostsTotalPages, setMyPostsTotalPages] = useState(0);
+  const [isLoadingMyPosts, setIsLoadingMyPosts] = useState(false);
 
-  // 테스트용 댓글을 단 게시글 (TODO: 실제 구현 시 로컬스토리지나 API에서 가져오기)
-  const commentedPosts = [
-    {
-      id: 1,
-      category: '분쟁해결사례/공유',
-      title: '당근마켓 사기 피해 복구 성공했습니다',
-      date: '2025.12.20',
-      views: 234,
-      likes: 45,
-      comments: 12,
-      myCommentDate: '2025.12.21',
-    },
-    {
-      id: 6,
-      category: '소비자/꿀팁/노하우',
-      title: '전자제품 AS 받을 때 꼭 챙겨야 할 것들',
-      date: '2025.12.15',
-      views: 523,
-      likes: 92,
-      comments: 19,
-      myCommentDate: '2025.12.16',
-    },
-  ];
+  const [commentedPosts, setCommentedPosts] = useState<MyCommentedPostItem[]>([]);
+  const [commentedPostsTotal, setCommentedPostsTotal] = useState(0);
+  const [commentedPostsTotalPages, setCommentedPostsTotalPages] = useState(0);
+  const [isLoadingCommentedPosts, setIsLoadingCommentedPosts] = useState(false);
+
+  // 내 게시글 API 호출
+  const fetchMyPosts = useCallback(async () => {
+    setIsLoadingMyPosts(true);
+    try {
+      const response = await myPageService.getMyPosts(myPostsPage, itemsPerPage);
+      setMyBoardPosts(response.posts);
+      setMyPostsTotal(response.total);
+      setMyPostsTotalPages(response.total_pages);
+    } catch (error) {
+      console.error('[MyPage] Failed to fetch my posts:', error);
+    } finally {
+      setIsLoadingMyPosts(false);
+    }
+  }, [myPostsPage, itemsPerPage]);
+
+  // 내가 댓글 단 게시글 API 호출
+  const fetchCommentedPosts = useCallback(async () => {
+    setIsLoadingCommentedPosts(true);
+    try {
+      const response = await myPageService.getMyCommentedPosts(commentedPostsPage, itemsPerPage);
+      setCommentedPosts(response.posts);
+      setCommentedPostsTotal(response.total);
+      setCommentedPostsTotalPages(response.total_pages);
+    } catch (error) {
+      console.error('[MyPage] Failed to fetch commented posts:', error);
+    } finally {
+      setIsLoadingCommentedPosts(false);
+    }
+  }, [commentedPostsPage, itemsPerPage]);
+
+  // 컴포넌트 마운트 시 및 페이지 변경 시 API 호출
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMyPosts();
+    }
+  }, [isAuthenticated, fetchMyPosts]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCommentedPosts();
+    }
+  }, [isAuthenticated, fetchCommentedPosts]);
 
   // 페이지네이션 계산
   const getPaginatedItems = <T,>(items: T[], page: number) => {
@@ -304,12 +319,12 @@ export default function MyPage() {
 
   // 각 섹션별 페이지네이션 데이터
   const paginatedChatSessions = getPaginatedItems(chatSessions, chatPage);
-  const paginatedMyPosts = getPaginatedItems(myBoardPosts, myPostsPage);
-  const paginatedCommentedPosts = getPaginatedItems(commentedPosts, commentedPostsPage);
+  // 게시글은 API에서 이미 페이지네이션된 데이터를 반환하므로 그대로 사용
+  const paginatedMyPosts = myBoardPosts;
+  const paginatedCommentedPosts = commentedPosts;
 
   const chatTotalPages = getTotalPages(chatSessions.length);
-  const myPostsTotalPages = getTotalPages(myBoardPosts.length);
-  const commentedPostsTotalPages = getTotalPages(commentedPosts.length);
+  // API에서 반환한 total_pages 사용
 
   // 페이지네이션 컴포넌트
   const Pagination = ({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (page: number) => void }) => {
@@ -524,10 +539,14 @@ export default function MyPage() {
         <div className="flex items-center gap-3 mb-6">
           <FileText size={24} className="text-deep-teal" />
           <h3 className="text-xl font-bold text-dark-navy">내 게시글</h3>
-          <span className="text-sm text-gray-purple">({myBoardPosts.length}개)</span>
+          <span className="text-sm text-gray-purple">({myPostsTotal}개)</span>
         </div>
 
-        {myBoardPosts.length === 0 ? (
+        {isLoadingMyPosts ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-deep-teal" />
+          </div>
+        ) : myBoardPosts.length === 0 ? (
           <div className="text-center py-12">
             <FileText size={48} className="text-gray-300 mx-auto mb-4" />
             <p className="text-gray-purple mb-4">아직 작성한 게시글이 없습니다</p>
@@ -552,7 +571,7 @@ export default function MyPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-lavender/20 text-dark-navy">
-                          {getCategoryLabel(post.category)}
+                          {post.category}
                         </span>
                         <span className="text-xs text-gray-500 flex items-center gap-1">
                           <Calendar size={12} />
@@ -594,10 +613,14 @@ export default function MyPage() {
         <div className="flex items-center gap-3 mb-6">
           <MessageSquare size={24} className="text-deep-teal" />
           <h3 className="text-xl font-bold text-dark-navy">내가 댓글을 단 게시글</h3>
-          <span className="text-sm text-gray-purple">({commentedPosts.length}개)</span>
+          <span className="text-sm text-gray-purple">({commentedPostsTotal}개)</span>
         </div>
 
-        {commentedPosts.length === 0 ? (
+        {isLoadingCommentedPosts ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-deep-teal" />
+          </div>
+        ) : commentedPosts.length === 0 ? (
           <div className="text-center py-12">
             <MessageSquare size={48} className="text-gray-300 mx-auto mb-4" />
             <p className="text-gray-purple mb-4">아직 댓글을 단 게시글이 없습니다</p>
@@ -622,14 +645,17 @@ export default function MyPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-lavender/20 text-dark-navy">
-                          {getCategoryLabel(post.category)}
+                          {post.category}
                         </span>
                         <span className="text-xs text-gray-500 flex items-center gap-1">
                           <Calendar size={12} />
-                          댓글 작성: {post.myCommentDate}
+                          댓글 작성: {post.my_comment_date}
                         </span>
                       </div>
                       <h4 className="font-semibold text-dark-navy mb-2 truncate">{post.title}</h4>
+                      {post.my_comment_preview && (
+                        <p className="text-xs text-gray-600 mb-2 truncate">내 댓글: {post.my_comment_preview}</p>
+                      )}
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
                           <Eye size={12} />

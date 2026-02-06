@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
 import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
 import { Send } from 'lucide-react';
@@ -20,9 +20,10 @@ interface ChatPageProps {
 export default function ChatPage({ currentSessionId = null, onSessionCreate }: ChatPageProps) {
   const storeSessionId = useChatStore((state) => state.currentSessionId);
   const storeActiveChatType = useChatStore((state) => state.activeChatType);
+  const storeChatSessions = useChatStore((state) => state.chatSessions);
   const setStoreSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setStoreChatType = useChatStore((state) => state.setActiveChatType);
-  const setChatSessions = useChatStore((state) => state.setChatSessions);
+  const saveChatSessionToStore = useChatStore((state) => state.saveChatSession);
   const setDisputeFormData = useChatStore((state) => state.setDisputeFormData);
   const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
@@ -100,49 +101,47 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         setStoreSessionId(resolvedSessionId);
       }
 
-      const storage = isLoggedIn ? localStorage : sessionStorage;
-      const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
+      // store의 chatSessions에서 세션 찾기 (이미 숨긴 세션이 필터링된 상태)
+      // stale closure 방지를 위해 직접 store에서 가져오기
+      const currentSessions = useChatStore.getState().chatSessions;
+      const session = currentSessions.find(s => s.id === resolvedSessionId);
 
-      try {
-        const sessions = JSON.parse(storage.getItem(storageKey) || '[]');
-        const session = sessions.find(s => s.id === resolvedSessionId);
-
-        if (session) {
-          const restoredMessages = session.messages.map(msg => ({
+      if (session) {
+        // 메시지를 id(turn_number) 순서로 정렬 (혹시 역순으로 저장된 경우 대비)
+        const restoredMessages = session.messages
+          .map(msg => ({
             ...msg,
-            timestamp: new Date(msg.timestamp)
-          }));
+            timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
+          }))
+          .sort((a, b) => a.id - b.id); // ✅ id 오름차순 정렬
 
-          // store에서 설정한 chatType을 우선 사용, 없으면 세션의 type 사용
-          const chatType = storeActiveChatType || session.type;
+        // store에서 설정한 chatType을 우선 사용, 없으면 세션의 type 사용
+        const chatType = storeActiveChatType || session.type;
 
-          if (chatType === 'dispute') {
-            setDisputeMessages(restoredMessages);
-            setActiveChatType('dispute');
-            setIsFormSubmitted(true);
-            setStoreChatType('dispute');
-            // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-            setTimeout(() => {
-              disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-          } else {
-            setGeneralMessages(restoredMessages);
-            setActiveChatType('general');
-            setStoreChatType('general');
-            // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-            setTimeout(() => {
-              generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 200);
-          }
-        } else if (storeActiveChatType) {
-          // 세션이 없지만 store에 chatType이 설정되어 있는 경우
-          setActiveChatType(storeActiveChatType);
-          if (storeActiveChatType === 'dispute') {
-            setIsFormSubmitted(false);
-          }
+        if (chatType === 'dispute') {
+          setDisputeMessages(restoredMessages);
+          setActiveChatType('dispute');
+          setIsFormSubmitted(true);
+          setStoreChatType('dispute');
+          // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
+          setTimeout(() => {
+            disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 200);
+        } else {
+          setGeneralMessages(restoredMessages);
+          setActiveChatType('general');
+          setStoreChatType('general');
+          // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
+          setTimeout(() => {
+            generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 200);
         }
-      } catch (e) {
-        console.error('Failed to load session:', e);
+      } else if (storeActiveChatType) {
+        // 세션이 없지만 store에 chatType이 설정되어 있는 경우
+        setActiveChatType(storeActiveChatType);
+        if (storeActiveChatType === 'dispute') {
+          setIsFormSubmitted(false);
+        }
       }
     } else {
       setSessionId(null);
@@ -177,65 +176,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         disputeDetail: ''
       });
     }
-  }, [resolvedSessionId, isLoggedIn, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedSessionId, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
 
-  // 채팅 세션 저장 함수
-  const saveChatSession = (type: ChatType, messages: Message[]) => {
-    const storage = isLoggedIn ? localStorage : sessionStorage;
-    const storageKey = isLoggedIn ? 'chatSessions' : 'tempChatSessions';
-
-    let sessions: ChatSession[] = [];
-    try {
-      sessions = JSON.parse(storage.getItem(storageKey) || '[]');
-    } catch (e) {
-      sessions = [];
-    }
-
-    const newSessionId = sessionId || Date.now().toString();
-
-    // 첫 사용자 메시지로 타이틀 생성
-    const userMessage = messages.find(msg => msg.type === 'user');
-    const title = userMessage
-      ? userMessage.content.substring(0, 30) + (userMessage.content.length > 30 ? '...' : '')
-      : type === 'dispute' ? '분쟁 상담' : '일반 상담';
-
-    const sessionIndex = sessions.findIndex(s => s.id === newSessionId);
-    const now = Date.now();
-
-    // 비로그인 사용자는 1일(86400000ms) 만료 시간 설정
-    const expiresAt = !isLoggedIn ? now + 86400000 : null;
-
-    const sessionData = {
-      id: newSessionId,
-      type,
-      title,
-      createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
-      expiresAt: sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
-      lastUpdated: now,
-      messages: messages.map(msg => ({
-        ...msg,
-        timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp
-      }))
-    };
-
-    if (sessionIndex >= 0) {
-      sessions[sessionIndex] = sessionData;
-    } else {
-      sessions.unshift(sessionData);
-    }
-
-    storage.setItem(storageKey, JSON.stringify(sessions));
-    setChatSessions(sessions);
-
-    if (!sessionId) {
-      setSessionId(newSessionId);
-      setStoreSessionId(newSessionId);
-      setStoreChatType(type);
-      if (onSessionCreate) {
-        onSessionCreate(newSessionId);
-      }
-    }
-  };
+  // 채팅 세션 저장 함수 (store 함수를 래핑)
+  const saveChatSession = useCallback(async (type: ChatType, messages: MessageWithCitations[]) => {
+    // store의 saveChatSession만 호출 (store에서 모든 state 관리)
+    await saveChatSessionToStore(type, messages, isLoggedIn);
+  }, [saveChatSessionToStore, isLoggedIn]);
 
   const disputeMessagesEndRef = useRef<HTMLDivElement | null>(null);
   const generalMessagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -251,7 +199,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       scrollToBottom(disputeMessagesEndRef);
       saveChatSession('dispute', disputeMessages);
     }
-  }, [disputeMessages]);
+  }, [disputeMessages, saveChatSession]);
 
   useEffect(() => {
     // 메시지가 2개 이상일 때만 스크롤 (초기 상태에서는 스크롤하지 않음)
@@ -259,7 +207,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       scrollToBottom(generalMessagesEndRef);
       saveChatSession('general', generalMessages);
     }
-  }, [generalMessages]);
+  }, [generalMessages, saveChatSession]);
 
   // 분쟁 상담 폼 제출 핸들러
   const handleDisputeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {

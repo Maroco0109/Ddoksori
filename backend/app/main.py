@@ -43,6 +43,7 @@ if os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true":
 from app.api import (
     admin_router,
     auth_router,
+    board_router,
     case_router,
     chat_router,
     health_router,
@@ -88,6 +89,7 @@ app.include_router(case_router)
 app.include_router(metrics_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(board_router)
 app.include_router(users_router)
 
 
@@ -96,8 +98,10 @@ app.include_router(users_router)
 async def startup_event():
     """애플리케이션 시작 시 로그 및 서비스 시작"""
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
+    memory_backend = os.getenv("CONVERSATION_MEMORY_BACKEND", "memory")
     logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
+    logger.info(f"[Startup] Conversation Memory Backend: {memory_backend}")
     logger.info("[Startup] Embedding: OpenAI text-embedding-3-large")
 
     # 템플릿 캐시 초기화 (개발 중 템플릿 변경 반영)

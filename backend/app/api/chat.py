@@ -116,6 +116,8 @@ async def chat(
         config = get_config()
         use_db = config.memory.backend == "db"
 
+        logger.info(f"[chat] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}")
+
         session_memory = None
         memory_context = {}
         if should_use_memory(body.chat_type):
@@ -125,6 +127,7 @@ async def chat(
                 user_id=user_id,
                 use_db=use_db,
             )
+            logger.info(f"[chat] ConversationMemory created: session={session_id[:8]}, use_db={use_db}")
 
             # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
             await session_memory.add_turn(role="user", content=body.message)
@@ -387,6 +390,8 @@ async def chat_stream_sse(
             config = get_config()
             use_db = config.memory.backend == "db"
 
+            logger.info(f"[chat_stream] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}")
+
             session_memory = None
             memory_context = {}
             if should_use_memory(body.chat_type):
@@ -396,6 +401,7 @@ async def chat_stream_sse(
                     user_id=user_id,
                     use_db=use_db,
                 )
+                logger.info(f"[chat_stream] ConversationMemory created: session={session_id[:8]}, use_db={use_db}, chat_type={body.chat_type}")
                 await session_memory.add_turn(role="user", content=body.message)
                 memory_context = session_memory.get_context_for_llm()
 
@@ -696,6 +702,186 @@ async def chat_stream_sse(
             "X-Accel-Buffering": "no",  # Nginx buffering 비활성화
         },
     )
+
+
+# ============================================================
+# 대화 세션 관리 API
+# ============================================================
+
+
+@router.get("/chat/sessions")
+@limiter.limit(RateLimits.AUTH)
+async def get_user_sessions(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional),
+    limit: int = 20,
+    offset: int = 0,
+):
+    """
+    로그인한 사용자의 대화 세션 목록을 조회합니다.
+
+    Args:
+        current_user: 현재 인증된 사용자 (필수)
+        limit: 최대 개수 (기본값: 20)
+        offset: 건너뛸 개수 (기본값: 0)
+
+    Returns:
+        대화 세션 목록 (최신순)
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+        conversations = await db.get_user_conversations(
+            user_id=current_user.user_id,
+            limit=limit,
+            offset=offset,
+            include_inactive=False,
+        )
+
+        # 응답 형식 변환
+        sessions = []
+        for conv in conversations:
+            sessions.append({
+                "id": str(conv["session_id"]),
+                "type": conv["chat_type"],
+                "title": f"{conv['chat_type']} 상담",  # TODO: 첫 메시지에서 제목 생성
+                "createdAt": conv["created_at"].isoformat(),
+                "lastMessageAt": conv["updated_at"].isoformat(),
+                "turnCount": conv["turn_count"],
+            })
+
+        logger.info(f"[get_user_sessions] user={current_user.user_id}, count={len(sessions)}")
+        return {"sessions": sessions}
+
+    except Exception as e:
+        logger.error(f"[get_user_sessions] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="세션 목록 조회 실패")
+
+
+@router.get("/chat/sessions/{session_id}/history")
+@limiter.limit(RateLimits.AUTH)
+async def get_session_history(
+    request: Request,
+    session_id: str,
+    current_user: User = Depends(get_current_user_optional),
+    limit: int = 50,
+):
+    """
+    특정 세션의 대화 내역을 조회합니다.
+
+    Args:
+        session_id: 세션 ID
+        current_user: 현재 인증된 사용자 (필수)
+        limit: 최대 턴 수 (기본값: 50)
+
+    Returns:
+        대화 내역 (시간순)
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+        HTTPException 403: 다른 사용자의 세션
+        HTTPException 404: 세션을 찾을 수 없음
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+
+        # 세션 정보 조회 (권한 확인)
+        conv = await db.get_conversation_by_session(session_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
+
+        # 권한 확인: 자신의 세션만 조회 가능
+        if conv["user_id"] != current_user.user_id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
+
+        # 대화 내역 조회
+        history = await db.get_conversation_history(
+            conversation_id=conv["conversation_id"],
+            limit=limit
+        )
+
+        # 응답 형식 변환
+        messages = []
+        for turn in history:
+            messages.append({
+                "id": turn["turn_number"],
+                "type": "user" if turn["role"] == "user" else "ai",
+                "content": turn["content"],
+                "timestamp": turn["created_at"].isoformat(),
+            })
+
+        logger.info(f"[get_session_history] session={session_id[:8]}, messages={len(messages)}")
+        return {"messages": messages}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[get_session_history] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="대화 내역 조회 실패")
+
+
+@router.delete("/chat/sessions/{session_id}")
+@limiter.limit(RateLimits.AUTH)
+async def delete_session(
+    request: Request,
+    session_id: str,
+    current_user: User = Depends(get_current_user_optional),
+):
+    """
+    특정 세션을 삭제(비활성화)합니다.
+
+    Args:
+        session_id: 세션 ID
+        current_user: 현재 인증된 사용자 (필수)
+
+    Returns:
+        성공 메시지
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+        HTTPException 403: 다른 사용자의 세션
+        HTTPException 404: 세션을 찾을 수 없음
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+
+        # 세션 정보 조회 (권한 확인)
+        conv = await db.get_conversation_by_session(session_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
+
+        # 권한 확인: 자신의 세션만 삭제 가능
+        if conv["user_id"] != current_user.user_id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
+
+        # 세션 비활성화
+        await db.deactivate_conversation(conv["conversation_id"])
+
+        logger.info(f"[delete_session] session={session_id[:8]}, user={current_user.user_id}")
+        return {"success": True, "message": "세션이 삭제되었습니다"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[delete_session] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="세션 삭제 실패")
 
 
 __all__ = ["router"]
