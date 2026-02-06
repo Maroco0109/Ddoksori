@@ -3,19 +3,18 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
 
 jobs:
   claude-review:
-    if: |
-      github.event.pull_request.author_association == 'OWNER' ||
-      github.event.pull_request.author_association == 'MEMBER' ||
-      github.event.pull_request.author_association == 'COLLABORATOR'
+    if: contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,27 +41,28 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            이 PR을 리뷰해주세요. 다음 항목을 균형있게 검토하세요:
 
-            **For documentation changes:**
-            - Distinguish between actual file deletions and content reorganization
-            - Before claiming something is "deleted", verify it doesn't exist in other files
-            - Cross-reference with actual workflow files in .github/workflows/ before commenting on CI/CD
-            - Check if referenced files/sections actually exist before flagging broken links
+            ## 버그 & 보안 (Critical)
+            - 잠재적 런타임 에러, null/undefined 처리
+            - OWASP Top 10 보안 취약점 (XSS, SQL Injection, etc.)
+            - 인증/인가 로직 검증
+            - 민감 정보 노출 여부 (.env, API 키 등)
 
-            **Important guidelines:**
-            - Use `gh pr diff ${{ github.event.pull_request.number }}` to see actual changes
-            - Use `ls` and `cat` to verify file existence before making claims
-            - Be precise about what was deleted vs moved vs reorganized
+            ## 품질 & 패턴 (Important)
+            - 코드 가독성, 네이밍 컨벤션
+            - CLAUDE.md에 정의된 프로젝트 스타일 준수
+            - 에러 핸들링 패턴
+            - 테스트 커버리지 (새 기능에 테스트가 있는지)
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+            ## 리뷰 가이드라인
+            - `gh pr diff ${{ github.event.pull_request.number }}`로 실제 변경사항 확인
+            - 파일 존재 여부는 `ls`, `cat`으로 검증
+            - 건설적이고 구체적인 피드백 제공
+            - 심각도 표시: 🔴 Critical, 🟡 Warning, 🟢 Suggestion
 
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            CLAUDE.md의 스타일 가이드를 참고하세요.
+            리뷰 완료 후 `gh pr comment`로 코멘트를 남기세요.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
