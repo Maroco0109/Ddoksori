@@ -81,6 +81,7 @@ frontend/playwright-report
 frontend/vitest.config.ts
 backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
 backend/app/agents/answer_generation/tests
+backend/scripts/testing
 frontend/.vite
 
 # Agents
