@@ -23,6 +23,10 @@ from app.common.cache.base import BaseRedisCache, hash_query, normalize_query
 
 logger = logging.getLogger(__name__)
 
+# Embedding-specific Redis client (singleton, independent of ENABLE_ANSWER_CACHE)
+_embedding_redis_client = None
+_embedding_redis_init_attempted = False
+
 
 class EmbeddingCache(BaseRedisCache):
     """
@@ -32,6 +36,7 @@ class EmbeddingCache(BaseRedisCache):
     - TTL: 7일 (604800초)
     - 키: emb:{hash(model_name + normalized_text)}
     - 값: List[float] (JSON 직렬화)
+    - 독립적인 Redis 연결: ENABLE_ANSWER_CACHE와 무관하게 ENABLE_EMBEDDING_CACHE로 제어
     """
 
     PREFIX: ClassVar[str] = "emb"
@@ -41,6 +46,49 @@ class EmbeddingCache(BaseRedisCache):
     def _is_enabled(cls) -> bool:
         """임베딩 캐시 활성화 여부 확인."""
         return os.getenv("ENABLE_EMBEDDING_CACHE", "false").lower() == "true"
+
+    @classmethod
+    def _get_redis(cls):
+        """
+        임베딩 전용 Redis 클라이언트 조회.
+
+        ENABLE_ANSWER_CACHE와 독립적으로 ENABLE_EMBEDDING_CACHE 환경변수로 제어.
+        """
+        global _embedding_redis_client, _embedding_redis_init_attempted
+
+        if _embedding_redis_client is not None:
+            return _embedding_redis_client
+
+        if _embedding_redis_init_attempted:
+            return None
+
+        _embedding_redis_init_attempted = True
+
+        if not cls._is_enabled():
+            logger.debug("[EmbeddingCache] Disabled (ENABLE_EMBEDDING_CACHE != true)")
+            return None
+
+        try:
+            import redis
+
+            _embedding_redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                db=int(os.getenv("REDIS_DB", "0")),
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+            _embedding_redis_client.ping()
+            logger.info("[EmbeddingCache] Redis connection established")
+            return _embedding_redis_client
+        except ImportError:
+            logger.warning("[EmbeddingCache] redis package not installed")
+            return None
+        except Exception as e:
+            logger.warning(f"[EmbeddingCache] Redis connection failed: {e}")
+            _embedding_redis_client = None
+            return None
 
     @classmethod
     def _build_embedding_key(cls, text: str, model: str) -> str:
