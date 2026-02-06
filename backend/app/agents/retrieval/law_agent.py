@@ -38,40 +38,74 @@ class LawRetrievalAgent(BaseRetrievalAgent):
         top_k: int,
         task_input: Dict[str, Any] | None = None,
     ) -> List[SimilarChunkResult]:
-        # Phase 2-10: 법령 전용 쿼리 확장 적용
-        law_specific_queries = await self._expand_for_law_search(query, task_input)
-
-        # 기존 expanded_queries와 병합
-        expanded_queries: List[str] = []
-        if task_input:
-            expanded_queries = task_input.get("expanded_queries") or []
-
-        # 법령 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
-        all_queries = law_specific_queries.copy()
-        for eq in expanded_queries:
-            if eq not in all_queries:
-                all_queries.append(eq)
-        all_queries = all_queries[:6]  # 최대 6개로 제한
-
-        if not all_queries:
-            all_queries = [query]
-
-        logger.info(
-            f"[LawAgent] Using {len(all_queries)} queries: "
-            f"law_specific={len(law_specific_queries)}, original={len(expanded_queries)}"
-        )
-
         db_config = _get_db_config()
-
-        document_types = None
-        if task_input:
-            metadata_filter = task_input.get("metadata_filter") or {}
-            document_types = metadata_filter.get("document_types") or None
-
         retriever = LawRetriever(db_config)
         retriever.connect()
 
         try:
+            # PRIORITY 1: 조문 번호 직접 검색 (chunk_id 패턴 매칭)
+            article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+            article_match = re.search(article_pattern, query)
+
+            direct_results: List[SimilarChunkResult] = []
+            if article_match:
+                law_name_part = article_match.group(1)
+                article_num = article_match.group(2)
+
+                # 법률명 정규화 ("법" suffix가 없으면 추가)
+                if not law_name_part.endswith("법"):
+                    law_name_part = law_name_part + "법"
+
+                logger.info(
+                    f"[LawAgent] Article pattern detected: {law_name_part} 제{article_num}조, "
+                    f"attempting direct chunk_id lookup"
+                )
+
+                direct_results = retriever.direct_search_by_article_number(
+                    law_name_part, article_num
+                )
+
+                if direct_results:
+                    logger.info(
+                        f"[LawAgent] Direct lookup SUCCESS: found {len(direct_results)} chunks"
+                    )
+                    # Direct match gets top priority - assign high RRF scores
+                    for idx, result in enumerate(direct_results):
+                        result.similarity = 10.0 - idx * 0.1  # Very high base score
+                        result.rrf_score = 10.0 - idx * 0.1
+
+                    # If we found direct matches, we can return early or supplement with hybrid search
+                    if len(direct_results) >= top_k:
+                        return direct_results[:top_k]
+
+            # PRIORITY 2: Hybrid search with query expansion
+            # Phase 2-10: 법령 전용 쿼리 확장 적용
+            law_specific_queries = await self._expand_for_law_search(query, task_input)
+
+            # 기존 expanded_queries와 병합
+            expanded_queries: List[str] = []
+            if task_input:
+                expanded_queries = task_input.get("expanded_queries") or []
+
+            # 법령 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
+            all_queries = law_specific_queries.copy()
+            for eq in expanded_queries:
+                if eq not in all_queries:
+                    all_queries.append(eq)
+            all_queries = all_queries[:6]  # 최대 6개로 제한
+
+            if not all_queries:
+                all_queries = [query]
+
+            logger.info(
+                f"[LawAgent] Using {len(all_queries)} queries: "
+                f"law_specific={len(law_specific_queries)}, original={len(expanded_queries)}"
+            )
+
+            document_types = None
+            if task_input:
+                metadata_filter = task_input.get("metadata_filter") or {}
+                document_types = metadata_filter.get("document_types") or None
             per_query_k = max(top_k, 12)
             all_results: List[List[SimilarChunkResult]] = []
             for q in all_queries:
@@ -89,9 +123,19 @@ class LawRetrievalAgent(BaseRetrievalAgent):
 
             rrf_k = get_config().retrieval.rrf_k_python
 
+            # Merge direct results first (highest priority)
+            for result in direct_results:
+                chunk_id = result.chunk_id
+                fused_scores[chunk_id] = result.similarity
+                fused_results[chunk_id] = result
+
+            # Then merge hybrid search results
             for results in all_results:
                 for rank, result in enumerate(results, start=1):
                     chunk_id = result.chunk_id
+                    # Don't overwrite direct match scores
+                    if chunk_id in direct_results:
+                        continue
                     fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + (
                         1.0 / (rrf_k + rank)
                     )

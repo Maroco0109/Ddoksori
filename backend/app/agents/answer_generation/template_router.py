@@ -32,20 +32,21 @@ class TemplateRouter:
         Select optimal template based on strict routing rules.
 
         Routing order (first match wins):
-        1. chat_type != "dispute" → "reject"
-        2. Hard routing checks:
+        1. chat_type == "general" → "general_info"
+        2. chat_type != "dispute" → "reject"
+        3. Hard routing checks:
            a. amount > 5,000,000 → "fallback"
            b. criminal keywords → "fallback"
            c. international keywords → "fallback"
-        3. needs_clarification → "inquiry"
-        4. No retrieval results → "fallback"
-        5. Phase-based routing (solution/action/execution)
+        4. needs_clarification → "inquiry"
+        5. No retrieval results → "fallback"
+        6. Phase-based routing (solution/action/execution)
 
         Args:
             state: State dictionary containing user query, analysis, and retrieval results
 
         Returns:
-            Template name: "solution", "action", "execution", "inquiry", "fallback", "reject"
+            Template name: "solution", "action", "execution", "inquiry", "fallback", "reject", "general_info"
         """
         user_query = state.get("user_query", "")
         chat_type = state.get("chat_type", "")
@@ -56,8 +57,11 @@ class TemplateRouter:
         logger.info(f"Routing template for query: {user_query[:50]}...")
 
         # Rule 1: Chat type validation
-        if chat_type != "dispute":
-            logger.info(f"Rejecting: chat_type={chat_type} (expected 'dispute')")
+        if chat_type == "general":
+            logger.info(f"General info template selected for chat_type={chat_type}")
+            return "general_info"
+        elif chat_type != "dispute":
+            logger.info(f"Rejecting: chat_type={chat_type} (expected 'dispute' or 'general')")
             return "reject"
 
         # Rule 2a: High amount check

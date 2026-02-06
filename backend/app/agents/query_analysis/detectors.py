@@ -333,10 +333,35 @@ def is_meta_conversational(query: str) -> bool:
     return False
 
 
+def _extract_product_keywords(query: str) -> set:
+    """
+    쿼리에서 품목 키워드를 추출합니다 (화제 전환 감지용).
+
+    Args:
+        query: 사용자 쿼리
+
+    Returns:
+        추출된 품목 키워드 집합
+    """
+    from .constants import COMMON_PRODUCTS
+
+    query_lower = query.lower()
+    found_items = set()
+
+    # COMMON_PRODUCTS에서 키워드 추출
+    for category, items in COMMON_PRODUCTS.items():
+        for item in items:
+            if item.lower() in query_lower:
+                found_items.add(item.lower())
+
+    return found_items
+
+
 def is_followup_with_context(
     query: str,
     previous_followups: list,
     threshold: float = 0.8,
+    previous_query: str = None,
 ) -> bool:
     """
     현재 쿼리가 이전 턴의 후속 질문 중 하나와 매칭되는지 확인합니다.
@@ -345,6 +370,7 @@ def is_followup_with_context(
         query: 현재 사용자 쿼리
         previous_followups: 이전 턴의 followup_questions 리스트
         threshold: SequenceMatcher 유사도 임계값 (기본 0.8)
+        previous_query: 이전 턴의 사용자 쿼리 (품목 변경 감지용)
 
     Returns:
         True if 매칭됨
@@ -353,12 +379,60 @@ def is_followup_with_context(
         return False
 
     import difflib
+    import re
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     query_normalized = query.strip()
+
+    # 조문 번호 패턴 감지 (법률 제XX조)
+    article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+    current_article_match = re.search(article_pattern, query_normalized)
+
+    # 품목 변경 감지 (화제 전환)
+    if previous_query:
+        current_items = _extract_product_keywords(query)
+        previous_items = _extract_product_keywords(previous_query)
+
+        # 둘 다 구체적 품목을 언급한 경우
+        if current_items and previous_items:
+            # 완전히 다른 품목 → 화제 전환
+            overlap = current_items & previous_items
+            if not overlap:
+                logger.info(
+                    f"[Followup] Product changed detected: {previous_items} → {current_items}, "
+                    f"not a followup (topic shift)"
+                )
+                return False  # 화제 전환!
+            else:
+                logger.info(
+                    f"[Followup] Same/related products: {overlap}, checking text similarity"
+                )
 
     for followup in previous_followups:
         if not followup:
             continue
+
+        # 이전 followup에서도 조문 번호 추출
+        followup_article_match = re.search(article_pattern, followup.strip())
+
+        # 둘 다 조문 번호 쿼리인 경우: 조문 번호가 다르면 follow-up이 아님
+        if current_article_match and followup_article_match:
+            current_law = current_article_match.group(1)
+            current_num = current_article_match.group(2)
+            followup_law = followup_article_match.group(1)
+            followup_num = followup_article_match.group(2)
+
+            # 같은 법률의 다른 조문 → follow-up이 아님
+            if current_law == followup_law and current_num != followup_num:
+                continue  # 다음 followup 검사
+
+            # 다른 법률 → follow-up이 아님
+            if current_law != followup_law:
+                continue
+
+        # 텍스트 유사도 체크
         ratio = difflib.SequenceMatcher(
             None, query_normalized, followup.strip()
         ).ratio()

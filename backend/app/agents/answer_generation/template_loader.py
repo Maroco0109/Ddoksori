@@ -67,6 +67,7 @@ class TemplateLoader:
             "execution": "execution_guide_template.md",
             "fallback": "fallback_template.md",
             "reject": "reject_template.md",
+            "general_info": "general_info_template.md",
         }
 
         loaded = {}

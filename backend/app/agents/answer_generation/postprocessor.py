@@ -107,6 +107,7 @@ def _get_pdf_url(source_file: str) -> Optional[str]:
 def postprocess_answer(
     answer: str,
     retrieval: Optional[Dict[str, Any]] = None,
+    query_type: str = "dispute",
 ) -> str:
     """
     LLM 생성 답변의 형식을 후처리하여 수정합니다.
@@ -114,6 +115,7 @@ def postprocess_answer(
     Args:
         answer: LLM이 생성한 원본 답변
         retrieval: 검색 결과 (출처 정보 보강용)
+        query_type: 질문 유형 (law, case, dispute 등)
 
     Returns:
         형식이 수정된 답변
@@ -143,7 +145,7 @@ def postprocess_answer(
 
     # Step 6: 출처 정보 보강
     if retrieval:
-        answer = _enhance_sources(answer, retrieval)
+        answer = _enhance_sources(answer, retrieval, query_type)
 
     # 최종 출처 섹션 확인
     if "[출처]" in answer:
@@ -337,32 +339,113 @@ def _fix_case_numbering(answer: str) -> str:
     return answer
 
 
-def _enhance_sources(answer: str, retrieval: Dict[str, Any]) -> str:
+def _enhance_sources(answer: str, retrieval: Dict[str, Any], query_type: str = "dispute") -> str:
     """
-    [출처] 섹션에 유사 사례의 URL/PDF 정보를 보강합니다.
+    [출처] 섹션에 법령, 기준, 사례의 출처 정보를 보강합니다.
 
-    retrieval에서 disputes와 counsels의 출처 정보를 추출하여
+    retrieval에서 laws, criteria, disputes, counsels의 출처 정보를 추출하여
     [출처] 섹션에 누락된 경우 추가합니다.
+
+    Args:
+        answer: 원본 답변
+        retrieval: 검색 결과
+        query_type: 질문 유형 (law, case, dispute 등)
     """
+    laws = retrieval.get("laws", [])
+    criteria = retrieval.get("criteria", [])
     disputes = retrieval.get("disputes", [])
     counsels = retrieval.get("counsels", [])
     all_cases = disputes + counsels
 
-    logger.info(f"[Postprocessor] Source enhancement: {len(disputes)} disputes, {len(counsels)} counsels")
+    logger.info(f"[Postprocessor] Source enhancement: query_type={query_type}, {len(laws)} laws, {len(criteria)} criteria, {len(disputes)} disputes, {len(counsels)} counsels")
 
-    if not all_cases:
-        return answer
-
-    # 사례별 출처 정보 수집
+    # 출처 항목 수집
     source_entries = []
+
+    # 1. 법령 출처 추가
+    for i, law in enumerate(laws):
+        law_name = law.get("metadata", {}).get("law_name") or law.get("law_name", "")
+        chunk_id = law.get("chunk_id", "")
+        source_url = law.get("metadata", {}).get("source_url") or law.get("source_url", "")
+
+        logger.info(f"[Postprocessor] Law {i}: law_name={law_name}, chunk_id={chunk_id[:30] if chunk_id else 'None'}, url={'YES' if source_url else 'NO'}")
+
+        if not law_name and not chunk_id:
+            continue
+
+        # 법령명 추출 (chunk_id에서 또는 law_name 필드에서)
+        if not law_name and chunk_id:
+            # chunk_id 형식: "민법_제756조" → "민법"
+            law_name = chunk_id.split("_")[0] if "_" in chunk_id else ""
+
+        # 조문 번호 추출
+        article_number = ""
+        if chunk_id and "_" in chunk_id:
+            # "민법_제756조" → "제756조"
+            article_number = chunk_id.split("_", 1)[1] if len(chunk_id.split("_")) > 1 else ""
+
+        if law_name:
+            if article_number:
+                display_text = f"『{law_name}』 {article_number}"
+            else:
+                display_text = f"『{law_name}』"
+
+            if source_url:
+                entry = f"● [{display_text}]({source_url})"
+            else:
+                entry = f"● {display_text}"
+
+            if entry not in source_entries:
+                source_entries.append(entry)
+                logger.info(f"[Postprocessor] Law source entry added: {entry}")
+
+    # 2. 기준 출처 추가
+    for i, criterion in enumerate(criteria):
+        source_label = criterion.get("metadata", {}).get("source_label") or ""
+        source_url = criterion.get("metadata", {}).get("source_url") or criterion.get("source_url", "")
+
+        logger.info(f"[Postprocessor] Criteria {i}: label={source_label[:30] if source_label else 'None'}, url={'YES' if source_url else 'NO'}")
+
+        if not source_label:
+            continue
+
+        if source_url:
+            entry = f"● [{source_label}]({source_url})"
+        else:
+            entry = f"● {source_label}"
+
+        if entry not in source_entries:
+            source_entries.append(entry)
+            logger.info(f"[Postprocessor] Criteria source entry added: {entry}")
+
+    # 3. 사례 출처 추가 (유사도 임계값 적용)
+    # query_type에 따라 다른 임계값 적용
+    if query_type == "law":
+        # 법령 질문: 사례는 부수적 정보 → 높은 임계값 (관련성 높은 것만)
+        CASE_SIMILARITY_THRESHOLD = 0.70
+    elif query_type in ["case", "dispute"]:
+        # 사례/분쟁 질문: 사례가 핵심 정보 → 낮은 임계값 (더 많이 표시)
+        CASE_SIMILARITY_THRESHOLD = 0.50
+    else:
+        # 기타: 중간 임계값
+        CASE_SIMILARITY_THRESHOLD = 0.60
+
+    logger.info(f"[Postprocessor] Case similarity threshold: {CASE_SIMILARITY_THRESHOLD} (query_type={query_type})")
+
     for i, case in enumerate(all_cases):
         title = case.get("doc_title") or case.get("title", "")
         source_org = case.get("source_org", "")
         url = case.get("url", "")
         source_file = case.get("source_file", "")
         printed_page = case.get("printed_page")
+        similarity = case.get("similarity", 0.0)
 
-        logger.info(f"[Postprocessor] Case {i}: title={title[:30] if title else 'None'}, url={'YES' if url else 'NO'}, source_file={'YES' if source_file else 'NO'}, printed_page={printed_page}")
+        logger.info(f"[Postprocessor] Case {i}: title={title[:30] if title else 'None'}, similarity={similarity:.3f}, url={'YES' if url else 'NO'}, source_file={'YES' if source_file else 'NO'}, printed_page={printed_page}")
+
+        # 유사도가 임계값보다 낮으면 출처에서 제외
+        if similarity < CASE_SIMILARITY_THRESHOLD:
+            logger.info(f"[Postprocessor] Case {i} excluded: similarity {similarity:.3f} < threshold {CASE_SIMILARITY_THRESHOLD}")
+            continue
 
         if not title:
             continue

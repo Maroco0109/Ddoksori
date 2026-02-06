@@ -360,6 +360,50 @@ def _generate_law_queries_rule_based(
     query_lower = query.lower()
     keywords_str = " ".join(keywords).lower()
 
+    # ============================================================
+    # 0. 조문 번호 직접 지정 패턴 감지 (최우선 처리!)
+    # ============================================================
+    # 패턴: "민법 756조", "전자상거래법 제17조", "소비자기본법 제4조" 등
+    import re
+    article_pattern = r'([\w가-힣]+법?)\s*제?(\d+)조'
+    article_match = re.search(article_pattern, query)
+
+    if article_match:
+        law_name_part = article_match.group(1)
+        article_num = article_match.group(2)
+
+        # 조문 번호가 명시된 경우, 원본 쿼리를 우선 사용하고 변형 최소화
+        # 중요: DB 텍스트가 "제N조"로 시작하므로 이 형식을 최우선으로!
+        queries.append(f"제{article_num}조")  # 1순위: DB text와 직접 매칭
+        queries.append(f"{law_name_part} 제{article_num}조")  # 2순위: 법령명 + 조문
+        queries.append(query)  # 3순위: 원본 그대로
+
+        # 추가 검색 패턴: "756조" (제 없이)
+        queries.append(f"{article_num}조")
+
+        # 법령명이 약칭인 경우 정식 명칭 추가
+        law_full_names = {
+            "민법": "민법",
+            "상법": "상법",
+            "전자상거래법": "전자상거래 등에서의 소비자보호에 관한 법률",
+            "소비자기본법": "소비자기본법",
+            "제조물책임법": "제조물책임법",
+        }
+
+        for short_name, full_name in law_full_names.items():
+            if short_name in law_name_part:
+                if full_name != law_name_part:  # 중복 방지
+                    queries.append(f"{full_name} 제{article_num}조")
+                break
+
+        logger.info(
+            f"[Article-specific query] Detected: {law_name_part} 제{article_num}조, "
+            f"generated queries={queries[:4]}"
+        )
+
+        # 조문 번호가 명시된 경우, 다른 불필요한 확장을 하지 않음
+        return queries[:5]
+
     # 1. 일상어 → 법률 용어 변환
     for word, terms in LEGAL_TERM_MAPPING.items():
         if word in query_lower or word in keywords_str:

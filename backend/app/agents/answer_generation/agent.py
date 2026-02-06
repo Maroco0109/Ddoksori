@@ -934,6 +934,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     retrieval = state.get("retrieval") or {}  # None인 경우 빈 dict 사용
     retry_context = state.get("retry_context")
     query_type = query_analysis.get("query_type", "dispute")
+    logger.info(f"[generation_node_v2] query_type from query_analysis: {query_type}")
     onboarding = state.get("onboarding") or {}
     mode = state.get("mode", "NEED_RAG")
 
@@ -974,7 +975,7 @@ async def generation_node_v2(state: Dict, config: Any = None) -> Dict:
     # 5.1: 답변 형식 후처리 (헤더 줄바꿈, 번호 추가, 출처 보강)
     from .postprocessor import postprocess_answer
     logger.info(f"[generation_node_v2] Before postprocess - source section exists: {'[출처]' in draft_answer}")
-    draft_answer = postprocess_answer(draft_answer, retrieval)
+    draft_answer = postprocess_answer(draft_answer, retrieval, query_type)
     logger.info(f"[generation_node_v2] After postprocess - answer length: {len(draft_answer)}")
 
     cited_cases = _extract_cited_cases(retrieval)

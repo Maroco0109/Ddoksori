@@ -286,7 +286,8 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     # Step 1: 쿼리 정규화
     normalized_query = normalize_query(user_query)
 
-    # Step 2: 질의 유형 분류 (Hybrid: Rule + LLM Fallback)
+    # Step 2: 질의 유형 분류 (LLM Primary, Rule-based Fallback)
+    # 정확도 최우선: 거의 모든 쿼리를 LLM으로 분류
     from .classifiers import classify_query_type_with_confidence
     from .llm_classifier import llm_classify
 
@@ -295,37 +296,38 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
         f"[QueryAnalysis v2] Rule-based classification: query_type={query_type}, confidence={rule_confidence:.2f}"
     )
 
-    # LLM Fallback: confidence < 0.7이면 LLM으로 2차 분류
+    # LLM Primary: confidence < 0.98이면 LLM으로 검증 (거의 모든 케이스)
+    # 명확한 패턴(조문 번호, 인사)만 LLM 건너뜀
     llm_used = False
-    if rule_confidence < 0.7:
+    if rule_confidence < 0.98:
         logger.info(
-            f"[QueryAnalysis v2] Low confidence ({rule_confidence:.2f}), trying LLM fallback..."
+            f"[QueryAnalysis v2] Using LLM for accuracy (rule_confidence={rule_confidence:.2f})..."
         )
         try:
-            llm_result = await llm_classify(normalized_query)
+            llm_result = await llm_classify(normalized_query, timeout=5.0)
             if llm_result:
                 llm_type, llm_confidence, llm_reasoning = llm_result
                 logger.info(
                     f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}, "
                     f"reasoning='{llm_reasoning[:100]}'"
                 )
-                if llm_confidence > rule_confidence:
-                    logger.info(
-                        f"[QueryAnalysis v2] LLM override: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
-                    )
-                    query_type = llm_type
-                    llm_used = True
-                else:
-                    logger.info(
-                        f"[QueryAnalysis v2] Rule-based confidence higher, keeping: {query_type}({rule_confidence:.2f})"
-                    )
+                # LLM을 primary로 사용 (confidence 비교 없이 항상 사용)
+                logger.info(
+                    f"[QueryAnalysis v2] Using LLM result: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
+                )
+                query_type = llm_type
+                llm_used = True
+            else:
+                logger.info(
+                    f"[QueryAnalysis v2] LLM returned None, using rule-based: {query_type}({rule_confidence:.2f})"
+                )
         except Exception as e:
             logger.warning(
-                f"[QueryAnalysis v2] LLM fallback failed, using rule-based: {e}"
+                f"[QueryAnalysis v2] LLM failed, using rule-based fallback: {e}"
             )
     else:
         logger.info(
-            f"[QueryAnalysis v2] High confidence ({rule_confidence:.2f}), skipping LLM fallback"
+            f"[QueryAnalysis v2] Very high confidence ({rule_confidence:.2f}), skipping LLM"
         )
 
     # Step 2.5: 쿼리 복잡도 분류 (Adaptive RAG)
@@ -437,7 +439,29 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
     logger.info(
         f"[QueryAnalysis v2] Before classify_mode: query_type={query_type}, intent={intent}"
     )
-    mode = classify_mode(query_type, needs_clarification, user_query)
+
+    # 이전 대화에서 사용자 쿼리 추출 (화제 전환 감지용)
+    conversation_history = state.get("conversation_history", []) or []
+    previous_query = None
+    if conversation_history:
+        # 마지막 사용자 메시지 찾기
+        for msg in reversed(conversation_history):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                previous_query = msg.get("content", "")
+                break
+        if previous_query:
+            logger.info(f"[QueryAnalysis v2] Previous query: '{previous_query[:50]}...'")
+
+    # 후속 질문 리스트 (Progressive Disclosure용)
+    previous_followups = last_turn.get("followup_questions", [])
+
+    mode = classify_mode(
+        query_type,
+        needs_clarification,
+        user_query,
+        previous_followups=previous_followups,
+        previous_query=previous_query
+    )
     logger.info(f"[QueryAnalysis v2] After classify_mode: mode={mode}")
 
     # Step 8.5: 분쟁 사유 감지 (단순변심 vs 하자)

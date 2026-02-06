@@ -504,8 +504,17 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     )
 
     # L4 캐시: 세션별 Retrieval 결과 저장 (Progressive Disclosure용)
+    # 주의: 새 검색이 수행되면 이전 캐시를 무효화하여 최신 데이터만 사용
     if session_id:
         try:
+            # 이전 캐시 확인 (디버깅용)
+            old_cache = RetrievalResultCache.get_by_session(session_id)
+            if old_cache:
+                logger.info(
+                    f"[RetrievalMerge] Overwriting previous L4 cache for session={session_id[:8]}..."
+                )
+
+            # 새 결과로 캐시 업데이트 (덮어쓰기)
             RetrievalResultCache.set_by_session(session_id, merged)
             logger.info(
                 f"[RetrievalMerge] L4 cache saved for session={session_id[:8]}..."

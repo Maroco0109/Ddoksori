@@ -46,20 +46,43 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
         if task_input:
             expanded_queries = task_input.get("expanded_queries") or []
 
-        # 분쟁해결기준 전용 쿼리를 우선 사용, 기존 쿼리는 보조로 추가
-        all_queries = criteria_specific_queries.copy()
-        for eq in expanded_queries:
-            if eq not in all_queries:
-                all_queries.append(eq)
-        all_queries = all_queries[:6]  # 최대 6개로 제한
+        # CRITICAL FIX Phase 4: 키워드 쿼리만 사용 (RRF 오염 방지)
+        # PostgreSQL plainto_tsquery()가 조사/활용형을 제대로 처리 못하는 문제 해결
+        # "종묘에 관련된 분쟁이 생겼을 때" → "종묘" 키워드만 검색
+        keyword_query = self._extract_keywords_from_query(query, task_input)
 
-        if not all_queries:
+        if keyword_query and keyword_query != query:
+            # STRATEGY: 키워드 쿼리만 사용 (다른 쿼리들이 RRF 스코어를 오염시키는 것 방지)
+            # "종묘" 검색 → 정확한 결과 10개
+            # 다른 5개 쿼리 → 엉뚱한 결과들 → RRF에서 종묘 결과 순위 하락
+            all_queries = [keyword_query]
+            logger.info(f"[CriteriaAgent] Using KEYWORD-ONLY strategy: '{keyword_query}'")
+            logger.info(f"[CriteriaAgent] Skipping other queries to prevent RRF pollution")
+        else:
+            # 키워드 추출 실패시 원본 + 확장 쿼리 사용
             all_queries = [query]
+            logger.info(f"[CriteriaAgent] No keyword extracted, using multi-query strategy")
+
+            # 분쟁해결기준 전용 쿼리 추가
+            for cq in criteria_specific_queries:
+                if cq not in all_queries:
+                    all_queries.append(cq)
+
+            # 기존 확장 쿼리 추가
+            for eq in expanded_queries:
+                if eq not in all_queries:
+                    all_queries.append(eq)
+
+            # 최대 6개로 제한
+            all_queries = all_queries[:6]
 
         logger.info(
-            f"[CriteriaAgent] Using {len(all_queries)} queries: "
-            f"criteria_specific={len(criteria_specific_queries)}, original={len(expanded_queries)}"
+            f"[CriteriaAgent] Total {len(all_queries)} queries: "
+            f"criteria_specific={len(criteria_specific_queries)}, expanded={len(expanded_queries)}"
         )
+        # 실제 쿼리 순서 출력
+        for idx, q in enumerate(all_queries, 1):
+            logger.info(f"[CriteriaAgent] Query #{idx}: {q[:80]}...")
 
         db_config = _get_db_config()
 
@@ -246,6 +269,71 @@ class CriteriaRetrievalAgent(BaseRetrievalAgent):
             return final_results
         finally:
             retriever.close()
+
+    def _extract_keywords_from_query(
+        self, query: str, task_input: Dict[str, Any] | None
+    ) -> str:
+        """
+        쿼리에서 핵심 키워드만 추출 (PostgreSQL BM25 검색 최적화)
+
+        Problem: "종묘에 관련된 분쟁이 생겼을 때" → plainto_tsquery() fails to match "종묘"
+        Solution: Extract ONLY "종묘" keyword (품목명 only!)
+
+        Returns:
+            품목명 키워드 (예: "종묘", "노트북" 등) - 최대 1개 단어만!
+        """
+        import re
+
+        # 1. task_input에서 추출된 품목 우선 사용
+        if task_input:
+            metadata_filter = task_input.get("metadata_filter") or {}
+            if "item" in metadata_filter and metadata_filter["item"]:
+                item = metadata_filter["item"]
+                logger.info(f"[CriteriaAgent] Using item from metadata: '{item}'")
+                return item
+
+        # 2. COMMON_PRODUCTS에서 직접 매칭 (가장 신뢰도 높음)
+        from app.agents.query_analysis.constants import COMMON_PRODUCTS
+
+        for product in COMMON_PRODUCTS:
+            # 정확한 매칭 (조사 포함)
+            if re.search(rf"\b{re.escape(product)}[은는이가을를에도와과]\b", query):
+                logger.info(f"[CriteriaAgent] Found product with particle: '{product}'")
+                return product
+            # 단독 매칭
+            if product in query:
+                logger.info(f"[CriteriaAgent] Found product exact match: '{product}'")
+                return product
+
+        # 3. 한글 2~4자 명사 추출 (조사 제거)
+        # "종묘에" → "종묘"
+        noun_pattern = r"\b([가-힣]{2,4})(?:을|를|이|가|은|는|에|에서|으로|로|와|과|도)\b"
+        nouns = re.findall(noun_pattern, query)
+
+        # 불용어 제거
+        stopwords = {
+            "관련", "분쟁", "생겼", "어떻게", "해결", "있는", "알려", "주세",
+            "가능", "되나", "인가", "뭐야", "무엇", "어떤", "이런", "저런",
+            "그런", "하는", "되는", "하고", "싶어", "같은", "있어", "없어",
+            "때문", "경우", "상황", "문제", "사항", "내용", "기준", "해결",
+        }
+
+        for noun in nouns:
+            if noun not in stopwords and len(noun) >= 2:
+                logger.info(f"[CriteriaAgent] Extracted noun (first match): '{noun}'")
+                return noun  # 첫 번째 명사만 반환!
+
+        # 4. 조사 없이 독립된 2~4자 한글 단어
+        simple_noun_pattern = r"\b([가-힣]{2,4})\b"
+        simple_nouns = re.findall(simple_noun_pattern, query)
+
+        for noun in simple_nouns:
+            if noun not in stopwords and len(noun) >= 2:
+                logger.info(f"[CriteriaAgent] Extracted simple noun: '{noun}'")
+                return noun
+
+        logger.info("[CriteriaAgent] No keyword extracted, returning empty string")
+        return ""
 
     async def _expand_for_criteria_search(
         self, query: str, task_input: Dict[str, Any] | None

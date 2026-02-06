@@ -160,6 +160,105 @@ class LawRetriever:
         """Legacy API wrapper for compatibility."""
         return self.hybrid_search(query, top_k)
 
+    def direct_search_by_article_number(
+        self, law_name: str, article_number: str
+    ) -> List[SimilarChunkResult]:
+        """
+        조문 번호로 직접 chunk_id 검색 (article_number_normalized 활용)
+
+        Args:
+            law_name: 법률명 (예: "민법", "전자상거래법")
+            article_number: 조문 번호 (예: "756조", "제756조", "756")
+
+        Returns:
+            매칭되는 청크 목록
+        """
+        if not self.conn:
+            logger.warning("[LawRetriever] No connection available for direct search")
+            return []
+
+        # 조문 번호 정규화 (제 제거, 조 제거)
+        normalized = article_number.replace("제", "").replace("조", "").strip()
+
+        # chunk_id 패턴 생성: {법률명}_제{번호}조
+        chunk_id_patterns = [
+            f"{law_name}_제{normalized}조%",
+            f"{law_name}_{normalized}조%",
+        ]
+
+        try:
+            with self.conn.cursor() as cur:
+                # chunk_id로 직접 검색
+                cur.execute(
+                    """
+                    SELECT
+                        chunk_id,
+                        dataset_type,
+                        text,
+                        law_name,
+                        chunk_type,
+                        category,
+                        document_type,
+                        source_url,
+                        source_file,
+                        printed_page,
+                        source_year,
+                        metadata
+                    FROM vector_chunks
+                    WHERE (chunk_id LIKE %s OR chunk_id LIKE %s)
+                        AND dataset_type = 'law_guide'
+                    ORDER BY chunk_id
+                    LIMIT 5
+                    """,
+                    (chunk_id_patterns[0], chunk_id_patterns[1]),
+                )
+
+                rows = cur.fetchall()
+
+                results: List[SimilarChunkResult] = []
+                for row in rows:
+                    metadata = row[11]
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except Exception:
+                            metadata = {}
+                    metadata = metadata if isinstance(metadata, dict) else {}
+
+                    results.append(
+                        SimilarChunkResult(
+                            chunk_id=row[0],
+                            dataset_type=row[1] or "",
+                            text=row[2] or "",
+                            similarity=1.0,  # Direct match gets highest score
+                            law_name=row[3],
+                            chunk_type=row[4],
+                            category=row[5],
+                            document_type=row[6],
+                            source_url=row[7],
+                            source_file=row[8],
+                            printed_page=row[9],
+                            source_year=row[10],
+                            metadata=metadata or None,
+                            vector_similarity=1.0,
+                            rrf_score=1.0,
+                        )
+                    )
+
+                if results:
+                    logger.info(
+                        f"[LawRetriever] Direct match found: {len(results)} chunks for "
+                        f"{law_name} {article_number}"
+                    )
+                    for idx, r in enumerate(results):
+                        logger.info(f"[LawRetriever] Direct match {idx}: chunk_id={r.chunk_id}, text_preview={r.text[:50] if r.text else 'NO_TEXT'}...")
+
+                return results
+
+        except Exception as e:
+            logger.warning(f"[LawRetriever] Direct search failed: {e}")
+            return []
+
     def search_by_article(self, law_id: str, article_no: str) -> List[Dict]:
         """특정 조문의 모든 하위 노드 조회"""
         with self.conn.cursor() as cur:
