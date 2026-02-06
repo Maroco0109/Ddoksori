@@ -11,7 +11,6 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  QueryAnalyst (질의분석)                                    │
 │  LLM 기반 다중 쿼리 확장, 의도 분류                          │
-│  문서: docs/guides/supervisor/agent-protocols.md             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -27,30 +26,28 @@
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  AnswerDrafter (답변생성)                                   │
-│  담당: Answer Generator 작업자                               │
-│  문서: docs/guides/supervisor/agent-protocols.md             │
+│  + FollowupGenerator (후속 질문 생성)                        │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  LegalReviewer (법률검토)                                   │
-│  담당: Legal Review 작업자                                   │
-│  문서: docs/guides/supervisor/agent-protocols.md             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
                     최종 답변
 ```
 
-## 작업자별 담당 문서
+## 에이전트 모듈 목록
 
-| 작업자 | 담당 에이전트 | 인터페이스 문서 |
-|--------|--------------|-----------------|
-| Query Analysis | QueryAnalyst | `docs/guides/supervisor/agent-protocols.md` |
-| Answer Generator | AnswerDrafter | `docs/guides/supervisor/agent-protocols.md` |
-| Law & Criteria | LawRetrievalAgent, CriteriaRetrievalAgent | `docs/guides/supervisor/agent-protocols.md` |
-| Case (분쟁사례+상담사례) | CaseRetrievalAgent | `docs/guides/supervisor/agent-protocols.md` |
-| Legal Review | LegalReviewer | `docs/guides/supervisor/agent-protocols.md` |
+| 모듈 | 에이전트 | 설명 |
+|------|----------|------|
+| `query_analysis/` | QueryAnalyst | 의도 분류, 키워드 추출, 쿼리 확장 |
+| `retrieval/` | LawAgent, CriteriaAgent, CaseAgent | 법령·기준·사례 검색 (병렬) |
+| `answer_generation/` | AnswerDrafter | 템플릿 기반 답변 생성 + Fallback 체인 |
+| `legal_review/` | LegalReviewer | 금지 표현·인용·용어 검증 |
+| `followup/` | FollowupQuestionGenerator | 후속 질문·보완 질문 생성 |
+| `registry/` | AgentRegistry | 에이전트 등록·발견·생명주기 관리 |
 
 ## 데이터 흐름 요약
 
@@ -71,7 +68,8 @@ ReviewOutput.final_answer → API Response
 
 ## 공통 타입 정의
 
-모든 에이전트가 공유하는 타입은 `protocols.py`에 정의되어 있습니다:
+모든 에이전트가 공유하는 타입은 `protocols.py`에 **문서화/참조용**으로 정의되어 있습니다.
+실제 런타임 구현은 `supervisor/state/`에 있으며, 이 파일은 인터페이스 참조 문서입니다.
 
 ```python
 from app.agents.protocols import (
