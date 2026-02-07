@@ -17,15 +17,18 @@ BaseRedisCache를 상속하며, 모델명을 캐시 키에 포함하여 모델 �
 import json
 import logging
 import os
+import threading
 from typing import ClassVar, List, Optional
 
 from app.common.cache.base import BaseRedisCache, hash_query, normalize_query
+from app.common.config import get_config
 
 logger = logging.getLogger(__name__)
 
 # Embedding-specific Redis client (singleton, independent of ENABLE_ANSWER_CACHE)
 _embedding_redis_client = None
 _embedding_redis_init_attempted = False
+_embedding_redis_lock = threading.Lock()
 
 
 class EmbeddingCache(BaseRedisCache):
@@ -48,12 +51,16 @@ class EmbeddingCache(BaseRedisCache):
         return os.getenv("ENABLE_EMBEDDING_CACHE", "false").lower() == "true"
 
     @classmethod
-    def _get_redis(cls):
-        """
-        임베딩 전용 Redis 클라이언트 조회.
+    def _get_ttl(cls) -> int:
+        """config에서 TTL 조회 (fallback: 7일)."""
+        try:
+            return get_config().redis.embedding_cache_ttl_days * 86400
+        except Exception:
+            return cls.TTL_SECONDS
 
-        ENABLE_ANSWER_CACHE와 독립적으로 ENABLE_EMBEDDING_CACHE 환경변수로 제어.
-        """
+    @classmethod
+    def _get_redis(cls):
+        """임베딩 전용 Redis 클라이언트 조회 (thread-safe)."""
         global _embedding_redis_client, _embedding_redis_init_attempted
 
         if _embedding_redis_client is not None:
@@ -62,33 +69,42 @@ class EmbeddingCache(BaseRedisCache):
         if _embedding_redis_init_attempted:
             return None
 
-        _embedding_redis_init_attempted = True
+        with _embedding_redis_lock:
+            # Double-check after acquiring lock
+            if _embedding_redis_client is not None:
+                return _embedding_redis_client
+            if _embedding_redis_init_attempted:
+                return None
 
-        if not cls._is_enabled():
-            logger.debug("[EmbeddingCache] Disabled (ENABLE_EMBEDDING_CACHE != true)")
-            return None
+            _embedding_redis_init_attempted = True
 
-        try:
-            import redis
+            if not cls._is_enabled():
+                logger.debug(
+                    "[EmbeddingCache] Disabled (ENABLE_EMBEDDING_CACHE != true)"
+                )
+                return None
 
-            _embedding_redis_client = redis.Redis(
-                host=os.getenv("REDIS_HOST", "localhost"),
-                port=int(os.getenv("REDIS_PORT", "6379")),
-                db=int(os.getenv("REDIS_DB", "0")),
-                decode_responses=True,
-                socket_connect_timeout=2,
-                socket_timeout=2,
-            )
-            _embedding_redis_client.ping()
-            logger.info("[EmbeddingCache] Redis connection established")
-            return _embedding_redis_client
-        except ImportError:
-            logger.warning("[EmbeddingCache] redis package not installed")
-            return None
-        except Exception as e:
-            logger.warning(f"[EmbeddingCache] Redis connection failed: {e}")
-            _embedding_redis_client = None
-            return None
+            try:
+                import redis
+
+                _embedding_redis_client = redis.Redis(
+                    host=os.getenv("REDIS_HOST", "localhost"),
+                    port=int(os.getenv("REDIS_PORT", "6379")),
+                    db=int(os.getenv("REDIS_DB", "0")),
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                    socket_timeout=2,
+                )
+                _embedding_redis_client.ping()
+                logger.info("[EmbeddingCache] Redis connection established")
+                return _embedding_redis_client
+            except ImportError:
+                logger.warning("[EmbeddingCache] redis package not installed")
+                return None
+            except Exception as e:
+                logger.warning(f"[EmbeddingCache] Redis connection failed: {e}")
+                _embedding_redis_client = None
+                return None
 
     @classmethod
     def _build_embedding_key(cls, text: str, model: str) -> str:
@@ -162,10 +178,11 @@ class EmbeddingCache(BaseRedisCache):
         try:
             cache_key = cls._build_embedding_key(text, model)
             serialized = json.dumps(embedding)
-            redis.setex(cache_key, cls.TTL_SECONDS, serialized)
+            ttl = cls._get_ttl()
+            redis.setex(cache_key, ttl, serialized)
             logger.debug(
                 f"[{cls.PREFIX}] SET: {cache_key[:30]}... "
-                f"(dim={len(embedding)}, TTL={cls.TTL_SECONDS}s)"
+                f"(dim={len(embedding)}, TTL={ttl}s)"
             )
             return True
 
@@ -173,3 +190,11 @@ class EmbeddingCache(BaseRedisCache):
             cls._error_count += 1
             logger.warning(f"[{cls.PREFIX}] Set error: {e}")
             return False
+
+
+def reset_embedding_redis_client() -> None:
+    """임베딩 Redis 클라이언트 리셋 (테스트용)."""
+    global _embedding_redis_client, _embedding_redis_init_attempted
+    with _embedding_redis_lock:
+        _embedding_redis_client = None
+        _embedding_redis_init_attempted = False
