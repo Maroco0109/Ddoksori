@@ -7,8 +7,8 @@
     python scripts/test_board_db.py
 """
 
-import sys
 import os
+import sys
 
 # 프로젝트 루트를 path에 추가
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,9 +29,10 @@ try:
 except ImportError:
     print("[WARNING] python-dotenv가 설치되지 않았습니다. pip install python-dotenv")
 
-from app.common.config import get_config
 import psycopg2
 import psycopg2.extras
+
+from app.common.config import get_config
 
 
 def test_db_connection():
@@ -123,15 +124,12 @@ def test_api_import():
     print("[4/4] API 모듈 import 테스트...")
 
     try:
-        from app.api.board import router as board_router
 
         print("     [OK] board_router import 성공")
 
-        from app.board.service import get_board_service
 
         print("     [OK] get_board_service import 성공")
 
-        from app.board.board_db import BoardDB
 
         print("     [OK] BoardDB import 성공")
 
