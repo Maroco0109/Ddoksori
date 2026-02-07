@@ -4,6 +4,7 @@
 서버 상태 확인 및 기본 정보 제공 엔드포인트입니다.
 """
 
+import logging
 import os
 
 import httpx
@@ -14,6 +15,8 @@ from app.agents.retrieval.tools.retriever import RAGRetriever
 from app.common.config import get_config
 
 from .dependencies import get_db_config, get_retrieval_mode
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
 
@@ -68,19 +71,15 @@ async def health_check():
         return {"status": "healthy", "database": "connected"}
 
     except Exception as e:
-        # Windows CP949/EUC-KR 로케일 이슈를 위한 안전한 문자열 변환
-        try:
-            error_msg = str(e)
-        except UnicodeDecodeError:
-            error_msg = repr(e)
-        return {"status": "unhealthy", "error": error_msg}
+        logger.error(f"[Health] DB 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "서비스 연결 실패"}
 
 
 @router.get("/health/llm/supervisor")
 async def check_supervisor_llm():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
 
     try:
         async with httpx.AsyncClient() as client:
@@ -93,19 +92,21 @@ async def check_supervisor_llm():
                 model_name = get_config().models.supervisor
                 return {"status": "healthy", "model": f"{model_name} (OpenAI API)"}
             else:
+                logger.error(f"[Health] OpenAI API 응답 오류: {response.status_code}")
                 return {
                     "status": "unhealthy",
-                    "error": f"OpenAI API returned {response.status_code}",
+                    "error": "LLM 서비스 응답 오류",
                 }
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        logger.error(f"[Health] OpenAI API 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "LLM 서비스 연결 실패"}
 
 
 @router.get("/health/llm/exaone")
 async def check_exaone_llm():
     base_url = os.getenv("MODEL_EXAONE_BASE_URL") or os.getenv("EXAONE_RUNPOD_URL")
     if not base_url:
-        return {"status": "unhealthy", "error": "EXAONE URL not configured"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
 
     if not base_url.endswith("/v1"):
         base_url = base_url.rstrip("/") + "/v1"
@@ -116,12 +117,14 @@ async def check_exaone_llm():
             if response.status_code == 200:
                 return {"status": "healthy", "url": base_url}
             else:
+                logger.error(f"[Health] vLLM 응답 오류: {response.status_code}")
                 return {
                     "status": "unhealthy",
-                    "error": f"vLLM returned {response.status_code}",
+                    "error": "LLM 서비스 응답 오류",
                 }
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        logger.error(f"[Health] vLLM 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "LLM 서비스 연결 실패"}
 
 
 @router.get("/health/embedding")
@@ -129,7 +132,7 @@ async def check_embedding():
     """OpenAI 임베딩 API 상태 확인"""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {"status": "unhealthy", "error": "OPENAI_API_KEY not found"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
     return {
         "status": "healthy",
         "type": "OpenAI Embedding",

@@ -163,7 +163,7 @@ async def google_callback(
 
     except Exception as e:
         logger.error(f"[Auth] Google 콜백 실패: {e}", exc_info=True)
-        error_url = f"{get_config().auth.frontend_url}/auth/error?error={str(e)}"
+        error_url = f"{get_config().auth.frontend_url}/auth/error?error=login_failed"
         return RedirectResponse(error_url)
 
 
@@ -242,7 +242,7 @@ async def naver_callback(
 
     except Exception as e:
         logger.error(f"[Auth] Naver 콜백 실패: {e}", exc_info=True)
-        error_url = f"{get_config().auth.frontend_url}/auth/error?error={str(e)}"
+        error_url = f"{get_config().auth.frontend_url}/auth/error?error=login_failed"
         return RedirectResponse(error_url)
 
 
