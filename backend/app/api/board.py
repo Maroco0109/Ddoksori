@@ -35,6 +35,7 @@ router = APIRouter(prefix="/api/board", tags=["board"])
 # Category Endpoints
 # ============================================================
 
+
 @router.get("/categories", response_model=list[CategoryResponse])
 async def get_categories():
     """카테고리 목록을 조회합니다."""
@@ -46,13 +47,18 @@ async def get_categories():
 # Post Endpoints
 # ============================================================
 
+
 @router.get("/posts", response_model=PostListResponse)
 async def get_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
-    category: Optional[str] = Query(None, description="카테고리 키 (case-sharing, qna, tips, all)"),
+    category: Optional[str] = Query(
+        None, description="카테고리 키 (case-sharing, qna, tips, all)"
+    ),
     search: Optional[str] = Query(None, description="검색어"),
-    search_type: str = Query("title", description="검색 유형 (title, author, content, title_content)"),
+    search_type: str = Query(
+        "title", description="검색 유형 (title, author, content, title_content)"
+    ),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """게시글 목록을 조회합니다."""
@@ -183,6 +189,7 @@ async def report_post(
 # Comment Endpoints
 # ============================================================
 
+
 @router.get("/posts/{post_id}/comments", response_model=CommentListResponse)
 async def get_comments(
     post_id: UUID,
@@ -196,7 +203,11 @@ async def get_comments(
     )
 
 
-@router.post("/posts/{post_id}/comments", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/posts/{post_id}/comments",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_comment(
     post_id: UUID,
     data: CommentCreate,
@@ -280,7 +291,11 @@ async def report_comment(
     )
 
 
-@router.post("/comments/{comment_id}/replies", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/comments/{comment_id}/replies",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_reply(
     comment_id: UUID,
     data: CommentCreate,
@@ -292,6 +307,7 @@ async def create_reply(
     # 부모 댓글의 post_id를 찾아야 함
     # 여기서는 DB에서 직접 조회
     from app.board.board_db import BoardDB
+
     db = BoardDB()
 
     # 부모 댓글 조회를 위한 쿼리
@@ -302,16 +318,20 @@ async def create_reply(
         conn = db._get_connection()
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT post_id FROM community_comment
                     WHERE id = %s AND status = 'normal'
-                """, (str(comment_id),))
+                """,
+                    (str(comment_id),),
+                )
                 row = cur.fetchone()
                 return row["post_id"] if row else None
         finally:
             conn.close()
 
     import asyncio
+
     post_id = await asyncio.to_thread(_get_parent_post_id)
 
     if not post_id:

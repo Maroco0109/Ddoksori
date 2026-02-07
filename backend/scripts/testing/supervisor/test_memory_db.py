@@ -81,8 +81,8 @@ class TestConversationMemoryInMemory:
 
         run_async(_test())
 
-    def test_general_chat_type_no_memory(self):
-        """Test general chat type does not store memory"""
+    def test_general_chat_type_stores_memory(self):
+        """Test general chat type stores memory (멀티 디바이스 동기화용)"""
 
         async def _test():
             memory = ConversationMemory(chat_type="general", use_db=False)
@@ -90,8 +90,8 @@ class TestConversationMemoryInMemory:
             await memory.add_turn(role="user", content="안녕하세요")
             await memory.add_turn(role="assistant", content="반갑습니다")
 
-            assert len(memory.turns) == 0
-            assert memory.total_turn_count == 0
+            assert len(memory.turns) == 2
+            assert memory.total_turn_count == 2
 
         run_async(_test())
 
@@ -414,9 +414,9 @@ class TestMemoryPolicies:
         assert policy.sliding_window == 10
 
     def test_general_policy(self):
-        """Test general policy configuration"""
+        """Test general policy configuration (멀티 디바이스 동기화용)"""
         policy = MEMORY_POLICIES["general"]
 
-        assert policy.max_turns == 0
+        assert policy.max_turns == 10
         assert policy.compact_enabled is False
-        assert policy.sliding_window == 0
+        assert policy.sliding_window == 5

@@ -225,18 +225,20 @@ class BoardService:
                 for r in c.get("replies", [])
             ]
 
-            result.append(CommentResponse(
-                id=c["id"],
-                content=c["content"],
-                author_id=c["author_id"],
-                author_nickname=c["author_nickname"],
-                is_author_deleted=c["is_author_deleted"],
-                like_count=c["like_count"],
-                is_liked=c["is_liked"],
-                created_at=c["created_at"],
-                edited_at=c["edited_at"],
-                replies=replies,
-            ))
+            result.append(
+                CommentResponse(
+                    id=c["id"],
+                    content=c["content"],
+                    author_id=c["author_id"],
+                    author_nickname=c["author_nickname"],
+                    is_author_deleted=c["is_author_deleted"],
+                    like_count=c["like_count"],
+                    is_liked=c["is_liked"],
+                    created_at=c["created_at"],
+                    edited_at=c["edited_at"],
+                    replies=replies,
+                )
+            )
 
         return CommentListResponse(comments=result, total=len(result))
 

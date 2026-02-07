@@ -20,6 +20,7 @@ env_path = os.path.join(llm_dir, ".env")
 
 try:
     from dotenv import load_dotenv
+
     if os.path.exists(env_path):
         load_dotenv(env_path)
         print(f"[INFO] .env 파일 로드: {env_path}")
@@ -53,12 +54,12 @@ def test_tables_exist():
     print("[2/4] 테이블 존재 여부 확인...")
 
     tables = [
-        'community_category',
-        'community_post',
-        'community_comment',
-        'community_post_like',
-        'community_comment_like',
-        'community_report',
+        "community_category",
+        "community_post",
+        "community_comment",
+        "community_post_like",
+        "community_comment_like",
+        "community_report",
     ]
 
     try:
@@ -66,12 +67,15 @@ def test_tables_exist():
         conn = psycopg2.connect(**config.database.get_connection_dict())
         with conn.cursor() as cur:
             for table in tables:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables
                         WHERE table_name = %s
                     )
-                """, (table,))
+                """,
+                    (table,),
+                )
                 exists = cur.fetchone()[0]
                 status = "[OK]" if exists else "[MISSING]"
                 print(f"     {status} {table}")
@@ -90,7 +94,9 @@ def test_categories():
         config = get_config()
         conn = psycopg2.connect(**config.database.get_connection_dict())
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT category_key, display_name FROM community_category ORDER BY sort_order")
+            cur.execute(
+                "SELECT category_key, display_name FROM community_category ORDER BY sort_order"
+            )
             rows = cur.fetchall()
 
             if not rows:
@@ -118,12 +124,15 @@ def test_api_import():
 
     try:
         from app.api.board import router as board_router
+
         print("     [OK] board_router import 성공")
 
         from app.board.service import get_board_service
+
         print("     [OK] get_board_service import 성공")
 
         from app.board.board_db import BoardDB
+
         print("     [OK] BoardDB import 성공")
 
         return True
@@ -158,7 +167,9 @@ def main():
         print("마이그레이션이 필요하면:")
         print("    psql 접속 후 005_community_board.sql 실행")
         print("    또는")
-        print("    cat app/database/migrations/005_community_board.sql | psql <connection_string>")
+        print(
+            "    cat app/database/migrations/005_community_board.sql | psql <connection_string>"
+        )
     print("=" * 60)
 
 

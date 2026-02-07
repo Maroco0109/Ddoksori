@@ -116,7 +116,9 @@ async def chat(
         config = get_config()
         use_db = config.memory.backend == "db"
 
-        logger.info(f"[chat] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}")
+        logger.info(
+            f"[chat] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}"
+        )
 
         session_memory = None
         memory_context = {}
@@ -127,7 +129,9 @@ async def chat(
                 user_id=user_id,
                 use_db=use_db,
             )
-            logger.info(f"[chat] ConversationMemory created: session={session_id[:8]}, use_db={use_db}")
+            logger.info(
+                f"[chat] ConversationMemory created: session={session_id[:8]}, use_db={use_db}"
+            )
 
             # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
             await session_memory.add_turn(role="user", content=body.message)
@@ -390,7 +394,9 @@ async def chat_stream_sse(
             config = get_config()
             use_db = config.memory.backend == "db"
 
-            logger.info(f"[chat_stream] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}")
+            logger.info(
+                f"[chat_stream] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}"
+            )
 
             session_memory = None
             memory_context = {}
@@ -401,7 +407,9 @@ async def chat_stream_sse(
                     user_id=user_id,
                     use_db=use_db,
                 )
-                logger.info(f"[chat_stream] ConversationMemory created: session={session_id[:8]}, use_db={use_db}, chat_type={body.chat_type}")
+                logger.info(
+                    f"[chat_stream] ConversationMemory created: session={session_id[:8]}, use_db={use_db}, chat_type={body.chat_type}"
+                )
                 await session_memory.add_turn(role="user", content=body.message)
                 memory_context = session_memory.get_context_for_llm()
 
@@ -748,16 +756,20 @@ async def get_user_sessions(
         # 응답 형식 변환
         sessions = []
         for conv in conversations:
-            sessions.append({
-                "id": str(conv["session_id"]),
-                "type": conv["chat_type"],
-                "title": f"{conv['chat_type']} 상담",  # TODO: 첫 메시지에서 제목 생성
-                "createdAt": conv["created_at"].isoformat(),
-                "lastMessageAt": conv["updated_at"].isoformat(),
-                "turnCount": conv["turn_count"],
-            })
+            sessions.append(
+                {
+                    "id": str(conv["session_id"]),
+                    "type": conv["chat_type"],
+                    "title": f"{conv['chat_type']} 상담",  # TODO: 첫 메시지에서 제목 생성
+                    "createdAt": conv["created_at"].isoformat(),
+                    "lastMessageAt": conv["updated_at"].isoformat(),
+                    "turnCount": conv["turn_count"],
+                }
+            )
 
-        logger.info(f"[get_user_sessions] user={current_user.user_id}, count={len(sessions)}")
+        logger.info(
+            f"[get_user_sessions] user={current_user.user_id}, count={len(sessions)}"
+        )
         return {"sessions": sessions}
 
     except Exception as e:
@@ -808,21 +820,24 @@ async def get_session_history(
 
         # 대화 내역 조회
         history = await db.get_conversation_history(
-            conversation_id=conv["conversation_id"],
-            limit=limit
+            conversation_id=conv["conversation_id"], limit=limit
         )
 
         # 응답 형식 변환
         messages = []
         for turn in history:
-            messages.append({
-                "id": turn["turn_number"],
-                "type": "user" if turn["role"] == "user" else "ai",
-                "content": turn["content"],
-                "timestamp": turn["created_at"].isoformat(),
-            })
+            messages.append(
+                {
+                    "id": turn["turn_number"],
+                    "type": "user" if turn["role"] == "user" else "ai",
+                    "content": turn["content"],
+                    "timestamp": turn["created_at"].isoformat(),
+                }
+            )
 
-        logger.info(f"[get_session_history] session={session_id[:8]}, messages={len(messages)}")
+        logger.info(
+            f"[get_session_history] session={session_id[:8]}, messages={len(messages)}"
+        )
         return {"messages": messages}
 
     except HTTPException:
@@ -874,7 +889,9 @@ async def delete_session(
         # 세션 비활성화
         await db.deactivate_conversation(conv["conversation_id"])
 
-        logger.info(f"[delete_session] session={session_id[:8]}, user={current_user.user_id}")
+        logger.info(
+            f"[delete_session] session={session_id[:8]}, user={current_user.user_id}"
+        )
         return {"success": True, "message": "세션이 삭제되었습니다"}
 
     except HTTPException:

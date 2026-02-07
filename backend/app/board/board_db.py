@@ -61,11 +61,14 @@ class BoardDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT id, category_key, category_name, display_name, sort_order
                         FROM community_category
                         WHERE category_key = %s
-                    """, (category_key,))
+                    """,
+                        (category_key,),
+                    )
                     row = cur.fetchone()
                     return dict(row) if row else None
             finally:
@@ -94,12 +97,22 @@ class BoardDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO community_post
                             (user_id, category_id, sub_category, title, content, preview)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         RETURNING id, created_at
-                    """, (user_id, str(category_id), sub_category, title, content, preview))
+                    """,
+                        (
+                            user_id,
+                            str(category_id),
+                            sub_category,
+                            title,
+                            content,
+                            preview,
+                        ),
+                    )
                     row = cur.fetchone()
                     conn.commit()
                     return dict(row)
@@ -112,14 +125,17 @@ class BoardDB:
 
         return await asyncio.to_thread(_query)
 
-    async def get_post(self, post_id: UUID, current_user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_post(
+        self, post_id: UUID, current_user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """게시글 상세를 조회합니다."""
 
         def _query():
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             p.id,
                             p.user_id AS author_id,
@@ -148,7 +164,9 @@ class BoardDB:
                         JOIN community_category c ON p.category_id = c.id
                         LEFT JOIN users u ON p.user_id = u.user_id
                         WHERE p.id = %s AND p.status = 'normal'
-                    """, (current_user_id, current_user_id, str(post_id)))
+                    """,
+                        (current_user_id, current_user_id, str(post_id)),
+                    )
                     row = cur.fetchone()
                     return dict(row) if row else None
             finally:
@@ -192,14 +210,17 @@ class BoardDB:
                             where_clauses.append("p.content ILIKE %s")
                             params.append(f"%{search_query}%")
                         elif search_type == "title_content":
-                            where_clauses.append("(p.title ILIKE %s OR p.content ILIKE %s)")
+                            where_clauses.append(
+                                "(p.title ILIKE %s OR p.content ILIKE %s)"
+                            )
                             params.append(f"%{search_query}%")
                             params.append(f"%{search_query}%")
 
                     where_sql = " AND ".join(where_clauses)
 
                     # 게시글 목록 조회
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             p.id,
                             p.user_id AS author_id,
@@ -221,17 +242,22 @@ class BoardDB:
                         WHERE {where_sql}
                         ORDER BY p.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, params + [limit, offset])
+                    """,
+                        params + [limit, offset],
+                    )
                     posts = [dict(row) for row in cur.fetchall()]
 
                     # 총 개수 조회
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT COUNT(*)
                         FROM community_post p
                         JOIN community_category c ON p.category_id = c.id
                         LEFT JOIN users u ON p.user_id = u.user_id
                         WHERE {where_sql}
-                    """, params)
+                    """,
+                        params,
+                    )
                     total = cur.fetchone()["count"]
 
                     total_pages = math.ceil(total / limit) if total > 0 else 0
@@ -265,10 +291,13 @@ class BoardDB:
             try:
                 with conn.cursor() as cur:
                     # 작성자 확인
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT user_id FROM community_post
                         WHERE id = %s AND status = 'normal'
-                    """, (str(post_id),))
+                    """,
+                        (str(post_id),),
+                    )
                     row = cur.fetchone()
                     if not row or row[0] != user_id:
                         return False
@@ -294,11 +323,14 @@ class BoardDB:
 
                     params.append(str(post_id))
 
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         UPDATE community_post
-                        SET {', '.join(updates)}
+                        SET {", ".join(updates)}
                         WHERE id = %s
-                    """, params)
+                    """,
+                        params,
+                    )
                     conn.commit()
                     return True
             except Exception as e:
@@ -318,11 +350,14 @@ class BoardDB:
             try:
                 with conn.cursor() as cur:
                     # 작성자 확인 후 삭제
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE community_post
                         SET status = 'deleted', deleted_at = NOW()
                         WHERE id = %s AND user_id = %s AND status = 'normal'
-                    """, (str(post_id), user_id))
+                    """,
+                        (str(post_id), user_id),
+                    )
                     affected = cur.rowcount
                     conn.commit()
                     return affected > 0
@@ -342,11 +377,14 @@ class BoardDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE community_post
                         SET view_count = view_count + 1
                         WHERE id = %s
-                    """, (str(post_id),))
+                    """,
+                        (str(post_id),),
+                    )
                     conn.commit()
             except Exception as e:
                 conn.rollback()
@@ -375,22 +413,33 @@ class BoardDB:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # 대댓글인 경우, 부모 댓글이 1단 댓글인지 확인
                     if parent_comment_id:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT parent_comment_id FROM community_comment
                             WHERE id = %s AND status = 'normal'
-                        """, (str(parent_comment_id),))
+                        """,
+                            (str(parent_comment_id),),
+                        )
                         parent = cur.fetchone()
                         if not parent:
                             raise ValueError("부모 댓글을 찾을 수 없습니다.")
                         if parent["parent_comment_id"] is not None:
                             raise ValueError("대댓글의 대댓글은 작성할 수 없습니다.")
 
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO community_comment
                             (post_id, user_id, parent_comment_id, content)
                         VALUES (%s, %s, %s, %s)
                         RETURNING id, created_at
-                    """, (str(post_id), user_id, str(parent_comment_id) if parent_comment_id else None, content))
+                    """,
+                        (
+                            str(post_id),
+                            user_id,
+                            str(parent_comment_id) if parent_comment_id else None,
+                            content,
+                        ),
+                    )
                     row = cur.fetchone()
                     conn.commit()
                     return dict(row)
@@ -415,7 +464,8 @@ class BoardDB:
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # 1단 댓글 조회
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             c.id,
                             c.user_id AS author_id,
@@ -436,12 +486,15 @@ class BoardDB:
                         LEFT JOIN users u ON c.user_id = u.user_id
                         WHERE c.post_id = %s AND c.parent_comment_id IS NULL AND c.status = 'normal'
                         ORDER BY c.created_at ASC
-                    """, (current_user_id, current_user_id, str(post_id)))
+                    """,
+                        (current_user_id, current_user_id, str(post_id)),
+                    )
                     comments = [dict(row) for row in cur.fetchall()]
 
                     # 각 댓글의 대댓글 조회
                     for comment in comments:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT
                                 r.id,
                                 r.user_id AS author_id,
@@ -462,7 +515,9 @@ class BoardDB:
                             LEFT JOIN users u ON r.user_id = u.user_id
                             WHERE r.parent_comment_id = %s AND r.status = 'normal'
                             ORDER BY r.created_at ASC
-                        """, (current_user_id, current_user_id, str(comment["id"])))
+                        """,
+                            (current_user_id, current_user_id, str(comment["id"])),
+                        )
                         comment["replies"] = [dict(row) for row in cur.fetchall()]
 
                     return comments
@@ -471,18 +526,23 @@ class BoardDB:
 
         return await asyncio.to_thread(_query)
 
-    async def update_comment(self, comment_id: UUID, user_id: str, content: str) -> bool:
+    async def update_comment(
+        self, comment_id: UUID, user_id: str, content: str
+    ) -> bool:
         """댓글을 수정합니다."""
 
         def _query():
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE community_comment
                         SET content = %s, edited_at = NOW()
                         WHERE id = %s AND user_id = %s AND status = 'normal'
-                    """, (content, str(comment_id), user_id))
+                    """,
+                        (content, str(comment_id), user_id),
+                    )
                     affected = cur.rowcount
                     conn.commit()
                     return affected > 0
@@ -502,11 +562,14 @@ class BoardDB:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE community_comment
                         SET status = 'deleted', deleted_at = NOW()
                         WHERE id = %s AND user_id = %s AND status = 'normal'
-                    """, (str(comment_id), user_id))
+                    """,
+                        (str(comment_id), user_id),
+                    )
                     affected = cur.rowcount
                     conn.commit()
                     return affected > 0
@@ -531,31 +594,43 @@ class BoardDB:
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # 이미 좋아요했는지 확인
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT id FROM community_post_like
                         WHERE post_id = %s AND user_id = %s
-                    """, (str(post_id), user_id))
+                    """,
+                        (str(post_id), user_id),
+                    )
                     existing = cur.fetchone()
 
                     if existing:
                         # 좋아요 취소
-                        cur.execute("""
+                        cur.execute(
+                            """
                             DELETE FROM community_post_like
                             WHERE post_id = %s AND user_id = %s
-                        """, (str(post_id), user_id))
+                        """,
+                            (str(post_id), user_id),
+                        )
                         liked = False
                     else:
                         # 좋아요 추가
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO community_post_like (post_id, user_id)
                             VALUES (%s, %s)
-                        """, (str(post_id), user_id))
+                        """,
+                            (str(post_id), user_id),
+                        )
                         liked = True
 
                     # 현재 좋아요 수 조회
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT like_count FROM community_post WHERE id = %s
-                    """, (str(post_id),))
+                    """,
+                        (str(post_id),),
+                    )
                     like_count = cur.fetchone()["like_count"]
 
                     conn.commit()
@@ -569,7 +644,9 @@ class BoardDB:
 
         return await asyncio.to_thread(_query)
 
-    async def toggle_comment_like(self, comment_id: UUID, user_id: str) -> Dict[str, Any]:
+    async def toggle_comment_like(
+        self, comment_id: UUID, user_id: str
+    ) -> Dict[str, Any]:
         """댓글 좋아요를 토글합니다."""
 
         def _query():
@@ -577,31 +654,43 @@ class BoardDB:
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # 이미 좋아요했는지 확인
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT id FROM community_comment_like
                         WHERE comment_id = %s AND user_id = %s
-                    """, (str(comment_id), user_id))
+                    """,
+                        (str(comment_id), user_id),
+                    )
                     existing = cur.fetchone()
 
                     if existing:
                         # 좋아요 취소
-                        cur.execute("""
+                        cur.execute(
+                            """
                             DELETE FROM community_comment_like
                             WHERE comment_id = %s AND user_id = %s
-                        """, (str(comment_id), user_id))
+                        """,
+                            (str(comment_id), user_id),
+                        )
                         liked = False
                     else:
                         # 좋아요 추가
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO community_comment_like (comment_id, user_id)
                             VALUES (%s, %s)
-                        """, (str(comment_id), user_id))
+                        """,
+                            (str(comment_id), user_id),
+                        )
                         liked = True
 
                     # 현재 좋아요 수 조회
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT like_count FROM community_comment WHERE id = %s
-                    """, (str(comment_id),))
+                    """,
+                        (str(comment_id),),
+                    )
                     like_count = cur.fetchone()["like_count"]
 
                     conn.commit()
@@ -632,12 +721,15 @@ class BoardDB:
             conn = self._get_connection()
             try:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO community_report
                             (reporter_id, target_type, target_id, reason)
                         VALUES (%s, %s, %s, %s)
                         RETURNING id, created_at
-                    """, (reporter_id, target_type, str(target_id), reason))
+                    """,
+                        (reporter_id, target_type, str(target_id), reason),
+                    )
                     row = cur.fetchone()
                     conn.commit()
                     return dict(row)
@@ -666,7 +758,8 @@ class BoardDB:
                     offset = (page - 1) * limit
 
                     # 게시글 목록
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             p.id,
                             c.category_key,
@@ -681,14 +774,19 @@ class BoardDB:
                         WHERE p.user_id = %s AND p.status = 'normal'
                         ORDER BY p.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, (user_id, limit, offset))
+                    """,
+                        (user_id, limit, offset),
+                    )
                     posts = [dict(row) for row in cur.fetchall()]
 
                     # 총 개수
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT COUNT(*) FROM community_post
                         WHERE user_id = %s AND status = 'normal'
-                    """, (user_id,))
+                    """,
+                        (user_id,),
+                    )
                     total = cur.fetchone()["count"]
 
                     return {
@@ -713,7 +811,8 @@ class BoardDB:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     offset = (page - 1) * limit
 
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT DISTINCT ON (p.id)
                             p.id,
                             cat.category_key,
@@ -732,15 +831,20 @@ class BoardDB:
                         WHERE p.status = 'normal'
                         ORDER BY p.id, c.created_at DESC
                         LIMIT %s OFFSET %s
-                    """, (user_id, limit, offset))
+                    """,
+                        (user_id, limit, offset),
+                    )
                     posts = [dict(row) for row in cur.fetchall()]
 
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT COUNT(DISTINCT p.id)
                         FROM community_post p
                         INNER JOIN community_comment c ON p.id = c.post_id
                         WHERE c.user_id = %s AND p.status = 'normal' AND c.status = 'normal'
-                    """, (user_id,))
+                    """,
+                        (user_id,),
+                    )
                     total = cur.fetchone()["count"]
 
                     return {

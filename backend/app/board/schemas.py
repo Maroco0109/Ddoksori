@@ -16,8 +16,10 @@ from pydantic import BaseModel, Field
 # Enums
 # ============================================================
 
+
 class PostCategory(str, Enum):
     """게시글 카테고리"""
+
     CASE_SHARING = "case-sharing"
     QNA = "qna"
     TIPS = "tips"
@@ -25,12 +27,14 @@ class PostCategory(str, Enum):
 
 class SubCategory(str, Enum):
     """분쟁해결사례 서브 카테고리"""
+
     PRE_MEDIATION = "pre-mediation"  # 조정 이전 단계에서 해결
     MEDIATION = "mediation"  # 조정을 통한 해결
 
 
 class ContentStatus(str, Enum):
     """게시글/댓글 상태"""
+
     NORMAL = "normal"
     HIDDEN = "hidden"
     DELETED = "deleted"
@@ -38,6 +42,7 @@ class ContentStatus(str, Enum):
 
 class ReportTargetType(str, Enum):
     """신고 대상 유형"""
+
     POST = "post"
     COMMENT = "comment"
 
@@ -46,8 +51,10 @@ class ReportTargetType(str, Enum):
 # Category Schemas
 # ============================================================
 
+
 class CategoryResponse(BaseModel):
     """카테고리 응답"""
+
     id: UUID
     category_key: str
     category_name: str
@@ -59,8 +66,10 @@ class CategoryResponse(BaseModel):
 # Post Schemas
 # ============================================================
 
+
 class PostCreate(BaseModel):
     """게시글 작성 요청"""
+
     category: PostCategory
     sub_category: Optional[SubCategory] = None
     title: str = Field(..., min_length=1, max_length=100)
@@ -69,6 +78,7 @@ class PostCreate(BaseModel):
 
 class PostUpdate(BaseModel):
     """게시글 수정 요청"""
+
     category: Optional[PostCategory] = None
     sub_category: Optional[SubCategory] = None
     title: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -77,6 +87,7 @@ class PostUpdate(BaseModel):
 
 class PostListItem(BaseModel):
     """게시글 목록 아이템"""
+
     id: UUID
     category: str  # display_name
     category_key: str
@@ -95,6 +106,7 @@ class PostListItem(BaseModel):
 
 class PostDetail(BaseModel):
     """게시글 상세"""
+
     id: UUID
     category: str  # display_name
     category_key: str
@@ -115,6 +127,7 @@ class PostDetail(BaseModel):
 
 class PostListResponse(BaseModel):
     """게시글 목록 응답"""
+
     posts: List[PostListItem]
     total: int
     page: int
@@ -127,18 +140,22 @@ class PostListResponse(BaseModel):
 # Comment Schemas
 # ============================================================
 
+
 class CommentCreate(BaseModel):
     """댓글 작성 요청"""
+
     content: str = Field(..., min_length=1, max_length=1000)
 
 
 class CommentUpdate(BaseModel):
     """댓글 수정 요청"""
+
     content: str = Field(..., min_length=1, max_length=1000)
 
 
 class ReplyResponse(BaseModel):
     """대댓글 응답"""
+
     id: UUID
     content: str
     author_id: str
@@ -152,6 +169,7 @@ class ReplyResponse(BaseModel):
 
 class CommentResponse(BaseModel):
     """댓글 응답"""
+
     id: UUID
     content: str
     author_id: str
@@ -166,6 +184,7 @@ class CommentResponse(BaseModel):
 
 class CommentListResponse(BaseModel):
     """댓글 목록 응답"""
+
     comments: List[CommentResponse]
     total: int
 
@@ -174,8 +193,10 @@ class CommentListResponse(BaseModel):
 # Like Schemas
 # ============================================================
 
+
 class LikeResponse(BaseModel):
     """좋아요 토글 응답"""
+
     liked: bool
     like_count: int
 
@@ -184,13 +205,16 @@ class LikeResponse(BaseModel):
 # Report Schemas
 # ============================================================
 
+
 class ReportCreate(BaseModel):
     """신고 요청"""
+
     reason: str = Field(..., min_length=1, max_length=1000)
 
 
 class ReportResponse(BaseModel):
     """신고 응답"""
+
     id: UUID
     message: str = "신고가 접수되었습니다."
 
@@ -199,8 +223,10 @@ class ReportResponse(BaseModel):
 # MyPage Schemas
 # ============================================================
 
+
 class MyPostItem(BaseModel):
     """마이페이지 내 게시글 아이템"""
+
     id: UUID
     category: str  # display_name
     category_key: str
@@ -213,6 +239,7 @@ class MyPostItem(BaseModel):
 
 class MyCommentedPostItem(BaseModel):
     """마이페이지 내가 댓글 단 게시글 아이템"""
+
     id: UUID
     category: str  # display_name
     category_key: str
@@ -227,6 +254,7 @@ class MyCommentedPostItem(BaseModel):
 
 class MyPostsResponse(BaseModel):
     """마이페이지 내 게시글 목록 응답"""
+
     posts: List[MyPostItem]
     total: int
     page: int
@@ -235,6 +263,7 @@ class MyPostsResponse(BaseModel):
 
 class MyCommentedPostsResponse(BaseModel):
     """마이페이지 내가 댓글 단 게시글 목록 응답"""
+
     posts: List[MyCommentedPostItem]
     total: int
     page: int

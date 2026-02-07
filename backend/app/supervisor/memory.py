@@ -35,7 +35,9 @@ class MemoryPolicy:
 
 # 채팅 타입별 메모리 정책
 MEMORY_POLICIES: Dict[str, MemoryPolicy] = {
-    "general": MemoryPolicy(max_turns=10, compact_enabled=False, sliding_window=5),  # ← 멀티 디바이스 동기화를 위해 메모리 활성화
+    "general": MemoryPolicy(
+        max_turns=10, compact_enabled=False, sliding_window=5
+    ),  # ← 멀티 디바이스 동기화를 위해 메모리 활성화
     "dispute": MemoryPolicy(
         max_turns=30,  # 15 → 30 (DB 기반 메모리로 증가)
         compact_enabled=True,
