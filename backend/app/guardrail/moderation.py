@@ -118,12 +118,13 @@ def _check_moderation(text: str, is_input: bool = True) -> ModerationResult:
 
     except Exception as e:
         logger.error(f"[Moderation] API error: {e}")
+        # SEC-17: fail-closed - API 오류 시 안전하게 차단
         return ModerationResult(
-            flagged=False,
+            flagged=True,
             categories={},
             category_scores={},
-            blocked=False,
-            fallback_message=None,
+            blocked=True,
+            fallback_message="보안 검증 중 일시적 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
         )
 
 

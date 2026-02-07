@@ -52,11 +52,15 @@ from app.api import (
     users_router,
 )
 
-# FastAPI 앱 생성
+# FastAPI 앱 생성 (SEC-20: 프로덕션에서 Swagger 비활성화)
+_is_debug = os.getenv("DEBUG", "false").lower() == "true"
 app = FastAPI(
     title="똑소리 API",
     version="0.4.2",  # Refactored with modular routers
     description="한국 소비자 분쟁 조정 RAG 챗봇 API",
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
 )
 
 # Prometheus 모니터링
@@ -71,8 +75,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
 
 # Rate Limiting 설정 (SEC-04)
