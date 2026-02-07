@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useChatStore } from '@/features/chat/chat.store';
+import { useAuthStore } from '@/features/auth/auth.store';
 import type {
   ChatAPIRequest,
   SSEEvent,
@@ -118,13 +119,23 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
         onboarding: onboarding,
       };
 
+      // Get JWT token from auth store for user identification
+      const token = useAuthStore.getState().token;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      };
+
+      // Include Authorization header if user is logged in
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('[useStreamingChat] Including Authorization header for logged-in user');
+      }
+
       try {
         const response = await fetch(`${API_BASE_URL}/chat/stream`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-          },
+          headers,
           body: JSON.stringify(enhancedRequest),
           signal: abortController.signal,
         });

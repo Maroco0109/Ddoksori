@@ -6,17 +6,35 @@ import { useAdminStore } from '@/features/admin/admin.store';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-function getAuthHeaders(): Record<string, string> {
+function getAuthHeaders(endpoint?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  // Admin token takes priority for /api/admin endpoints
-  const adminToken = useAdminStore.getState().adminToken;
-  if (adminToken) {
-    headers['Authorization'] = `Bearer ${adminToken}`;
-    return headers;
+  // Admin token은 /api/admin 엔드포인트에만 사용
+  if (endpoint?.startsWith('/api/admin')) {
+    const adminToken = useAdminStore.getState().adminToken;
+    if (adminToken) {
+      headers['Authorization'] = `Bearer ${adminToken}`;
+      return headers;
+    }
   }
 
-  const userToken = useAuthStore.getState().token;
+  // 일반 사용자 토큰 사용
+  // Zustand store에서 먼저 시도
+  let userToken = useAuthStore.getState().token;
+
+  // Store에 토큰이 없으면 localStorage에서 직접 읽기 (persist hydration 전 대비)
+  if (!userToken) {
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        userToken = parsed?.state?.token || null;
+      }
+    } catch {
+      // JSON 파싱 실패 시 무시
+    }
+  }
+
   if (userToken) {
     headers['Authorization'] = `Bearer ${userToken}`;
   }
@@ -37,7 +55,7 @@ export const apiClient = {
 
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(endpoint),
     });
 
     if (!response.ok) {
@@ -50,7 +68,7 @@ export const apiClient = {
   post: async <T>(endpoint: string, data?: any): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
     });
 
@@ -64,7 +82,7 @@ export const apiClient = {
   put: async <T>(endpoint: string, data?: any): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
     });
 
@@ -78,7 +96,7 @@ export const apiClient = {
   delete: async <T>(endpoint: string): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(endpoint),
     });
 
     if (!response.ok) {

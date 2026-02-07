@@ -155,7 +155,7 @@ async def google_callback(
             "expires_in": auth_response.expires_in,
         }
         redirect_url = (
-            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+            f"{config.frontend_url}/auth/callback#{urlencode(redirect_params)}"
         )
 
         logger.info(f"[Auth] Google 콜백 성공: user_id={auth_response.user.user_id}")
@@ -234,7 +234,7 @@ async def naver_callback(
             "expires_in": auth_response.expires_in,
         }
         redirect_url = (
-            f"{config.frontend_url}/auth/callback?{urlencode(redirect_params)}"
+            f"{config.frontend_url}/auth/callback#{urlencode(redirect_params)}"
         )
 
         logger.info(f"[Auth] Naver 콜백 성공: user_id={auth_response.user.user_id}")

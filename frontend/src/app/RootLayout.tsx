@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Outlet, useLocation, ScrollRestoration } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/store';
@@ -13,7 +13,11 @@ export default function RootLayout() {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
 
   const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
+  const syncWithBackend = useChatStore((state) => state.syncWithBackend);
+
+  const lastSyncTime = useRef<number>(0);
 
   useEffect(() => {
     loadChatSessions(isLoggedIn);
@@ -23,6 +27,36 @@ export default function RootLayout() {
       return () => clearInterval(interval);
     }
   }, [location.pathname, isLoggedIn, loadChatSessions]);
+
+  // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
+  useEffect(() => {
+    if (!isLoggedIn || !token) return;
+
+    const handleVisibilityChange = async () => {
+      // 페이지가 다시 보이게 되었을 때
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        const timeSinceLastSync = now - lastSyncTime.current;
+
+        // 최소 30초 간격으로 동기화 (너무 자주 호출 방지)
+        if (timeSinceLastSync > 30000) {
+          console.log('[RootLayout] Page became visible, syncing with backend...');
+          try {
+            await syncWithBackend(token);
+            lastSyncTime.current = now;
+            console.log('[RootLayout] Sync complete');
+          } catch (error) {
+            console.error('[RootLayout] Sync failed:', error);
+          }
+        } else {
+          console.log(`[RootLayout] Skipping sync (last sync was ${Math.floor(timeSinceLastSync / 1000)}s ago)`);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isLoggedIn, token, syncWithBackend]);
 
   // 브라우저 자동 스크롤 복원 비활성화
   useEffect(() => {

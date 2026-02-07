@@ -17,7 +17,24 @@ export default defineConfig({
     // Production uses nginx proxy (infra/nginx.conf)
     // ========================================
     proxy: {
-      '/auth': {
+      // Note: /auth/callback은 프론트엔드 라우트이므로 프록시에서 제외
+      '/auth/google': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/auth/naver': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/auth/me': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/auth/verify': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/auth/delete-account': {
         target: 'http://localhost:8000',
         changeOrigin: true,
       },

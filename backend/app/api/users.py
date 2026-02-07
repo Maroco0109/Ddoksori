@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.user_db import UserDB
-from app.board.board_db import BoardDB
+from app.board.schemas import MyCommentedPostsResponse, MyPostsResponse
+from app.board.service import get_board_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -26,28 +27,26 @@ class UpdateProfileRequest(BaseModel):
     )
 
 
-@router.get("/me/posts")
+@router.get("/me/posts", response_model=MyPostsResponse)
 async def get_my_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
     """내가 작성한 게시글 목록을 조회합니다."""
-    board_db = BoardDB()
-    result = await board_db.get_user_posts(current_user.user_id, page, limit)
-    return result
+    service = get_board_service()
+    return await service.get_my_posts(current_user.user_id, page, limit)
 
 
-@router.get("/me/commented-posts")
+@router.get("/me/commented-posts", response_model=MyCommentedPostsResponse)
 async def get_my_commented_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
     """내가 댓글을 단 게시글 목록을 조회합니다."""
-    board_db = BoardDB()
-    result = await board_db.get_user_commented_posts(current_user.user_id, page, limit)
-    return result
+    service = get_board_service()
+    return await service.get_my_commented_posts(current_user.user_id, page, limit)
 
 
 @router.patch("/me/profile")

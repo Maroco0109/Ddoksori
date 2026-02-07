@@ -22,6 +22,7 @@ FastAPI APIRouter를 모아서 main.py에서 include할 수 있도록 제공합�
 
 from .admin import router as admin_router
 from .auth import router as auth_router
+from .board import router as board_router
 from .case import router as case_router
 from .chat import router as chat_router
 
@@ -58,6 +59,7 @@ __all__ = [
     "metrics_router",
     "auth_router",
     "admin_router",
+    "board_router",
     "users_router",
     # 모델
     "ChatRequest",

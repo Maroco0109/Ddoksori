@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
-import { CATEGORY_LABELS, DISPLAY_TO_CATEGORY_MAP, POST_CATEGORIES } from '@/shared/config/categories';
 import type { BoardPost, BoardPostForm } from '../board.types';
 
 interface EditPostProps {
   post: BoardPost;
+  content: string;
   onBack: () => void;
-  onSubmit: (postId: number, data: BoardPostForm) => void;
+  onSubmit: (postId: string, data: BoardPostForm) => void;
 }
 
 type EditPostFormState = {
@@ -17,37 +17,25 @@ type EditPostFormState = {
   content: string;
 };
 
-export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
-  const getCategoryIdFromDisplayName = (displayName) => {
-    // 서브 카테고리가 포함된 경우 분리
-    const parts = displayName.split(' - ');
-    const mainCategory = parts[0];
-
-    const categoryMap = {
-      '분쟁해결사례/공유': 'case-sharing',
-      '무엇이든/물어보세요': 'qna',
-      '소비자/꿀팁/노하우': 'tips'
-    };
-    return categoryMap[mainCategory] || 'case-sharing';
+export default function EditPost({ post, content, onBack, onSubmit }: EditPostProps) {
+  // category_key에서 카테고리 ID 추출
+  const getCategoryIdFromKey = (categoryKey: string) => {
+    const validCategories = ['case-sharing', 'qna', 'tips'];
+    return validCategories.includes(categoryKey) ? categoryKey : 'case-sharing';
   };
 
-  const getSubCategoryFromDisplayName = (displayName) => {
-    const parts = displayName.split(' - ');
-    if (parts.length > 1) {
-      const subCategoryMap = {
-        '조정 이전 단계에서 해결': 'before-mediation',
-        '조정을 통한 해결': 'through-mediation'
-      };
-      return subCategoryMap[parts[1]] || '';
-    }
-    return '';
+  // sub_category에서 서브 카테고리 ID 추출
+  const getSubCategoryFromValue = (subCategory: string | null | undefined) => {
+    if (!subCategory) return '';
+    const validSubCategories = ['pre-mediation', 'mediation'];
+    return validSubCategories.includes(subCategory) ? subCategory : '';
   };
 
-  const [formData, setFormData] = useState({
-    category: getCategoryIdFromDisplayName(post.category),
-    subCategory: getSubCategoryFromDisplayName(post.category),
+  const [formData, setFormData] = useState<EditPostFormState>({
+    category: getCategoryIdFromKey(post.category_key) as BoardPostForm['category'],
+    subCategory: getSubCategoryFromValue(post.sub_category),
     title: post.title,
-    content: post.preview // 실제로는 전체 내용이 들어가야 함
+    content: content
   });
 
   const categories = [
@@ -57,8 +45,8 @@ export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
   ];
 
   const subCategories = [
-    { id: 'before-mediation', name: '조정 이전 단계에서 해결' },
-    { id: 'through-mediation', name: '조정을 통한 해결' }
+    { id: 'pre-mediation', name: '조정 이전 단계에서 해결' },
+    { id: 'mediation', name: '조정을 통한 해결' }
   ];
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -74,13 +62,18 @@ export default function EditPost({ post, onBack, onSubmit }: EditPostProps) {
       return;
     }
 
-    onSubmit(post.id, formData);
+    onSubmit(post.id, {
+      category: formData.category,
+      subCategory: formData.subCategory || undefined,
+      title: formData.title,
+      content: formData.content,
+    });
   };
 
   const handleCategoryChange = (categoryId: string) => {
     setFormData({
       ...formData,
-      category: categoryId,
+      category: categoryId as BoardPostForm['category'],
       subCategory: '' // 카테고리 변경 시 서브 카테고리 초기화
     });
   };
