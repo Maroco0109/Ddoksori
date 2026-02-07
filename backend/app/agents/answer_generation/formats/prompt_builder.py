@@ -659,7 +659,9 @@ class PromptBuilder:
             for law in laws[:5]:
                 law_name = law.get("law_name", "법령")
                 full_path = law.get("full_path", "")
-                text = wrap_retrieved_context(law.get("text", law.get("content", "")), max_length=500)
+                text = wrap_retrieved_context(
+                    law.get("text", law.get("content", "")), max_length=500
+                )
                 similarity = law.get("similarity", 0)
                 lines.append(f"\n### {law_name} {full_path}")
                 lines.append(f"내용: {text}")
@@ -692,7 +694,9 @@ class PromptBuilder:
                     if category and item
                     else category or item or ""
                 )
-                unit_text = wrap_retrieved_context(crit.get("unit_text", crit.get("content", "")), max_length=500)
+                unit_text = wrap_retrieved_context(
+                    crit.get("unit_text", crit.get("content", "")), max_length=500
+                )
                 similarity = crit.get("similarity", 0)
 
                 lines.append(f"\n### [{source_label}] {path}")
