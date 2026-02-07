@@ -75,6 +75,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 보안 헤더 미들웨어 (SEC-07)
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Rate Limiting 설정 (SEC-04)
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 
@@ -122,6 +144,19 @@ async def startup_event():
         logger.info("[Startup] ConversationCleanupService 시작 완료")
     except Exception as e:
         logger.warning(f"[Startup] ConversationCleanupService 시작 실패: {e}")
+
+    # SEC-14: 기본 시크릿 사용 경고
+    from app.common.config import get_config
+
+    config = get_config()
+    if config.auth.jwt_secret_key == "dev_secret_key_change_in_production":
+        logger.warning(
+            "[Security] JWT_SECRET_KEY가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
+        )
+    if config.db.password == "postgres":
+        logger.warning(
+            "[Security] DB_PASSWORD가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
+        )
 
 
 @app.on_event("shutdown")
