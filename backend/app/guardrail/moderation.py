@@ -116,9 +116,19 @@ def _check_moderation(text: str, is_input: bool = True) -> ModerationResult:
             fallback_message=fallback_message,
         )
 
+    except ValueError as e:
+        # API 키 미설정 등 설정 오류 - fail-open (서비스 차단 방지)
+        logger.warning(f"[Moderation] Configuration error: {e}")
+        return ModerationResult(
+            flagged=False,
+            categories={},
+            category_scores={},
+            blocked=False,
+            fallback_message=None,
+        )
     except Exception as e:
         logger.error(f"[Moderation] API error: {e}")
-        # SEC-17: fail-closed - API 오류 시 안전하게 차단
+        # SEC-17: fail-closed - API 런타임 오류 시 안전하게 차단
         return ModerationResult(
             flagged=True,
             categories={},
