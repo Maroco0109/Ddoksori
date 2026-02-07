@@ -31,6 +31,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
+
+# PII 필터를 모든 로그 핸들러에 연결 (SEC-04)
+from app.common.logging.pii_redactor import PIIRedactingFilter
+
+for handler in logging.root.handlers:
+    handler.addFilter(PIIRedactingFilter())
+
 logger = logging.getLogger(__name__)
 
 # Langsmith 트레이싱 로그
