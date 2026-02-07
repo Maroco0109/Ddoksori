@@ -398,8 +398,12 @@ class HybridLegalReviewer:
             config = get_config()
             review_model = config.models.review_agent
 
-            # 출처 텍스트 포맷팅
+            # 출처 텍스트 포맷팅 (retrieved context 래핑)
+            from app.common.sanitization import wrap_retrieved_context
+
             sources_text = self._format_sources_for_prompt(sources)
+            if sources_text:
+                sources_text = wrap_retrieved_context(sources_text, max_length=3000)
 
             # 컨텍스트 주입 프롬프트 생성
             user_prompt = LLM_REVIEW_USER_PROMPT_TEMPLATE.format(

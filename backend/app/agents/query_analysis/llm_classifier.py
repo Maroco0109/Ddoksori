@@ -12,6 +12,8 @@ import json
 import logging
 from typing import Optional, Tuple
 
+from app.common.sanitization import wrap_user_input
+
 logger = logging.getLogger(__name__)
 
 # Few-shot examples for intent classification
@@ -175,7 +177,7 @@ async def llm_classify(
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"예시:\n{few_shot_text}\n\n질문: {query}\n응답:",
+                "content": f"예시:\n{few_shot_text}\n\n질문: {wrap_user_input(query)}\n응답:",
             },
         ]
 

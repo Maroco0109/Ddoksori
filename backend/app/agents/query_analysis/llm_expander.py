@@ -17,6 +17,7 @@ from typing import List, Optional
 from openai import AsyncOpenAI
 
 from ...common.config import get_config
+from ...common.sanitization import wrap_user_input
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,8 @@ async def expand_query_with_llm(
         client = AsyncOpenAI(api_key=config.llm.openai_api_key)
 
         user_prompt = QUERY_EXPANSION_USER_PROMPT.format(
-            query=query, keywords=", ".join(keywords) if keywords else "없음"
+            query=wrap_user_input(query),
+            keywords=", ".join(keywords) if keywords else "없음",
         )
 
         response = await asyncio.wait_for(
