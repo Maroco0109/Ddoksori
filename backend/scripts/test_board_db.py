@@ -124,12 +124,9 @@ def test_api_import():
     print("[4/4] API 모듈 import 테스트...")
 
     try:
-
         print("     [OK] board_router import 성공")
 
-
         print("     [OK] get_board_service import 성공")
-
 
         print("     [OK] BoardDB import 성공")
 
