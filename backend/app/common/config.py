@@ -452,6 +452,16 @@ class RedisConfig(BaseSettings):
     answer_cache_ttl_hours: int = Field(
         default=24, alias="ANSWER_CACHE_TTL_HOURS", description="답변 캐시 TTL (시간)"
     )
+    enable_embedding_cache: bool = Field(
+        default=False,
+        alias="ENABLE_EMBEDDING_CACHE",
+        description="임베딩 캐시 활성화 (동일 쿼리 재호출 방지)",
+    )
+    embedding_cache_ttl_days: int = Field(
+        default=7,
+        alias="EMBEDDING_CACHE_TTL_DAYS",
+        description="임베딩 캐시 TTL (일)",
+    )
 
 
 # ============================================================

@@ -338,18 +338,32 @@ class UnifiedRetriever:
         return [fused_results[cid] for cid, _ in ranked[:top_k]]
 
     def _create_embedding(self, query: str) -> List[float]:
-        """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim)"""
+        """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim), Redis 캐시 지원"""
+        model_name = "text-embedding-3-large"
+
+        # 캐시 조회
+        from app.common.cache import EmbeddingCache
+
+        cached = EmbeddingCache.get_embedding(query, model_name)
+        if cached is not None:
+            return cached
+
         if self._openai_client is None:
             from openai import OpenAI
 
             self._openai_client = OpenAI(api_key=self._openai_api_key)
 
         response = self._openai_client.embeddings.create(
-            model="text-embedding-3-large",
+            model=model_name,
             input=query,
             dimensions=1536,
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # 캐시 저장
+        EmbeddingCache.set_embedding(query, model_name, embedding)
+
+        return embedding
 
     def _execute_rrf_search(
         self,
