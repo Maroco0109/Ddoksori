@@ -6,13 +6,18 @@
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.admin.dependencies import get_current_admin
+from app.admin.models import Admin
 
 router = APIRouter(prefix="/metrics", tags=["Metrics"])
 
 
 @router.get("/agents")
-async def get_agent_metrics(agent_name: Optional[str] = None):
+async def get_agent_metrics(
+    agent_name: Optional[str] = None, admin: Admin = Depends(get_current_admin)
+):
     """
     에이전트 성능 메트릭스 조회
 
@@ -28,7 +33,7 @@ async def get_agent_metrics(agent_name: Optional[str] = None):
 
 
 @router.get("/agents/summary")
-async def get_agent_metrics_summary():
+async def get_agent_metrics_summary(admin: Admin = Depends(get_current_admin)):
     """
     전체 에이전트 성능 요약
 
@@ -41,7 +46,11 @@ async def get_agent_metrics_summary():
 
 
 @router.get("/agents/recent")
-async def get_recent_metrics(agent_name: Optional[str] = None, limit: int = 100):
+async def get_recent_metrics(
+    agent_name: Optional[str] = None,
+    limit: int = 100,
+    admin: Admin = Depends(get_current_admin),
+):
     """
     최근 메트릭 레코드 조회
 

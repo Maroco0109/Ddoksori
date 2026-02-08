@@ -523,7 +523,7 @@ class AuthConfig(BaseSettings):
         default="HS256", alias="JWT_ALGORITHM", description="JWT 알고리즘"
     )
     jwt_token_expire_days: int = Field(
-        default=30, alias="JWT_TOKEN_EXPIRE_DAYS", description="JWT 토큰 만료 기간 (일)"
+        default=7, alias="JWT_TOKEN_EXPIRE_DAYS", description="JWT 토큰 만료 기간 (일)"
     )
 
     # Google OAuth

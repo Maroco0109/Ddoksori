@@ -11,7 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.admin.admin_db import AdminDB
-from app.admin.dependencies import create_admin_token, get_current_admin, hash_password
+from app.admin.dependencies import (
+    create_admin_token,
+    get_current_admin,
+    verify_password,
+)
 from app.admin.models import Admin, AdminLoginRequest, AdminLoginResponse
 
 logger = logging.getLogger(__name__)
@@ -32,7 +36,7 @@ async def admin_login(request: AdminLoginRequest):
     if not admin_row:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if admin_row["password_hash"] != hash_password(request.password):
+    if not verify_password(request.password, admin_row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     admin = Admin(

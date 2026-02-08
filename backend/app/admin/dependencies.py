@@ -6,17 +6,31 @@ import logging
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from passlib.context import CryptContext
 
 from app.admin.models import Admin
 from app.common.config import get_config
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    """비밀번호를 SHA-256으로 해싱합니다."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """비밀번호를 bcrypt로 해싱합니다."""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """비밀번호를 검증합니다. bcrypt 해시와 레거시 SHA-256 모두 지원."""
+    try:
+        if pwd_context.verify(plain_password, hashed_password):
+            return True
+    except Exception:
+        pass
+    # 레거시 SHA-256 fallback (마이그레이션 기간)
+    sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+    return sha256_hash == hashed_password
 
 
 def create_admin_token(admin: Admin) -> str:
