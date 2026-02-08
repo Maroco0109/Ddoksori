@@ -68,8 +68,6 @@ export default function AuthCallback() {
     const handleCallback = async () => {
       // URL fragment에서 토큰 파라미터 추출
       const params = parseHashParams(window.location.hash);
-      console.log('[AuthCallback] URL hash:', window.location.hash);
-      console.log('[AuthCallback] Parsed params:', params);
 
       // 보안: URL에서 토큰 정보 즉시 제거
       if (window.location.hash) {
@@ -78,7 +76,6 @@ export default function AuthCallback() {
 
       // 에러 처리
       if (params.error) {
-        console.error('[AuthCallback] OAuth error:', params.error);
         setStatus('error');
         setErrorMessage(
           params.error === 'auth_failed'
@@ -90,17 +87,14 @@ export default function AuthCallback() {
 
       // 토큰 검증
       if (!params.access_token) {
-        console.error('[AuthCallback] No access token in URL');
         setStatus('error');
         setErrorMessage('인증 토큰을 받지 못했습니다.');
         return;
       }
 
-      console.log('[AuthCallback] Access token received, fetching user info...');
       try {
         // 사용자 정보 조회
         const userData = await fetchUserInfo(params.access_token);
-        console.log('[AuthCallback] User info fetched:', userData);
 
         // 사용자 객체 생성
         const user = {
@@ -112,18 +106,14 @@ export default function AuthCallback() {
         };
 
         // 로그인 상태 설정
-        console.log('[AuthCallback] Calling login()...');
         login(user, params.access_token);
 
         // 채팅 세션 로드
-        console.log('[AuthCallback] Loading chat sessions...');
         loadChatSessions(true);
 
         // 홈으로 리다이렉트
-        console.log('[AuthCallback] Redirecting to home...');
         navigate(ROUTES.HOME, { replace: true });
       } catch (error) {
-        console.error('[AuthCallback] 로그인 처리 실패:', error);
         setStatus('error');
         setErrorMessage(
           error instanceof Error ? error.message : '로그인 처리 중 오류가 발생했습니다.'
