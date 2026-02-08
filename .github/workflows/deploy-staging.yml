@@ -207,6 +207,20 @@ jobs:
             fi
             echo "OK: / endpoint"
 
+
+            # 5. OAuth Configuration Check (경고 - OAuth 로그인 검증)
+            echo "Checking OAuth configuration..."
+            OAUTH_OK=true
+            for VAR in GOOGLE_CLIENT_ID NAVER_CLIENT_ID; do
+              VAL=$(docker exec $BACKEND_CONTAINER printenv $VAR 2>/dev/null || echo "")
+              if [ -z "$VAL" ]; then
+                echo "WARNING: $VAR is empty - OAuth login will not work"
+                OAUTH_OK=false
+              fi
+            done
+            if [ "$OAUTH_OK" = "true" ]; then
+              echo "OK: OAuth client_id configured"
+            fi
             echo "=== Smoke Tests Completed ==="
 
       - name: External Health Check
