@@ -60,8 +60,8 @@ export default function OAuthCallback() {
           provider: userData.provider,
         };
 
-        // 로그인 처리
-        login(user, accessToken);
+        // 로그인 처리 (await로 claim API 완료 대기)
+        await login(user, accessToken);
 
         // 백엔드에서 채팅 세션 동기화 (멀티 디바이스 동기화)
         try {
