@@ -13,6 +13,7 @@ UnifiedRetriever - SQL search_hybrid_rrf() 기반 통합 검색
 
 import logging
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, cast
 
@@ -22,6 +23,139 @@ from psycopg2.extras import RealDictCursor
 from .retriever import SearchResult, _to_category_path
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# Phase 2-1: 동적 RRF k값 결정 함수
+# ============================================================
+def determine_rrf_k(query: str, query_analysis: Optional[Dict] = None) -> int:
+    """
+    쿼리 유형에 따른 RRF k값 동적 결정
+
+    - k값 낮음 → BM25(키워드) 가중치 ↑ (법령 직접 참조에 적합)
+    - k값 높음 → Vector(의미) 가중치 ↑ (일반 질문에 적합)
+
+    Args:
+        query: 사용자 쿼리
+        query_analysis: 쿼리 분석 결과 (mode, query_type 등)
+
+    Returns:
+        int: 40~80 범위의 k값
+    """
+    # 1. 법령 직접 참조 패턴 (BM25 우선 → k 낮춤)
+    law_patterns = [
+        r"제?\d+조",  # 제16조, 16조
+        r"법\s*제?\d+",  # 법 제16
+        r"시행령|시행규칙",
+        r"소비자기본법|전자상거래법|할부거래법|방문판매법",
+        r"별표\s*\d+",  # 별표 1
+    ]
+
+    for pattern in law_patterns:
+        if re.search(pattern, query):
+            logger.debug("[RRF-k] Law pattern matched: k=40")
+            return 40
+
+    # 2. query_analysis 기반 판단
+    if query_analysis:
+        mode = query_analysis.get("mode", "")
+        query_type = query_analysis.get("query_type", "")
+
+        if query_type == "law_direct":
+            logger.debug("[RRF-k] query_type=law_direct: k=40")
+            return 40
+        elif query_type == "criteria":
+            logger.debug("[RRF-k] query_type=criteria: k=50")
+            return 50
+        elif mode in ["case_search", "general"]:
+            logger.debug(f"[RRF-k] mode={mode}: k=80")
+            return 80
+
+    # 3. 기본값
+    logger.debug("[RRF-k] Default: k=60")
+    return 60
+
+
+# ============================================================
+# Phase 2-1: 동적 유사도 임계값 함수
+# ============================================================
+def adaptive_similarity_threshold(
+    results: List["SearchResult"],
+    min_results: int = 3,
+    min_threshold: float = 0.35,
+    max_threshold: float = 0.70,
+) -> float:
+    """
+    검색 결과 품질 기반 동적 유사도 임계값 결정
+
+    최고 유사도의 70%를 기준으로 하되, 최소 결과 수를 보장합니다.
+
+    Args:
+        results: 검색 결과 리스트
+        min_results: 최소 반환 결과 수
+        min_threshold: 최소 임계값
+        max_threshold: 최대 임계값
+
+    Returns:
+        float: 0.35 ~ 0.70 범위의 임계값
+    """
+    if not results:
+        return min_threshold
+
+    # 유사도 점수 추출
+    similarities = [r.similarity for r in results if r.similarity > 0]
+    if not similarities:
+        return min_threshold
+
+    max_sim = max(similarities)
+
+    # 최고 유사도의 70%를 기준
+    dynamic_threshold = max_sim * 0.70
+
+    # 최소 결과 수 보장
+    sorted_by_sim = sorted(results, key=lambda x: x.similarity, reverse=True)
+    if len(sorted_by_sim) >= min_results:
+        # min_results번째 결과의 유사도보다 약간 낮게 설정
+        nth_sim = sorted_by_sim[min_results - 1].similarity
+        if dynamic_threshold > nth_sim:
+            dynamic_threshold = nth_sim - 0.01
+
+    final_threshold = max(min(dynamic_threshold, max_threshold), min_threshold)
+    logger.debug(
+        f"[Threshold] max_sim={max_sim:.3f} → dynamic={dynamic_threshold:.3f} → final={final_threshold:.3f}"
+    )
+    return final_threshold
+
+
+def filter_by_threshold(
+    results: List["SearchResult"],
+    threshold: float,
+    min_results: int = 3,
+) -> List["SearchResult"]:
+    """
+    유사도 임계값 기반 필터링 (최소 결과 수 보장)
+
+    Args:
+        results: 검색 결과 리스트
+        threshold: 유사도 임계값
+        min_results: 최소 반환 결과 수
+
+    Returns:
+        필터링된 결과 리스트
+    """
+    if not results:
+        return results
+
+    filtered = [r for r in results if r.similarity >= threshold]
+
+    # 최소 결과 수 보장
+    if len(filtered) < min_results and len(results) >= min_results:
+        sorted_results = sorted(
+            results, key=lambda x: x.rrf_score or x.similarity, reverse=True
+        )
+        return sorted_results[:min_results]
+
+    return filtered if filtered else results[:min_results]
 
 
 class UnifiedRetriever:
@@ -45,12 +179,21 @@ class UnifiedRetriever:
         self._openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY", "")
 
     def connect(self):
-        """DB 연결"""
+        """DB 연결 + HNSW ef_search 최적화 설정"""
         self.conn = psycopg2.connect(
             **cast(Any, self.db_config),
             cursor_factory=RealDictCursor,
             connect_timeout=10,
         )
+        # Phase 2-2: HNSW 검색 품질 향상 (ef_search: 40 → 100)
+        # ef_search 값이 클수록 정확도 증가, 속도 감소
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("SET hnsw.ef_search = 100;")
+            self.conn.commit()
+            logger.debug("[UnifiedRetriever] SET hnsw.ef_search = 100")
+        except Exception as e:
+            logger.warning(f"[UnifiedRetriever] Failed to set ef_search: {e}")
 
     def close(self):
         """DB 연결 종료"""
@@ -68,6 +211,8 @@ class UnifiedRetriever:
         year_filter: Optional[int] = None,
         rrf_k: Optional[int] = None,
         hyde_query: Optional[str] = None,
+        query_analysis: Optional[Dict] = None,
+        apply_threshold: bool = True,
     ) -> List[SearchResult]:
         """
         통합 하이브리드 검색 (BM25 + Vector + RRF)
@@ -80,6 +225,8 @@ class UnifiedRetriever:
             document_type_filter: 문서 유형 필터 ('법률' | '시행령' | '행정규칙' | '별표')
             year_filter: 연도 필터
             hyde_query: HyDE 가상 답변 (제공 시 벡터 검색에 사용)
+            query_analysis: 쿼리 분석 결과 (동적 RRF k 결정에 사용)
+            apply_threshold: 유사도 임계값 필터링 적용 여부
 
         Returns:
             List[SearchResult]: RRF 점수 기준 정렬된 검색 결과
@@ -94,10 +241,14 @@ class UnifiedRetriever:
                 f"[UnifiedRetriever] HyDE embedding used (length={len(hyde_query)})"
             )
 
-        # rrf_k: config에서 가져오거나 인자로 전달된 값 사용
-        from ....common.config import get_config
+        # Phase 2-1: 동적 RRF k 결정
 
-        effective_rrf_k = rrf_k if rrf_k is not None else get_config().retrieval.rrf_k
+        if rrf_k is not None:
+            effective_rrf_k = rrf_k
+        else:
+            # 동적 RRF k 사용 (query_analysis 기반)
+            effective_rrf_k = determine_rrf_k(query, query_analysis)
+            logger.info(f"[UnifiedRetriever] Dynamic RRF k={effective_rrf_k}")
 
         # 2. SQL search_hybrid_rrf() 호출
         rows = self._execute_rrf_search(
@@ -114,11 +265,20 @@ class UnifiedRetriever:
         # 3. dict → SearchResult 변환
         results = self._to_search_results(rows)
 
+        # Phase 2-1: 동적 유사도 임계값 필터링
+        original_count = len(results)
+        if apply_threshold and results:
+            threshold = adaptive_similarity_threshold(results)
+            results = filter_by_threshold(results, threshold)
+            logger.info(
+                f"[UnifiedRetriever] Threshold filter: {original_count} → {len(results)} (threshold={threshold:.3f})"
+            )
+
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(
             f"[UnifiedRetriever] query={query[:50]!r} "
             f"dataset={dataset_filter} category={category_filter} "
-            f"doc_type={document_type_filter} "
+            f"doc_type={document_type_filter} rrf_k={effective_rrf_k} "
             f"results={len(results)} time={elapsed_ms:.1f}ms"
         )
 
@@ -178,18 +338,32 @@ class UnifiedRetriever:
         return [fused_results[cid] for cid, _ in ranked[:top_k]]
 
     def _create_embedding(self, query: str) -> List[float]:
-        """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim)"""
+        """OpenAI text-embedding-3-large 임베딩 생성 (1536-dim), Redis 캐시 지원"""
+        model_name = "text-embedding-3-large"
+
+        # 캐시 조회
+        from app.common.cache import EmbeddingCache
+
+        cached = EmbeddingCache.get_embedding(query, model_name)
+        if cached is not None:
+            return cached
+
         if self._openai_client is None:
             from openai import OpenAI
 
             self._openai_client = OpenAI(api_key=self._openai_api_key)
 
         response = self._openai_client.embeddings.create(
-            model="text-embedding-3-large",
+            model=model_name,
             input=query,
             dimensions=1536,
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # 캐시 저장
+        EmbeddingCache.set_embedding(query, model_name, embedding)
+
+        return embedding
 
     def _execute_rrf_search(
         self,
@@ -233,7 +407,7 @@ class UnifiedRetriever:
     def _to_search_results(self, rows: List[Dict]) -> List[SearchResult]:
         """RealDictCursor 결과 → SearchResult 변환"""
         results = []
-        for row in rows:
+        for i, row in enumerate(rows):
             metadata = row.get("metadata") or {}
             dataset_type = row.get("dataset_type", "")
             category = row.get("category")
@@ -290,6 +464,16 @@ class UnifiedRetriever:
                 metadata.get("decision_date") if isinstance(metadata, dict) else None
             )
 
+            # PDF source information
+            source_file = row.get("source_file")
+            printed_page = row.get("printed_page")
+
+            # DEBUG: printed_page 값 확인
+            if i < 3:  # 첫 3개만 로그
+                logger.info(
+                    f"[UnifiedRetriever] Row {i}: printed_page={printed_page}, source_file={source_file}, doc_title={title[:50] if title else 'None'}"
+                )
+
             results.append(
                 SearchResult(
                     chunk_id=row.get("chunk_id", ""),
@@ -309,6 +493,8 @@ class UnifiedRetriever:
                     url=url,
                     decision_date=decision_date,
                     collected_at=None,
+                    source_file=source_file,
+                    printed_page=printed_page,
                     metadata=metadata if isinstance(metadata, dict) else None,
                 )
             )
@@ -316,4 +502,9 @@ class UnifiedRetriever:
         return results
 
 
-__all__ = ["UnifiedRetriever"]
+__all__ = [
+    "UnifiedRetriever",
+    "determine_rrf_k",
+    "adaptive_similarity_threshold",
+    "filter_by_threshold",
+]

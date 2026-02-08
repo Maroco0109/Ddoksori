@@ -83,6 +83,7 @@ class QueryAnalysisCache(BaseRedisCache):
             "keywords": data.get("keywords", []),
             "retriever_types": data.get("retriever_types", []),
             "search_priority": data.get("search_priority"),
+            "product_scope_change": data.get("product_scope_change", {}),
             "_cached_at": time.time(),
         }
 

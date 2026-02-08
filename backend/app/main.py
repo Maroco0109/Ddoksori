@@ -31,6 +31,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
+
+# PII 필터를 모든 로그 핸들러에 연결 (SEC-04)
+from app.common.logging.pii_redactor import PIIRedactingFilter
+
+for handler in logging.root.handlers:
+    handler.addFilter(PIIRedactingFilter())
+
 logger = logging.getLogger(__name__)
 
 # Langsmith 트레이싱 로그
@@ -43,6 +50,7 @@ if os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true":
 from app.api import (
     admin_router,
     auth_router,
+    board_router,
     case_router,
     chat_router,
     health_router,
@@ -51,18 +59,21 @@ from app.api import (
     users_router,
 )
 
-# FastAPI 앱 생성
+# FastAPI 앱 생성 (SEC-20: 프로덕션에서 Swagger 비활성화)
+_is_debug = os.getenv("DEBUG", "false").lower() == "true"
 app = FastAPI(
     title="똑소리 API",
     version="0.4.2",  # Refactored with modular routers
     description="한국 소비자 분쟁 조정 RAG 챗봇 API",
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
 )
 
 # Prometheus 모니터링
 Instrumentator().instrument(app).expose(app)
 
 # CORS 설정
-# [SEC-07] 보안: 허용 메서드와 헤더를 명시적으로 제한
 cors_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -71,9 +82,31 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "DELETE"],  # DELETE는 회원탈퇴용
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
+
+# 보안 헤더 미들웨어 (SEC-07)
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Rate Limiting 설정 (SEC-04)
 from app.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
@@ -89,78 +122,29 @@ app.include_router(case_router)
 app.include_router(metrics_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(board_router)
 app.include_router(users_router)
 
 
 # 시작 로그
-def _validate_security_config():
-    """
-    [SEC-01, SEC-40] 프로덕션 보안 설정 검증
-
-    프로덕션 환경에서 필수 보안 환경변수가 올바르게 설정되었는지 확인합니다.
-    개발 환경에서는 경고만 출력합니다.
-
-    ENVIRONMENT 환경변수:
-        - 'production' 또는 'prod': 프로덕션 모드 (필수 검증 활성화)
-        - 그 외: 개발 모드 (경고만 출력)
-    """
-    env = os.getenv("ENVIRONMENT", "development").lower()
-    is_production = env in ("production", "prod")
-    warnings_list = []
-
-    # JWT_SECRET_KEY 검증
-    jwt_secret = os.getenv("JWT_SECRET_KEY", "")
-    default_jwt_secret = "dev_secret_key_change_in_production"
-    if not jwt_secret or jwt_secret == default_jwt_secret:
-        msg = (
-            "[SEC-01] JWT_SECRET_KEY가 기본값이거나 미설정됨 - 프로덕션에서 변경 필수!"
-        )
-        if is_production:
-            logger.critical(msg)
-            raise RuntimeError(msg)
-        else:
-            warnings_list.append(msg)
-
-    # REDIS_PASSWORD 검증 (Redis 사용 시, 프로덕션에서만 필수)
-    redis_host = os.getenv("REDIS_HOST", "")
-    redis_password = os.getenv("REDIS_PASSWORD", "")
-    if redis_host and not redis_password:
-        msg = "[SEC-40] REDIS_PASSWORD 미설정 - Redis 인증 없이 실행됨"
-        if is_production:
-            logger.critical(msg)
-            raise RuntimeError(msg)
-        else:
-            warnings_list.append(msg)
-
-    # OAuth 설정 검증 (프로덕션에서만 경고)
-    if is_production:
-        oauth_vars = [
-            "GOOGLE_CLIENT_ID",
-            "GOOGLE_CLIENT_SECRET",
-            "NAVER_CLIENT_ID",
-            "NAVER_CLIENT_SECRET",
-        ]
-        missing = [v for v in oauth_vars if not os.getenv(v)]
-        if missing:
-            logger.warning(
-                f"[Auth] OAuth 환경변수 미설정: {missing} - 소셜 로그인 불가"
-            )
-
-    # 개발 환경 경고 출력
-    for warning in warnings_list:
-        logger.warning(warning)
-
-
 @app.on_event("startup")
 async def startup_event():
     """애플리케이션 시작 시 로그 및 서비스 시작"""
-    # [SEC-01, SEC-40] 보안 설정 검증
-    _validate_security_config()
-
     retrieval_mode = os.getenv("RETRIEVAL_MODE", "dense")
+    memory_backend = os.getenv("CONVERSATION_MEMORY_BACKEND", "memory")
     logger.info("[Startup] 똑소리 API 서버 시작")
     logger.info(f"[Startup] Retrieval Mode: {retrieval_mode}")
+    logger.info(f"[Startup] Conversation Memory Backend: {memory_backend}")
     logger.info("[Startup] Embedding: OpenAI text-embedding-3-large")
+
+    # 템플릿 캐시 초기화 (개발 중 템플릿 변경 반영)
+    try:
+        from app.agents.answer_generation.template_loader import TemplateLoader
+
+        TemplateLoader.reload_templates()
+        logger.info("[Startup] Template cache cleared - will reload fresh templates")
+    except Exception as e:
+        logger.warning(f"[Startup] Template cache clear failed: {e}")
 
     # ConversationCleanupService 시작
     try:
@@ -171,6 +155,19 @@ async def startup_event():
         logger.info("[Startup] ConversationCleanupService 시작 완료")
     except Exception as e:
         logger.warning(f"[Startup] ConversationCleanupService 시작 실패: {e}")
+
+    # SEC-14: 기본 시크릿 사용 경고
+    from app.common.config import get_config
+
+    config = get_config()
+    if config.auth.jwt_secret_key == "dev_secret_key_change_in_production":
+        logger.warning(
+            "[Security] JWT_SECRET_KEY가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
+        )
+    if config.database.password == "postgres":
+        logger.warning(
+            "[Security] DB_PASSWORD가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
+        )
 
 
 @app.on_event("shutdown")

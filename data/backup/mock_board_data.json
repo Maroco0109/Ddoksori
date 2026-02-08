@@ -1,0 +1,425 @@
+{
+  "backup_date": "2026-02-06",
+  "source_files": [
+    "frontend/src/features/board/BoardPage.tsx",
+    "frontend/src/features/board/components/PostDetail.tsx",
+    "frontend/src/features/mypage/MyPage.tsx"
+  ],
+  "posts": [
+    {
+      "id": 1,
+      "category": "분쟁해결사례/공유",
+      "title": "당근마켓 사기 피해 복구 성공했습니다",
+      "author": "당근러버",
+      "date": "2025.12.20",
+      "views": 234,
+      "likes": 45,
+      "comments": 12,
+      "preview": "입금 후 연락 두절된 판매자를 신고하고 계좌 지급정지 신청했더니..."
+    },
+    {
+      "id": 2,
+      "category": "분쟁해결사례/공유",
+      "title": "쿠팡 배송 파손 제품, 이렇게 해결했어요",
+      "author": "happybuyer",
+      "date": "2025.12.19",
+      "views": 189,
+      "likes": 32,
+      "comments": 8,
+      "preview": "노트북이 파손되어 도착했는데 처음엔 환불 거부당했습니다. 하지만..."
+    },
+    {
+      "id": 3,
+      "category": "소비자/꿀팁/노하우",
+      "title": "소비자분쟁 조정 신청할 때 꼭 알아야 할 3가지",
+      "author": "소비자지킴이",
+      "date": "2025.12.18",
+      "views": 456,
+      "likes": 78,
+      "comments": 23,
+      "preview": "여러 번 조정 신청 경험이 있는 사람으로서 초보자들에게 팁을 드립니다..."
+    },
+    {
+      "id": 4,
+      "category": "무엇이든/물어보세요",
+      "title": "환불 절차가 궁금합니다",
+      "author": "newbie2025",
+      "date": "2025.12.17",
+      "views": 567,
+      "likes": 89,
+      "comments": 34,
+      "preview": "온라인 쇼핑몰에서 제품을 구매했는데 환불 절차가 복잡해서요..."
+    },
+    {
+      "id": 5,
+      "category": "분쟁해결사례/공유",
+      "title": "11번가 미배송 건 환불 성공 후기",
+      "author": "쇼핑왕123",
+      "date": "2025.12.16",
+      "views": 342,
+      "likes": 56,
+      "comments": 15,
+      "preview": "주문한 상품이 한 달째 배송되지 않아 소비자원에 신청했습니다..."
+    },
+    {
+      "id": 6,
+      "category": "소비자/꿀팁/노하우",
+      "title": "전자제품 AS 받을 때 꼭 챙겨야 할 것들",
+      "author": "Tech마스터",
+      "date": "2025.12.15",
+      "views": 523,
+      "likes": 92,
+      "comments": 28,
+      "preview": "보증기간 내 AS를 받을 때 놓치기 쉬운 포인트들을 정리해봤어요..."
+    },
+    {
+      "id": 7,
+      "category": "무엇이든/물어보세요",
+      "title": "중고거래 사기 당했는데 어떻게 해야 할까요?",
+      "author": "중고나라유저",
+      "date": "2025.12.14",
+      "views": 678,
+      "likes": 45,
+      "comments": 42,
+      "preview": "중고나라에서 거래했는데 계좌이체 후 연락이 안 됩니다..."
+    },
+    {
+      "id": 8,
+      "category": "분쟁해결사례/공유",
+      "title": "통신사 위약금 분쟁 해결 과정 공유",
+      "author": "통신전문가_K",
+      "date": "2025.12.13",
+      "views": 412,
+      "likes": 67,
+      "comments": 19,
+      "preview": "약정 위반이라며 과도한 위약금을 청구받았는데 조정 신청으로..."
+    },
+    {
+      "id": 9,
+      "category": "소비자/꿀팁/노하우",
+      "title": "온라인 쇼핑 환불 거부 대처법",
+      "author": "법률이야기",
+      "date": "2025.12.12",
+      "views": 789,
+      "likes": 134,
+      "comments": 51,
+      "preview": "단순 변심 환불을 거부당했을 때 알아야 할 전자상거래법..."
+    },
+    {
+      "id": 10,
+      "category": "무엇이든/물어보세요",
+      "title": "택배 분실 시 보상 받는 방법 알려주세요",
+      "author": "help_me!",
+      "date": "2025.12.11",
+      "views": 445,
+      "likes": 38,
+      "comments": 26,
+      "preview": "고가의 물건을 보냈는데 택배가 분실되었다고 합니다..."
+    },
+    {
+      "id": 11,
+      "category": "분쟁해결사례/공유",
+      "title": "호텔 예약 취소 수수료 환불 받았어요",
+      "author": "여행러버88",
+      "date": "2025.12.10",
+      "views": 356,
+      "likes": 48,
+      "comments": 14,
+      "preview": "천재지변으로 예약을 취소했는데 전액 수수료를 청구받아서..."
+    },
+    {
+      "id": 12,
+      "category": "소비자/꿀팁/노하우",
+      "title": "항공권 환불 최대한 받아내는 꿀팁",
+      "author": "SkyTraveler",
+      "date": "2025.12.09",
+      "views": 891,
+      "likes": 156,
+      "comments": 63,
+      "preview": "코로나 이후 항공권 환불 정책이 많이 바뀌었는데요..."
+    },
+    {
+      "id": 13,
+      "category": "무엇이든/물어보세요",
+      "title": "헬스장 환불 문제 어떻게 해결하나요?",
+      "author": "헬스초보자",
+      "date": "2025.12.08",
+      "views": 623,
+      "likes": 71,
+      "comments": 38,
+      "preview": "이사로 인해 헬스장 환불을 요청했는데 거부당했습니다..."
+    },
+    {
+      "id": 14,
+      "category": "분쟁해결사례/공유",
+      "title": "자동차 중고거래 하자 분쟁 해결 후기",
+      "author": "카매니저@",
+      "date": "2025.12.07",
+      "views": 534,
+      "likes": 82,
+      "comments": 29,
+      "preview": "중고차를 구입했는데 숨겨진 사고 이력이 있어서 분쟁조정을..."
+    },
+    {
+      "id": 15,
+      "category": "소비자/꿀팁/노하우",
+      "title": "신용카드 부정사용 피해 예방법",
+      "author": "금융지킴이",
+      "date": "2025.12.06",
+      "views": 712,
+      "likes": 98,
+      "comments": 44,
+      "preview": "카드 정보 유출로 피해를 입지 않으려면 이것만은 꼭..."
+    },
+    {
+      "id": 16,
+      "category": "무엇이든/물어보세요",
+      "title": "배달앱 환불 거부 정당한가요?",
+      "author": "배고픈사람",
+      "date": "2025.12.05",
+      "views": 489,
+      "likes": 54,
+      "comments": 32,
+      "preview": "음식이 상한 상태로 배달되었는데 환불이 안 된다고..."
+    },
+    {
+      "id": 17,
+      "category": "분쟁해결사례/공유",
+      "title": "가구 배송 파손 보상 받은 경험",
+      "author": "interior_lover",
+      "date": "2025.12.04",
+      "views": 398,
+      "likes": 61,
+      "comments": 18,
+      "preview": "침대 프레임이 파손되어 배송되었는데 업체에서 책임 회피를..."
+    },
+    {
+      "id": 18,
+      "category": "소비자/꿀팁/노하우",
+      "title": "인터넷 쇼핑 피해 예방 체크리스트",
+      "author": "쇼핑달인",
+      "date": "2025.12.03",
+      "views": 645,
+      "likes": 107,
+      "comments": 41,
+      "preview": "온라인 쇼핑 전 반드시 확인해야 할 사항들을 정리했습니다..."
+    },
+    {
+      "id": 19,
+      "category": "무엇이든/물어보세요",
+      "title": "렌탈 중도 해지 위약금이 너무 비싼데요",
+      "author": "정수기고민중",
+      "date": "2025.12.02",
+      "views": 556,
+      "likes": 69,
+      "comments": 35,
+      "preview": "정수기 렌탈을 중도 해지하려는데 위약금이 과도한 것 같아요..."
+    },
+    {
+      "id": 20,
+      "category": "분쟁해결사례/공유",
+      "title": "학원비 환불 100% 받아낸 방법",
+      "author": "학부모연대",
+      "date": "2025.12.01",
+      "views": 723,
+      "likes": 128,
+      "comments": 52,
+      "preview": "학원법을 근거로 환불 요청했더니 전액 환불 받았습니다..."
+    },
+    {
+      "id": 21,
+      "category": "소비자/꿀팁/노하우",
+      "title": "SNS 쇼핑몰 사기 피하는 법",
+      "author": "sns탐정",
+      "date": "2025.11.30",
+      "views": 834,
+      "likes": 142,
+      "comments": 58,
+      "preview": "인스타그램 쇼핑몰에서 사기 당하지 않으려면..."
+    },
+    {
+      "id": 22,
+      "category": "무엇이든/물어보세요",
+      "title": "의료비 과다청구 신고 어떻게 하나요?",
+      "author": "환자의권리",
+      "date": "2025.11.29",
+      "views": 467,
+      "likes": 53,
+      "comments": 27,
+      "preview": "병원에서 과도한 비급여 항목을 청구한 것 같은데..."
+    },
+    {
+      "id": 23,
+      "category": "분쟁해결사례/공유",
+      "title": "보험금 지급 거부 이의신청 성공",
+      "author": "보험전문가",
+      "date": "2025.11.28",
+      "views": 592,
+      "likes": 87,
+      "comments": 31,
+      "preview": "보험사에서 보험금 지급을 거부했지만 금융감독원에 신청해서..."
+    },
+    {
+      "id": 24,
+      "category": "소비자/꿀팁/노하우",
+      "title": "청약철회 기간과 행사 방법 정리",
+      "author": "Legal_info",
+      "date": "2025.11.27",
+      "views": 678,
+      "likes": 115,
+      "comments": 46,
+      "preview": "전자상거래법상 청약철회권에 대해 자세히 알아봅시다..."
+    },
+    {
+      "id": 25,
+      "category": "무엇이든/물어보세요",
+      "title": "중고차 보증 기간 내 고장, 어디에 요청하나요?",
+      "author": "자동차초보",
+      "date": "2025.11.26",
+      "views": 523,
+      "likes": 64,
+      "comments": 29,
+      "preview": "중고차 매매 업체의 보증 기간이 있는데 고장이 났어요..."
+    },
+    {
+      "id": 26,
+      "category": "분쟁해결사례/공유",
+      "title": "항공사 수하물 분실 보상 받은 후기",
+      "author": "WorldTraveler",
+      "date": "2025.11.25",
+      "views": 445,
+      "likes": 72,
+      "comments": 22,
+      "preview": "해외여행 중 수하물이 분실되어 항공사에 보상을 청구했습니다..."
+    },
+    {
+      "id": 27,
+      "category": "소비자/꿀팁/노하우",
+      "title": "명품 온라인 구매 시 주의사항",
+      "author": "럭셔리쇼퍼",
+      "date": "2025.11.24",
+      "views": 756,
+      "likes": 103,
+      "comments": 39,
+      "preview": "명품 온라인 쇼핑 시 가품을 피하는 방법과 확인 포인트..."
+    },
+    {
+      "id": 28,
+      "category": "무엇이든/물어보세요",
+      "title": "세탁소 옷 분실, 배상 받을 수 있나요?",
+      "author": "옷관리왕",
+      "date": "2025.11.23",
+      "views": 389,
+      "likes": 47,
+      "comments": 24,
+      "preview": "세탁소에 맡긴 고가의 옷이 분실되었다는데 배상은..."
+    },
+    {
+      "id": 29,
+      "category": "분쟁해결사례/공유",
+      "title": "부동산 중개 수수료 분쟁 해결",
+      "author": "집구하기",
+      "date": "2025.11.22",
+      "views": 612,
+      "likes": 94,
+      "comments": 33,
+      "preview": "부동산 중개인이 과도한 수수료를 요구해서 분쟁조정을..."
+    },
+    {
+      "id": 30,
+      "category": "소비자/꿀팁/노하우",
+      "title": "구독 서비스 자동결제 해지하는 방법",
+      "author": "OTT마스터",
+      "date": "2025.11.21",
+      "views": 891,
+      "likes": 167,
+      "comments": 54,
+      "preview": "OTT, 음악 스트리밍 등 구독 서비스 자동결제 관리 꿀팁..."
+    }
+  ],
+  "comments": [
+    {
+      "id": 1,
+      "author": "정보공유왕",
+      "content": "정말 유용한 정보네요! 저도 비슷한 경험이 있어서 공감됩니다.",
+      "date": "2025.12.21",
+      "likes": 5,
+      "likedBy": ["user1", "user2", "user3", "user4", "user5"],
+      "replies": [
+        {
+          "id": 1,
+          "author": "게시글작성자",
+          "content": "도움이 되셨다니 기쁩니다!",
+          "date": "2025.12.21",
+          "likes": 2,
+          "likedBy": ["user1", "user2"]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "author": "궁금한사람",
+      "content": "혹시 변호사 선임은 하셨나요?",
+      "date": "2025.12.21",
+      "likes": 3,
+      "likedBy": ["user1", "user3", "user5"],
+      "replies": []
+    }
+  ],
+  "mypage_mock": {
+    "myBoardPosts": [
+      {
+        "id": 4,
+        "category": "무엇이든/물어보세요",
+        "title": "환불 절차가 궁금합니다",
+        "date": "2025.12.17",
+        "views": 567,
+        "likes": 89,
+        "comments": 34
+      },
+      {
+        "id": 3,
+        "category": "소비자/꿀팁/노하우",
+        "title": "소비자분쟁 조정 신청할 때 꼭 알아야 할 3가지",
+        "date": "2025.12.18",
+        "views": 456,
+        "likes": 78,
+        "comments": 23
+      }
+    ],
+    "commentedPosts": [
+      {
+        "id": 1,
+        "category": "분쟁해결사례/공유",
+        "title": "당근마켓 사기 피해 복구 성공했습니다",
+        "date": "2025.12.20",
+        "views": 234,
+        "likes": 45,
+        "comments": 12,
+        "myCommentDate": "2025.12.21"
+      },
+      {
+        "id": 6,
+        "category": "소비자/꿀팁/노하우",
+        "title": "전자제품 AS 받을 때 꼭 챙겨야 할 것들",
+        "date": "2025.12.15",
+        "views": 523,
+        "likes": 92,
+        "comments": 19,
+        "myCommentDate": "2025.12.16"
+      }
+    ]
+  },
+  "metadata": {
+    "total_posts": 30,
+    "total_comments": 2,
+    "total_replies": 1,
+    "mypage_my_posts": 2,
+    "mypage_commented_posts": 2,
+    "categories": {
+      "case-sharing": "분쟁해결사례/공유",
+      "qna": "무엇이든/물어보세요",
+      "tips": "소비자/꿀팁/노하우"
+    }
+  }
+}

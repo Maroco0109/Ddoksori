@@ -37,10 +37,7 @@ class TestNoRetrievalFastPath:
             start = time.time()
 
             result = await graph.ainvoke(
-                {
-                    "messages": [{"role": "user", "content": "안녕"}],
-                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                },
+                {"messages": [{"role": "user", "content": "안녕"}]},
                 config={"configurable": {"thread_id": "test-greeting"}},
             )
 
@@ -80,10 +77,7 @@ class TestNoRetrievalFastPath:
                 start = time.time()
 
                 result = await graph.ainvoke(
-                    {
-                        "messages": [{"role": "user", "content": query}],
-                        "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                    },
+                    {"messages": [{"role": "user", "content": query}]},
                     config={"configurable": {"thread_id": f"test-system-{i}"}},
                 )
 
@@ -110,8 +104,7 @@ class TestNoRetrievalFastPath:
                 {
                     "messages": [
                         {"role": "user", "content": "소비자기본법 환불 조항은?"}
-                    ],
-                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
+                    ]
                 },
                 config={"configurable": {"thread_id": "test-need-rag"}},
             )
@@ -150,10 +143,7 @@ class TestNoRetrievalFastPath:
 
         async def run_test():
             return await graph.ainvoke(
-                {
-                    "messages": [{"role": "user", "content": query}],
-                    "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                },
+                {"messages": [{"role": "user", "content": query}]},
                 config={"configurable": {"thread_id": f"test-mode-{query[:5]}"}},
             )
 
@@ -183,10 +173,7 @@ class TestFastPathPerformance:
                 for i in range(3):  # 3회 반복 측정
                     start = time.time()
                     await graph.ainvoke(
-                        {
-                            "messages": [{"role": "user", "content": query}],
-                            "chat_type": "general",  # clarify 노드 우회를 위해 명시적 설정
-                        },
+                        {"messages": [{"role": "user", "content": query}]},
                         config={
                             "configurable": {"thread_id": f"test-perf-{query[:3]}-{i}"}
                         },

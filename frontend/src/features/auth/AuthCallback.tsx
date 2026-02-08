@@ -44,7 +44,7 @@ function parseHashParams(hash: string): TokenParams {
  * 토큰으로 사용자 정보를 가져옵니다.
  */
 async function fetchUserInfo(token: string) {
-  const response = await fetch('/api/auth/me', {
+  const response = await fetch('/auth/me', {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -114,7 +114,6 @@ export default function AuthCallback() {
         // 홈으로 리다이렉트
         navigate(ROUTES.HOME, { replace: true });
       } catch (error) {
-        console.error('[AuthCallback] 로그인 처리 실패:', error);
         setStatus('error');
         setErrorMessage(
           error instanceof Error ? error.message : '로그인 처리 중 오류가 발생했습니다.'

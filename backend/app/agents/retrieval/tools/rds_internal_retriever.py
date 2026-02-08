@@ -47,7 +47,16 @@ class RDSInternalRetriever:
             self.conn.close()
 
     def embed_query(self, query: str) -> List[float]:
-        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large)"""
+        """쿼리 임베딩 생성 (OpenAI text-embedding-3-large), Redis 캐시 지원"""
+        model_name = "text-embedding-3-large"
+
+        # 캐시 조회
+        from app.common.cache import EmbeddingCache
+
+        cached = EmbeddingCache.get_embedding(query, model_name)
+        if cached is not None:
+            return cached
+
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -60,11 +69,16 @@ class RDSInternalRetriever:
             self._openai_client = OpenAI()
 
         response = self._openai_client.embeddings.create(
-            model="text-embedding-3-large",
+            model=model_name,
             input=[query],
             dimensions=1536,
         )
-        return response.data[0].embedding
+        embedding = response.data[0].embedding
+
+        # 캐시 저장
+        EmbeddingCache.set_embedding(query, model_name, embedding)
+
+        return embedding
 
     def dense_search(
         self,
@@ -328,34 +342,124 @@ class RDSInternalRetriever:
         result_limit: int = 10,
         rrf_k: int = 60,
     ) -> Tuple[List[Dict], float]:
+        """
+        Hybrid RRF search with metadata support.
+
+        This version includes JSONB metadata search for better matching on
+        items stored in metadata fields (소분류, 중분류, dispute_type, etc.)
+        """
         if not self.conn:
             raise RuntimeError(
                 "Database connection is not initialized. Call connect() first."
             )
 
         query_embedding = self.embed_query(query_text)
+        sql_start = time.time()
+
+        # Build WHERE clause components
+        where_conditions = []
+        params = {
+            "query_text": query_text,
+            "query_pattern": f"%{query_text}%",  # For ILIKE matching
+            "query_embedding": query_embedding,
+            "rrf_k": rrf_k,
+            "result_limit": result_limit,
+        }
+
+        # Base filters
+        if filter_dataset:
+            where_conditions.append("vc.dataset_type = %(filter_dataset)s")
+            params["filter_dataset"] = filter_dataset
+
+        if filter_category:
+            where_conditions.append("vc.category = %(filter_category)s")
+            params["filter_category"] = filter_category
+
+        if filter_document_type:
+            where_conditions.append("vc.document_type = ANY(%(filter_document_type)s)")
+            params["filter_document_type"] = filter_document_type
+
+        if filter_chunk_type:
+            where_conditions.append("vc.chunk_type = ANY(%(filter_chunk_type)s)")
+            params["filter_chunk_type"] = filter_chunk_type
+
+        if filter_year_from:
+            where_conditions.append("vc.source_year >= %(filter_year_from)s")
+            params["filter_year_from"] = filter_year_from
+
+        if filter_year_to:
+            where_conditions.append("vc.source_year <= %(filter_year_to)s")
+            params["filter_year_to"] = filter_year_to
+
+        where_clause = " AND ".join(where_conditions) if where_conditions else "TRUE"
+
+        # Enhanced BM25 search with metadata fields
+        # Searches: text_tsv (main) + JSONB metadata fields (소분류, 중분류, 품목, dispute_type)
+        bm25_query = f"""
+            WITH bm25_results AS (
+                SELECT
+                    vc.chunk_id,
+                    ts_rank_cd('{{0.1, 0.2, 0.4, 0.6}}', vc.text_tsv, plainto_tsquery('simple', %(query_text)s))::FLOAT as score,
+                    ROW_NUMBER() OVER (ORDER BY ts_rank_cd('{{0.1, 0.2, 0.4, 0.6}}', vc.text_tsv, plainto_tsquery('simple', %(query_text)s)) DESC) as rank
+                FROM vector_chunks vc
+                WHERE
+                    (
+                        vc.text_tsv @@ plainto_tsquery('simple', %(query_text)s)
+                        OR (vc.metadata->>'소분류') ILIKE %(query_pattern)s
+                        OR (vc.metadata->>'중분류') ILIKE %(query_pattern)s
+                        OR (vc.metadata->>'품목') ILIKE %(query_pattern)s
+                        OR (vc.metadata->>'dispute_type') ILIKE %(query_pattern)s
+                        OR (vc.metadata->>'category_name') ILIKE %(query_pattern)s
+                        OR (vc.metadata->>'subcategory_name') ILIKE %(query_pattern)s
+                    )
+                    AND {where_clause}
+                ORDER BY score DESC
+                LIMIT 100
+            ),
+            vector_results AS (
+                SELECT
+                    vc.chunk_id,
+                    (1 - (vc.embedding <=> %(query_embedding)s::vector))::FLOAT as similarity,
+                    ROW_NUMBER() OVER (ORDER BY vc.embedding <=> %(query_embedding)s::vector) as rank
+                FROM vector_chunks vc
+                WHERE {where_clause}
+                ORDER BY vc.embedding <=> %(query_embedding)s::vector
+                LIMIT 100
+            ),
+            rrf_combined AS (
+                SELECT
+                    COALESCE(b.chunk_id, v.chunk_id) as chunk_id,
+                    (COALESCE(1.0 / (%(rrf_k)s + b.rank), 0) +
+                     COALESCE(1.0 / (%(rrf_k)s + v.rank), 0))::FLOAT as rrf_score,
+                    COALESCE(b.score, 0)::FLOAT as bm25_score,
+                    COALESCE(v.similarity, 0)::FLOAT as vector_similarity
+                FROM bm25_results b
+                FULL OUTER JOIN vector_results v ON b.chunk_id = v.chunk_id
+            )
+            SELECT
+                vc.chunk_id,
+                vc.dataset_type,
+                vc.text,
+                rc.rrf_score,
+                rc.bm25_score,
+                rc.vector_similarity,
+                vc.law_name,
+                vc.chunk_type,
+                vc.category,
+                vc.document_type,
+                vc.source_url,
+                vc.source_file,
+                vc.printed_page,
+                vc.source_year,
+                vc.metadata
+            FROM rrf_combined rc
+            JOIN vector_chunks vc ON rc.chunk_id = vc.chunk_id
+            ORDER BY rc.rrf_score DESC
+            LIMIT %(result_limit)s
+        """
 
         with self.conn.cursor() as cur:
-            sql_start = time.time()
-            cur.execute(
-                """
-                SELECT * FROM search_hybrid_rrf_2(
-                    %s, %s::vector, %s, %s, %s::varchar[], %s::varchar[], %s, %s, %s, %s
-                )
-                """,
-                (
-                    query_text,
-                    query_embedding,
-                    filter_dataset,
-                    filter_category,
-                    filter_document_type,
-                    filter_chunk_type,
-                    filter_year_from,
-                    filter_year_to,
-                    result_limit,
-                    rrf_k,
-                ),
-            )
+            cur.execute(bm25_query, params)
 
             results: List[Dict] = []
             for row in cur.fetchall():

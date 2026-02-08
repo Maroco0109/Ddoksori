@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 # Based on COMMON_PRODUCTS from query_analysis/constants.py
 PRODUCT_CATEGORY_MAP = {
     "전자기기": [
+        "전자기기",  # 카테고리 이름 자체도 포함
+        "전자제품",
+        "가전제품",
+        "가전",
         "노트북",
         "컴퓨터",
         "pc",
@@ -55,6 +59,8 @@ PRODUCT_CATEGORY_MAP = {
         "드론",
     ],
     "가전제품": [
+        "가전제품",  # 카테고리 이름 자체도 포함
+        "가전",
         "tv",
         "텔레비전",
         "냉장고",
@@ -72,8 +78,9 @@ PRODUCT_CATEGORY_MAP = {
         "믹서기",
         "커피머신",
     ],
-    "가구": ["침대", "소파", "책상", "의자", "옷장", "매트리스", "가구"],
+    "가구": ["가구", "가구제품", "침대", "소파", "책상", "의자", "옷장", "매트리스"],
     "서비스": [
+        "서비스",
         "헬스장",
         "pt",
         "피티",
@@ -90,8 +97,18 @@ PRODUCT_CATEGORY_MAP = {
         "호텔",
         "숙박",
     ],
-    "의류잡화": ["옷", "신발", "가방", "지갑", "시계", "악세서리"],
-    "차량": ["자동차", "차량", "중고차", "오토바이", "자전거", "킥보드", "전동킥보드"],
+    "의류잡화": [
+        "의류",
+        "잡화",
+        "의류잡화",
+        "옷",
+        "신발",
+        "가방",
+        "지갑",
+        "시계",
+        "악세서리",
+    ],
+    "차량": ["차량", "자동차", "중고차", "오토바이", "자전거", "킥보드", "전동킥보드"],
 }
 
 
@@ -99,6 +116,7 @@ def _compute_product_relevance(
     document: Dict[str, Any],
     purchase_item: Optional[str],
     product_category: Optional[str],
+    negated_items: Optional[List[str]] = None,
 ) -> float:
     """
     검색된 문서의 품목 관련성을 계산합니다.
@@ -107,24 +125,32 @@ def _compute_product_relevance(
         document: 검색된 문서 dict (content, metadata 등)
         purchase_item: 온보딩 구매 품목
         product_category: 온보딩 품목 카테고리
+        negated_items: 제외하려는 품목 리스트 (e.g., ["모니터"])
 
     Returns:
         관련성 점수 (0.0 ~ 1.0)
     """
-    if not purchase_item:
-        return 1.0  # 품목 정보 없으면 모든 문서 관련
-
     content = (document.get("content") or "").lower()
     title = (document.get("doc_title") or document.get("title") or "").lower()
     text = f"{title} {content}"
 
-    item_lower = purchase_item.lower()
+    # Negated items 체크 (최우선 - 제외하려는 품목이 있으면 relevance 0)
+    if negated_items:
+        for negated_item in negated_items:
+            if negated_item.lower() in text:
+                return 0.0  # 제외 대상!
 
-    # 직접 품목명 매칭
-    if item_lower in text:
+    # 품목과 카테고리 둘 다 없으면 모든 문서 관련
+    if not purchase_item and not product_category:
         return 1.0
 
-    # 카테고리 키워드 매칭
+    # 직접 품목명 매칭 (purchase_item이 있을 때만)
+    if purchase_item:
+        item_lower = purchase_item.lower()
+        if item_lower in text:
+            return 1.0
+
+    # 카테고리 키워드 매칭 (purchase_item 유무와 관계없이 실행)
     if product_category:
         category_keywords = PRODUCT_CATEGORY_MAP.get(product_category, [])
         for keyword in category_keywords:
@@ -342,21 +368,36 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
         )
 
     # Post-retrieval product relevance filtering
-    # query_analysis.onboarding_context에서 enriched 데이터 우선 사용
-    query_analysis = state.get("query_analysis") or {}
-    onboarding_ctx = query_analysis.get("onboarding_context") or {}
+    # Check if user changed product scope in follow-up question
+    product_scope_change = query_analysis.get("product_scope_change") or {}
+    should_ignore_filter = product_scope_change.get(
+        "should_ignore_product_filter", False
+    )
+    negated_items = product_scope_change.get("negated_items", [])
 
-    # Fallback: 원본 onboarding
+    logger.info(
+        f"[RetrievalMerge] product_scope_change={product_scope_change}, "
+        f"should_ignore={should_ignore_filter}"
+    )
+
     onboarding = state.get("onboarding") or {}
+    purchase_item = onboarding.get("purchase_item")
+    product_category = onboarding.get("product_category")
 
-    purchase_item = onboarding_ctx.get("purchase_item") or onboarding.get(
-        "purchase_item"
-    )
-    product_category = onboarding_ctx.get("purchase_item_category") or onboarding.get(
-        "product_category"
+    logger.info(
+        f"[RetrievalMerge] Initial: purchase_item={purchase_item}, category={product_category}"
     )
 
-    if purchase_item:
+    # Override product category if expanded
+    if product_scope_change.get("expanded_category"):
+        product_category = product_scope_change["expanded_category"]
+        purchase_item = None  # Clear specific item filter when expanding
+        logger.info(
+            f"[RetrievalMerge] Product scope expanded to category='{product_category}'"
+        )
+
+    # Apply product filter only if not explicitly ignored
+    if purchase_item and not should_ignore_filter:
         logger.info(
             f"[RetrievalMerge] Applying product relevance filter for item='{purchase_item}'"
         )
@@ -368,7 +409,7 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
                 # Calculate product relevance for each document
                 for doc in docs:
                     doc["product_relevance"] = _compute_product_relevance(
-                        doc, purchase_item, product_category
+                        doc, purchase_item, product_category, negated_items
                     )
 
                 # Sort by (product_relevance * similarity) descending
@@ -392,6 +433,57 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
                             f"{section_key} (kept {len(high_relevance)})"
                         )
                 # else: keep all results to maintain minimum coverage
+    elif should_ignore_filter:
+        logger.info("[RetrievalMerge] Product filter ignored (scope change detected)")
+        # Apply category-level filtering if expanded category is specified
+        if product_category:
+            logger.info(
+                f"[RetrievalMerge] Applying category filter for '{product_category}'"
+            )
+            if negated_items:
+                logger.info(
+                    f"[RetrievalMerge] Excluding negated items: {negated_items}"
+                )
+            for section_key in ["disputes", "counsels"]:
+                docs = merged.get(section_key, [])
+                if docs:
+                    # Score by category relevance (more lenient than item matching)
+                    for doc in docs:
+                        doc["product_relevance"] = _compute_product_relevance(
+                            doc, None, product_category, negated_items
+                        )
+
+                    # Sort by category relevance
+                    docs.sort(
+                        key=lambda d: (
+                            d.get("product_relevance", 1.0) * d.get("similarity", 0.0)
+                        ),
+                        reverse=True,
+                    )
+
+                    # Filter out negated items (relevance = 0.0) and low relevance
+                    # If negated_items exist, filter out 0.0 relevance (negated)
+                    # Otherwise, use threshold 0.5 for category matching
+                    if negated_items:
+                        # Exclude negated items (relevance = 0.0)
+                        high_relevance = [
+                            d for d in docs if d.get("product_relevance", 1.0) > 0.0
+                        ]
+                    else:
+                        # Normal category filter (threshold 0.5)
+                        high_relevance = [
+                            d for d in docs if d.get("product_relevance", 1.0) >= 0.5
+                        ]
+
+                    if len(high_relevance) >= 2:
+                        filtered_count = len(docs) - len(high_relevance)
+                        merged[section_key] = high_relevance
+                        if filtered_count > 0:
+                            logger.info(
+                                f"[RetrievalMerge] Category filter: removed {filtered_count} "
+                                f"low-relevance {section_key} (kept {len(high_relevance)})"
+                            )
+                    # else: keep all results to maintain minimum coverage
 
     # 도메인별 노출 수 제한 적용
     session_id = state.get("session_id")
@@ -422,8 +514,17 @@ async def retrieval_merge_node(state: ChatState) -> Dict[str, Any]:
     )
 
     # L4 캐시: 세션별 Retrieval 결과 저장 (Progressive Disclosure용)
+    # 주의: 새 검색이 수행되면 이전 캐시를 무효화하여 최신 데이터만 사용
     if session_id:
         try:
+            # 이전 캐시 확인 (디버깅용)
+            old_cache = RetrievalResultCache.get_by_session(session_id)
+            if old_cache:
+                logger.info(
+                    f"[RetrievalMerge] Overwriting previous L4 cache for session={session_id[:8]}..."
+                )
+
+            # 새 결과로 캐시 업데이트 (덮어쓰기)
             RetrievalResultCache.set_by_session(session_id, merged)
             logger.info(
                 f"[RetrievalMerge] L4 cache saved for session={session_id[:8]}..."

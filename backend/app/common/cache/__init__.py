@@ -10,10 +10,12 @@ from app.common.cache.base import (
     hash_query,
     normalize_query,
 )
+from app.common.cache.embedding_cache import EmbeddingCache
 
 __all__ = [
     "BaseRedisCache",
     "get_redis_client",
     "normalize_query",
     "hash_query",
+    "EmbeddingCache",
 ]

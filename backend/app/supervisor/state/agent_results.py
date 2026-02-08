@@ -5,7 +5,7 @@
 노드 간 데이터 전달의 중심 역할을 합니다.
 """
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from typing_extensions import TypedDict
 
@@ -78,6 +78,17 @@ class QueryAnalysisResult(TypedDict, total=False):
         str
     ]  # finance, medical, privacy, realestate, construction
     restricted_agency_info: Optional[Dict[str, str]]  # {name, organization, url, phone}
+
+    # === Adaptive RAG: 쿼리 복잡도 ===
+    query_complexity: Optional[str]  # simple, moderate, complex
+
+    # === Dispute Reason: 단순변심 vs 하자 ===
+    dispute_reason: Optional[str]  # change_of_mind, defect, unknown
+
+    # === Product Scope Change: 제품 범위 변경 감지 ===
+    product_scope_change: Optional[
+        Dict[str, Any]
+    ]  # {should_ignore_product_filter, expanded_category, negated_items}
 
 
 class RetrievalResult(TypedDict, total=False):

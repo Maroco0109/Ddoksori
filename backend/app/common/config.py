@@ -452,6 +452,16 @@ class RedisConfig(BaseSettings):
     answer_cache_ttl_hours: int = Field(
         default=24, alias="ANSWER_CACHE_TTL_HOURS", description="답변 캐시 TTL (시간)"
     )
+    enable_embedding_cache: bool = Field(
+        default=False,
+        alias="ENABLE_EMBEDDING_CACHE",
+        description="임베딩 캐시 활성화 (동일 쿼리 재호출 방지)",
+    )
+    embedding_cache_ttl_days: int = Field(
+        default=7,
+        alias="EMBEDDING_CACHE_TTL_DAYS",
+        description="임베딩 캐시 TTL (일)",
+    )
 
 
 # ============================================================
@@ -513,7 +523,7 @@ class AuthConfig(BaseSettings):
         default="HS256", alias="JWT_ALGORITHM", description="JWT 알고리즘"
     )
     jwt_token_expire_days: int = Field(
-        default=30, alias="JWT_TOKEN_EXPIRE_DAYS", description="JWT 토큰 만료 기간 (일)"
+        default=7, alias="JWT_TOKEN_EXPIRE_DAYS", description="JWT 토큰 만료 기간 (일)"
     )
 
     # Google OAuth

@@ -87,6 +87,19 @@ export function MarkdownRenderer({
         em({ children }) {
           return <em className="italic">{children}</em>;
         },
+        // Links (마크다운 링크를 클릭 가능한 하이퍼링크로 렌더링)
+        a({ href, children }) {
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-deep-teal hover:text-mint-green underline cursor-pointer"
+            >
+              {children}
+            </a>
+          );
+        },
       }}
     >
       {processedContent}

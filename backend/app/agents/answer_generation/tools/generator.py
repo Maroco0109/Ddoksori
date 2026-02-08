@@ -524,13 +524,19 @@ class RAGGenerator:
             system_prompt = self._get_structured_system_prompt(
                 include_disclaimer=include_disclaimer
             )
+            if user_prompt is None:
+                # 기존 방식: system_prompt가 없을 때만 구조화된 user_prompt 생성
+                user_prompt = self._build_structured_prompt(
+                    query, agency_info, disputes, counsels, laws, criteria, onboarding
+                )
+        else:
+            # 외부 템플릿이 제공된 경우: 템플릿에 이미 모든 데이터와 지시사항 포함
+            # 간단한 user_prompt만 사용 (충돌 방지)
+            if user_prompt is None:
+                user_prompt = "위 지시사항에 따라 답변을 생성해주세요."
+
         if retry_supplement:
             system_prompt += f"\n\n## 재생성 지침\n{retry_supplement}"
-        if user_prompt is None:
-            # 외부 프롬프트가 없으면 기존 방식 사용 (하위 호환)
-            user_prompt = self._build_structured_prompt(
-                query, agency_info, disputes, counsels, laws, criteria, onboarding
-            )
 
         # LLM 호출 with timing
         start_time = time.time()
@@ -953,6 +959,8 @@ class RAGGenerator:
         query_analysis: Dict,
         retrieval: Dict,
         agency_info: Dict,
+        conversation_history: Optional[List[Dict]] = None,
+        onboarding: Optional[Dict] = None,
     ) -> Dict:
         """
         유연한 답변 형식을 사용하여 답변 생성 (Track 2)
@@ -965,6 +973,8 @@ class RAGGenerator:
             query_analysis: 쿼리 분석 결과
             retrieval: 검색 결과
             agency_info: 기관 정보
+            conversation_history: 대화 히스토리 (Phase 2-16: 후속 질문 컨텍스트)
+            onboarding: 온보딩 정보
 
         Returns:
             {
@@ -989,11 +999,17 @@ class RAGGenerator:
         response_format = selector.select_format(query_analysis, retrieval)
         context = selector.build_context(retrieval)
 
-        # 2. 프롬프트 생성
+        # 2. 프롬프트 생성 (Phase 2-16: conversation_history 포함)
         prompt_builder = PromptBuilder()
         system_prompt = prompt_builder.build_system_prompt(response_format)
         user_prompt = prompt_builder.build_user_prompt(
-            response_format, query, retrieval, agency_info, context
+            response_format,
+            query,
+            retrieval,
+            agency_info,
+            context,
+            onboarding=onboarding,
+            conversation_history=conversation_history,
         )
 
         # 3. LLM 호출

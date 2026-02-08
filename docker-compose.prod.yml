@@ -55,7 +55,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-https://ddoksori.duckdns.org}
       # JWT (Secrets Manager 또는 환경변수)
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - JWT_TOKEN_EXPIRE_DAYS=${JWT_TOKEN_EXPIRE_DAYS:-30}
+      - JWT_TOKEN_EXPIRE_DAYS=${JWT_TOKEN_EXPIRE_DAYS:-7}
       # OAuth 2.0 (Secrets Manager 또는 환경변수)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}

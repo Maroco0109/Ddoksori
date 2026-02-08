@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Admin } from '@/shared/types/admin';
+import { STORAGE_KEYS } from '@/shared/config/storage-keys';
 
 interface AdminAuthState {
   admin: Admin | null;

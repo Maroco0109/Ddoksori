@@ -4,6 +4,7 @@
 서버 상태 확인 및 기본 정보 제공 엔드포인트입니다.
 """
 
+import logging
 import os
 
 import httpx
@@ -11,8 +12,11 @@ from fastapi import APIRouter
 
 from app.agents.retrieval.tools.hybrid_retriever import HybridRetriever
 from app.agents.retrieval.tools.retriever import RAGRetriever
+from app.common.config import get_config
 
 from .dependencies import get_db_config, get_retrieval_mode
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
 
@@ -66,21 +70,16 @@ async def health_check():
         checker.close()
         return {"status": "healthy", "database": "connected"}
 
-    except Exception:
-        # [SEC-06] 보안: 상세 에러 메시지 노출 제거
-        return {"status": "unhealthy", "error": "Database connection failed"}
+    except Exception as e:
+        logger.error(f"[Health] DB 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "서비스 연결 실패"}
 
 
 @router.get("/health/llm/supervisor")
 async def check_supervisor_llm():
-    """
-    Supervisor LLM 상태 확인
-
-    [SEC-06] 보안: 모델명, 내부 URL, 상세 에러 메시지 노출 제거
-    """
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {"status": "unhealthy", "error": "API key not configured"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
 
     try:
         async with httpx.AsyncClient() as client:
@@ -90,23 +89,24 @@ async def check_supervisor_llm():
                 timeout=5.0,
             )
             if response.status_code == 200:
-                return {"status": "healthy"}
+                model_name = get_config().models.supervisor
+                return {"status": "healthy", "model": f"{model_name} (OpenAI API)"}
             else:
-                return {"status": "unhealthy", "error": "Service unavailable"}
-    except Exception:
-        return {"status": "unhealthy", "error": "Service unavailable"}
+                logger.error(f"[Health] OpenAI API 응답 오류: {response.status_code}")
+                return {
+                    "status": "unhealthy",
+                    "error": "LLM 서비스 응답 오류",
+                }
+    except Exception as e:
+        logger.error(f"[Health] OpenAI API 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "LLM 서비스 연결 실패"}
 
 
 @router.get("/health/llm/exaone")
 async def check_exaone_llm():
-    """
-    EXAONE LLM 상태 확인
-
-    [SEC-06] 보안: 내부 URL, 상세 에러 메시지 노출 제거
-    """
     base_url = os.getenv("MODEL_EXAONE_BASE_URL") or os.getenv("EXAONE_RUNPOD_URL")
     if not base_url:
-        return {"status": "unhealthy", "error": "Service not configured"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
 
     if not base_url.endswith("/v1"):
         base_url = base_url.rstrip("/") + "/v1"
@@ -115,24 +115,29 @@ async def check_exaone_llm():
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{base_url}/models", timeout=5.0)
             if response.status_code == 200:
-                return {"status": "healthy"}
+                return {"status": "healthy", "url": base_url}
             else:
-                return {"status": "unhealthy", "error": "Service unavailable"}
-    except Exception:
-        return {"status": "unhealthy", "error": "Service unavailable"}
+                logger.error(f"[Health] vLLM 응답 오류: {response.status_code}")
+                return {
+                    "status": "unhealthy",
+                    "error": "LLM 서비스 응답 오류",
+                }
+    except Exception as e:
+        logger.error(f"[Health] vLLM 연결 실패: {e}")
+        return {"status": "unhealthy", "error": "LLM 서비스 연결 실패"}
 
 
 @router.get("/health/embedding")
 async def check_embedding():
-    """
-    임베딩 API 상태 확인
-
-    [SEC-06] 보안: 모델명 노출 제거
-    """
+    """OpenAI 임베딩 API 상태 확인"""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {"status": "unhealthy", "error": "API key not configured"}
-    return {"status": "healthy"}
+        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
+    return {
+        "status": "healthy",
+        "type": "OpenAI Embedding",
+        "model": "text-embedding-3-large",
+    }
 
 
 __all__ = ["router"]

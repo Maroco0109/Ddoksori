@@ -47,13 +47,15 @@ npm run dev
 
 ## 3. Quickstart (Docker)
 
-Docker Compose를 사용하여 서비스 스택(Backend, Frontend, Redis, CloudBeaver)을 한 번에 실행할 수 있습니다.
+Docker Compose를 사용하여 서비스 스택(Backend, Frontend, Redis)을 한 번에 실행할 수 있습니다.
 데이터베이스는 AWS RDS를 사용하므로 로컬에서 실행되지 않습니다.
 
 ```bash
 # 전체 서비스 실행
 docker compose up -d
 
+# Redis만 실행 (로컬 개발 시)
+docker compose up redis -d
 ```
 
 ### 서비스 포트 정보
@@ -61,8 +63,9 @@ docker compose up -d
 |--------|------|------|
 | Frontend | 5173 | React Web UI |
 | Backend | 8000 | FastAPI API Server |
-| Redis | 6379 | Answer Caching |
-| CloudBeaver | 8978 | Web-based DB Manager |
+| Redis | 6379 | Answer Caching (인증 필수, SEC-40) |
+
+> **참고**: CloudBeaver는 보안상 제거되었습니다 (SEC-41). 로컬 DBeaver 또는 pgAdmin을 사용하세요.
 
 ---
 
@@ -72,11 +75,15 @@ docker compose up -d
 
 - **Web UI**: `http://localhost:5173`
 - **API Docs**: `http://localhost:8000/docs`
-- **주요 API**:
+- **주요 API** (전체 39개 엔드포인트):
   - `POST /chat`: 챗봇 응답 생성
   - `POST /chat/stream`: SSE 스트리밍 응답
   - `POST /search`: 벡터 검색 (LLM 미사용)
   - `GET /health`: 서버 상태 확인
+  - `GET /auth/google`, `GET /auth/naver`: OAuth 로그인
+  - `GET /auth/me`: 인증 사용자 정보
+  - `/api/admin/*`: 관리자 API (18개 엔드포인트)
+  - `/api/users/me/*`: 마이페이지 API
 
 ---
 
@@ -196,10 +203,12 @@ sequenceDiagram
 
 | 대상 | 문서 링크 | 설명 |
 |------|-----------|------|
+| **Backend** | [backend/README.md](backend/README.md) | 백엔드 MAS 아키텍처 전체 구조 |
+| **Frontend** | [frontend/README.md](frontend/README.md) | 프론트엔드 구조 및 기능 모듈 |
+| **API** | [backend/app/api/README.md](backend/app/api/README.md) | 39개 엔드포인트 명세 |
+| **에이전트** | [backend/app/agents/README.md](backend/app/agents/README.md) | 에이전트 인터페이스 가이드 |
+| **아키텍처** | [backend/app/supervisor/README.md](backend/app/supervisor/README.md) | Supervisor 상세 설계 |
 | **배포 가이드** | [docs/guides/deployment-execution-guide.md](docs/guides/deployment-execution-guide.md) | 로컬/Docker 배포 실행 가이드 |
-| **API** | [backend/app/api/README.md](backend/app/api/README.md) | 엔드포인트 및 데이터 모델 명세 |
-| **아키텍처** | [backend/app/supervisor/README.md](backend/app/supervisor/README.md) | 에이전트 상세 설계 및 구현 가이드 |
-| **인프라** | [docs/infrastructure/runpod-vllm-setup.md](docs/infrastructure/runpod-vllm-setup.md) | RunPod vLLM 서버 설정 가이드 |
 | **테스트** | [backend/scripts/testing/README.md](backend/scripts/testing/README.md) | 테스트 구조 및 실행 가이드 |
 | **CI/CD** | [docs/guides/backup-setup-guide.md](docs/guides/backup-setup-guide.md) | GitHub Actions CI/CD 및 백업 가이드 |
 | **Feature** | [docs/feature/MAS_SUPERVISOR_ARCHITECTURE.md](docs/feature/MAS_SUPERVISOR_ARCHITECTURE.md) | MAS Supervisor v2 아키텍처 설계 |

@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
 
 from app.auth.dependencies import get_current_user_optional
 from app.auth.models import User
@@ -62,9 +61,6 @@ KNOWN_GRAPH_NODES = {
     "retrieval_criteria",
     "retrieval_case",
     "retrieval_merge",
-    "memory_save",
-    "inject_cached_retrieval",
-    "clarify",  # PR-4: 역질문 노드
 }
 
 
@@ -120,6 +116,10 @@ async def chat(
         config = get_config()
         use_db = config.memory.backend == "db"
 
+        logger.info(
+            f"[chat] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}"
+        )
+
         session_memory = None
         memory_context = {}
         if should_use_memory(body.chat_type):
@@ -128,6 +128,9 @@ async def chat(
                 session_id=session_id,
                 user_id=user_id,
                 use_db=use_db,
+            )
+            logger.info(
+                f"[chat] ConversationMemory created: session={session_id[:8]}, use_db={use_db}"
             )
 
             # 사용자 메시지를 메모리에 추가 (DB에 저장됨)
@@ -142,7 +145,6 @@ async def chat(
             chat_type=body.chat_type,
             onboarding=cast(Any, body.onboarding),
         )
-        initial_state["messages"] = [HumanMessage(content=body.message)]
 
         # 온보딩 데이터 영속화
         if body.onboarding and session_memory:
@@ -318,7 +320,10 @@ async def chat(
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
 
-        raise HTTPException(status_code=500, detail=f"답변 생성 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        )
 
 
 async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
@@ -392,6 +397,10 @@ async def chat_stream_sse(
             config = get_config()
             use_db = config.memory.backend == "db"
 
+            logger.info(
+                f"[chat_stream] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}"
+            )
+
             session_memory = None
             memory_context = {}
             if should_use_memory(body.chat_type):
@@ -400,6 +409,9 @@ async def chat_stream_sse(
                     session_id=session_id,
                     user_id=user_id,
                     use_db=use_db,
+                )
+                logger.info(
+                    f"[chat_stream] ConversationMemory created: session={session_id[:8]}, use_db={use_db}, chat_type={body.chat_type}"
                 )
                 await session_memory.add_turn(role="user", content=body.message)
                 memory_context = session_memory.get_context_for_llm()
@@ -410,7 +422,6 @@ async def chat_stream_sse(
                 chat_type=body.chat_type,
                 onboarding=cast(Any, body.onboarding),
             )
-            initial_state["messages"] = [HumanMessage(content=body.message)]
 
             # 온보딩 데이터 영속화
             if body.onboarding and session_memory:
@@ -497,9 +508,7 @@ async def chat_stream_sse(
                         # Error during generation
                         error_event = {
                             "type": "error",
-                            "data": {
-                                "message": custom_data.get("message", "Unknown error")
-                            },
+                            "data": {"message": "답변 생성 중 오류가 발생했습니다."},
                         }
                         yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
@@ -523,6 +532,20 @@ async def chat_stream_sse(
                     chain_name = event.get("name", "")
                     node_output = event.get("data", {}).get("output", {})
 
+                    # DEBUG: output_guardrail 노드의 출력 확인
+                    if chain_name == "output_guardrail" and isinstance(
+                        node_output, dict
+                    ):
+                        og_answer = node_output.get("final_answer", "")
+                        logger.info(
+                            f"[SSE DEBUG] output_guardrail returned final_answer length: {len(og_answer) if og_answer else 'None/Empty'}"
+                        )
+                        if og_answer and "[출처]" in og_answer:
+                            source_idx = og_answer.find("[출처]")
+                            logger.info(
+                                f"[SSE DEBUG] output_guardrail source: {og_answer[source_idx : source_idx + 150]}..."
+                            )
+
                     if (
                         isinstance(node_output, dict)
                         and chain_name in KNOWN_GRAPH_NODES
@@ -542,8 +565,27 @@ async def chat_stream_sse(
             if final_state:
                 answer = final_state.get("final_answer", "")
 
+                # DEBUG: SSE 전송 전 final_answer 확인
+                logger.info(f"[SSE DEBUG] final_state keys: {list(final_state.keys())}")
+                logger.info(
+                    f"[SSE DEBUG] final_answer length: {len(answer) if answer else 'None/Empty'}"
+                )
+                if answer and "[출처]" in answer:
+                    source_idx = answer.find("[출처]")
+                    logger.info(
+                        f"[SSE DEBUG] Source section: {answer[source_idx : source_idx + 200]}..."
+                    )
+
+                # DEBUG: full_answer 상태 확인
+                logger.info(
+                    f"[SSE DEBUG] full_answer (streamed) length: {len(full_answer)}"
+                )
+
                 # Fallback: final_answer가 비어있을 때 토큰 누적 답변 사용
                 if not answer and full_answer:
+                    logger.warning(
+                        "[SSE DEBUG] final_answer is empty, using full_answer fallback"
+                    )
                     review_executed = bool(final_state.get("review"))
                     if review_executed:
                         review_answer = (final_state.get("review", {}) or {}).get(
@@ -577,6 +619,21 @@ async def chat_stream_sse(
                     await session_memory.add_turn(role="assistant", content=answer)
 
                 complete_event = {"type": "complete", "data": response_data}
+
+                # DEBUG: 최종 SSE 전송 데이터 확인
+                sent_answer = response_data.get("answer", "")
+                logger.info(f"[SSE DEBUG] Sending answer length: {len(sent_answer)}")
+                if "[출처]" in sent_answer:
+                    source_idx = sent_answer.find("[출처]")
+                    logger.info(
+                        f"[SSE DEBUG] Sent source section: {sent_answer[source_idx : source_idx + 200]}..."
+                    )
+                else:
+                    logger.warning("[SSE DEBUG] No [출처] section in sent answer!")
+                    logger.info(
+                        f"[SSE DEBUG] Full answer preview: {sent_answer[:300]}..."
+                    )
+
                 yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
 
                 # 에이전트 트레이스 로깅
@@ -641,7 +698,9 @@ async def chat_stream_sse(
             rag_logger.save(log_entry)
             error_event = {
                 "type": "error",
-                "data": {"message": f"답변 생성 중 오류 발생: {str(e)}"},
+                "data": {
+                    "message": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+                },
             }
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
@@ -654,6 +713,195 @@ async def chat_stream_sse(
             "X-Accel-Buffering": "no",  # Nginx buffering 비활성화
         },
     )
+
+
+# ============================================================
+# 대화 세션 관리 API
+# ============================================================
+
+
+@router.get("/chat/sessions")
+@limiter.limit(RateLimits.AUTH)
+async def get_user_sessions(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional),
+    limit: int = 20,
+    offset: int = 0,
+):
+    """
+    로그인한 사용자의 대화 세션 목록을 조회합니다.
+
+    Args:
+        current_user: 현재 인증된 사용자 (필수)
+        limit: 최대 개수 (기본값: 20)
+        offset: 건너뛸 개수 (기본값: 0)
+
+    Returns:
+        대화 세션 목록 (최신순)
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+        conversations = await db.get_user_conversations(
+            user_id=current_user.user_id,
+            limit=limit,
+            offset=offset,
+            include_inactive=False,
+        )
+
+        # 응답 형식 변환
+        sessions = []
+        for conv in conversations:
+            sessions.append(
+                {
+                    "id": str(conv["session_id"]),
+                    "type": conv["chat_type"],
+                    "title": f"{conv['chat_type']} 상담",  # TODO: 첫 메시지에서 제목 생성
+                    "createdAt": conv["created_at"].isoformat(),
+                    "lastMessageAt": conv["updated_at"].isoformat(),
+                    "turnCount": conv["turn_count"],
+                }
+            )
+
+        logger.info(
+            f"[get_user_sessions] user={current_user.user_id}, count={len(sessions)}"
+        )
+        return {"sessions": sessions}
+
+    except Exception as e:
+        logger.error(f"[get_user_sessions] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="세션 목록 조회 실패")
+
+
+@router.get("/chat/sessions/{session_id}/history")
+@limiter.limit(RateLimits.AUTH)
+async def get_session_history(
+    request: Request,
+    session_id: str,
+    current_user: User = Depends(get_current_user_optional),
+    limit: int = 50,
+):
+    """
+    특정 세션의 대화 내역을 조회합니다.
+
+    Args:
+        session_id: 세션 ID
+        current_user: 현재 인증된 사용자 (필수)
+        limit: 최대 턴 수 (기본값: 50)
+
+    Returns:
+        대화 내역 (시간순)
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+        HTTPException 403: 다른 사용자의 세션
+        HTTPException 404: 세션을 찾을 수 없음
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+
+        # 세션 정보 조회 (권한 확인)
+        conv = await db.get_conversation_by_session(session_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
+
+        # 권한 확인: 자신의 세션만 조회 가능
+        if conv["user_id"] != current_user.user_id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
+
+        # 대화 내역 조회
+        history = await db.get_conversation_history(
+            conversation_id=conv["conversation_id"], limit=limit
+        )
+
+        # 응답 형식 변환
+        messages = []
+        for turn in history:
+            messages.append(
+                {
+                    "id": turn["turn_number"],
+                    "type": "user" if turn["role"] == "user" else "ai",
+                    "content": turn["content"],
+                    "timestamp": turn["created_at"].isoformat(),
+                }
+            )
+
+        logger.info(
+            f"[get_session_history] session={session_id[:8]}, messages={len(messages)}"
+        )
+        return {"messages": messages}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[get_session_history] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="대화 내역 조회 실패")
+
+
+@router.delete("/chat/sessions/{session_id}")
+@limiter.limit(RateLimits.AUTH)
+async def delete_session(
+    request: Request,
+    session_id: str,
+    current_user: User = Depends(get_current_user_optional),
+):
+    """
+    특정 세션을 삭제(비활성화)합니다.
+
+    Args:
+        session_id: 세션 ID
+        current_user: 현재 인증된 사용자 (필수)
+
+    Returns:
+        성공 메시지
+
+    Raises:
+        HTTPException 401: 인증되지 않은 사용자
+        HTTPException 403: 다른 사용자의 세션
+        HTTPException 404: 세션을 찾을 수 없음
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    try:
+        from app.supervisor.persistence.db import ConversationDB
+
+        db = ConversationDB()
+
+        # 세션 정보 조회 (권한 확인)
+        conv = await db.get_conversation_by_session(session_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
+
+        # 권한 확인: 자신의 세션만 삭제 가능
+        if conv["user_id"] != current_user.user_id:
+            raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
+
+        # 세션 비활성화
+        await db.deactivate_conversation(conv["conversation_id"])
+
+        logger.info(
+            f"[delete_session] session={session_id[:8]}, user={current_user.user_id}"
+        )
+        return {"success": True, "message": "세션이 삭제되었습니다"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[delete_session] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="세션 삭제 실패")
 
 
 __all__ = ["router"]
