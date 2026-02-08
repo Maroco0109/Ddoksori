@@ -45,28 +45,37 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # OAuth state 저장소 (Redis 기반 - 멀티 워커 환경 지원)
 STATE_TTL_SECONDS = 600  # 10분
+_REDIS_CONNECT_TIMEOUT = 3
 
 _redis_client = None
+_redis_init_attempted = False
 
 
 def _get_redis():
-    """OAuth state용 Redis 클라이언트 (싱글톤)."""
-    global _redis_client
+    """OAuth state용 Redis 클라이언트 (싱글톤, 재시도 방지)."""
+    global _redis_client, _redis_init_attempted
     if _redis_client is not None:
         return _redis_client
+    if _redis_init_attempted:
+        return None
+    _redis_init_attempted = True
     try:
-        import redis
+        import redis as redis_lib
 
-        _redis_client = redis.Redis(
+        _redis_client = redis_lib.Redis(
             host=os.getenv("REDIS_HOST", "localhost"),
             port=int(os.getenv("REDIS_PORT", "6379")),
             db=int(os.getenv("REDIS_DB", "0")),
+            password=os.getenv("REDIS_PASSWORD") or None,
             decode_responses=True,
-            socket_connect_timeout=3,
+            socket_connect_timeout=_REDIS_CONNECT_TIMEOUT,
         )
         _redis_client.ping()
         logger.info("[Auth] OAuth state Redis 연결 성공")
         return _redis_client
+    except ImportError:
+        logger.error("[Auth] redis 패키지 미설치")
+        return None
     except Exception as e:
         logger.error(f"[Auth] OAuth state Redis 연결 실패: {e}")
         _redis_client = None
@@ -76,10 +85,13 @@ def _get_redis():
 def _store_state(state: str) -> None:
     """OAuth state를 Redis에 저장합니다."""
     r = _get_redis()
-    if r:
-        r.setex(f"oauth_state:{state}", STATE_TTL_SECONDS, "1")
-    else:
+    if not r:
         logger.warning("[Auth] Redis 미사용 - OAuth state 저장 실패")
+        return
+    try:
+        r.setex(f"oauth_state:{state}", STATE_TTL_SECONDS, "1")
+    except Exception as e:
+        logger.error(f"[Auth] OAuth state 저장 중 Redis 오류: {e}")
 
 
 def _verify_and_remove_state(state: str) -> bool:
@@ -89,11 +101,15 @@ def _verify_and_remove_state(state: str) -> bool:
         logger.warning("[Auth] Redis 미사용 - OAuth state 검증 실패")
         return False
     key = f"oauth_state:{state}"
-    result = r.get(key)
-    if result is None:
+    try:
+        result = r.get(key)
+        if result is None:
+            return False
+        r.delete(key)
+        return True
+    except Exception as e:
+        logger.error(f"[Auth] OAuth state 검증 중 Redis 오류: {e}")
         return False
-    r.delete(key)
-    return True
 
 
 # ============================================================

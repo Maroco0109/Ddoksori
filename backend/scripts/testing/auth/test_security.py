@@ -68,6 +68,7 @@ class TestOAuthCSRFDefense:
 
         self._auth_mod = self._get_auth_module()
         self._auth_mod._redis_client = FakeRedis(self._fake_store)
+        self._auth_mod._redis_init_attempted = True
 
     @pytest.mark.unit
     def test_valid_state_verification(self):
