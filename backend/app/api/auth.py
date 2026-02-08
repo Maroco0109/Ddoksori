@@ -83,15 +83,21 @@ def _get_redis():
 
 
 def _store_state(state: str) -> None:
-    """OAuth state를 Redis에 저장합니다."""
+    """OAuth state를 Redis에 저장합니다. 실패 시 HTTPException(503)."""
     r = _get_redis()
     if not r:
-        logger.warning("[Auth] Redis 미사용 - OAuth state 저장 실패")
-        return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다 (Redis 연결 실패)",
+        )
     try:
         r.setex(f"oauth_state:{state}", STATE_TTL_SECONDS, "1")
     except Exception as e:
         logger.error(f"[Auth] OAuth state 저장 중 Redis 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다",
+        )
 
 
 def _verify_and_remove_state(state: str) -> bool:
