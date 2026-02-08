@@ -4,7 +4,7 @@
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useAdminStore } from '@/features/admin/admin.store';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 function getAuthHeaders(endpoint?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -44,7 +44,7 @@ function getAuthHeaders(endpoint?: string): Record<string, string> {
 
 export const apiClient = {
   get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
-    const url = new URL(`${API_BASE_URL}${endpoint}`);
+    const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
