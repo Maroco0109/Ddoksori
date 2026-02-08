@@ -28,7 +28,7 @@ from app.auth.models import User
 
 
 class TestOAuthCSRFDefense:
-    """OAuth state 검증 테스트 (CSRF 방어)"""
+    """OAuth state 검증 테스트 (CSRF 방어) - Redis 기반"""
 
     @staticmethod
     def _get_auth_module():
@@ -46,9 +46,27 @@ class TestOAuthCSRFDefense:
         return mod
 
     def setup_method(self):
-        """각 테스트 전 state 저장소 초기화"""
+        """각 테스트 전 fake Redis 주입"""
+        self._fake_store = {}
         auth_mod = self._get_auth_module()
-        auth_mod._oauth_states.clear()
+
+        class FakeRedis:
+            def __init__(self, store):
+                self._store = store
+
+            def setex(self, key, ttl, value):
+                self._store[key] = (value, ttl)
+
+            def get(self, key):
+                return self._store.get(key, (None,))[0]
+
+            def delete(self, key):
+                self._store.pop(key, None)
+
+            def ping(self):
+                return True
+
+        auth_mod._redis_client = FakeRedis(self._fake_store)
 
     @pytest.mark.unit
     def test_valid_state_verification(self):
@@ -72,25 +90,19 @@ class TestOAuthCSRFDefense:
         assert auth_mod._verify_and_remove_state("single-use-state") is False
 
     @pytest.mark.unit
-    def test_expired_state_rejected(self):
-        """만료된 state 거부"""
+    def test_expired_state_handled_by_redis_ttl(self):
+        """만료된 state는 Redis TTL로 자동 삭제 (키 없으면 거부)"""
         auth_mod = self._get_auth_module()
-        auth_mod._oauth_states["expired-state"] = datetime.now() - timedelta(minutes=1)
+        # Redis에 키가 없으면 만료된 것으로 간주
         assert auth_mod._verify_and_remove_state("expired-state") is False
 
     @pytest.mark.unit
-    def test_cleanup_expired_states(self):
-        """만료된 state 정리"""
+    def test_redis_ttl_cleanup_not_needed(self):
+        """Redis TTL이 자동 만료를 처리하므로 별도 정리 불필요"""
         auth_mod = self._get_auth_module()
         auth_mod._store_state("valid-state")
-        auth_mod._oauth_states["expired-1"] = datetime.now() - timedelta(minutes=15)
-        auth_mod._oauth_states["expired-2"] = datetime.now() - timedelta(minutes=30)
-
-        auth_mod._cleanup_expired_states()
-
-        assert "valid-state" in auth_mod._oauth_states
-        assert "expired-1" not in auth_mod._oauth_states
-        assert "expired-2" not in auth_mod._oauth_states
+        # store 후 키가 존재하는지 확인
+        assert self._fake_store.get("oauth_state:valid-state") is not None
 
     @pytest.mark.unit
     def test_empty_state_rejected(self):
@@ -103,9 +115,8 @@ class TestOAuthCSRFDefense:
         """state 저장 시 TTL 설정 확인"""
         auth_mod = self._get_auth_module()
         auth_mod._store_state("ttl-state")
-        expiry = auth_mod._oauth_states["ttl-state"]
-        expected = datetime.now() + timedelta(minutes=auth_mod.STATE_TTL_MINUTES)
-        assert abs((expiry - expected).total_seconds()) < 1
+        _value, ttl = self._fake_store["oauth_state:ttl-state"]
+        assert ttl == auth_mod.STATE_TTL_SECONDS
 
 
 # ============================================================
