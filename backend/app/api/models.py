@@ -54,7 +54,7 @@ class SearchRequest(BaseModel):
     def query_not_empty(cls, v):
         if not v or not v.strip():
             raise ValueError("쿼리는 빈 문자열일 수 없습니다")
-        return v.strip()
+        return sanitize_user_input(v.strip())
 
 
 # === 응답 모델 - 참조 정보 ===

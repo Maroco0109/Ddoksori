@@ -19,6 +19,12 @@ ResponseFormat에 따라 시스템 프롬프트와 사용자 프롬프트를 생
 
 from typing import Dict, List, Optional
 
+from app.common.sanitization import (
+    get_security_instructions,
+    wrap_retrieved_context,
+    wrap_user_input,
+)
+
 from .config import ResponseFormat
 
 # 면책 문구
@@ -70,7 +76,8 @@ class PromptBuilder:
             method_name = "_build_comprehensive_dispute_system_prompt"
 
         builder = getattr(self, method_name)
-        return builder(response_format)
+        base_prompt = builder(response_format)
+        return base_prompt + get_security_instructions()
 
     def build_user_prompt(
         self,
@@ -111,6 +118,9 @@ class PromptBuilder:
             )
             if history_lines:
                 history_section = "\n".join(history_lines) + "\n"
+
+        # 사용자 쿼리 sanitization (L1-L3)
+        query = wrap_user_input(query)
 
         # 각 빌더에 필요한 인자를 전달
         if response_format.format_id == "general_greeting":
@@ -518,7 +528,7 @@ class PromptBuilder:
         """general_greeting 형식의 사용자 프롬프트"""
         return f"""사용자가 다음과 같이 말했습니다:
 
-"{query}"
+{query}
 
 자연스럽고 친근하게 응답하되, 소비자 분쟁 상담으로 자연스럽게 유도하는 질문을 포함해 주세요."""
 
@@ -649,7 +659,9 @@ class PromptBuilder:
             for law in laws[:5]:
                 law_name = law.get("law_name", "법령")
                 full_path = law.get("full_path", "")
-                text = law.get("text", law.get("content", ""))[:500]
+                text = wrap_retrieved_context(
+                    law.get("text", law.get("content", "")), max_length=500
+                )
                 similarity = law.get("similarity", 0)
                 lines.append(f"\n### {law_name} {full_path}")
                 lines.append(f"내용: {text}")
@@ -682,7 +694,9 @@ class PromptBuilder:
                     if category and item
                     else category or item or ""
                 )
-                unit_text = crit.get("unit_text", crit.get("content", ""))[:500]
+                unit_text = wrap_retrieved_context(
+                    crit.get("unit_text", crit.get("content", "")), max_length=500
+                )
                 similarity = crit.get("similarity", 0)
 
                 lines.append(f"\n### [{source_label}] {path}")
