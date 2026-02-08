@@ -926,6 +926,11 @@ async def claim_guest_sessions(
         raise HTTPException(
             status_code=422, detail="session_ids는 최대 50개까지 허용됩니다"
         )
+    if not all(isinstance(sid, str) and 0 < len(sid) <= 100 for sid in session_ids):
+        raise HTTPException(
+            status_code=422,
+            detail="session_ids의 모든 항목은 1~100자의 문자열이어야 합니다",
+        )
 
     from app.supervisor.persistence.db import ConversationDB
 
