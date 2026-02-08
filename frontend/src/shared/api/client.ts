@@ -42,18 +42,21 @@ function getAuthHeaders(endpoint?: string): Record<string, string> {
   return headers;
 }
 
+function buildUrl(endpoint: string, params?: Record<string, any>): string {
+  const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.append(key, String(value));
+      }
+    });
+  }
+  return url.toString();
+}
+
 export const apiClient = {
   get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
-    const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, String(value));
-        }
-      });
-    }
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch(buildUrl(endpoint, params), {
       method: 'GET',
       headers: getAuthHeaders(endpoint),
     });
@@ -66,7 +69,7 @@ export const apiClient = {
   },
 
   post: async <T>(endpoint: string, data?: any): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'POST',
       headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
@@ -80,7 +83,7 @@ export const apiClient = {
   },
 
   put: async <T>(endpoint: string, data?: any): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'PUT',
       headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
@@ -94,7 +97,7 @@ export const apiClient = {
   },
 
   delete: async <T>(endpoint: string): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'DELETE',
       headers: getAuthHeaders(endpoint),
     });
