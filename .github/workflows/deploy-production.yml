@@ -148,8 +148,8 @@ jobs:
             OAUTH_OK=true
             for VAR in GOOGLE_CLIENT_ID NAVER_CLIENT_ID; do
               VAL=$(docker exec $(docker ps --filter "name=backend" --format "{{.Names}}" | head -1) printenv $VAR 2>/dev/null || echo "")
-              if [ -z "$VAL" ]; then
-                echo "WARNING: $VAR is empty - OAuth login will not work"
+              if [ -z "$VAL" ] || [ "$VAL" = "None" ] || [ "$VAL" = "null" ]; then
+                echo "WARNING: $VAR is empty or invalid ('$VAL') - OAuth login will not work"
                 OAUTH_OK=false
               fi
             done

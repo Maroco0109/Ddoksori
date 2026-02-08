@@ -60,8 +60,6 @@ def inject_aws_secrets() -> int:
         logger.error("boto3 not installed. Run: pip install boto3")
         return 0
 
-    _injected = True
-
     client = boto3.client(
         "secretsmanager",
         region_name=os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2"),
@@ -89,6 +87,7 @@ def inject_aws_secrets() -> int:
                 logger.warning("Secret not found: %s", secret_name)
             else:
                 logger.error("Failed to load secret %s: %s", secret_name, e)
+    _injected = True
 
     logger.info(
         "Injected %d secrets from AWS Secrets Manager (%s)", injected, environment
