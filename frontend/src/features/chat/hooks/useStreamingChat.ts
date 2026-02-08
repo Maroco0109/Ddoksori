@@ -6,6 +6,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useChatStore } from '@/features/chat/chat.store';
 import { useAuthStore } from '@/features/auth/auth.store';
+import { API_BASE_URL } from '@/shared/api/client';
 import type {
   ChatAPIRequest,
   SSEEvent,
@@ -13,8 +14,6 @@ import type {
   StreamingState,
   OnboardingAPIData,
 } from '@/shared/types';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 /**
  * Convert dispute form data to onboarding API format
