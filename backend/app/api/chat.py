@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.auth.dependencies import get_current_user_optional
+from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.auth.models import User
 from app.common.config import get_config
 from app.common.logger import get_rag_logger
@@ -902,6 +902,42 @@ async def delete_session(
     except Exception as e:
         logger.error(f"[delete_session] Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="세션 삭제 실패")
+
+
+@router.post("/chat/sessions/claim")
+@limiter.limit(RateLimits.AUTH)
+async def claim_guest_sessions(
+    request: Request,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    게스트 세션을 로그인한 사용자 계정으로 이전합니다.
+    로그인 시 한 번 호출됩니다.
+
+    Note: get_current_user 사용 (인증 필수, 미인증 시 자동 401)
+    """
+    session_ids = body.get("session_ids", [])
+    if not session_ids or not isinstance(session_ids, list):
+        raise HTTPException(
+            status_code=422, detail="session_ids는 비어있지 않은 리스트여야 합니다"
+        )
+    if len(session_ids) > 50:
+        raise HTTPException(
+            status_code=422, detail="session_ids는 최대 50개까지 허용됩니다"
+        )
+
+    from app.supervisor.persistence.db import ConversationDB
+
+    db = ConversationDB()
+    claimed_ids = await db.claim_sessions_for_user(
+        session_ids=session_ids,
+        user_id=current_user.user_id,
+    )
+    return {
+        "claimed_count": len(claimed_ids),
+        "claimed_session_ids": claimed_ids,
+    }
 
 
 __all__ = ["router"]
