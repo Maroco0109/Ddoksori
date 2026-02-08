@@ -4,7 +4,7 @@
 import { useAuthStore } from '@/features/auth/auth.store';
 import { useAdminStore } from '@/features/admin/admin.store';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 function getAuthHeaders(endpoint?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -42,9 +42,9 @@ function getAuthHeaders(endpoint?: string): Record<string, string> {
   return headers;
 }
 
-export const apiClient = {
-  get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
-    const url = new URL(`${API_BASE_URL}${endpoint}`);
+function buildUrl(endpoint: string, params?: Record<string, any>): string {
+  try {
+    const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -52,8 +52,26 @@ export const apiClient = {
         }
       });
     }
+    return url.toString();
+  } catch {
+    const base = API_BASE_URL || window.location.origin;
+    const fullUrl = `${base}${endpoint}`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, String(value));
+        }
+      });
+      return `${fullUrl}?${searchParams.toString()}`;
+    }
+    return fullUrl;
+  }
+}
 
-    const response = await fetch(url.toString(), {
+export const apiClient = {
+  get: async <T>(endpoint: string, params?: Record<string, any>): Promise<T> => {
+    const response = await fetch(buildUrl(endpoint, params), {
       method: 'GET',
       headers: getAuthHeaders(endpoint),
     });
@@ -66,7 +84,7 @@ export const apiClient = {
   },
 
   post: async <T>(endpoint: string, data?: any): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'POST',
       headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
@@ -80,7 +98,7 @@ export const apiClient = {
   },
 
   put: async <T>(endpoint: string, data?: any): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'PUT',
       headers: getAuthHeaders(endpoint),
       body: data ? JSON.stringify(data) : undefined,
@@ -94,7 +112,7 @@ export const apiClient = {
   },
 
   delete: async <T>(endpoint: string): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildUrl(endpoint), {
       method: 'DELETE',
       headers: getAuthHeaders(endpoint),
     });
