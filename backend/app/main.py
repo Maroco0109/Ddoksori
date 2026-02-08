@@ -164,7 +164,7 @@ async def startup_event():
         logger.warning(
             "[Security] JWT_SECRET_KEY가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
         )
-    if config.db.password == "postgres":
+    if config.database.password == "postgres":
         logger.warning(
             "[Security] DB_PASSWORD가 기본값입니다. 프로덕션에서 반드시 변경하세요!"
         )
