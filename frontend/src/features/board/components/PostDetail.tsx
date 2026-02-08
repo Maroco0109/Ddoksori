@@ -10,7 +10,7 @@ interface PostDetailProps {
   postDetail: PostDetailType;
   onBack: () => void;
   onEdit: (post: BoardPost) => void;
-  onDelete: (postId: string) => void;
+  onDelete: (postId: string) => Promise<void>;
 }
 
 export default function PostDetail({ post, postDetail, onBack, onEdit, onDelete }: PostDetailProps) {
@@ -218,9 +218,16 @@ export default function PostDetail({ post, postDetail, onBack, onEdit, onDelete 
     }
   };
 
-  const handleDelete = () => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
     if (window.confirm('정말 이 게시글을 삭제하시겠습니까?')) {
-      onDelete(post.id);
+      setIsDeleting(true);
+      try {
+        await onDelete(post.id);
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -284,10 +291,11 @@ export default function PostDetail({ post, postDetail, onBack, onEdit, onDelete 
               </button>
               <button
                 onClick={handleDelete}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-all"
+                disabled={isDeleting}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Trash2 size={16} />
-                <span className="hidden sm:inline">삭제</span>
+                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                <span className="hidden sm:inline">{isDeleting ? '삭제 중...' : '삭제'}</span>
               </button>
             </>
           ) : (

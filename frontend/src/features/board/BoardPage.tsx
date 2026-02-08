@@ -229,7 +229,7 @@ export default function BoardPage() {
     try {
       await boardService.deletePost(postId);
       setCurrentView('list');
-      fetchPosts(); // 목록 새로고침
+      await fetchPosts();
     } catch (err) {
       console.error('Failed to delete post:', err);
       alert('게시글 삭제에 실패했습니다.');
