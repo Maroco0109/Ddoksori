@@ -101,11 +101,13 @@ def _store_state(state: str) -> None:
 
 
 def _verify_and_remove_state(state: str) -> bool:
-    """OAuth state를 검증하고 삭제합니다."""
+    """OAuth state를 검증하고 삭제합니다. Redis 장애 시 503."""
     r = _get_redis()
     if not r:
-        logger.warning("[Auth] Redis 미사용 - OAuth state 검증 실패")
-        return False
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다 (Redis 연결 실패)",
+        )
     key = f"oauth_state:{state}"
     try:
         result = r.get(key)
@@ -115,7 +117,10 @@ def _verify_and_remove_state(state: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"[Auth] OAuth state 검증 중 Redis 오류: {e}")
-        return False
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다",
+        )
 
 
 # ============================================================
