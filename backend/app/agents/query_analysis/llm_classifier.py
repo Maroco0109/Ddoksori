@@ -62,9 +62,9 @@ FEW_SHOT_EXAMPLES = [
     },
     {
         "query": "소비자보호법이 뭐야?",
-        "type": "general",
-        "confidence": 0.90,
-        "reasoning": "정의형 질문, 구체적 분쟁 없음",
+        "type": "law",
+        "confidence": 0.85,
+        "reasoning": "특정 법률명 포함 정의형 질문 = 법령 정보 요청",
     },
     {
         "query": "오늘 날씨 어때?",

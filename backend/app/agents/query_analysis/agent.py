@@ -311,12 +311,24 @@ async def query_analysis_node_v2(state: Dict, config: Any = None) -> Dict:
                     f"[QueryAnalysis v2] LLM classification: type={llm_type}, confidence={llm_confidence:.2f}, "
                     f"reasoning='{llm_reasoning[:100]}'"
                 )
-                # LLM을 primary로 사용 (confidence 비교 없이 항상 사용)
-                logger.info(
-                    f"[QueryAnalysis v2] Using LLM result: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
-                )
-                query_type = llm_type
-                llm_used = True
+                # LLM이 general로 다운그레이드하려 할 때, rule-based가 specific type이면 보호
+                PROTECTED_TYPES = {"law", "criteria", "procedure", "restricted"}
+                if (
+                    llm_type == "general"
+                    and query_type in PROTECTED_TYPES
+                    and rule_confidence >= 0.8
+                ):
+                    logger.info(
+                        f"[QueryAnalysis v2] LLM downgrade blocked: keeping rule-based {query_type}({rule_confidence:.2f}) "
+                        f"over LLM {llm_type}({llm_confidence:.2f})"
+                    )
+                    # rule-based 결과 유지
+                else:
+                    logger.info(
+                        f"[QueryAnalysis v2] Using LLM result: {query_type}({rule_confidence:.2f}) -> {llm_type}({llm_confidence:.2f})"
+                    )
+                    query_type = llm_type
+                    llm_used = True
             else:
                 logger.info(
                     f"[QueryAnalysis v2] LLM returned None, using rule-based: {query_type}({rule_confidence:.2f})"

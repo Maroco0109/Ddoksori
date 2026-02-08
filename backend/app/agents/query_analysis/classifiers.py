@@ -212,7 +212,7 @@ def classify_query_type_with_confidence(query: str) -> Tuple[QueryType, float]:
 
     # 법률명 패턴 우선 (예: "소비자보호법이 뭐야?" → law, not general)
     # DEFINITIONAL 패턴보다 먼저 체크하여 법률명 포함 질문을 law로 분류
-    law_pattern_match = re.search(r"\S+법", query_lower)
+    law_pattern_match = re.search(r"\S+(?:법률|법령|법적|법)", query_lower)
     if law_pattern_match:
         return "law", 0.9
 
