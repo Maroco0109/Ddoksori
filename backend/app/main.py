@@ -146,15 +146,18 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"[Startup] Template cache clear failed: {e}")
 
-    # ConversationCleanupService 시작
-    try:
-        from app.supervisor.persistence.cleanup import get_cleanup_service
-
-        cleanup_service = get_cleanup_service()
-        await cleanup_service.start()
-        logger.info("[Startup] ConversationCleanupService 시작 완료")
-    except Exception as e:
-        logger.warning(f"[Startup] ConversationCleanupService 시작 실패: {e}")
+    # ConversationCleanupService 비활성화
+    # NOTE: ddoksori_rw 유저에 DELETE 권한이 없어 매분 permission denied 에러 발생.
+    # 만료 세션은 expires_at으로 이미 기능적 만료 처리되므로, 물리 삭제는 불필요.
+    # 추후 소프트 삭제 또는 별도 관리자 배치로 전환 예정.
+    # try:
+    #     from app.supervisor.persistence.cleanup import get_cleanup_service
+    #     cleanup_service = get_cleanup_service()
+    #     await cleanup_service.start()
+    #     logger.info("[Startup] ConversationCleanupService 시작 완료")
+    # except Exception as e:
+    #     logger.warning(f"[Startup] ConversationCleanupService 시작 실패: {e}")
+    logger.info("[Startup] ConversationCleanupService 비활성화 (DELETE 권한 없음)")
 
     # SEC-14: 기본 시크릿 사용 경고
     from app.common.config import get_config
@@ -175,15 +178,14 @@ async def shutdown_event():
     """애플리케이션 종료 시 정리"""
     logger.info("[Shutdown] 똑소리 API 서버 종료 중...")
 
-    # ConversationCleanupService 종료
-    try:
-        from app.supervisor.persistence.cleanup import get_cleanup_service
-
-        cleanup_service = get_cleanup_service()
-        await cleanup_service.stop()
-        logger.info("[Shutdown] ConversationCleanupService 종료 완료")
-    except Exception as e:
-        logger.warning(f"[Shutdown] ConversationCleanupService 종료 실패: {e}")
+    # ConversationCleanupService 종료 (비활성화됨)
+    # try:
+    #     from app.supervisor.persistence.cleanup import get_cleanup_service
+    #     cleanup_service = get_cleanup_service()
+    #     await cleanup_service.stop()
+    #     logger.info("[Shutdown] ConversationCleanupService 종료 완료")
+    # except Exception as e:
+    #     logger.warning(f"[Shutdown] ConversationCleanupService 종료 실패: {e}")
 
 
 from app.api.dependencies import (

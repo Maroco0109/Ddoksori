@@ -26,10 +26,8 @@ OAuth 2.0 소셜 로그인 API 엔드포인트를 제공합니다.
     # 4. JWT 토큰 발행 후 프론트엔드로 리다이렉트
 """
 
-import asyncio
 import logging
-from datetime import datetime, timedelta
-from typing import Dict
+import os
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -45,47 +43,84 @@ from app.middleware.rate_limiter import RateLimits, limiter
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# 인메모리 OAuth state 저장소 (TTL 관리)
-# 프로덕션에서는 Redis 사용 권장, 단일 인스턴스에서는 충분
-_oauth_states: Dict[str, datetime] = {}
-STATE_TTL_MINUTES = 10
+# OAuth state 저장소 (Redis 기반 - 멀티 워커 환경 지원)
+STATE_TTL_SECONDS = 600  # 10분
+_REDIS_CONNECT_TIMEOUT = 3
+
+_redis_client = None
+_redis_init_attempted = False
+
+
+def _get_redis():
+    """OAuth state용 Redis 클라이언트 (싱글톤, 재시도 방지)."""
+    global _redis_client, _redis_init_attempted
+    if _redis_client is not None:
+        return _redis_client
+    if _redis_init_attempted:
+        return None
+    _redis_init_attempted = True
+    try:
+        import redis as redis_lib
+
+        _redis_client = redis_lib.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            db=int(os.getenv("REDIS_DB", "0")),
+            password=os.getenv("REDIS_PASSWORD") or None,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_CONNECT_TIMEOUT,
+        )
+        _redis_client.ping()
+        logger.info("[Auth] OAuth state Redis 연결 성공")
+        return _redis_client
+    except ImportError:
+        logger.error("[Auth] redis 패키지 미설치")
+        return None
+    except Exception as e:
+        logger.error(f"[Auth] OAuth state Redis 연결 실패: {e}")
+        _redis_client = None
+        return None
 
 
 def _store_state(state: str) -> None:
-    """OAuth state를 저장합니다."""
-    _oauth_states[state] = datetime.now() + timedelta(minutes=STATE_TTL_MINUTES)
+    """OAuth state를 Redis에 저장합니다. 실패 시 HTTPException(503)."""
+    r = _get_redis()
+    if not r:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다 (Redis 연결 실패)",
+        )
+    try:
+        r.setex(f"oauth_state:{state}", STATE_TTL_SECONDS, "1")
+    except Exception as e:
+        logger.error(f"[Auth] OAuth state 저장 중 Redis 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다",
+        )
 
 
 def _verify_and_remove_state(state: str) -> bool:
-    """OAuth state를 검증하고 삭제합니다."""
-    if state not in _oauth_states:
-        return False
-
-    # 만료 확인
-    if datetime.now() > _oauth_states[state]:
-        del _oauth_states[state]
-        return False
-
-    # 사용 후 삭제 (일회용)
-    del _oauth_states[state]
-    return True
-
-
-def _cleanup_expired_states() -> None:
-    """만료된 state를 정리합니다."""
-    now = datetime.now()
-    expired_keys = [k for k, v in _oauth_states.items() if now > v]
-    for key in expired_keys:
-        del _oauth_states[key]
-
-
-# 백그라운드 정리 태스크 (5분마다)
-async def _periodic_state_cleanup():
-    """주기적으로 만료된 state를 정리합니다."""
-    while True:
-        await asyncio.sleep(300)  # 5분
-        _cleanup_expired_states()
-        logger.debug(f"[Auth] OAuth state 정리 완료: {len(_oauth_states)}개 남음")
+    """OAuth state를 검증하고 삭제합니다. Redis 장애 시 503."""
+    r = _get_redis()
+    if not r:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다 (Redis 연결 실패)",
+        )
+    key = f"oauth_state:{state}"
+    try:
+        result = r.get(key)
+        if result is None:
+            return False
+        r.delete(key)
+        return True
+    except Exception as e:
+        logger.error(f"[Auth] OAuth state 검증 중 Redis 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OAuth 서비스를 일시적으로 사용할 수 없습니다",
+        )
 
 
 # ============================================================
@@ -314,7 +349,7 @@ async def delete_account(current_user: User = Depends(get_current_user)):
 
 
 @router.on_event("startup")
-async def start_state_cleanup():
-    """OAuth state 정리 태스크를 시작합니다."""
-    asyncio.create_task(_periodic_state_cleanup())
-    logger.info("[Auth] OAuth state 정리 태스크 시작")
+async def init_oauth_redis():
+    """OAuth state Redis 연결을 초기화합니다."""
+    _get_redis()
+    logger.info("[Auth] OAuth state 저장소 초기화 완료 (Redis 기반)")
