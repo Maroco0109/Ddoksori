@@ -53,8 +53,9 @@ function buildUrl(endpoint: string, params?: Record<string, any>): string {
       });
     }
     return url.toString();
-  } catch {
-    const base = API_BASE_URL || window.location.origin;
+  } catch (error) {
+    console.warn('[buildUrl] URL constructor failed, using fallback:', error);
+    const base = API_BASE_URL ?? window.location.origin;
     const fullUrl = `${base}${endpoint}`;
     if (params) {
       const searchParams = new URLSearchParams();
