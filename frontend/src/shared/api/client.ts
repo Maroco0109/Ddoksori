@@ -43,15 +43,30 @@ function getAuthHeaders(endpoint?: string): Record<string, string> {
 }
 
 function buildUrl(endpoint: string, params?: Record<string, any>): string {
-  const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.append(key, String(value));
-      }
-    });
+  try {
+    const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+    }
+    return url.toString();
+  } catch {
+    const base = API_BASE_URL || window.location.origin;
+    const fullUrl = `${base}${endpoint}`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, String(value));
+        }
+      });
+      return `${fullUrl}?${searchParams.toString()}`;
+    }
+    return fullUrl;
   }
-  return url.toString();
 }
 
 export const apiClient = {
