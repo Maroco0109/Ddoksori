@@ -18,6 +18,16 @@ export default function RootLayout() {
   const syncWithBackend = useChatStore((state) => state.syncWithBackend);
 
   const lastSyncTime = useRef<number>(0);
+  const prevAuthRef = useRef(isLoggedIn);
+
+  // 로그아웃 감지 시 chatStore 상태 초기화 (순환 참조 방지)
+  useEffect(() => {
+    if (prevAuthRef.current && !isLoggedIn) {
+      useChatStore.getState().resetState();
+      console.log('[RootLayout] Auth state changed to logged out — chat state reset');
+    }
+    prevAuthRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   useEffect(() => {
     loadChatSessions(isLoggedIn);
