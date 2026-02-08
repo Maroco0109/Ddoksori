@@ -115,12 +115,11 @@ class TestSupervisorLLMTimeout:
     """Supervisor LLM timeout should fallback to rule-based routing."""
 
     @pytest.mark.asyncio
-    async def test_supervisor_llm_none_uses_rule_based(self):
-        """SupervisorNode with llm=None uses rule-based routing."""
+    async def test_supervisor_llm_failure_uses_rule_based(self):
+        """SupervisorNode falls back to rule-based when LLM call fails."""
         from app.supervisor.nodes.supervisor import SupervisorNode
 
         supervisor = SupervisorNode(llm=None)
-        assert supervisor.llm is None
 
         state = {
             "user_query": "환불 가능한가요?",
@@ -133,8 +132,13 @@ class TestSupervisorLLMTimeout:
             "review": None,
         }
 
-        node_fn = supervisor.as_node()
-        result = await node_fn(state)
+        # LLM 호출을 실패시켜 rule-based fallback 검증
+        with (
+            patch.object(supervisor, "_primary_llm", None),
+            patch.object(supervisor, "_fallback_llm", None),
+        ):
+            node_fn = supervisor.as_node()
+            result = await node_fn(state)
 
         assert "supervisor" in result
         supervisor_state = result["supervisor"]
