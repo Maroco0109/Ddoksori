@@ -38,7 +38,7 @@ export default function OAuthCallback() {
         }
 
         // 백엔드에서 사용자 정보 가져오기
-        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
         const response = await fetch(`${BACKEND_URL}/auth/me`, {
           headers: {
             'Authorization': `${tokenType || 'Bearer'} ${accessToken}`,
