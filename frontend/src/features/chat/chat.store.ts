@@ -1,28 +1,19 @@
 import { create } from 'zustand';
-import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData, User } from '@/shared/types';
+import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData } from '@/shared/types';
 import { storage } from '@/shared/lib/storage';
 import { STORAGE_KEYS, getUserChatSessionsKey, getUserHiddenSessionsKey } from '@/shared/config/storage-keys';
 import { SESSION_EXPIRY_DURATION } from '@/shared/config';
 import { generateGuestSessionId } from '@/shared/lib/session';
 import { getUserSessions, getSessionHistory, convertBackendSessionToLocal } from '@/shared/lib/api-client';
+import { useAuthStore } from '@/features/auth/auth.store';
 
 /**
  * 현재 로그인한 사용자 ID를 가져옵니다.
- * circular dependency를 피하기 위해 storage에서 직접 읽습니다.
+ * Zustand의 in-memory 상태에서 직접 읽어 레이스 컨디션을 방지합니다.
  */
 function getCurrentUserId(): string | null {
-  try {
-    const userDataStr = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-    if (!userDataStr) return null;
-
-    const userData = JSON.parse(userDataStr);
-    // zustand persist 형식: { state: { user: {...}, token: "...", ... } }
-    const user = userData?.state?.user as User | null;
-    return user?.id || null;
-  } catch (error) {
-    console.error('[ChatStore] Failed to get current user ID:', error);
-    return null;
-  }
+  const user = useAuthStore.getState().user;
+  return user?.id || null;
 }
 
 /**
@@ -114,6 +105,7 @@ interface ChatState {
   deleteChatSession: (sessionId: string, isLoggedIn: boolean) => Promise<void>;
   refreshSessionTime: (sessionId: string) => void;
   startNewChat: () => void;
+  resetState: () => void;
   syncWithBackend: (token: string) => Promise<void>;
 }
 
@@ -341,6 +333,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isFormSubmitted: false,
       disputeMessages: [...initialMessages],
       generalMessages: [...initialMessages],
+      backendSessionId: null,
+      disputeFormData: null,
+    });
+  },
+
+  resetState: () => {
+    set({
+      currentSessionId: null,
+      activeChatType: null,
+      chatSessions: [],
+      disputeMessages: [...initialMessages],
+      generalMessages: [...initialMessages],
+      isDisputeLoading: false,
+      isGeneralLoading: false,
+      isFormSubmitted: false,
       backendSessionId: null,
       disputeFormData: null,
     });
