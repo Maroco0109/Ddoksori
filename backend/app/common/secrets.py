@@ -41,7 +41,7 @@ def inject_aws_secrets() -> int:
     AWS Secrets Manager에서 시크릿을 로드하여 os.environ에 주입합니다.
 
     USE_AWS_SECRETS=true일 때만 동작합니다.
-    이미 설정된 환경변수는 덮어쓰지 않습니다 (환경변수 우선).
+    빈 문자열인 환경변수는 덮어씁니다 (실질적 값이 있는 환경변수만 우선).
     중복 호출 시 첫 번째 호출만 실행됩니다.
 
     Returns:
@@ -78,7 +78,7 @@ def inject_aws_secrets() -> int:
             data = json.loads(response["SecretString"])
 
             for env_key, env_value in data.items():
-                if env_key not in os.environ:
+                if not os.environ.get(env_key):
                     os.environ[env_key] = str(env_value)
                     injected += 1
 

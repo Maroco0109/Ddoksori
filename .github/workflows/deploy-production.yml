@@ -142,6 +142,17 @@ jobs:
             fi
             echo "OK: / endpoint"
 
+
+            # 5. OAuth Configuration Check (경고 - OAuth 로그인 검증)
+            echo "Checking OAuth configuration..."
+            OAUTH_RESP=$(curl -sf http://localhost:8000/api/auth/google/url 2>/dev/null || echo "")
+            if echo "$OAUTH_RESP" | grep -q "client_id=&\|client_id=$\|Missing required parameter"; then
+              echo "WARNING: Google OAuth client_id is empty - login will not work"
+            elif [ -n "$OAUTH_RESP" ]; then
+              echo "OK: Google OAuth URL contains client_id"
+            else
+              echo "WARNING: Could not verify OAuth config (non-blocking)"
+            fi
             echo "=== Smoke Tests Completed ==="
 
       - name: Health Check
