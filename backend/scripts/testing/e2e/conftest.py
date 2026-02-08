@@ -75,7 +75,7 @@ def hybrid_retriever(rds_db_config):
 # ============================================================
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def compiled_mas_graph():
     """
     MAS Supervisor 컴파일된 그래프 (MemorySaver 사용).
