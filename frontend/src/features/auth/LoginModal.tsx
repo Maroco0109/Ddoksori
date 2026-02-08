@@ -20,7 +20,7 @@ const NaverIcon = () => (
 export default function LoginModal() {
   const setIsAuthModalOpen = useUIStore((state) => state.setIsAuthModalOpen);
 
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
 
   const handleGoogleLogin = () => {
     window.location.href = `${BACKEND_URL}/auth/google`;

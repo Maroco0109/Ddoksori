@@ -93,7 +93,7 @@ export default function MyPage() {
 
     try {
       // 백엔드 API 호출
-      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
       const response = await fetch(`${BACKEND_URL}/api/users/me/profile`, {
         method: 'PATCH',
         headers: {
