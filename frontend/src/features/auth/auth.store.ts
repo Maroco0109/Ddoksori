@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { User, ChatSession } from '@/shared/types';
 import { STORAGE_KEYS, getUserChatSessionsKey } from '@/shared/config/storage-keys';
 import { storage } from '@/shared/lib/storage';
+import { claimGuestSessions } from '@/shared/lib/api-client';
 
 interface AuthState {
   user: User | null;
@@ -10,36 +11,48 @@ interface AuthState {
   token: string | null;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
-  login: (user: User, token: string) => void;
+  login: (user: User, token: string) => Promise<void>;
   logout: () => void;
 }
 
 /**
  * 비로그인 세션을 로그인 사용자 세션으로 이전
- * @param userId - 로그인한 사용자 ID
+ * 백엔드 API를 호출하여 DB 레벨에서 소유권을 이전하고,
+ * localStorage도 함께 업데이트합니다.
  */
-const transferGuestSessions = (userId: string) => {
+const transferGuestSessions = async (userId: string, token: string) => {
   const guestSessions = storage.get<ChatSession[]>(STORAGE_KEYS.TEMP_CHAT_SESSIONS, true) || [];
 
   if (guestSessions.length === 0) return;
 
-  // 사용자별 storage key 사용
+  // 1. 백엔드에 게스트 세션 소유권 이전 요청
+  const backendSessionIds = guestSessions
+    .map(s => s.id)
+    .filter(Boolean);
+
+  if (backendSessionIds.length > 0) {
+    try {
+      await claimGuestSessions(token, backendSessionIds);
+      console.log(`[Auth] Claimed ${backendSessionIds.length} guest sessions on backend`);
+    } catch (error) {
+      console.error('[Auth] Failed to claim guest sessions on backend:', error);
+      // 백엔드 실패해도 로컬 이전은 계속 진행 (graceful degradation)
+    }
+  }
+
+  // 2. 기존 localStorage 이전 로직 (로컬 캐시)
   const userStorageKey = getUserChatSessionsKey(userId);
   const userSessions = storage.get<ChatSession[]>(userStorageKey, false) || [];
 
-  // 게스트 세션을 사용자 세션으로 복사 (expiresAt 제거)
   const transferredSessions = guestSessions.map((session) => ({
     ...session,
-    expiresAt: null, // 로그인 사용자는 만료 시간 없음
+    expiresAt: null,
   }));
 
-  // 사용자 세션 목록 맨 앞에 추가
   const mergedSessions = [...transferredSessions, ...userSessions];
-
-  // 사용자별 key에 저장
   storage.set(userStorageKey, mergedSessions, false);
 
-  // 게스트 세션 삭제
+  // 3. 게스트 세션 삭제
   storage.remove(STORAGE_KEYS.TEMP_CHAT_SESSIONS, true);
 
   console.log(`[Auth] Transferred ${guestSessions.length} guest sessions to user ${userId}`);
@@ -53,14 +66,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setToken: (token) => set({ token }),
-      login: (user, token) => {
-        // 게스트 세션을 현재 사용자의 세션으로 이전
-        transferGuestSessions(user.id);
+      login: async (user, token) => {
+        // 먼저 상태 설정 (getCurrentUserId가 작동하도록)
         set({ user, token, isAuthenticated: true });
+        // 그 다음 게스트 세션 이전 (백엔드 API 호출 포함)
+        await transferGuestSessions(user.id, token);
       },
       logout: () => {
-        // 사용자별 storage key를 사용하므로 데이터 삭제 불필요
-        // 각 사용자의 채팅 데이터는 localStorage에 보존됨
+        // auth 상태만 초기화 (chatStore는 RootLayout에서 처리 — 순환 참조 방지)
         set({ user: null, token: null, isAuthenticated: false });
       },
     }),
