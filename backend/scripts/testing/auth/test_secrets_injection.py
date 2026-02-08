@@ -29,9 +29,7 @@ def reset_injected_flag():
 def _make_mock_client(secret_data: dict):
     """Create a mock boto3 client returning given secret data for all categories."""
     client = MagicMock()
-    client.get_secret_value.return_value = {
-        "SecretString": json.dumps(secret_data)
-    }
+    client.get_secret_value.return_value = {"SecretString": json.dumps(secret_data)}
     mock_boto3 = MagicMock()
     mock_boto3.client.return_value = client
     return mock_boto3, client
@@ -49,8 +47,10 @@ class TestSecretsInjectionEmptyString:
             "USE_AWS_SECRETS": "true",
             "GOOGLE_CLIENT_ID": "",  # Docker Compose가 빈 문자열로 설정
         }
-        with patch.dict(os.environ, env_patch, clear=False), \
-             patch.dict("sys.modules", {"boto3": mock_boto3}):
+        with (
+            patch.dict(os.environ, env_patch, clear=False),
+            patch.dict("sys.modules", {"boto3": mock_boto3}),
+        ):
             count = inject_aws_secrets()
             assert os.environ["GOOGLE_CLIENT_ID"] == "real-client-id"
             assert count >= 1
@@ -64,8 +64,10 @@ class TestSecretsInjectionEmptyString:
             "USE_AWS_SECRETS": "true",
             "GOOGLE_CLIENT_ID": "already-set-value",
         }
-        with patch.dict(os.environ, env_patch, clear=False), \
-             patch.dict("sys.modules", {"boto3": mock_boto3}):
+        with (
+            patch.dict(os.environ, env_patch, clear=False),
+            patch.dict("sys.modules", {"boto3": mock_boto3}),
+        ):
             inject_aws_secrets()
             assert os.environ["GOOGLE_CLIENT_ID"] == "already-set-value"
 
@@ -76,8 +78,10 @@ class TestSecretsInjectionEmptyString:
 
         os.environ.pop("NAVER_CLIENT_ID", None)
         env_patch = {"USE_AWS_SECRETS": "true"}
-        with patch.dict(os.environ, env_patch, clear=False), \
-             patch.dict("sys.modules", {"boto3": mock_boto3}):
+        with (
+            patch.dict(os.environ, env_patch, clear=False),
+            patch.dict("sys.modules", {"boto3": mock_boto3}),
+        ):
             inject_aws_secrets()
             assert os.environ.get("NAVER_CLIENT_ID") == "naver-id"
 
@@ -103,11 +107,14 @@ class TestSecretsInjectionGuards:
         """두 번째 호출은 0을 반환한다 (중복 방지)."""
         mock_boto3, _ = _make_mock_client({"KEY": "val"})
 
-        with patch.dict(os.environ, {"USE_AWS_SECRETS": "true"}, clear=False), \
-             patch.dict("sys.modules", {"boto3": mock_boto3}):
+        with (
+            patch.dict(os.environ, {"USE_AWS_SECRETS": "true"}, clear=False),
+            patch.dict("sys.modules", {"boto3": mock_boto3}),
+        ):
             inject_aws_secrets()
 
             import app.common.secrets as secrets_mod
+
             # _injected is now True, second call should return 0
             assert secrets_mod._injected is True
             second = inject_aws_secrets()
@@ -126,7 +133,9 @@ class TestSecretsInjectionGuards:
         client.get_secret_value.side_effect = FakeResourceNotFound("not found")
         mock_boto3.client.return_value = client
 
-        with patch.dict(os.environ, {"USE_AWS_SECRETS": "true"}, clear=False), \
-             patch.dict("sys.modules", {"boto3": mock_boto3}):
+        with (
+            patch.dict(os.environ, {"USE_AWS_SECRETS": "true"}, clear=False),
+            patch.dict("sys.modules", {"boto3": mock_boto3}),
+        ):
             count = inject_aws_secrets()
             assert count == 0

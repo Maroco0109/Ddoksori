@@ -41,14 +41,22 @@ def check_oauth_env() -> int:
         value = os.environ.get(var)
         if value is None:
             if use_aws:
-                print(f"  INFO: {var} not set (will be injected from AWS Secrets Manager)")
+                print(
+                    f"  INFO: {var} not set (will be injected from AWS Secrets Manager)"
+                )
             elif var in REQUIRED_VARS:
-                errors.append(f"  ERROR: {var} is not set and USE_AWS_SECRETS is not enabled")
+                errors.append(
+                    f"  ERROR: {var} is not set and USE_AWS_SECRETS is not enabled"
+                )
         elif value == "":
             if use_aws:
-                print(f"  INFO: {var} is empty string (will be overridden by AWS Secrets Manager)")
+                print(
+                    f"  INFO: {var} is empty string (will be overridden by AWS Secrets Manager)"
+                )
             else:
-                warnings.append(f"  WARNING: {var} is empty string - OAuth login will fail!")
+                warnings.append(
+                    f"  WARNING: {var} is empty string - OAuth login will fail!"
+                )
 
     if errors:
         print("\n=== OAuth Environment Check: FAILED ===")
