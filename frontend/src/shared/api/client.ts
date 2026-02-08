@@ -43,31 +43,17 @@ function getAuthHeaders(endpoint?: string): Record<string, string> {
 }
 
 function buildUrl(endpoint: string, params?: Record<string, any>): string {
-  try {
-    const url = new URL(`${API_BASE_URL}${endpoint}`, window.location.origin);
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, String(value));
-        }
-      });
-    }
-    return url.toString();
-  } catch (error) {
-    console.warn('[buildUrl] URL constructor failed, using fallback:', error);
-    const base = API_BASE_URL ?? window.location.origin;
-    const fullUrl = `${base}${endpoint}`;
-    if (params) {
-      const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value));
-        }
-      });
-      return `${fullUrl}?${searchParams.toString()}`;
-    }
-    return fullUrl;
+  // 절대 URL이면 그대로 사용, 빈 문자열/상대 경로면 origin 기준
+  const base = API_BASE_URL.startsWith('http') ? API_BASE_URL : window.location.origin;
+  const url = new URL(endpoint, base);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.append(key, String(value));
+      }
+    });
   }
+  return url.toString();
 }
 
 export const apiClient = {
