@@ -145,13 +145,16 @@ jobs:
 
             # 5. OAuth Configuration Check (경고 - OAuth 로그인 검증)
             echo "Checking OAuth configuration..."
-            OAUTH_RESP=$(curl -sf http://localhost:8000/api/auth/google/url 2>/dev/null || echo "")
-            if echo "$OAUTH_RESP" | grep -q "client_id=&\|client_id=$\|Missing required parameter"; then
-              echo "WARNING: Google OAuth client_id is empty - login will not work"
-            elif [ -n "$OAUTH_RESP" ]; then
-              echo "OK: Google OAuth URL contains client_id"
-            else
-              echo "WARNING: Could not verify OAuth config (non-blocking)"
+            OAUTH_OK=true
+            for VAR in GOOGLE_CLIENT_ID NAVER_CLIENT_ID; do
+              VAL=$(docker exec $(docker ps --filter "name=backend" --format "{{.Names}}" | head -1) printenv $VAR 2>/dev/null || echo "")
+              if [ -z "$VAL" ]; then
+                echo "WARNING: $VAR is empty - OAuth login will not work"
+                OAUTH_OK=false
+              fi
+            done
+            if [ "$OAUTH_OK" = "true" ]; then
+              echo "OK: OAuth client_id configured"
             fi
             echo "=== Smoke Tests Completed ==="
 

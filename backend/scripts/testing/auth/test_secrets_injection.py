@@ -76,14 +76,21 @@ class TestSecretsInjectionEmptyString:
         """env var가 아예 없으면 AWS Secrets Manager 값이 주입된다."""
         mock_boto3, _ = _make_mock_client({"NAVER_CLIENT_ID": "naver-id"})
 
-        os.environ.pop("NAVER_CLIENT_ID", None)
-        env_patch = {"USE_AWS_SECRETS": "true"}
-        with (
-            patch.dict(os.environ, env_patch, clear=False),
-            patch.dict("sys.modules", {"boto3": mock_boto3}),
-        ):
-            inject_aws_secrets()
-            assert os.environ.get("NAVER_CLIENT_ID") == "naver-id"
+        original_value = os.environ.get("NAVER_CLIENT_ID")
+        try:
+            os.environ.pop("NAVER_CLIENT_ID", None)
+            env_patch = {"USE_AWS_SECRETS": "true"}
+            with (
+                patch.dict(os.environ, env_patch, clear=False),
+                patch.dict("sys.modules", {"boto3": mock_boto3}),
+            ):
+                inject_aws_secrets()
+                assert os.environ.get("NAVER_CLIENT_ID") == "naver-id"
+        finally:
+            if original_value is not None:
+                os.environ["NAVER_CLIENT_ID"] = original_value
+            else:
+                os.environ.pop("NAVER_CLIENT_ID", None)
 
 
 class TestSecretsInjectionGuards:
