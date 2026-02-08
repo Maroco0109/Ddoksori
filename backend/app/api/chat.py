@@ -320,7 +320,10 @@ async def chat(
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
 
-        raise HTTPException(status_code=500, detail=f"답변 생성 중 오류 발생: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        )
 
 
 async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
@@ -505,9 +508,7 @@ async def chat_stream_sse(
                         # Error during generation
                         error_event = {
                             "type": "error",
-                            "data": {
-                                "message": custom_data.get("message", "Unknown error")
-                            },
+                            "data": {"message": "답변 생성 중 오류가 발생했습니다."},
                         }
                         yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
@@ -697,7 +698,9 @@ async def chat_stream_sse(
             rag_logger.save(log_entry)
             error_event = {
                 "type": "error",
-                "data": {"message": f"답변 생성 중 오류 발생: {str(e)}"},
+                "data": {
+                    "message": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+                },
             }
             yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
