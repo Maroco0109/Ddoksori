@@ -511,6 +511,55 @@ class ConversationDB:
 
         await asyncio.to_thread(_deactivate)
 
+    async def claim_sessions_for_user(
+        self,
+        session_ids: List[str],
+        user_id: str,
+    ) -> List[str]:
+        """
+        게스트 세션(user_id=NULL)의 소유권을 특정 사용자에게 이전합니다.
+
+        Args:
+            session_ids: 이전할 세션 ID 목록
+            user_id: 새 소유자 ID
+
+        Returns:
+            실제로 이전된 세션 ID 목록
+        """
+
+        def _claim():
+            conn = self._get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE conversations
+                        SET user_id = %s,
+                            expires_at = NULL,
+                            updated_at = NOW()
+                        WHERE session_id = ANY(%s)
+                          AND user_id IS NULL
+                        RETURNING session_id
+                        """,
+                        (user_id, session_ids),
+                    )
+                    claimed = [row[0] for row in cur.fetchall()]
+                conn.commit()
+                if claimed:
+                    logger.info(
+                        f"[ConversationDB] 세션 소유권 이전: user_id={user_id}, "
+                        f"claimed={len(claimed)}/{len(session_ids)}"
+                    )
+                return claimed
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"[ConversationDB] 세션 소유권 이전 실패: {e}")
+                raise
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_claim)
+
     async def get_user_conversations(
         self,
         user_id: str,
