@@ -113,6 +113,34 @@ export async function deleteSession(
   return handleResponse<{ success: boolean; message: string }>(response);
 }
 
+// ============================================================
+// 게스트 세션 소유권 이전 API
+// ============================================================
+
+export interface ClaimSessionsResponse {
+  claimed_count: number;
+  claimed_session_ids: string[];
+}
+
+/**
+ * 게스트 세션을 로그인한 사용자 계정으로 이전합니다.
+ */
+export async function claimGuestSessions(
+  token: string,
+  sessionIds: string[],
+): Promise<ClaimSessionsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}chat/sessions/claim`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }
+  );
+
+  return handleResponse<ClaimSessionsResponse>(response);
+}
+
 /**
  * 백엔드 세션을 ChatSession 형식으로 변환합니다.
  */
