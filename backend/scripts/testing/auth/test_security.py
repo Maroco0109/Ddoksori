@@ -28,7 +28,7 @@ from app.auth.models import User
 
 
 class TestOAuthCSRFDefense:
-    """OAuth state 검증 테스트 (CSRF 방어)"""
+    """OAuth state 검증 테스트 (CSRF 방어) - Redis 기반"""
 
     @staticmethod
     def _get_auth_module():
@@ -46,66 +46,74 @@ class TestOAuthCSRFDefense:
         return mod
 
     def setup_method(self):
-        """각 테스트 전 state 저장소 초기화"""
-        auth_mod = self._get_auth_module()
-        auth_mod._oauth_states.clear()
+        """각 테스트 전 fake Redis 주입 (모듈 인스턴스 캐시)"""
+        self._fake_store = {}
+
+        class FakeRedis:
+            def __init__(self, store):
+                self._store = store
+
+            def setex(self, key, ttl, value):
+                self._store[key] = (value, ttl)
+
+            def get(self, key):
+                entry = self._store.get(key)
+                return entry[0] if entry else None
+
+            def delete(self, key):
+                self._store.pop(key, None)
+
+            def getdel(self, key):
+                entry = self._store.pop(key, None)
+                return entry[0] if entry else None
+
+            def ping(self):
+                return True
+
+        self._auth_mod = self._get_auth_module()
+        self._auth_mod._redis_client = FakeRedis(self._fake_store)
+        self._auth_mod._redis_init_attempted = True
 
     @pytest.mark.unit
     def test_valid_state_verification(self):
         """유효한 state 검증 성공"""
-        auth_mod = self._get_auth_module()
-        auth_mod._store_state("test-state-123")
-        assert auth_mod._verify_and_remove_state("test-state-123") is True
+        self._auth_mod._store_state("test-state-123")
+        assert self._auth_mod._verify_and_remove_state("test-state-123") is True
 
     @pytest.mark.unit
     def test_unknown_state_rejected(self):
         """알 수 없는 state 거부"""
-        auth_mod = self._get_auth_module()
-        assert auth_mod._verify_and_remove_state("unknown-state") is False
+        assert self._auth_mod._verify_and_remove_state("unknown-state") is False
 
     @pytest.mark.unit
     def test_state_single_use(self):
         """state는 일회용 - 재사용 불가"""
-        auth_mod = self._get_auth_module()
-        auth_mod._store_state("single-use-state")
-        assert auth_mod._verify_and_remove_state("single-use-state") is True
-        assert auth_mod._verify_and_remove_state("single-use-state") is False
+        self._auth_mod._store_state("single-use-state")
+        assert self._auth_mod._verify_and_remove_state("single-use-state") is True
+        assert self._auth_mod._verify_and_remove_state("single-use-state") is False
 
     @pytest.mark.unit
-    def test_expired_state_rejected(self):
-        """만료된 state 거부"""
-        auth_mod = self._get_auth_module()
-        auth_mod._oauth_states["expired-state"] = datetime.now() - timedelta(minutes=1)
-        assert auth_mod._verify_and_remove_state("expired-state") is False
+    def test_expired_state_handled_by_redis_ttl(self):
+        """만료된 state는 Redis TTL로 자동 삭제 (키 없으면 거부)"""
+        assert self._auth_mod._verify_and_remove_state("expired-state") is False
 
     @pytest.mark.unit
-    def test_cleanup_expired_states(self):
-        """만료된 state 정리"""
-        auth_mod = self._get_auth_module()
-        auth_mod._store_state("valid-state")
-        auth_mod._oauth_states["expired-1"] = datetime.now() - timedelta(minutes=15)
-        auth_mod._oauth_states["expired-2"] = datetime.now() - timedelta(minutes=30)
-
-        auth_mod._cleanup_expired_states()
-
-        assert "valid-state" in auth_mod._oauth_states
-        assert "expired-1" not in auth_mod._oauth_states
-        assert "expired-2" not in auth_mod._oauth_states
+    def test_redis_ttl_cleanup_not_needed(self):
+        """Redis TTL이 자동 만료를 처리하므로 별도 정리 불필요"""
+        self._auth_mod._store_state("valid-state")
+        assert self._fake_store.get("oauth_state:valid-state") is not None
 
     @pytest.mark.unit
     def test_empty_state_rejected(self):
         """빈 문자열 state 거부"""
-        auth_mod = self._get_auth_module()
-        assert auth_mod._verify_and_remove_state("") is False
+        assert self._auth_mod._verify_and_remove_state("") is False
 
     @pytest.mark.unit
     def test_store_state_sets_ttl(self):
         """state 저장 시 TTL 설정 확인"""
-        auth_mod = self._get_auth_module()
-        auth_mod._store_state("ttl-state")
-        expiry = auth_mod._oauth_states["ttl-state"]
-        expected = datetime.now() + timedelta(minutes=auth_mod.STATE_TTL_MINUTES)
-        assert abs((expiry - expected).total_seconds()) < 1
+        self._auth_mod._store_state("ttl-state")
+        _value, ttl = self._fake_store["oauth_state:ttl-state"]
+        assert ttl == self._auth_mod.STATE_TTL_SECONDS
 
 
 # ============================================================
