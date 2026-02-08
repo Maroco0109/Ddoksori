@@ -110,11 +110,9 @@ def _verify_and_remove_state(state: str) -> bool:
         )
     key = f"oauth_state:{state}"
     try:
-        result = r.get(key)
-        if result is None:
-            return False
-        r.delete(key)
-        return True
+        # GETDEL: 원자적 검증+삭제 (Redis 6.2.0+), 동시 콜백 race condition 방지
+        result = r.getdel(key)
+        return result is not None
     except Exception as e:
         logger.error(f"[Auth] OAuth state 검증 중 Redis 오류: {e}")
         raise HTTPException(

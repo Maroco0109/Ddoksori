@@ -63,6 +63,10 @@ class TestOAuthCSRFDefense:
             def delete(self, key):
                 self._store.pop(key, None)
 
+            def getdel(self, key):
+                entry = self._store.pop(key, None)
+                return entry[0] if entry else None
+
             def ping(self):
                 return True
 
