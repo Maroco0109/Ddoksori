@@ -194,16 +194,18 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   };
 
   useEffect(() => {
-    // 메시지가 2개 이상일 때만 스크롤 (초기 상태에서는 스크롤하지 않음)
-    if (disputeMessages.length > 1) {
+    // 메시지가 2개 이상이고 user 메시지가 있을 때만 저장 (초기 상태에서는 저장하지 않음)
+    const hasUserMessage = disputeMessages.some(m => m.type === 'user');
+    if (disputeMessages.length > 1 && hasUserMessage) {
       scrollToBottom(disputeMessagesEndRef);
       saveChatSession('dispute', disputeMessages);
     }
   }, [disputeMessages, saveChatSession]);
 
   useEffect(() => {
-    // 메시지가 2개 이상일 때만 스크롤 (초기 상태에서는 스크롤하지 않음)
-    if (generalMessages.length > 1) {
+    // 메시지가 2개 이상이고 user 메시지가 있을 때만 저장 (초기 상태에서는 저장하지 않음)
+    const hasUserMessage = generalMessages.some(m => m.type === 'user');
+    if (generalMessages.length > 1 && hasUserMessage) {
       scrollToBottom(generalMessagesEndRef);
       saveChatSession('general', generalMessages);
     }
