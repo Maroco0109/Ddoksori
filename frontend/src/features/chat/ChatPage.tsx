@@ -144,6 +144,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       const session = currentSessions.find(s => s.id === resolvedSessionId);
 
       if (session) {
+        // BUG-1 fix: 세션 전환 시 backendSessionId를 해당 세션 ID로 동기화
+        // 이렇게 하지 않으면 이전 세션의 backendSessionId가 남아있어
+        // saveChatSession에서 잘못된 세션에 메시지가 저장됨
+        setBackendSessionId(session.id);
+
         // 메시지를 id(turn_number) 순서로 정렬 (혹시 역순으로 저장된 경우 대비)
         const restoredMessages = session.messages
           .map(msg => ({
@@ -175,12 +180,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           }, 200);
           transitionTimersRef.current.push(scrollTimer);
         }
-        // Bug 2 fix: Register unlock timer for cleanup
-        const unlockTimer = setTimeout(() => {
-          isTransitioningRef.current = false;
-          setIsTransitioning(false);
-        }, 300);
-        transitionTimersRef.current.push(unlockTimer);
+        // BUG-4 fix: 메시지 복원 완료 후 즉시 전환 가드 해제 (300ms 타이머 대신)
+        // 스크롤 타이머는 UX용이므로 유지하되 전환 가드와 분리
+        isTransitioningRef.current = false;
+        setIsTransitioning(false);
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
@@ -310,7 +313,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       timestamp: new Date()
     };
 
-    setDisputeMessages([...disputeMessages, formMessage]);
+    setDisputeMessages(prev => [...prev, formMessage]);
     setIsFormSubmitted(true);
     setStoreChatType('dispute');
     setActiveChatType('dispute');
@@ -418,7 +421,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
       // 의미있는 질문 (최소 5글자)
       if (line.length >= 5) {
-        console.warn('[ChatPage] Detected conversation history in input, extracted:', line.substring(0, 50));
         return line;
       }
     }
@@ -434,14 +436,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
     const expectedSessionId = resolvedSessionId;
 
-    // DEBUG: 원본 입력값 로깅
-    console.log('[ChatPage] Original disputeInputValue (length=' + disputeInputValue.length + '):', disputeInputValue.substring(0, 100));
-
     // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(disputeInputValue);
-
-    // DEBUG: 정제 후 로깅
-    console.log('[ChatPage] Cleaned input (length=' + cleanedInput.length + '):', cleanedInput.substring(0, 100));
 
     const newMessage: MessageWithCitations = {
       id: disputeMessages.length + 1,
@@ -450,7 +446,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       timestamp: new Date()
     };
 
-    setDisputeMessages([...disputeMessages, newMessage]);
+    setDisputeMessages(prev => [...prev, newMessage]);
     setDisputeInputValue('');
 
     // AI 메시지 ID 미리 생성 (placeholder 없이)
@@ -522,7 +518,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       timestamp: new Date()
     };
 
-    setGeneralMessages([...generalMessages, newMessage]);
+    setGeneralMessages(prev => [...prev, newMessage]);
     setGeneralInputValue('');
     setActiveChatType('general');
     setStoreChatType('general');

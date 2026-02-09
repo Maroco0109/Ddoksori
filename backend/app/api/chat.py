@@ -685,9 +685,20 @@ async def chat_stream_sse(
             logger.info(
                 f"[chat_stream] Client disconnected during streaming, session={session_id[:8]}"
             )
+            # BUG-6 fix: 부분 응답이 있으면 assistant turn으로 저장
+            if full_answer and session_memory:
+                try:
+                    await session_memory.add_turn(role="assistant", content=full_answer)
+                    logger.info(
+                        f"[chat_stream] Saved partial answer ({len(full_answer)} chars) on cancel"
+                    )
+                except Exception as save_err:
+                    logger.error(
+                        f"[chat_stream] Failed to save partial answer: {save_err}"
+                    )
             rag_logger.log_response(
                 entry=log_entry,
-                answer="",
+                answer=full_answer or "",
                 chunks_used=0,
                 sources_count=0,
                 status="cancelled",
