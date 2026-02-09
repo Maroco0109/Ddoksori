@@ -96,6 +96,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 세션 불러오기
   useEffect(() => {
+    // Set transition lock BEFORE cancelling streams to prevent any race condition
+    setIsTransitioning(true);
+
     // Cancel any active streams during session transition
     cancelDisputeStream();
     cancelGeneralStream();
@@ -113,7 +116,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       const session = currentSessions.find(s => s.id === resolvedSessionId);
 
       if (session) {
-        setIsTransitioning(true);
         // 메시지를 id(turn_number) 순서로 정렬 (혹시 역순으로 저장된 경우 대비)
         const restoredMessages = session.messages
           .map(msg => ({
@@ -143,8 +145,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 200);
         }
-        // Unlock transition after messages are settled
-        requestAnimationFrame(() => setIsTransitioning(false));
+        // Unlock transition after messages and scroll are fully settled
+        setTimeout(() => setIsTransitioning(false), 300);
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
