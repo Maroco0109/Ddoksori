@@ -26,6 +26,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const saveChatSessionToStore = useChatStore((state) => state.saveChatSession);
   const setDisputeFormData = useChatStore((state) => state.setDisputeFormData);
   const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
+  const isTransitioning = useChatStore((state) => state.isTransitioning);
+  const setIsTransitioning = useChatStore((state) => state.setIsTransitioning);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
 
   // 현재 세션 ID
@@ -35,8 +37,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const chatMutation = useChatMutation();
 
   // PR-7: SSE Streaming hook for real-time agent status
-  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat();
-  const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream, cancelStream: cancelDisputeStream } = useStreamingChat();
+  const { streamingState: generalStreamingState, startStream: startGeneralStream, cancelStream: cancelGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
   const [disputeMessages, setDisputeMessages] = useState<MessageWithCitations[]>([
@@ -94,6 +96,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 세션 불러오기
   useEffect(() => {
+    // Set transition lock BEFORE cancelling streams to prevent any race condition
+    setIsTransitioning(true);
+
+    // Cancel any active streams during session transition
+    cancelDisputeStream();
+    cancelGeneralStream();
+
     if (resolvedSessionId) {
       setSessionId(resolvedSessionId);
 
@@ -136,12 +145,15 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 200);
         }
+        // Unlock transition after messages and scroll are fully settled
+        setTimeout(() => setIsTransitioning(false), 300);
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
         if (storeActiveChatType === 'dispute') {
           setIsFormSubmitted(false);
         }
+        setIsTransitioning(false);
       }
     } else {
       setSessionId(null);
@@ -175,6 +187,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         purchaseAmount: '',
         disputeDetail: ''
       });
+      setIsTransitioning(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedSessionId, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
@@ -194,6 +207,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   };
 
   useEffect(() => {
+    if (isTransitioning) return;
     if (disputeMessages.length > 1) {
       scrollToBottom(disputeMessagesEndRef);
     }
@@ -201,9 +215,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     if (disputeMessages.length > 1 && hasUserMessage) {
       saveChatSession('dispute', disputeMessages);
     }
-  }, [disputeMessages, saveChatSession]);
+  }, [disputeMessages, saveChatSession, isTransitioning]);
 
   useEffect(() => {
+    if (isTransitioning) return;
     if (generalMessages.length > 1) {
       scrollToBottom(generalMessagesEndRef);
     }
@@ -211,7 +226,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     if (generalMessages.length > 1 && hasUserMessage) {
       saveChatSession('general', generalMessages);
     }
-  }, [generalMessages, saveChatSession]);
+  }, [generalMessages, saveChatSession, isTransitioning]);
 
   // 분쟁 상담 폼 제출 핸들러
   const handleDisputeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {

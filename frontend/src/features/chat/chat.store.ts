@@ -88,6 +88,7 @@ interface ChatState {
   backendSessionId: string | null;
   disputeFormData: DisputeFormData | null;
   isSyncing: boolean;
+  isTransitioning: boolean;
 
   // Actions
   setCurrentSessionId: (id: string | null) => void;
@@ -100,6 +101,7 @@ interface ChatState {
   setIsFormSubmitted: (submitted: boolean) => void;
   setBackendSessionId: (id: string | null) => void;
   setDisputeFormData: (data: DisputeFormData | null) => void;
+  setIsTransitioning: (transitioning: boolean) => void;
 
   loadChatSessions: (isLoggedIn: boolean) => void;
   saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean) => void;
@@ -131,6 +133,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   backendSessionId: null,
   disputeFormData: null,
   isSyncing: false,
+  isTransitioning: false,
 
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setActiveChatType: (type) => set({ activeChatType: type }),
@@ -142,6 +145,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsFormSubmitted: (submitted) => set({ isFormSubmitted: submitted }),
   setBackendSessionId: (id) => set({ backendSessionId: id }),
   setDisputeFormData: (data) => set({ disputeFormData: data }),
+  setIsTransitioning: (transitioning) => set({ isTransitioning: transitioning }),
 
   loadChatSessions: (isLoggedIn) => {
     // 동기화 중이면 로드 건너뛰기 (race condition 방지)
@@ -178,6 +182,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   saveChatSession: async (type, messages, isLoggedIn) => {
     const state = get();
+    // Guard: skip save during session transition to prevent message contamination
+    if (state.isTransitioning) {
+      console.log('[ChatStore] Skipping save — session transition in progress');
+      return;
+    }
     let storageKey: string;
     let userId: string | null = null;
 
@@ -357,6 +366,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isFormSubmitted: false,
       backendSessionId: null,
       disputeFormData: null,
+      isTransitioning: false,
     });
   },
 

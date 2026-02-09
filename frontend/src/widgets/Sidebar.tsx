@@ -38,6 +38,7 @@ export default function Sidebar() {
   const currentSessionId = useChatStore((state) => state.currentSessionId);
   const setCurrentSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setActiveChatType = useChatStore((state) => state.setActiveChatType);
+  const isTransitioning = useChatStore((state) => state.isTransitioning);
   const startNewChat = useChatStore((state) => state.startNewChat);
   const refreshSessionTime = useChatStore((state) => state.refreshSessionTime);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
@@ -233,6 +234,7 @@ export default function Sidebar() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (isTransitioning) return;
                                   setCurrentSessionId(session.id);
                                   setActiveChatType(session.type);
                                   navigate(ROUTES.CHAT);

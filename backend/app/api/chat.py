@@ -119,6 +119,11 @@ async def chat(
         logger.info(
             f"[chat] Memory backend: {config.memory.backend}, use_db: {use_db}, user_id: {user_id}"
         )
+        if not use_db:
+            logger.warning(
+                "[chat] DB persistence disabled (CONVERSATION_MEMORY_BACKEND != 'db'). "
+                "Chat history will NOT be saved to PostgreSQL."
+            )
 
         session_memory = None
         memory_context = {}

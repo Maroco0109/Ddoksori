@@ -195,18 +195,34 @@ EXECUTE FUNCTION update_users_updated_at();
 -- 7. Data Validation
 -- ============================================================
 
--- Check constraints
-ALTER TABLE conversations ADD CONSTRAINT check_chat_type
-    CHECK (chat_type IN ('dispute', 'general'));
+-- Check constraints (idempotent - safe for re-runs)
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_chat_type') THEN
+        ALTER TABLE conversations ADD CONSTRAINT check_chat_type
+            CHECK (chat_type IN ('dispute', 'general'));
+    END IF;
+END $$;
 
-ALTER TABLE conversation_turns ADD CONSTRAINT check_role
-    CHECK (role IN ('user', 'assistant', 'system'));
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_role') THEN
+        ALTER TABLE conversation_turns ADD CONSTRAINT check_role
+            CHECK (role IN ('user', 'assistant', 'system'));
+    END IF;
+END $$;
 
-ALTER TABLE users ADD CONSTRAINT check_provider
-    CHECK (provider IN ('google', 'kakao', 'naver'));
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_provider') THEN
+        ALTER TABLE users ADD CONSTRAINT check_provider
+            CHECK (provider IN ('google', 'kakao', 'naver'));
+    END IF;
+END $$;
 
-ALTER TABLE oauth_sessions ADD CONSTRAINT check_oauth_provider
-    CHECK (provider IN ('google', 'kakao', 'naver'));
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_oauth_provider') THEN
+        ALTER TABLE oauth_sessions ADD CONSTRAINT check_oauth_provider
+            CHECK (provider IN ('google', 'kakao', 'naver'));
+    END IF;
+END $$;
 
 -- ============================================================
 -- 완료
