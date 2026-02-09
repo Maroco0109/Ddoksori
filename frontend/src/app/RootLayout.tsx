@@ -30,13 +30,27 @@ export default function RootLayout() {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    loadChatSessions(isLoggedIn);
+    if (isLoggedIn && token) {
+      // 로그인 상태: 백엔드 동기화 우선 (5초 쿨다운)
+      const now = Date.now();
+      if (now - lastSyncTime.current > 5000) {
+        syncWithBackend(token).then(() => {
+          lastSyncTime.current = Date.now();
+        }).catch(() => {
+          loadChatSessions(true); // 동기화 실패 시 localStorage 폴백
+        });
+      } else {
+        loadChatSessions(true);
+      }
+    } else {
+      loadChatSessions(false);
+    }
 
     if (!isLoggedIn) {
       const interval = setInterval(() => loadChatSessions(false), 60000);
       return () => clearInterval(interval);
     }
-  }, [location.pathname, isLoggedIn, loadChatSessions]);
+  }, [location.pathname, isLoggedIn, token, loadChatSessions, syncWithBackend]);
 
   // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
   useEffect(() => {
