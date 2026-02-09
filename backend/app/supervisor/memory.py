@@ -196,7 +196,12 @@ class ConversationMemory:
 
             self._db_loaded = True
         except Exception as e:
-            logger.error(f"[Memory] Failed to load from DB: {e}", exc_info=True)
+            logger.error(
+                f"[Memory] Failed to load from DB: {e}, "
+                f"session_id={self.session_id}, user_id={self.user_id}, "
+                f"chat_type={self.chat_type}",
+                exc_info=True,
+            )
             # Continue with in-memory mode
             self.use_db = False
             self.db = None
