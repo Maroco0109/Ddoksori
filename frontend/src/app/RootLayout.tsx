@@ -28,13 +28,21 @@ export default function RootLayout() {
       setAuthReady(true);
       return;
     }
+    const timeout = setTimeout(() => {
+      console.error('[RootLayout] Auth hydration timeout — proceeding with current state');
+      setAuthReady(true);
+    }, 5000);
     const check = setInterval(() => {
       if (isAuthHydrated()) {
         setAuthReady(true);
         clearInterval(check);
+        clearTimeout(timeout);
       }
-    }, 10);
-    return () => clearInterval(check);
+    }, 50);
+    return () => {
+      clearInterval(check);
+      clearTimeout(timeout);
+    };
   }, []);
 
   // 로그아웃 감지 시 chatStore 상태 초기화 (순환 참조 방지)
