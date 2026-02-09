@@ -31,6 +31,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const isTransitioningRef = useRef(false);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
 
+  // Bug 1 fix: Track previous session ID to detect actual session switches
+  // undefined = initial mount (never seen a session), null = new chat, string = specific session
+  const prevSessionIdRef = useRef<string | null | undefined>(undefined);
+  // Bug 2 fix: Track all transition timers for cleanup on rapid switches
+  const transitionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   // 현재 세션 ID
   const [sessionId, setSessionId] = useState<string | null>(resolvedSessionId);
 
@@ -97,13 +103,31 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 세션 불러오기
   useEffect(() => {
+    // Bug 2 fix: Cancel all pending timers from previous transition
+    transitionTimersRef.current.forEach(clearTimeout);
+    transitionTimersRef.current = [];
+
+    // Bug 1 fix: Skip if resolvedSessionId hasn't actually changed (spurious re-trigger)
+    if (prevSessionIdRef.current !== undefined
+        && prevSessionIdRef.current === resolvedSessionId) {
+      return;
+    }
+
+    // Bug 1 fix: Only cancel streams on actual session switch (not initial mount)
+    const isSessionSwitch = prevSessionIdRef.current !== undefined
+      && prevSessionIdRef.current !== resolvedSessionId;
+
+    prevSessionIdRef.current = resolvedSessionId;
+
     // Synchronous ref lock (immediate, no batching delay)
     isTransitioningRef.current = true;
     setIsTransitioning(true);
 
-    // Cancel any active streams during session transition
-    cancelDisputeStream();
-    cancelGeneralStream();
+    // Cancel active streams only on actual session switch
+    if (isSessionSwitch) {
+      cancelDisputeStream();
+      cancelGeneralStream();
+    }
 
     if (resolvedSessionId) {
       setSessionId(resolvedSessionId);
@@ -124,7 +148,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
             ...msg,
             timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
           }))
-          .sort((a, b) => a.id - b.id); // ✅ id 오름차순 정렬
+          .sort((a, b) => a.id - b.id); // id 오름차순 정렬
 
         // store에서 설정한 chatType을 우선 사용, 없으면 세션의 type 사용
         const chatType = storeActiveChatType || session.type;
@@ -134,24 +158,27 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           setActiveChatType('dispute');
           setIsFormSubmitted(true);
           setStoreChatType('dispute');
-          // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-          setTimeout(() => {
+          // Bug 2 fix: Register scroll timer for cleanup
+          const scrollTimer = setTimeout(() => {
             disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 200);
+          transitionTimersRef.current.push(scrollTimer);
         } else {
           setGeneralMessages(restoredMessages);
           setActiveChatType('general');
           setStoreChatType('general');
-          // 기존 상담 불러올 때 스크롤을 아래로 이동 (RootLayout 스크롤 처리 이후 실행)
-          setTimeout(() => {
+          // Bug 2 fix: Register scroll timer for cleanup
+          const scrollTimer = setTimeout(() => {
             generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 200);
+          transitionTimersRef.current.push(scrollTimer);
         }
-        // Unlock transition after messages and scroll are fully settled
-        setTimeout(() => {
+        // Bug 2 fix: Register unlock timer for cleanup
+        const unlockTimer = setTimeout(() => {
           isTransitioningRef.current = false;
           setIsTransitioning(false);
         }, 300);
+        transitionTimersRef.current.push(unlockTimer);
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
@@ -196,6 +223,12 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       isTransitioningRef.current = false;
       setIsTransitioning(false);
     }
+
+    // Bug 2 fix: Cleanup all timers on unmount or next re-trigger
+    return () => {
+      transitionTimersRef.current.forEach(clearTimeout);
+      transitionTimersRef.current = [];
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedSessionId, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
 

@@ -622,6 +622,13 @@ async def chat_stream_sse(
                 # 어시스턴트 응답을 메모리에 추가
                 if session_memory:
                     await session_memory.add_turn(role="assistant", content=answer)
+                    logger.info(
+                        f"[chat_stream] Memory save status: "
+                        f"conversation_id={session_memory.conversation_id}, "
+                        f"use_db={session_memory.use_db}, "
+                        f"turns={session_memory.get_turn_count()}, "
+                        f"session={session_id[:8]}"
+                    )
 
                 complete_event = {"type": "complete", "data": response_data}
 
