@@ -28,11 +28,15 @@ export default function RootLayout() {
       setAuthReady(true);
       return;
     }
+    let mounted = true;
     const timeout = setTimeout(() => {
-      console.error('[RootLayout] Auth hydration timeout — proceeding with current state');
-      setAuthReady(true);
+      if (mounted) {
+        console.warn('[RootLayout] Auth hydration timeout — proceeding with current state');
+        setAuthReady(true);
+      }
     }, 5000);
     const check = setInterval(() => {
+      if (!mounted) return;
       if (isAuthHydrated()) {
         setAuthReady(true);
         clearInterval(check);
@@ -40,6 +44,7 @@ export default function RootLayout() {
       }
     }, 50);
     return () => {
+      mounted = false;
       clearInterval(check);
       clearTimeout(timeout);
     };
@@ -83,7 +88,7 @@ export default function RootLayout() {
 
   // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
   useEffect(() => {
-    if (!isLoggedIn || !token) return;
+    if (!authReady || !isLoggedIn || !token) return;
 
     const handleVisibilityChange = async () => {
       // 페이지가 다시 보이게 되었을 때
@@ -109,7 +114,7 @@ export default function RootLayout() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isLoggedIn, token, syncWithBackend]);
+  }, [authReady, isLoggedIn, token, syncWithBackend]);
 
   // 브라우저 자동 스크롤 복원 비활성화
   useEffect(() => {
