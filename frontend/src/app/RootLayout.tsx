@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, ScrollRestoration } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/store';
-import { useAuthStore } from '@/features/auth/auth.store';
+import { useAuthStore, isAuthHydrated } from '@/features/auth/auth.store';
 import { useChatStore } from '@/features/chat/chat.store';
 import Sidebar from '@/widgets/Sidebar';
 import LoginModal from '@/features/auth/LoginModal';
@@ -20,16 +20,53 @@ export default function RootLayout() {
   const lastSyncTime = useRef<number>(0);
   const prevAuthRef = useRef(isLoggedIn);
 
+  // Auth hydration 완료 대기 (F5 새로고침 시 race condition 방지)
+  const [authReady, setAuthReady] = useState(isAuthHydrated());
+
+  useEffect(() => {
+    if (isAuthHydrated()) {
+      setAuthReady(true);
+      return;
+    }
+    let mounted = true;
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('[RootLayout] Auth hydration timeout — proceeding with current state');
+        setAuthReady(true);
+      }
+    }, 5000);
+    const check = setInterval(() => {
+      if (!mounted) {
+        clearInterval(check);
+        clearTimeout(timeout);
+        return;
+      }
+      if (isAuthHydrated()) {
+        setAuthReady(true);
+        clearInterval(check);
+        clearTimeout(timeout);
+      }
+    }, 50);
+    return () => {
+      mounted = false;
+      clearInterval(check);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   // 로그아웃 감지 시 chatStore 상태 초기화 (순환 참조 방지)
   useEffect(() => {
+    if (!authReady) return;
     if (prevAuthRef.current && !isLoggedIn) {
       useChatStore.getState().resetState();
       console.log('[RootLayout] Auth state changed to logged out — chat state reset');
     }
     prevAuthRef.current = isLoggedIn;
-  }, [isLoggedIn]);
+  }, [authReady, isLoggedIn]);
 
   useEffect(() => {
+    if (!authReady) return;
+
     if (isLoggedIn && token) {
       // 로그인 상태: 백엔드 동기화 우선 (5초 쿨다운)
       const now = Date.now();
@@ -51,11 +88,11 @@ export default function RootLayout() {
       const interval = setInterval(() => loadChatSessions(false), 60000);
       return () => clearInterval(interval);
     }
-  }, [isLoggedIn, token, loadChatSessions, syncWithBackend]);
+  }, [authReady, isLoggedIn, token, loadChatSessions, syncWithBackend]);
 
   // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
   useEffect(() => {
-    if (!isLoggedIn || !token) return;
+    if (!authReady || !isLoggedIn || !token) return;
 
     const handleVisibilityChange = async () => {
       // 페이지가 다시 보이게 되었을 때
@@ -81,7 +118,7 @@ export default function RootLayout() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isLoggedIn, token, syncWithBackend]);
+  }, [authReady, isLoggedIn, token, syncWithBackend]);
 
   // 브라우저 자동 스크롤 복원 비활성화
   useEffect(() => {
