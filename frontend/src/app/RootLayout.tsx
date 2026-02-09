@@ -36,8 +36,9 @@ export default function RootLayout() {
       if (now - lastSyncTime.current > 5000) {
         syncWithBackend(token).then(() => {
           lastSyncTime.current = Date.now();
-        }).catch(() => {
-          loadChatSessions(true); // 동기화 실패 시 localStorage 폴백
+        }).catch((error) => {
+          console.error('[RootLayout] Backend sync failed, falling back to localStorage:', error);
+          loadChatSessions(true);
         });
       } else {
         loadChatSessions(true);
