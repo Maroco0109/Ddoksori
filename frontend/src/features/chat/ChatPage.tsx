@@ -12,6 +12,16 @@ import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
 import { StatusIndicator } from './components/StatusIndicator';
 
+// Fix 2: Initial messages constant for clearing opposite chat type
+const initialGreetingMessages: MessageWithCitations[] = [
+  {
+    id: 1,
+    type: 'ai',
+    content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+    timestamp: new Date()
+  }
+];
+
 interface ChatPageProps {
   currentSessionId?: string | null;
   onSessionCreate?: (sessionId: string) => void;
@@ -30,6 +40,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const setIsTransitioning = useChatStore((state) => state.setIsTransitioning);
   const isTransitioningRef = useRef(false);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
+
+  // Fix 1: Stream token for validating stream responses belong to current session
+  const streamTokenRef = useRef<string | null>(null);
 
   // Bug 1 fix: Track previous session ID to detect actual session switches
   // undefined = initial mount (never seen a session), null = new chat, string = specific session
@@ -125,6 +138,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     isTransitioningRef.current = true;
     setIsTransitioning(true);
 
+    // Fix 1: Invalidate any in-flight stream token on session change
+    streamTokenRef.current = null;
+
     // Cancel active streams only on actual session switch
     if (isSessionSwitch) {
       cancelDisputeStream();
@@ -162,6 +178,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
         if (chatType === 'dispute') {
           setDisputeMessages(restoredMessages);
+          // Fix 2: Clear opposite chat type messages to prevent cross-contamination
+          setGeneralMessages([...initialGreetingMessages]);
           setActiveChatType('dispute');
           setIsFormSubmitted(true);
           setStoreChatType('dispute');
@@ -172,6 +190,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           transitionTimersRef.current.push(scrollTimer);
         } else {
           setGeneralMessages(restoredMessages);
+          // Fix 2: Clear opposite chat type messages to prevent cross-contamination
+          setDisputeMessages([...initialGreetingMessages]);
           setActiveChatType('general');
           setStoreChatType('general');
           // Bug 2 fix: Register scroll timer for cleanup
@@ -180,18 +200,23 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           }, 200);
           transitionTimersRef.current.push(scrollTimer);
         }
-        // BUG-4 fix: 메시지 복원 완료 후 즉시 전환 가드 해제 (300ms 타이머 대신)
-        // 스크롤 타이머는 UX용이므로 유지하되 전환 가드와 분리
-        isTransitioningRef.current = false;
-        setIsTransitioning(false);
+        // Fix 4: Defer guard release to microtask so save useEffects
+        // (which run in the next render cycle) still see isTransitioning=true
+        queueMicrotask(() => {
+          isTransitioningRef.current = false;
+          setIsTransitioning(false);
+        });
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
         if (storeActiveChatType === 'dispute') {
           setIsFormSubmitted(false);
         }
-        isTransitioningRef.current = false;
-        setIsTransitioning(false);
+        // Fix 4: Defer guard release to microtask
+        queueMicrotask(() => {
+          isTransitioningRef.current = false;
+          setIsTransitioning(false);
+        });
       }
     } else {
       setSessionId(null);
@@ -225,8 +250,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         purchaseAmount: '',
         disputeDetail: ''
       });
-      isTransitioningRef.current = false;
-      setIsTransitioning(false);
+      // Fix 4: Defer guard release to microtask
+      queueMicrotask(() => {
+        isTransitioningRef.current = false;
+        setIsTransitioning(false);
+      });
     }
 
     // Bug 2 fix: Cleanup all timers on unmount or next re-trigger
@@ -237,10 +265,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedSessionId, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
 
-  // 채팅 세션 저장 함수 (store 함수를 래핑)
-  const saveChatSession = useCallback(async (type: ChatType, messages: MessageWithCitations[]) => {
-    // store의 saveChatSession만 호출 (store에서 모든 state 관리)
-    await saveChatSessionToStore(type, messages, isLoggedIn);
+  // Fix 3: 채팅 세션 저장 함수 - targetSessionId를 명시적으로 전달하여
+  // save 실행 시점의 state가 아닌 호출 시점의 세션 ID를 사용
+  const saveChatSession = useCallback(async (type: ChatType, messages: MessageWithCitations[], targetSessionId?: string | null) => {
+    await saveChatSessionToStore(type, messages, isLoggedIn, targetSessionId ?? undefined);
   }, [saveChatSessionToStore, isLoggedIn]);
 
   const disputeMessagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -261,7 +289,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
     const hasUserMessage = disputeMessages.some(m => m.type === 'user');
     if (disputeMessages.length > 1 && hasUserMessage) {
-      saveChatSession('dispute', disputeMessages);
+      // Fix 3: Pass sessionId explicitly so save uses call-time ID, not execution-time state
+      saveChatSession('dispute', disputeMessages, sessionId);
     }
   }, [disputeMessages, saveChatSession, isTransitioning, sessionId]);
 
@@ -275,7 +304,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
     const hasUserMessage = generalMessages.some(m => m.type === 'user');
     if (generalMessages.length > 1 && hasUserMessage) {
-      saveChatSession('general', generalMessages);
+      // Fix 3: Pass sessionId explicitly so save uses call-time ID, not execution-time state
+      saveChatSession('general', generalMessages, sessionId);
     }
   }, [generalMessages, saveChatSession, isTransitioning, sessionId]);
 
@@ -291,8 +321,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       return;
     }
 
-    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
-    const expectedSessionId = resolvedSessionId;
+    // Fix 1: Generate unique stream token — session transitions invalidate it
+    const token = crypto.randomUUID();
+    streamTokenRef.current = token;
 
     const formDataForBackend: DisputeFormData = {
       purchaseDate: disputeForm.purchaseDate,
@@ -337,12 +368,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         },
       });
 
-      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
-      // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
-      const currentStoreSessionId = useChatStore.getState().currentSessionId;
-      if (isTransitioningRef.current ||
-          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
+      // Fix 1/6: Stream token guard — if token was invalidated by session transition, discard response
+      if (streamTokenRef.current !== token) {
         return;
       }
 
@@ -436,8 +463,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleDisputeSend = async () => {
     if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
 
-    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
-    const expectedSessionId = resolvedSessionId;
+    // Fix 1: Generate unique stream token
+    const token = crypto.randomUUID();
+    streamTokenRef.current = token;
 
     // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(disputeInputValue);
@@ -463,12 +491,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         top_k: 5,
       });
 
-      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
-      // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
-      const currentStoreSessionId = useChatStore.getState().currentSessionId;
-      if (isTransitioningRef.current ||
-          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
+      // Fix 1/6: Stream token guard
+      if (streamTokenRef.current !== token) {
         return;
       }
 
@@ -511,8 +535,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleGeneralSend = async () => {
     if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
-    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
-    const expectedSessionId = resolvedSessionId;
+    // Fix 1: Generate unique stream token
+    const token = crypto.randomUUID();
+    streamTokenRef.current = token;
 
     // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(generalInputValue);
@@ -540,12 +565,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         top_k: 5,
       });
 
-      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
-      // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
-      const currentStoreSessionId = useChatStore.getState().currentSessionId;
-      if (isTransitioningRef.current ||
-          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
+      // Fix 1/6: Stream token guard
+      if (streamTokenRef.current !== token) {
         return;
       }
 

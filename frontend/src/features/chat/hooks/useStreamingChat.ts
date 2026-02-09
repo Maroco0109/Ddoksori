@@ -182,11 +182,11 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
                   onStatusUpdate?.(status, progress, node);
                 } else if (eventData.type === 'complete') {
                   completeData = eventData.data;
-                  // BUG-9 fix: 세션 전환이 발생하지 않은 경우에만 backendSessionId 업데이트
-                  // 세션 전환 시 backendSessionId가 새 세션 ID로 변경되므로
-                  // capturedBackendSessionId와 다르면 전환된 것
+                  // Fix 5: 세션 전환이 발생하지 않은 경우에만 backendSessionId 업데이트
+                  // capturedBackendSessionId === null은 새 채팅 시작을 의미하므로 항상 업데이트 허용
                   const currentBackendSessionId = useChatStore.getState().backendSessionId;
-                  if (currentBackendSessionId === capturedBackendSessionId) {
+                  if (currentBackendSessionId === capturedBackendSessionId
+                      || capturedBackendSessionId === null) {
                     setBackendSessionId(completeData.session_id);
                   }
                   setStreamingState({

@@ -111,7 +111,7 @@ interface ChatState {
   setIsTransitioning: (transitioning: boolean) => void;
 
   loadChatSessions: (isLoggedIn: boolean) => void;
-  saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean) => void;
+  saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean, targetSessionId?: string) => void;
   deleteChatSession: (sessionId: string, isLoggedIn: boolean) => Promise<void>;
   refreshSessionTime: (sessionId: string) => void;
   startNewChat: () => void;
@@ -186,7 +186,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ chatSessions: sessions });
   },
 
-  saveChatSession: (type, messages, isLoggedIn) => {
+  saveChatSession: (type, messages, isLoggedIn, targetSessionId?) => {
     // BUG-3 fix: Promise 체이닝으로 save를 직렬화
     saveQueue = saveQueue.then(async () => {
       const state = get();
@@ -206,11 +206,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       let sessions = storage.get<ChatSession[]>(storageKey, !isLoggedIn) || [];
 
-      // 세션 ID 결정 우선순위:
-      // 1. backendSessionId (백엔드에서 반환한 ID - 가장 우선)
-      // 2. currentSessionId (프론트엔드 로컬 ID)
-      // 3. 새 ID 생성
-      let newSessionId = state.backendSessionId || state.currentSessionId;
+      // Fix 3: 세션 ID 결정 우선순위:
+      // 1. targetSessionId (호출자가 명시적으로 전달한 ID - 가장 우선)
+      // 2. backendSessionId (백엔드에서 반환한 ID)
+      // 3. currentSessionId (프론트엔드 로컬 ID)
+      // 4. 새 ID 생성
+      let newSessionId = targetSessionId || state.backendSessionId || state.currentSessionId;
 
       // 백엔드 session_id를 받았고, 기존 currentSessionId와 다른 경우
       // 임시 ID로 저장된 세션을 백엔드 ID로 변경
