@@ -113,9 +113,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       return;
     }
 
-    // Bug 1 fix: Only cancel streams on actual session switch (not initial mount)
+    // Bug 1 fix: Only cancel streams on actual session switch (ID_A → ID_B)
+    // null → ID is session "creation" (not a switch), so don't cancel streams
     const isSessionSwitch = prevSessionIdRef.current !== undefined
-      && prevSessionIdRef.current !== resolvedSessionId;
+      && prevSessionIdRef.current !== resolvedSessionId
+      && prevSessionIdRef.current !== null;
 
     prevSessionIdRef.current = resolvedSessionId;
 
