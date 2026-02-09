@@ -51,7 +51,7 @@ export default function RootLayout() {
       const interval = setInterval(() => loadChatSessions(false), 60000);
       return () => clearInterval(interval);
     }
-  }, [location.pathname, isLoggedIn, token, loadChatSessions, syncWithBackend]);
+  }, [isLoggedIn, token, loadChatSessions, syncWithBackend]);
 
   // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
   useEffect(() => {
