@@ -441,16 +441,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
+      // 백엔드에 없지만 최근 5분 이내 생성된 로컬 세션 보존 (DB 저장 지연 방어)
+      const backendSessionIds = new Set(convertedSessions.map(s => s.id));
+      const recentLocalOnly = localSessions.filter(
+        s => !backendSessionIds.has(s.id) && s.lastUpdated && (Date.now() - s.lastUpdated < 5 * 60 * 1000)
+      );
+      const mergedSessions = [...convertedSessions, ...recentLocalOnly];
+
+      if (recentLocalOnly.length > 0) {
+        console.log(`[ChatStore] Preserved ${recentLocalOnly.length} recent local-only sessions`);
+      }
+
       // 숨긴 세션 필터링
-      const visibleSessions = filterHiddenSessions(convertedSessions, userId);
+      const visibleSessions = filterHiddenSessions(mergedSessions, userId);
 
       // localStorage에 저장 (필터링되지 않은 전체 세션 저장 - 숨김 해제 가능하도록)
-      storage.set(storageKey, convertedSessions, false);
+      storage.set(storageKey, mergedSessions, false);
 
       // state 업데이트 (필터링된 세션만)
       set({ chatSessions: visibleSessions });
 
-      console.log(`[ChatStore] Sync complete: ${visibleSessions.length} sessions (${convertedSessions.length - visibleSessions.length} hidden)`);
+      console.log(`[ChatStore] Sync complete: ${visibleSessions.length} sessions (${mergedSessions.length - visibleSessions.length} hidden)`);
     } catch (error) {
       console.error('[ChatStore] syncWithBackend failed:', error);
       // 동기화 실패 시 localStorage 데이터 사용
