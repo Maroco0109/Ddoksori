@@ -28,6 +28,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
   const isTransitioning = useChatStore((state) => state.isTransitioning);
   const setIsTransitioning = useChatStore((state) => state.setIsTransitioning);
+  const isTransitioningRef = useRef(false);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
 
   // 현재 세션 ID
@@ -96,7 +97,8 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 세션 불러오기
   useEffect(() => {
-    // Set transition lock BEFORE cancelling streams to prevent any race condition
+    // Synchronous ref lock (immediate, no batching delay)
+    isTransitioningRef.current = true;
     setIsTransitioning(true);
 
     // Cancel any active streams during session transition
@@ -146,13 +148,17 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           }, 200);
         }
         // Unlock transition after messages and scroll are fully settled
-        setTimeout(() => setIsTransitioning(false), 300);
+        setTimeout(() => {
+          isTransitioningRef.current = false;
+          setIsTransitioning(false);
+        }, 300);
       } else if (storeActiveChatType) {
         // 세션이 없지만 store에 chatType이 설정되어 있는 경우
         setActiveChatType(storeActiveChatType);
         if (storeActiveChatType === 'dispute') {
           setIsFormSubmitted(false);
         }
+        isTransitioningRef.current = false;
         setIsTransitioning(false);
       }
     } else {
@@ -187,6 +193,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         purchaseAmount: '',
         disputeDetail: ''
       });
+      isTransitioningRef.current = false;
       setIsTransitioning(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,7 +214,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   };
 
   useEffect(() => {
-    if (isTransitioning) return;
+    if (isTransitioningRef.current || isTransitioning) return;
     if (disputeMessages.length > 1) {
       scrollToBottom(disputeMessagesEndRef);
     }
@@ -218,7 +225,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   }, [disputeMessages, saveChatSession, isTransitioning]);
 
   useEffect(() => {
-    if (isTransitioning) return;
+    if (isTransitioningRef.current || isTransitioning) return;
     if (generalMessages.length > 1) {
       scrollToBottom(generalMessagesEndRef);
     }
