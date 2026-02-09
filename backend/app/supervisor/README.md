@@ -1,109 +1,109 @@
-# MAS Supervisor (Multi-Agent System Orchestrator)
+# MAS Supervisor (멀티 에이전트 시스템 오케스트레이터)
 
-**Last modified**: 2026-02-09
+**최종 수정**: 2026-02-09
 
-## 1. Overview
+## 1. 개요 (Overview)
 
-The MAS (Multi-Agent System) Supervisor is the central orchestration layer of the DDOKSORI consumer dispute resolution chatbot. Built on **LangGraph** with a **Hub-Spoke architecture**, it coordinates 6 specialized agents through a stateful workflow graph.
+MAS (Multi-Agent System) Supervisor는 DDOKSORI 소비자 분쟁 해결 챗봇의 중앙 오케스트레이션 레이어입니다. **LangGraph** 기반 **Hub-Spoke 아키텍처**로 구성되며, 6개의 전문 에이전트를 상태 기반 워크플로우 그래프를 통해 조율합니다.
 
-### Core Responsibilities
+### 핵심 역할
 
-1. **Workflow Management**: Defines the end-to-end execution flow -- query analysis, selective retrieval, answer generation, legal review, and output guardrails.
-2. **State Management**: Shares conversation history, retrieval results, generated answers, and control flags across agents via the `ChatState` TypedDict.
-3. **2-Strategy Routing**: Routes queries through either a **Fast Path** (no retrieval) or a **Full Pipeline** (retrieval + review) based on intent classification.
-4. **Conversation Phase System**: Rule-based state machine for progressive information gathering and phased guidance in dispute consultations.
-5. **Multi-Level Caching**: L1 through L5 Redis caches to minimize redundant LLM calls and retrieval operations.
-6. **Security**: Input sanitization, prompt injection prevention, and input length limits.
+1. **워크플로우 관리**: 질의 분석, 선택적 검색, 답변 생성, 법률 검토, 출력 가드레일까지의 전체 실행 흐름을 정의합니다.
+2. **상태 관리**: 대화 이력, 검색 결과, 생성된 답변, 제어 플래그를 `ChatState` TypedDict를 통해 에이전트 간 공유합니다.
+3. **2-전략 라우팅**: 의도 분류 결과에 따라 **Fast Path** (검색 없음) 또는 **Full Pipeline** (검색 + 검토)로 쿼리를 라우팅합니다.
+4. **대화 단계 시스템**: 분쟁 상담에서 단계적 정보 수집과 점진적 안내를 위한 규칙 기반 상태 머신입니다.
+5. **다단계 캐싱**: L1~L5 Redis 캐시로 중복 LLM 호출 및 검색 작업을 최소화합니다.
+6. **보안**: 입력 정화, 프롬프트 인젝션 방지, 입력 길이 제한을 수행합니다.
 
-### Architectural Highlights
+### 아키텍처 특징
 
-- **3 Retrieval Agents** (law, criteria, case) execute in parallel via LangGraph Fan-out/Fan-in
-- **Fallback Chain**: GPT-4o -> Claude 3.5 Sonnet -> Rule-based (guarantees response even when all LLMs fail)
-- **Singleton Graph**: Compiled once, reused across all requests via `get_mas_supervisor_graph()`
-- **Checkpointer**: Thread-based state persistence (MemorySaver for dev; PostgresSaver planned)
+- **3개 검색 에이전트** (law, criteria, case)가 LangGraph Fan-out/Fan-in을 통해 병렬 실행됩니다.
+- **폴백 체인**: GPT-4o -> Claude 3.5 Sonnet -> 규칙 기반 (모든 LLM이 실패해도 응답을 보장합니다)
+- **싱글톤 그래프**: 한 번 컴파일되어 `get_mas_supervisor_graph()`를 통해 모든 요청에서 재사용됩니다.
+- **체크포인터**: 스레드 기반 상태 영속화 (개발용 MemorySaver; PostgresSaver 예정)
 
 ---
 
-## 2. State Schema
+## 2. 상태 스키마 (State Schema)
 
-The orchestrator manages all system data through `ChatState` (inherits `MessagesState`), defined across 7 submodules in the `state/` package.
+오케스트레이터는 `ChatState` (`MessagesState` 상속)를 통해 모든 시스템 데이터를 관리하며, `state/` 패키지의 7개 서브모듈에 걸쳐 정의됩니다.
 
-### State Submodules
+### 상태 서브모듈
 
-| Module | Key Types | Description |
-|--------|-----------|-------------|
-| `session.py` | `OnboardingInfo`, `SessionState`, `ChatType` | Session metadata, onboarding form data, chat type (`dispute` / `general`) |
-| `agent_results.py` | `QueryAnalysisResult`, `RetrievalResult`, `IndividualRetrievalResult`, `ReviewResult`, `CitedCase`, `ViolationV2`, `RetryContext` | Agent execution results, MAS v2 types |
-| `output.py` | `OutputState`, `ClaimEvidenceMapping`, `ResponseDepth` | Final answer, sources (cumulative via `operator.add`), claim-evidence mapping, Progressive Disclosure depth |
-| `control.py` | `RoutingMode`, `ControlState`, `TraceEntry` | Routing mode literals, guardrail flags, node execution traces |
-| `supervisor.py` | `SupervisorState`, `AgentMessage` | Supervisor decision state, inter-agent message protocol |
-| `memory.py` | `MemoryState`, `ConversationTurn`, `CompactSummary`, `RAGConversationMemory`, `RAGTurn` | Conversation history, compact summaries, selective RAG memory (window-based) |
-| `__init__.py` | `ChatState`, `create_initial_state` | Unified state schema integrating all submodules, initial state factory |
+| 모듈 | 주요 타입 | 설명 |
+|------|----------|------|
+| `session.py` | `OnboardingInfo`, `SessionState`, `ChatType` | 세션 메타데이터, 온보딩 폼 데이터, 채팅 유형 (`dispute` / `general`) |
+| `agent_results.py` | `QueryAnalysisResult`, `RetrievalResult`, `IndividualRetrievalResult`, `ReviewResult`, `CitedCase`, `ViolationV2`, `RetryContext` | 에이전트 실행 결과, MAS v2 타입 |
+| `output.py` | `OutputState`, `ClaimEvidenceMapping`, `ResponseDepth` | 최종 답변, 출처 (누적: `operator.add`), 주장-증거 매핑, Progressive Disclosure 깊이 |
+| `control.py` | `RoutingMode`, `ControlState`, `TraceEntry` | 라우팅 모드 리터럴, 가드레일 플래그, 노드 실행 트레이스 |
+| `supervisor.py` | `SupervisorState`, `AgentMessage` | Supervisor 의사결정 상태, 에이전트 간 메시지 프로토콜 |
+| `memory.py` | `MemoryState`, `ConversationTurn`, `CompactSummary`, `RAGConversationMemory`, `RAGTurn` | 대화 이력, 압축 요약, 선택적 RAG 메모리 (윈도우 기반) |
+| `__init__.py` | `ChatState`, `create_initial_state` | 모든 서브모듈을 통합한 통합 상태 스키마, 초기 상태 팩토리 |
 
-### RoutingMode (6 modes)
+### RoutingMode (6가지 모드)
 
 ```python
 RoutingMode = Literal[
-    "NO_RETRIEVAL",           # Fast Path: greeting, system questions (skip retrieval + review)
-    "NEED_RAG",               # Full Pipeline: retrieval + generation + review
-    "CACHED_RAG",             # Follow-up turn using cached retrieval results
-    "RESTRICTED_DOMAIN",      # Specialized agency referral (finance, medical, etc.)
-    "META_CONVERSATIONAL",    # Meta-conversation (about the system itself)
-    "FOLLOWUP_WITH_CONTEXT",  # Follow-up using previous turn's cached retrieval
+    "NO_RETRIEVAL",           # Fast Path: 인사, 시스템 질문 (검색 + 검토 생략)
+    "NEED_RAG",               # Full Pipeline: 검색 + 생성 + 검토
+    "CACHED_RAG",             # 캐시된 검색 결과를 사용하는 후속 턴
+    "RESTRICTED_DOMAIN",      # 전문기관 안내 (금융, 의료 등)
+    "META_CONVERSATIONAL",    # 메타 대화 (시스템 자체에 대한 질문)
+    "FOLLOWUP_WITH_CONTEXT",  # 이전 턴의 캐시된 검색을 활용하는 후속 질문
 ]
 ```
 
-### ConversationPhase (Progressive Disclosure)
+### ConversationPhase (점진적 공개)
 
-The conversation phase system implements progressive information disclosure for dispute consultations:
+대화 단계 시스템은 분쟁 상담에서 점진적 정보 공개(Progressive Disclosure)를 구현합니다:
 
 ```python
-# Actual phase names from conversation_manager.py
-ConversationPhase = str  # Legacy compat; actual values:
+# conversation_manager.py의 실제 단계명
+ConversationPhase = str  # 레거시 호환; 실제 값:
 
-# Phase flow:
-# "initial"                    -> First entry
-# "info_gathering"             -> Collecting dispute slots
-# "providing_case_summary"     -> Delivering case summary (first RAG turn)
-# "awaiting_law_confirm"       -> "Want law/criteria details?" prompt
-# "providing_law_detail"       -> Delivering law/criteria details
-# "awaiting_procedure_confirm" -> "Want procedure info?" prompt
-# "providing_procedure"        -> Delivering procedure guidance
-# "completed"                  -> Consultation complete
+# 단계 흐름:
+# "initial"                    -> 최초 진입
+# "info_gathering"             -> 분쟁 슬롯 수집
+# "providing_case_summary"     -> 사례 요약 제공 (첫 번째 RAG 턴)
+# "awaiting_law_confirm"       -> "법률/기준 상세 정보를 원하시나요?" 프롬프트
+# "providing_law_detail"       -> 법률/기준 상세 정보 제공
+# "awaiting_procedure_confirm" -> "절차 안내를 원하시나요?" 프롬프트
+# "providing_procedure"        -> 절차 안내 제공
+# "completed"                  -> 상담 완료
 ```
 
-### Key ChatState Fields
+### 주요 ChatState 필드
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `messages` | `List[BaseMessage]` | Multi-turn conversation history (LangChain standard, `add_messages` reducer) |
-| `user_query` | `str` | Current turn user question |
-| `chat_type` | `Literal["dispute", "general"]` | Session type |
-| `onboarding` | `Optional[OnboardingInfo]` | Frontend form data (purchase item, amount, dispute details, etc.) |
-| `session_id` | `Optional[str]` | Session ID (cache key) |
-| `mode` | `RoutingMode` | Routing mode set by query analysis |
-| `query_analysis` | `Optional[QueryAnalysisResult]` | Intent classification, keywords, retriever types, expanded queries |
-| `retrieval` | `Optional[RetrievalResult]` | Merged retrieval results (4-section: laws, criteria, disputes, counsels) |
-| `draft_answer` | `Optional[str]` | LLM-generated draft answer |
-| `review` | `Optional[ReviewResult]` | Legal review result (pass/fail, violations, confidence score) |
-| `final_answer` | `Optional[str]` | Final verified answer |
-| `sources` | `Annotated[List[Dict], operator.add]` | Citation sources (cumulative) |
-| `supervisor` | `Optional[SupervisorState]` | Supervisor decision state (phase, next_agent, iteration_count) |
-| `individual_retrieval_results` | `Annotated[List[IndividualRetrievalResult], operator.add]` | Per-agent retrieval results (Fan-in accumulation) |
-| `conversation_phase` | `str` | Current conversation phase (Progressive Disclosure) |
-| `dispute_slots` | `Dict[str, Optional[str]]` | Dispute consultation slots (purchase_item, problem_details, etc.) |
-| `rag_conversation_memory` | `Optional[List[Dict]]` | Selective RAG turn memory (window size 5) |
-| `_last_turn_context` | `Optional[Dict]` | Previous turn context for FOLLOWUP_WITH_CONTEXT |
-| `_node_timings` | `Annotated[Dict, _merge_dicts]` | Per-node execution timing (parallel-safe merge) |
-| `_agent_trace_entries` | `Annotated[List[TraceEntry], operator.add]` | Agent trace entries (append-only, parallel fan-out compatible) |
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `messages` | `List[BaseMessage]` | 멀티턴 대화 이력 (LangChain 표준, `add_messages` 리듀서) |
+| `user_query` | `str` | 현재 턴 사용자 질문 |
+| `chat_type` | `Literal["dispute", "general"]` | 세션 유형 |
+| `onboarding` | `Optional[OnboardingInfo]` | 프론트엔드 폼 데이터 (구매 품목, 금액, 분쟁 상세 등) |
+| `session_id` | `Optional[str]` | 세션 ID (캐시 키) |
+| `mode` | `RoutingMode` | 질의 분석에서 결정된 라우팅 모드 |
+| `query_analysis` | `Optional[QueryAnalysisResult]` | 의도 분류, 키워드, 검색기 유형, 확장 쿼리 |
+| `retrieval` | `Optional[RetrievalResult]` | 병합된 검색 결과 (4개 섹션: laws, criteria, disputes, counsels) |
+| `draft_answer` | `Optional[str]` | LLM이 생성한 초안 답변 |
+| `review` | `Optional[ReviewResult]` | 법률 검토 결과 (통과/실패, 위반 사항, 신뢰도 점수) |
+| `final_answer` | `Optional[str]` | 최종 검증된 답변 |
+| `sources` | `Annotated[List[Dict], operator.add]` | 인용 출처 (누적) |
+| `supervisor` | `Optional[SupervisorState]` | Supervisor 의사결정 상태 (단계, next_agent, iteration_count) |
+| `individual_retrieval_results` | `Annotated[List[IndividualRetrievalResult], operator.add]` | 에이전트별 검색 결과 (Fan-in 누적) |
+| `conversation_phase` | `str` | 현재 대화 단계 (Progressive Disclosure) |
+| `dispute_slots` | `Dict[str, Optional[str]]` | 분쟁 상담 슬롯 (purchase_item, problem_details 등) |
+| `rag_conversation_memory` | `Optional[List[Dict]]` | 선택적 RAG 턴 메모리 (윈도우 크기 5) |
+| `_last_turn_context` | `Optional[Dict]` | FOLLOWUP_WITH_CONTEXT용 이전 턴 컨텍스트 |
+| `_node_timings` | `Annotated[Dict, _merge_dicts]` | 노드별 실행 타이밍 (병렬 안전 병합) |
+| `_agent_trace_entries` | `Annotated[List[TraceEntry], operator.add]` | 에이전트 트레이스 항목 (추가 전용, 병렬 Fan-out 호환) |
 
 ---
 
-## 3. Graph Architecture (Workflow)
+## 3. 그래프 아키텍처 (Graph Architecture)
 
-The system uses a single **MAS Supervisor Graph** defined in `graph_mas.py`.
+시스템은 `graph_mas.py`에 정의된 단일 **MAS Supervisor Graph**를 사용합니다.
 
-### Mermaid Diagram
+### Mermaid 다이어그램
 
 ```mermaid
 flowchart TD
@@ -152,37 +152,37 @@ flowchart TD
     memory_save --> End4((End))
 ```
 
-### Node Registration Order (from `graph_mas.py`)
+### 노드 등록 순서 (`graph_mas.py` 기준)
 
-| # | Node Name | Source | Description |
-|---|-----------|--------|-------------|
-| 1 | `cache_check` | `graph_mas.py` | L1 cache lookup (session-aware, turn-aware) |
-| 2 | `cache_response` | `graph_mas.py` | Return cached response (skips entire pipeline) |
-| 3 | `input_guardrail` | `guardrail/nodes.py` | Input validation, safety check, moderation |
-| 4 | `supervisor` | `nodes/supervisor.py` | Hub node: decides next agent via 2-strategy routing |
-| 5 | `query_analysis` | `agents/query_analysis/` | Intent classification, keyword extraction, query expansion, slot extraction |
-| 6 | `generation` | `agents/answer_generation/` | RAG-based answer generation (gpt-4o) with fallback chain |
-| 7 | `review` | `agents/legal_review/` | Legal review: hallucination check, prohibited expression filter, citation verification |
-| 8 | `retrieval_law` | `agents/retrieval/law_agent.py` | Law/statute retrieval agent (metadata filter: law_guide + legislation types) |
-| 9 | `retrieval_criteria` | `agents/retrieval/criteria_agent.py` | Dispute resolution criteria retrieval agent (metadata filter: administrative rules) |
-| 10 | `retrieval_case` | `agents/retrieval/case_agent.py` | Dispute/mediation case retrieval agent (categories: mediation, resolution, consultation) |
-| 11 | `retrieval_merge` | `nodes/retrieval_merge.py` | Fan-in: merge 3 agent results into 4-section RetrievalResult + product relevance filtering |
-| 12 | `memory_save` | `nodes/memory_save.py` | Save NEED_RAG turns to selective memory + L4 cache persistence |
-| 13 | `inject_cached_retrieval` | `graph_mas.py` | Inject cached retrieval for FOLLOWUP_WITH_CONTEXT mode |
+| # | 노드명 | 소스 | 설명 |
+|---|--------|------|------|
+| 1 | `cache_check` | `graph_mas.py` | L1 캐시 조회 (세션 인식, 턴 인식) |
+| 2 | `cache_response` | `graph_mas.py` | 캐시된 응답 반환 (전체 파이프라인 생략) |
+| 3 | `input_guardrail` | `guardrail/nodes.py` | 입력 검증, 안전성 검사, 모더레이션 |
+| 4 | `supervisor` | `nodes/supervisor.py` | 허브 노드: 2-전략 라우팅으로 다음 에이전트를 결정 |
+| 5 | `query_analysis` | `agents/query_analysis/` | 의도 분류, 키워드 추출, 쿼리 확장, 슬롯 추출 |
+| 6 | `generation` | `agents/answer_generation/` | RAG 기반 답변 생성 (gpt-4o) + 폴백 체인 |
+| 7 | `review` | `agents/legal_review/` | 법률 검토: 환각 검사, 금지 표현 필터, 인용 검증 |
+| 8 | `retrieval_law` | `agents/retrieval/law_agent.py` | 법률/법령 검색 에이전트 (메타데이터 필터: law_guide + legislation 유형) |
+| 9 | `retrieval_criteria` | `agents/retrieval/criteria_agent.py` | 분쟁해결기준 검색 에이전트 (메타데이터 필터: 행정 규칙) |
+| 10 | `retrieval_case` | `agents/retrieval/case_agent.py` | 분쟁/조정 사례 검색 에이전트 (카테고리: 조정, 해결, 상담) |
+| 11 | `retrieval_merge` | `nodes/retrieval_merge.py` | Fan-in: 3개 에이전트 결과를 4개 섹션 RetrievalResult로 병합 + 제품 관련성 필터링 |
+| 12 | `memory_save` | `nodes/memory_save.py` | NEED_RAG 턴을 선택적 메모리에 저장 + L4 캐시 영속화 |
+| 13 | `inject_cached_retrieval` | `graph_mas.py` | FOLLOWUP_WITH_CONTEXT 모드용 캐시된 검색 결과 주입 |
 
-### Edge Configuration
+### 엣지 구성
 
 ```
-Entry Point: cache_check
+진입점: cache_check
 
-Conditional Edges:
-  cache_check      -> cache_response | input_guardrail      (based on _cache_hit)
-  input_guardrail  -> END | supervisor                       (based on guardrail_blocked)
+조건부 엣지:
+  cache_check      -> cache_response | input_guardrail      (_cache_hit 기반)
+  input_guardrail  -> END | supervisor                       (guardrail_blocked 기반)
   supervisor       -> query_analysis | retrieval_{law,criteria,case} | generation |
                       review | output_guardrail | inject_cached_retrieval
-                      (based on _route_mas_supervisor)
+                      (_route_mas_supervisor 기반)
 
-Static Edges:
+정적 엣지:
   cache_response          -> END
   retrieval_{law,criteria,case} -> retrieval_merge           (Fan-in)
   retrieval_merge         -> supervisor
@@ -198,164 +198,164 @@ Static Edges:
 
 ## 4. SupervisorNode
 
-`nodes/supervisor.py` implements the central orchestrator as a class with dependency-injected LLM support.
+`nodes/supervisor.py`는 의존성 주입 LLM을 지원하는 클래스로 중앙 오케스트레이터를 구현합니다.
 
-### 2-Strategy Routing
+### 2-전략 라우팅
 
-| Mode | Strategy | Pipeline |
-|------|----------|----------|
-| `NO_RETRIEVAL` | **Fast Path** | Query Analysis -> Generation -> END (skip retrieval + review) |
-| `RESTRICTED_DOMAIN` | **Fast Path** | Query Analysis -> Generation -> END (specialized agency referral) |
+| 모드 | 전략 | 파이프라인 |
+|------|------|-----------|
+| `NO_RETRIEVAL` | **Fast Path** | Query Analysis -> Generation -> END (검색 + 검토 생략) |
+| `RESTRICTED_DOMAIN` | **Fast Path** | Query Analysis -> Generation -> END (전문기관 안내) |
 | `NEED_RAG` | **Full Pipeline** | Query Analysis -> Retrieval (Fan-out) -> Generation -> Review -> END |
-| `CACHED_RAG` | **Full Pipeline** (skip retrieval) | Query Analysis -> Generation -> Review -> END |
-| `FOLLOWUP_WITH_CONTEXT` | **Full Pipeline** (inject cache) | Query Analysis -> inject_cached_retrieval -> Generation -> Review -> END |
+| `CACHED_RAG` | **Full Pipeline** (검색 생략) | Query Analysis -> Generation -> Review -> END |
+| `FOLLOWUP_WITH_CONTEXT` | **Full Pipeline** (캐시 주입) | Query Analysis -> inject_cached_retrieval -> Generation -> Review -> END |
 
-### Fallback Chain
+### 폴백 체인
 
-The SupervisorNode initializes a multi-model fallback chain for LLM-based decision-making:
+SupervisorNode는 LLM 기반 의사결정을 위한 다중 모델 폴백 체인을 초기화합니다:
 
 ```
 1. Primary:   GPT-4o (config.models.supervisor)        -- OpenAI
 2. Fallback:  Claude 3.5 Sonnet (MODEL_SUPERVISOR_FALLBACK env)  -- Anthropic
-3. Final:     Rule-based (_rule_based_fallback)         -- No LLM needed
+3. Final:     규칙 기반 (_rule_based_fallback)         -- LLM 불필요
 ```
 
-Each level is tried in sequence. If primary times out (30s) or returns unparseable JSON, fallback is tried. If all LLMs fail, rule-based logic makes the routing decision deterministically.
+각 단계는 순차적으로 시도됩니다. Primary가 타임아웃(30초)되거나 파싱 불가능한 JSON을 반환하면 Fallback을 시도합니다. 모든 LLM이 실패하면 규칙 기반 로직이 결정론적으로 라우팅 결정을 내립니다.
 
-### Security Features
+### 보안 기능
 
-| Feature | Implementation |
-|---------|---------------|
-| **Input Sanitization** | `_sanitize_user_input()` masks dangerous patterns (ignore, disregard, pretend, etc.) |
-| **Length Limit** | User input truncated to 500 characters (`MAX_USER_INPUT_LENGTH`) |
-| **Structure Protection** | Consecutive `###` and `---` patterns collapsed to prevent prompt structure attacks |
-| **Korean Injection** | Korean-language injection patterns detected and masked |
-| **Infinite Loop Prevention** | `MAX_SUPERVISOR_ITERATIONS = 10` forces termination with partial results |
-| **JSON Parse Retry** | 1 retry with markdown cleanup before falling back to rule-based |
+| 기능 | 구현 |
+|------|------|
+| **입력 정화** | `_sanitize_user_input()`가 위험 패턴(ignore, disregard, pretend 등)을 마스킹 |
+| **길이 제한** | 사용자 입력을 500자로 절단 (`MAX_USER_INPUT_LENGTH`) |
+| **구조 보호** | 연속된 `###` 및 `---` 패턴을 축소하여 프롬프트 구조 공격 방지 |
+| **한국어 인젝션** | 한국어 인젝션 패턴을 감지하고 마스킹 |
+| **무한 루프 방지** | `MAX_SUPERVISOR_ITERATIONS = 10`으로 부분 결과와 함께 강제 종료 |
+| **JSON 파싱 재시도** | 규칙 기반 폴백 전 마크다운 정리 후 1회 재시도 |
 
-### Key Constants
+### 주요 상수
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `MAX_SUPERVISOR_ITERATIONS` | 10 | Maximum supervisor invocations per turn |
-| `LLM_TIMEOUT_SECONDS` | 30.0 | Per-LLM-call timeout |
-| `MAX_JSON_PARSE_RETRIES` | 1 | JSON parsing retry before rule-based fallback |
-| `MAX_USER_INPUT_LENGTH` | 500 | Input truncation limit (prompt injection prevention) |
+| 상수 | 값 | 설명 |
+|------|-----|------|
+| `MAX_SUPERVISOR_ITERATIONS` | 10 | 턴당 최대 Supervisor 호출 횟수 |
+| `LLM_TIMEOUT_SECONDS` | 30.0 | LLM 호출당 타임아웃 |
+| `MAX_JSON_PARSE_RETRIES` | 1 | 규칙 기반 폴백 전 JSON 파싱 재시도 횟수 |
+| `MAX_USER_INPUT_LENGTH` | 500 | 입력 절단 제한 (프롬프트 인젝션 방지) |
 
-### SupervisorState Phases
+### SupervisorState 단계
 
-The supervisor tracks its current execution phase:
+Supervisor는 현재 실행 단계를 추적합니다:
 
-| Phase | Meaning |
-|-------|---------|
-| `analyzing` | Query analysis in progress |
-| `retrieving` | Retrieval agents executing |
-| `drafting` | Answer generation in progress |
-| `reviewing` | Legal review in progress |
-| `clarifying` | Awaiting user clarification |
-| `done` | Pipeline complete |
-| `processing` | Generic processing state |
+| 단계 | 의미 |
+|------|------|
+| `analyzing` | 질의 분석 진행 중 |
+| `retrieving` | 검색 에이전트 실행 중 |
+| `drafting` | 답변 생성 진행 중 |
+| `reviewing` | 법률 검토 진행 중 |
+| `clarifying` | 사용자 명확화 대기 중 |
+| `done` | 파이프라인 완료 |
+| `processing` | 일반 처리 상태 |
 
 ---
 
-## 5. Conversation Manager
+## 5. 대화 관리자 (Conversation Manager)
 
-`conversation_manager.py` is a **rule-based engine** for conversation phase transitions and slot management. It operates without LLM calls for cost efficiency.
+`conversation_manager.py`는 대화 단계 전환과 슬롯 관리를 위한 **규칙 기반 엔진**입니다. 비용 효율성을 위해 LLM 호출 없이 동작합니다.
 
-### Core Functions
+### 핵심 함수
 
 ```python
 def update_slots_and_phase(state: ChatState) -> Dict[str, Any]:
-    """Main entry point. Merges slots, computes status, determines phase transition.
-    Returns: dispute_slots, dispute_slot_status, conversation_phase, last_phase_transition_reason"""
+    """메인 진입점. 슬롯 병합, 상태 계산, 단계 전환 결정.
+    반환: dispute_slots, dispute_slot_status, conversation_phase, last_phase_transition_reason"""
 
 def get_next_questions(state: ChatState) -> List[str]:
-    """Returns 1-3 questions based on current phase and missing slots."""
+    """현재 단계와 누락된 슬롯에 따라 1~3개의 질문을 반환."""
 
 def detect_yes_no(text: str) -> Optional[bool]:
-    """Rule-based yes/no detection using Korean patterns."""
+    """한국어 패턴을 사용한 규칙 기반 예/아니오 감지."""
 
 def should_trigger_clarification(state: ChatState) -> bool:
-    """True if phase is info_gathering, awaiting_law_confirm, or awaiting_procedure_confirm."""
+    """단계가 info_gathering, awaiting_law_confirm, 또는 awaiting_procedure_confirm이면 True."""
 
 def get_retriever_types_for_phase(phase: str) -> List[str]:
-    """Returns retrieval agent types for each phase."""
+    """각 단계에 대한 검색 에이전트 유형을 반환."""
 
 def compute_phase_transition(current_phase, user_query, slot_status, query_type) -> Tuple[str, str]:
-    """Computes next phase and transition reason."""
+    """다음 단계와 전환 사유를 계산."""
 ```
 
-### Slot Management
+### 슬롯 관리
 
-**Required Slots**: `purchase_item`, `problem_details`
-**Optional Slots**: `dispute_type`, `purchase_date`, `purchase_place`
+**필수 슬롯**: `purchase_item`, `problem_details`
+**선택 슬롯**: `dispute_type`, `purchase_date`, `purchase_place`
 
-**Merge Priority** (highest to lowest):
-1. `extracted_info` (current turn LLM extraction)
-2. `onboarding` (frontend form data)
-3. `existing_slots` (memory/previous turns)
+**병합 우선순위** (높은 순):
+1. `extracted_info` (현재 턴 LLM 추출)
+2. `onboarding` (프론트엔드 폼 데이터)
+3. `existing_slots` (메모리/이전 턴)
 
-### Phase Transition Table
+### 단계 전환 테이블
 
 ```
-initial -> info_gathering             (dispute intent detected + slots missing)
-        -> providing_case_summary     (dispute intent + required slots filled)
-        -> initial                    (no dispute intent)
+initial -> info_gathering             (분쟁 의도 감지 + 슬롯 누락)
+        -> providing_case_summary     (분쟁 의도 + 필수 슬롯 충족)
+        -> initial                    (분쟁 의도 없음)
 
-info_gathering -> providing_case_summary  (required slots filled)
-               -> info_gathering          (slots still missing)
+info_gathering -> providing_case_summary  (필수 슬롯 충족)
+               -> info_gathering          (슬롯 미충족)
 
-providing_case_summary -> awaiting_law_confirm    (case summary provided)
+providing_case_summary -> awaiting_law_confirm    (사례 요약 제공 완료)
 
-awaiting_law_confirm -> providing_law_detail          (user says "yes")
-                     -> awaiting_procedure_confirm    (user says "no")
-                     -> initial                       (new topic detected)
+awaiting_law_confirm -> providing_law_detail          (사용자 "예" 응답)
+                     -> awaiting_procedure_confirm    (사용자 "아니오" 응답)
+                     -> initial                       (새 주제 감지)
 
-providing_law_detail -> awaiting_procedure_confirm    (law detail provided)
+providing_law_detail -> awaiting_procedure_confirm    (법률 상세 제공 완료)
 
-awaiting_procedure_confirm -> providing_procedure     (user says "yes")
-                           -> completed               (user says "no")
-                           -> initial                  (new topic detected)
+awaiting_procedure_confirm -> providing_procedure     (사용자 "예" 응답)
+                           -> completed               (사용자 "아니오" 응답)
+                           -> initial                  (새 주제 감지)
 
-providing_procedure -> completed                      (procedure provided)
+providing_procedure -> completed                      (절차 안내 제공 완료)
 
-completed -> initial                                  (new query restarts flow)
+completed -> initial                                  (새 쿼리로 흐름 재시작)
 ```
 
-### Phase-Based Retriever Selection
+### 단계별 검색기 선택
 
 ```python
 # conversation_manager.py
 if phase == "providing_case_summary":
-    return ["law", "criteria", "case"]   # Full retrieval (cached for later phases)
+    return ["law", "criteria", "case"]   # 전체 검색 (이후 단계를 위해 캐싱)
 
 if phase in ("providing_law_detail", "providing_procedure"):
-    return []                             # Use cache, no re-retrieval needed
+    return []                             # 캐시 사용, 재검색 불필요
 
-# Default:
+# 기본값:
 return ["law", "criteria", "case"]
 ```
 
 ---
 
-## 6. Caching System
+## 6. 캐싱 시스템 (Caching System)
 
-The supervisor implements a 5-level Redis caching hierarchy. All caches inherit from `BaseRedisCache` in `app.common.cache`.
+Supervisor는 5단계 Redis 캐싱 계층을 구현합니다. 모든 캐시는 `app.common.cache`의 `BaseRedisCache`를 상속합니다.
 
-### Cache Levels
+### 캐시 단계
 
-| Level | Class | Scope | TTL | Description |
-|-------|-------|-------|-----|-------------|
-| **L1** | `SupervisorResponseCache` | Session-aware | 1 hour | Full pipeline response cache. Identical query in same session skips entire pipeline. Turn-aware cache key prevents repeat answers. |
-| **L2** | `QueryAnalysisCache` | Session-agnostic | 24 hours | Query analysis result cache. Reuses intent classification, keywords, retriever_types for identical queries. |
-| **L3** | `IntentClassificationCache` | Session-agnostic | 7 days | Intent classification cache. gpt-4o-mini call results cached to reduce LLM cost/latency. |
-| **L4** | `RetrievalResultCache` | Session-scoped | 1 hour | Per-session retrieval results for Progressive Disclosure. First turn results reused in follow-up turns. Invalidated on topic change. |
-| **L5** | `RetrievalOverflowCache` | Session-scoped | 30 min (configurable) | Overflow results exceeding display limits. Served on "show more" requests. |
+| 단계 | 클래스 | 범위 | TTL | 설명 |
+|------|--------|------|-----|------|
+| **L1** | `SupervisorResponseCache` | 세션 인식 | 1시간 | 전체 파이프라인 응답 캐시. 동일 세션에서 동일 쿼리 시 전체 파이프라인을 건너뜁니다. 턴 인식 캐시 키로 반복 답변을 방지합니다. |
+| **L2** | `QueryAnalysisCache` | 세션 무관 | 24시간 | 질의 분석 결과 캐시. 동일 쿼리에 대한 의도 분류, 키워드, retriever_types를 재사용합니다. |
+| **L3** | `IntentClassificationCache` | 세션 무관 | 7일 | 의도 분류 캐시. gpt-4o-mini 호출 결과를 캐싱하여 LLM 비용/지연을 줄입니다. |
+| **L4** | `RetrievalResultCache` | 세션 범위 | 1시간 | Progressive Disclosure를 위한 세션별 검색 결과. 첫 턴 결과를 후속 턴에서 재사용합니다. 주제 변경 시 무효화됩니다. |
+| **L5** | `RetrievalOverflowCache` | 세션 범위 | 30분 (설정 가능) | 표시 제한을 초과하는 오버플로우 결과. "더 보기" 요청 시 제공됩니다. |
 
-### Cache Flow in Graph
+### 그래프 내 캐시 흐름
 
 ```
-User Query
+사용자 쿼리
     |
     v
 [cache_check] -- L1 HIT --> [cache_response] --> END
@@ -365,7 +365,7 @@ User Query
     v
 [input_guardrail] --> [supervisor] --> [query_analysis]
                                            |
-                                    (L2/L3 checked internally)
+                                    (L2/L3 내부에서 확인)
                                            |
                                            v
                                     [retrieval agents]
@@ -373,263 +373,263 @@ User Query
                                            v
                                     [retrieval_merge]
                                        |       |
-                                  L4 save   L5 overflow save
+                                  L4 저장   L5 오버플로우 저장
                                        |
                                        v
                                     [generation] --> [review] --> [output_guardrail]
                                                                         |
                                                                         v
                                                                     [memory_save]
-                                                                   L4 persist
+                                                                   L4 영속화
 ```
 
-### Cache Management Utilities
+### 캐시 관리 유틸리티
 
 ```python
 from app.supervisor.cache import clear_all_supervisor_caches, get_cache_stats
 
-# Clear all caches
+# 전체 캐시 초기화
 results = clear_all_supervisor_caches()
-# Returns: {"l1_deleted": N, "l2_deleted": N, "l3_deleted": N, "l4_deleted": N, "l5_deleted": N}
+# 반환: {"l1_deleted": N, "l2_deleted": N, "l3_deleted": N, "l4_deleted": N, "l5_deleted": N}
 
-# Get cache statistics
+# 캐시 통계 조회
 stats = get_cache_stats()
-# Returns: {"enabled": True, "l1_supervisor_count": N, ..., "total": N}
+# 반환: {"enabled": True, "l1_supervisor_count": N, ..., "total": N}
 ```
 
 ---
 
-## 7. Retrieval Merge Node
+## 7. 검색 병합 노드 (Retrieval Merge Node)
 
-`nodes/retrieval_merge.py` implements the Fan-in merge of parallel retrieval results.
+`nodes/retrieval_merge.py`는 병렬 검색 결과의 Fan-in 병합을 구현합니다.
 
-### Merge Process
+### 병합 프로세스
 
-1. **Section Mapping**: `law` -> `laws`, `criteria` -> `criteria`, `case` -> `disputes`, `counsel` -> `counsels`
-2. **Product Relevance Filtering**: Scores each document against `purchase_item` and `product_category` from onboarding
-3. **Display Limits**: Configurable per-domain limits (`config.retrieval.display_law`, etc.), overflow cached to L5
-4. **Statistics**: Computes `max_similarity` and `avg_similarity` across all agents
-5. **L4 Cache Save**: Stores merged results for Progressive Disclosure follow-up turns
+1. **섹션 매핑**: `law` -> `laws`, `criteria` -> `criteria`, `case` -> `disputes`, `counsel` -> `counsels`
+2. **제품 관련성 필터링**: 온보딩의 `purchase_item` 및 `product_category`를 기준으로 각 문서의 관련성을 평가합니다.
+3. **표시 제한**: 도메인별 설정 가능한 제한 (`config.retrieval.display_law` 등), 초과분은 L5에 캐싱됩니다.
+4. **통계**: 전체 에이전트에 걸친 `max_similarity` 및 `avg_similarity`를 계산합니다.
+5. **L4 캐시 저장**: Progressive Disclosure 후속 턴을 위해 병합 결과를 저장합니다.
 
-### Product Relevance Scoring
+### 제품 관련성 점수
 
-| Score | Meaning |
-|-------|---------|
-| 1.0 | Direct product name match in document |
-| 0.8 | Product category keyword match |
-| 0.4 | Dispute type keyword match (generic relevance) |
-| 0.2 | No relevance detected |
-| 0.0 | Negated item detected (excluded) |
+| 점수 | 의미 |
+|------|------|
+| 1.0 | 문서에서 제품명 직접 매칭 |
+| 0.8 | 제품 카테고리 키워드 매칭 |
+| 0.4 | 분쟁 유형 키워드 매칭 (일반적 관련성) |
+| 0.2 | 관련성 미감지 |
+| 0.0 | 부정 항목 감지 (제외됨) |
 
-Documents with relevance < 0.3 are filtered when sufficient high-relevance results exist (minimum 2).
+충분한 고관련성 결과(최소 2개)가 존재할 때 관련성 < 0.3인 문서는 필터링됩니다.
 
 ---
 
-## 8. Memory System
+## 8. 메모리 시스템 (Memory System)
 
-### Conversation Memory (`memory.py`)
+### 대화 메모리 (`memory.py`)
 
-| Chat Type | Policy | Details |
-|-----------|--------|---------|
-| `general` | 10 turns max, no compact | Sliding window of 5 |
-| `dispute` | 30 turns max, compact enabled | Sliding window of 10, structured field extraction |
+| 채팅 유형 | 정책 | 상세 |
+|-----------|------|------|
+| `general` | 최대 10턴, 압축 없음 | 슬라이딩 윈도우 5 |
+| `dispute` | 최대 30턴, 압축 활성화 | 슬라이딩 윈도우 10, 구조화된 필드 추출 |
 
-### Compact Process (`compact.py`)
+### 압축 프로세스 (`compact.py`)
 
-When turn limit is reached, the `compact_conversation()` function extracts structured fields from conversation history:
+턴 제한에 도달하면 `compact_conversation()` 함수가 대화 이력에서 구조화된 필드를 추출합니다:
 - `purchase_item`, `purchase_date`, `purchase_amount`, `purchase_place`
 - `dispute_type`, `dispute_details`, `desired_resolution`
-- `key_facts` (up to 5 core facts)
+- `key_facts` (최대 5개 핵심 사실)
 
-The compact summary is merged with any existing summary and the sliding window retains only the most recent N turns.
+압축 요약은 기존 요약과 병합되며, 슬라이딩 윈도우는 가장 최근 N개의 턴만 유지합니다.
 
-### RAG Conversation Memory (`state/memory.py`)
+### RAG 대화 메모리 (`state/memory.py`)
 
-`RAGConversationMemory` selectively stores only `NEED_RAG` turns (skips `NO_RETRIEVAL` greetings/system queries):
-- Window size: 5 (configurable via `CONVERSATION_MEMORY_WINDOW` env var)
-- Stores: `user_query` + `answer_summary` (first 200 chars of `final_answer`)
-- Used by Query Rewriter for multi-turn context
+`RAGConversationMemory`는 `NEED_RAG` 턴만 선택적으로 저장합니다 (`NO_RETRIEVAL` 인사/시스템 쿼리는 건너뜀):
+- 윈도우 크기: 5 (`CONVERSATION_MEMORY_WINDOW` 환경 변수로 설정 가능)
+- 저장 항목: `user_query` + `answer_summary` (`final_answer`의 처음 200자)
+- Query Rewriter가 멀티턴 컨텍스트에 활용
 
-### Memory Save Node (`nodes/memory_save.py`)
+### 메모리 저장 노드 (`nodes/memory_save.py`)
 
-Runs after `output_guardrail`, performs:
-1. **RAG Memory**: Saves `NEED_RAG` turns to `rag_conversation_memory`
-2. **Last Turn Context**: Saves `followup_questions`, `available_details`, and `retrieval` for `FOLLOWUP_WITH_CONTEXT`
-3. **L4 Cache Persist**: Writes retrieval results to `RetrievalResultCache` for cross-turn persistence
+`output_guardrail` 후에 실행되며, 다음을 수행합니다:
+1. **RAG 메모리**: `NEED_RAG` 턴을 `rag_conversation_memory`에 저장
+2. **이전 턴 컨텍스트**: `FOLLOWUP_WITH_CONTEXT`를 위해 `followup_questions`, `available_details`, `retrieval`을 저장
+3. **L4 캐시 영속화**: 교차 턴 영속성을 위해 검색 결과를 `RetrievalResultCache`에 기록
 
-### Database Persistence (`persistence/`)
+### 데이터베이스 영속화 (`persistence/`)
 
-| Module | Class | Description |
-|--------|-------|-------------|
-| `db.py` | `ConversationDB` | PostgreSQL DAL for conversations, turns, summaries. Per-call connection (concurrency-safe). |
-| `cleanup.py` | `ConversationCleanupService` | Background service that periodically cleans expired guest sessions. |
-
----
-
-## 9. Clarify Node
-
-`nodes/clarify.py` generates clarification questions when information is insufficient.
-
-### Trigger Conditions
-
-1. **Missing required fields**: `purchase_item` or `dispute_details` absent
-2. **Brand-only item**: Brand name detected without product category (e.g., "Samsung" without "phone")
-3. **Phase-based**: Current phase is `info_gathering`, `awaiting_law_confirm`, or `awaiting_procedure_confirm`
-4. **Ambiguous query**: Query classified as `ambiguous` type
-
-### Question Generation
-
-- Phase-based questions from `ConversationManager.get_next_questions()`
-- Field-specific templates for missing slots
-- Pre-clarification templates for very short or ambiguous queries
-- Maximum 3 questions per clarification turn
+| 모듈 | 클래스 | 설명 |
+|------|--------|------|
+| `db.py` | `ConversationDB` | 대화, 턴, 요약을 위한 PostgreSQL DAL. 호출당 커넥션 (동시성 안전). |
+| `cleanup.py` | `ConversationCleanupService` | 만료된 게스트 세션을 주기적으로 정리하는 백그라운드 서비스. |
 
 ---
 
-## 10. Code Structure
+## 9. 명확화 노드 (Clarify Node)
+
+`nodes/clarify.py`는 정보가 불충분할 때 명확화 질문을 생성합니다.
+
+### 트리거 조건
+
+1. **필수 필드 누락**: `purchase_item` 또는 `dispute_details` 부재
+2. **브랜드명만 입력**: 제품 카테고리 없이 브랜드명만 감지 (예: "삼성"만 있고 "폰"이 없는 경우)
+3. **단계 기반**: 현재 단계가 `info_gathering`, `awaiting_law_confirm`, 또는 `awaiting_procedure_confirm`
+4. **모호한 쿼리**: 쿼리가 `ambiguous` 유형으로 분류된 경우
+
+### 질문 생성
+
+- `ConversationManager.get_next_questions()`의 단계 기반 질문
+- 누락된 슬롯에 대한 필드별 템플릿
+- 매우 짧거나 모호한 쿼리에 대한 사전 명확화 템플릿
+- 명확화 턴당 최대 3개 질문
+
+---
+
+## 10. 코드 구조 (Code Structure)
 
 ```
 backend/app/supervisor/
-├── __init__.py                # Package exports (lazy-loaded graph functions)
-├── graph.py                   # Entry point: get_graph_for_chat_type(), _create_timed_node()
-├── graph_mas.py               # MAS Supervisor graph definition (current production)
-├── conversation_manager.py    # Phase transitions, slot management (rule-based)
-├── cache.py                   # L1-L5 Redis cache classes
-├── checkpointer.py            # LangGraph checkpointer factory (Memory / Postgres)
-├── compact.py                 # Conversation history compaction (structured field extraction)
-├── memory.py                  # ConversationMemory class, memory policies
-├── state.py                   # Backward-compat re-export shim for state/ package
+├── __init__.py                # 패키지 export (지연 로딩 그래프 함수)
+├── graph.py                   # 진입점: get_graph_for_chat_type(), _create_timed_node()
+├── graph_mas.py               # MAS Supervisor 그래프 정의 (현재 프로덕션)
+├── conversation_manager.py    # 단계 전환, 슬롯 관리 (규칙 기반)
+├── cache.py                   # L1-L5 Redis 캐시 클래스
+├── checkpointer.py            # LangGraph 체크포인터 팩토리 (Memory / Postgres)
+├── compact.py                 # 대화 이력 압축 (구조화된 필드 추출)
+├── memory.py                  # ConversationMemory 클래스, 메모리 정책
+├── state.py                   # 하위 호환 재export shim (state/ 패키지용)
 ├── state/
-│   ├── __init__.py            # ChatState unified schema, create_initial_state()
+│   ├── __init__.py            # ChatState 통합 스키마, create_initial_state()
 │   ├── session.py             # OnboardingInfo, SessionState, ChatType
 │   ├── agent_results.py       # QueryAnalysisResult, RetrievalResult, ReviewResult, CitedCase, ViolationV2, RetryContext
 │   ├── output.py              # OutputState, ClaimEvidenceMapping, ResponseDepth
 │   ├── control.py             # RoutingMode, ControlState, TraceEntry
 │   ├── supervisor.py          # SupervisorState, AgentMessage
 │   ├── memory.py              # MemoryState, ConversationTurn, CompactSummary, RAGConversationMemory, RAGTurn
-│   └── README.md              # State module documentation
+│   └── README.md              # 상태 모듈 문서
 ├── nodes/
-│   ├── __init__.py            # Node exports
-│   ├── supervisor.py          # SupervisorNode class (2-strategy routing, fallback chain, security)
-│   ├── clarify.py             # ask_clarification node (information clarification)
-│   ├── retrieval_merge.py     # Fan-in merge of 3 retrieval agents + product relevance filtering
-│   └── memory_save.py         # Selective memory save (NEED_RAG only) + L4 cache persistence
+│   ├── __init__.py            # 노드 export
+│   ├── supervisor.py          # SupervisorNode 클래스 (2-전략 라우팅, 폴백 체인, 보안)
+│   ├── clarify.py             # ask_clarification 노드 (정보 명확화)
+│   ├── retrieval_merge.py     # 3개 검색 에이전트의 Fan-in 병합 + 제품 관련성 필터링
+│   └── memory_save.py         # 선택적 메모리 저장 (NEED_RAG만) + L4 캐시 영속화
 └── persistence/
-    ├── __init__.py            # Persistence module exports
+    ├── __init__.py            # 영속화 모듈 export
     ├── db.py                  # ConversationDB (PostgreSQL DAL)
-    └── cleanup.py             # ConversationCleanupService (expired session cleanup)
+    └── cleanup.py             # ConversationCleanupService (만료 세션 정리)
 ```
 
 ---
 
-## 11. Testing
+## 11. 테스트 (Testing)
 
-All supervisor tests are located in `backend/scripts/testing/supervisor/`.
+모든 Supervisor 테스트는 `backend/scripts/testing/supervisor/`에 위치합니다.
 
-### Test Files
+### 테스트 파일
 
-| File | Description |
-|------|-------------|
-| `test_conversation_phase_manager.py` | ConversationManager unit tests (phase transitions, slot management) |
-| `test_mas_supervisor_graph.py` | MAS graph structure and node existence verification |
-| `test_supervisor.py` | SupervisorNode decision logic, routing strategies |
-| `test_supervisor_state.py` | ChatState schema, create_initial_state validation |
-| `test_graph_routing.py` | Graph routing and conditional edge tests |
-| `test_fast_path.py` | Fast Path (NO_RETRIEVAL) end-to-end flow |
-| `test_selective_retrieval.py` | Selective retrieval agent activation |
-| `test_retrieval_merge.py` | Retrieval merge, product relevance filtering, display limits |
-| `test_retry_context.py` | Retry/regeneration loop (review -> generation) |
-| `test_followup_with_context.py` | FOLLOWUP_WITH_CONTEXT mode and inject_cached_retrieval |
-| `test_progressive_disclosure.py` | Progressive Disclosure phase flow |
-| `test_conversation_memory.py` | RAGConversationMemory window management |
-| `test_memory_db.py` | ConversationDB PostgreSQL persistence |
-| `test_answer_cache.py` | L1-L5 cache hit/miss behavior |
-| `test_sufficiency.py` | Retrieval sufficiency scoring |
-| `test_adaptive_rag.py` | Adaptive RAG complexity-based strategy |
-| `test_agent_communication.py` | AgentMessage protocol tests |
-| `test_agent_metrics.py` | Agent execution metrics and timing |
-| `test_agent_trace.py` | TraceEntry and pipeline summary |
-| `test_mas_integration.py` | MAS integration tests (requires LLM API keys) |
-| `test_e2e_queries.py` | End-to-end query tests (requires full stack) |
+| 파일 | 설명 |
+|------|------|
+| `test_conversation_phase_manager.py` | ConversationManager 단위 테스트 (단계 전환, 슬롯 관리) |
+| `test_mas_supervisor_graph.py` | MAS 그래프 구조 및 노드 존재 여부 검증 |
+| `test_supervisor.py` | SupervisorNode 의사결정 로직, 라우팅 전략 |
+| `test_supervisor_state.py` | ChatState 스키마, create_initial_state 검증 |
+| `test_graph_routing.py` | 그래프 라우팅 및 조건부 엣지 테스트 |
+| `test_fast_path.py` | Fast Path (NO_RETRIEVAL) 엔드투엔드 흐름 |
+| `test_selective_retrieval.py` | 선택적 검색 에이전트 활성화 |
+| `test_retrieval_merge.py` | 검색 병합, 제품 관련성 필터링, 표시 제한 |
+| `test_retry_context.py` | 재시도/재생성 루프 (review -> generation) |
+| `test_followup_with_context.py` | FOLLOWUP_WITH_CONTEXT 모드 및 inject_cached_retrieval |
+| `test_progressive_disclosure.py` | Progressive Disclosure 단계 흐름 |
+| `test_conversation_memory.py` | RAGConversationMemory 윈도우 관리 |
+| `test_memory_db.py` | ConversationDB PostgreSQL 영속화 |
+| `test_answer_cache.py` | L1-L5 캐시 적중/미적중 동작 |
+| `test_sufficiency.py` | 검색 충분성 점수 산출 |
+| `test_adaptive_rag.py` | 적응형 RAG 복잡도 기반 전략 |
+| `test_agent_communication.py` | AgentMessage 프로토콜 테스트 |
+| `test_agent_metrics.py` | 에이전트 실행 메트릭 및 타이밍 |
+| `test_agent_trace.py` | TraceEntry 및 파이프라인 요약 |
+| `test_mas_integration.py` | MAS 통합 테스트 (LLM API 키 필요) |
+| `test_e2e_queries.py` | 엔드투엔드 쿼리 테스트 (전체 스택 필요) |
 
-### Running Tests
+### 실행 방법
 
 ```bash
-# All supervisor tests
+# 전체 Supervisor 테스트
 conda run -n dsr pytest backend/scripts/testing/supervisor/ -v
 
-# ConversationManager unit tests
+# ConversationManager 단위 테스트
 conda run -n dsr pytest backend/scripts/testing/supervisor/test_conversation_phase_manager.py -v
 
-# Graph structure tests
+# 그래프 구조 테스트
 conda run -n dsr pytest backend/scripts/testing/supervisor/test_mas_supervisor_graph.py -v
 
-# SupervisorNode routing tests
+# SupervisorNode 라우팅 테스트
 conda run -n dsr pytest backend/scripts/testing/supervisor/test_supervisor.py -v
 
-# Skip slow/LLM tests
+# 느린/LLM 테스트 제외
 conda run -n dsr pytest backend/scripts/testing/supervisor/ -m "not slow and not llm" -v
 
-# Unit tests only (no DB, no LLM)
+# Unit 테스트만 실행 (DB 불필요, LLM 불필요)
 conda run -n dsr pytest backend/scripts/testing/supervisor/ -m unit -v
 ```
 
 ---
 
-## 12. Environment Variables
+## 12. 환경 변수 (Environment Variables)
 
-### Supervisor Configuration
+### Supervisor 설정
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SUPERVISOR_LLM_ENABLED` | `false` | Enable LLM-based supervisor decisions (vs. rule-based) |
-| `SUPERVISOR_LLM_MODEL` | `gpt-4o-mini` | Model for supervisor LLM (graph_mas.py wrapper) |
-| `MODEL_SUPERVISOR_FALLBACK` | `claude-3-5-sonnet-20241022` | Fallback model for SupervisorNode |
-| `OPENAI_API_KEY` | (required) | OpenAI API key for primary LLM |
-| `ANTHROPIC_API_KEY` | (optional) | Anthropic API key for fallback LLM |
-| `CHECKPOINTER_MODE` | `memory` | Checkpointer backend: `memory` or `postgres` |
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `SUPERVISOR_LLM_ENABLED` | `false` | LLM 기반 Supervisor 의사결정 활성화 (규칙 기반 대비) |
+| `SUPERVISOR_LLM_MODEL` | `gpt-4o-mini` | Supervisor LLM 모델 (graph_mas.py 래퍼) |
+| `MODEL_SUPERVISOR_FALLBACK` | `claude-3-5-sonnet-20241022` | SupervisorNode 폴백 모델 |
+| `OPENAI_API_KEY` | (필수) | OpenAI API 키 (Primary LLM용) |
+| `ANTHROPIC_API_KEY` | (선택) | Anthropic API 키 (Fallback LLM용) |
+| `CHECKPOINTER_MODE` | `memory` | 체크포인터 백엔드: `memory` 또는 `postgres` |
 
-### Cache Configuration
+### 캐시 설정
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_HOST` | `localhost` | Redis host for L1-L5 caches |
-| `REDIS_PORT` | `6379` | Redis port |
-| `ENABLE_ANSWER_CACHE` | `true` | Enable/disable answer caching |
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `REDIS_HOST` | `localhost` | L1-L5 캐시용 Redis 호스트 |
+| `REDIS_PORT` | `6379` | Redis 포트 |
+| `ENABLE_ANSWER_CACHE` | `true` | 답변 캐싱 활성화/비활성화 |
 
-### Memory Configuration
+### 메모리 설정
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CONVERSATION_MEMORY_WINDOW` | `5` | RAGConversationMemory window size |
-
----
-
-## 13. History
-
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-01-14 | PR 1 | Fast Path implementation. Skip review for general conversations. |
-| 2026-01-20 | PR 3 | Compact module, conversation memory, clarify node. |
-| 2026-01-22 | PR 3 | Data collection logging schema improvements. |
-| 2026-01-24 | Phase 7 | **MAS Supervisor introduced**. ReAct pattern archived. Hub-Spoke architecture with Fan-out/Fan-in retrieval. |
-| 2026-01-26 | Phase 8 | SupervisorNode class with LLM fallback chain, security features, 2-strategy routing. |
-| 2026-01-27 | Phase 7 | Module renamed: `orchestrator` -> `supervisor`. Legacy code removed. |
-| 2026-01-28 | Phase 9 | **Conversation Phase System**. Slot-based info gathering, progressive disclosure, DB persistence. |
-| 2026-01-28 | Track 2-3 | Follow-up questions, DB integration, conversation memory persistence. |
-| 2026-01-29 | Phase 10 | **v2 tag cleanup**: v1 code removed, V2 suffixes removed from functions/types, files renamed. |
-| 2026-01-31 | PR-B | RAGConversationMemory selective save, memory_save node. |
-| 2026-02-01 | Phase 3-C | FOLLOWUP_WITH_CONTEXT mode, inject_cached_retrieval node, L4 RetrievalResultCache. |
-| 2026-02-01 | Phase 3-E | Turn-aware L1 cache keys to prevent repeat answers on multi-turn. |
-| 2026-02-01 | PR-6 | L1-L5 caching system, cache_check/cache_response nodes. |
-| 2026-02-09 | Current | README updated to reflect current codebase state. |
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `CONVERSATION_MEMORY_WINDOW` | `5` | RAGConversationMemory 윈도우 크기 |
 
 ---
 
-## 14. Roadmap
+## 13. 변경 이력 (History)
 
-1. **PostgreSQL Checkpointer**: Replace MemorySaver with AsyncPostgresSaver for production state persistence (currently `NotImplementedError`).
-2. **Human-in-the-Loop**: Pause execution for expert intervention on complex legal questions.
-3. **Multi-turn Summarization**: Compress long conversations while preserving key context.
-4. **Phase Satisfaction Metrics**: Collect user feedback after each Progressive Disclosure phase.
-5. **Adaptive Retrieval Strategy**: Dynamic HyDE/BM25 strategy selection based on query complexity.
+| 날짜 | 버전 | 변경 내용 |
+|------|------|----------|
+| 2026-01-14 | PR 1 | Fast Path 구현. 일반 대화에서 검토 생략. |
+| 2026-01-20 | PR 3 | Compact 모듈, 대화 메모리, 명확화 노드. |
+| 2026-01-22 | PR 3 | 데이터 수집 로깅 스키마 개선. |
+| 2026-01-24 | Phase 7 | **MAS Supervisor 도입**. ReAct 패턴 아카이브. Fan-out/Fan-in 검색이 포함된 Hub-Spoke 아키텍처. |
+| 2026-01-26 | Phase 8 | LLM 폴백 체인, 보안 기능, 2-전략 라우팅이 포함된 SupervisorNode 클래스. |
+| 2026-01-27 | Phase 7 | 모듈명 변경: `orchestrator` -> `supervisor`. 레거시 코드 제거. |
+| 2026-01-28 | Phase 9 | **대화 단계 시스템**. 슬롯 기반 정보 수집, 점진적 공개, DB 영속화. |
+| 2026-01-28 | Track 2-3 | 후속 질문, DB 통합, 대화 메모리 영속화. |
+| 2026-01-29 | Phase 10 | **v2 태그 정리**: v1 코드 제거, 함수/타입에서 V2 접미사 제거, 파일명 변경. |
+| 2026-01-31 | PR-B | RAGConversationMemory 선택적 저장, memory_save 노드. |
+| 2026-02-01 | Phase 3-C | FOLLOWUP_WITH_CONTEXT 모드, inject_cached_retrieval 노드, L4 RetrievalResultCache. |
+| 2026-02-01 | Phase 3-E | 멀티턴에서 반복 답변 방지를 위한 턴 인식 L1 캐시 키. |
+| 2026-02-01 | PR-6 | L1-L5 캐싱 시스템, cache_check/cache_response 노드. |
+| 2026-02-09 | 현재 | 현재 코드베이스 상태를 반영하여 README 갱신. |
+
+---
+
+## 14. 향후 계획 (Roadmap)
+
+1. **PostgreSQL 체크포인터**: 프로덕션 상태 영속화를 위해 MemorySaver를 AsyncPostgresSaver로 교체 (현재 `NotImplementedError`).
+2. **Human-in-the-Loop**: 복잡한 법적 질문에 대해 전문가 개입을 위한 실행 일시 중지.
+3. **멀티턴 요약**: 핵심 컨텍스트를 보존하면서 긴 대화를 압축.
+4. **단계 만족도 메트릭**: 각 Progressive Disclosure 단계 후 사용자 피드백을 수집.
+5. **적응형 검색 전략**: 쿼리 복잡도에 기반한 동적 HyDE/BM25 전략 선택.
