@@ -45,6 +45,9 @@ services:
       # === Logging ===
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
+      # === Memory Backend ===
+      - CONVERSATION_MEMORY_BACKEND=${CONVERSATION_MEMORY_BACKEND:-db}
+
       # === Environment ===
       - ENVIRONMENT=production
 
