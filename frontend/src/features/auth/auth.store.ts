@@ -61,6 +61,7 @@ const transferGuestSessions = async (userId: string, token: string) => {
 // Auth hydration 상태 추적 (F5 새로고침 시 race condition 방지)
 let _isAuthHydrated = false;
 export const isAuthHydrated = () => _isAuthHydrated;
+export const resetAuthHydration = () => { _isAuthHydrated = false; };
 
 export const useAuthStore = create<AuthState>()(
   persist(

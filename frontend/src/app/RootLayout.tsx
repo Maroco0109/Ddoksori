@@ -36,7 +36,11 @@ export default function RootLayout() {
       }
     }, 5000);
     const check = setInterval(() => {
-      if (!mounted) return;
+      if (!mounted) {
+        clearInterval(check);
+        clearTimeout(timeout);
+        return;
+      }
       if (isAuthHydrated()) {
         setAuthReady(true);
         clearInterval(check);
