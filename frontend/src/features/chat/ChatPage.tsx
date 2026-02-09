@@ -1,64 +1,33 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent, FormEvent, RefObject } from 'react';
-import type { ChatSession, ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
+import type { ChatType, DisputeForm, DisputeFormData, MessageWithCitations } from '@/shared/types';
 import { Send } from 'lucide-react';
 import { useChatStore } from '@/features/chat/chat.store';
 import { useAuthStore } from '@/features/auth/auth.store';
-import { useChatMutation } from './hooks/useChatMutation';
 import { useStreamingChat } from './hooks/useStreamingChat';
 import { extractCitations } from '@/shared/lib/citation';
-import { simulateStreaming } from '@/shared/lib/streaming';
+import { getSessionHistory } from '@/shared/lib/api-client';
 import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
 import { StatusIndicator } from './components/StatusIndicator';
 
-// Fix 2: Initial messages constant for clearing opposite chat type
-const initialGreetingMessages: MessageWithCitations[] = [
-  {
-    id: 1,
-    type: 'ai',
-    content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
-    timestamp: new Date()
-  }
-];
-
 interface ChatPageProps {
   currentSessionId?: string | null;
-  onSessionCreate?: (sessionId: string) => void;
 }
 
-export default function ChatPage({ currentSessionId = null, onSessionCreate }: ChatPageProps) {
+export default function ChatPage({ currentSessionId = null }: ChatPageProps) {
   const storeSessionId = useChatStore((state) => state.currentSessionId);
   const storeActiveChatType = useChatStore((state) => state.activeChatType);
-  const storeChatSessions = useChatStore((state) => state.chatSessions);
   const setStoreSessionId = useChatStore((state) => state.setCurrentSessionId);
   const setStoreChatType = useChatStore((state) => state.setActiveChatType);
   const saveChatSessionToStore = useChatStore((state) => state.saveChatSession);
   const setDisputeFormData = useChatStore((state) => state.setDisputeFormData);
   const setBackendSessionId = useChatStore((state) => state.setBackendSessionId);
-  const isTransitioning = useChatStore((state) => state.isTransitioning);
-  const setIsTransitioning = useChatStore((state) => state.setIsTransitioning);
-  const isTransitioningRef = useRef(false);
   const resolvedSessionId = currentSessionId ?? storeSessionId;
 
-  // Fix 1: Stream token for validating stream responses belong to current session
-  const streamTokenRef = useRef<string | null>(null);
-
-  // Bug 1 fix: Track previous session ID to detect actual session switches
-  // undefined = initial mount (never seen a session), null = new chat, string = specific session
-  const prevSessionIdRef = useRef<string | null | undefined>(undefined);
-  // Bug 2 fix: Track all transition timers for cleanup on rapid switches
-  const transitionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  // 현재 세션 ID
-  const [sessionId, setSessionId] = useState<string | null>(resolvedSessionId);
-
-  // React Query mutation for API calls (fallback)
-  const chatMutation = useChatMutation();
-
   // PR-7: SSE Streaming hook for real-time agent status
-  const { streamingState: disputeStreamingState, startStream: startDisputeStream, cancelStream: cancelDisputeStream } = useStreamingChat();
-  const { streamingState: generalStreamingState, startStream: startGeneralStream, cancelStream: cancelGeneralStream } = useStreamingChat();
+  const { streamingState: disputeStreamingState, startStream: startDisputeStream } = useStreamingChat();
+  const { streamingState: generalStreamingState, startStream: startGeneralStream } = useStreamingChat();
 
   // 분쟁 상담 state
   const [disputeMessages, setDisputeMessages] = useState<MessageWithCitations[]>([
@@ -70,7 +39,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   ]);
   const [disputeInputValue, setDisputeInputValue] = useState('');
-  const [isDisputeLoading, setIsDisputeLoading] = useState(false);
   const [isFormSubmitted, setIsFormSubmitted] = useState(false);
 
   // 일반 상담 state
@@ -83,7 +51,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   ]);
   const [generalInputValue, setGeneralInputValue] = useState('');
-  const [isGeneralLoading, setIsGeneralLoading] = useState(false);
 
   // 분쟁 상담 폼 state
   const [disputeForm, setDisputeForm] = useState<DisputeForm>({
@@ -100,6 +67,15 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   // 로그인 여부 확인
   const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
+  const authToken = useAuthStore((state) => state.token);
+
+  const disputeMessagesEndRef = useRef<HTMLDivElement | null>(null);
+  const generalMessagesEndRef = useRef<HTMLDivElement | null>(null);
+  const pageTopRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = (ref: RefObject<HTMLDivElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   // 컴포넌트 마운트 시 스크롤 최상단으로 이동 (한 번만 실행)
   useEffect(() => {
@@ -112,114 +88,127 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     scrollToTop();
     setTimeout(scrollToTop, 50);
     setTimeout(scrollToTop, 100);
-  }, []); // 빈 의존성 배열 - 마운트 시 한 번만 실행
+  }, []);
 
   // 세션 불러오기
   useEffect(() => {
-    // Bug 2 fix: Cancel all pending timers from previous transition
-    transitionTimersRef.current.forEach(clearTimeout);
-    transitionTimersRef.current = [];
-
-    // Bug 1 fix: Skip if resolvedSessionId hasn't actually changed (spurious re-trigger)
-    if (prevSessionIdRef.current !== undefined
-        && prevSessionIdRef.current === resolvedSessionId) {
-      return;
-    }
-
-    // Bug 1 fix: Only cancel streams on actual session switch (ID_A → ID_B)
-    // null → ID is session "creation" (not a switch), so don't cancel streams
-    const isSessionSwitch = prevSessionIdRef.current !== undefined
-      && prevSessionIdRef.current !== resolvedSessionId
-      && prevSessionIdRef.current !== null;
-
-    prevSessionIdRef.current = resolvedSessionId;
-
-    // Synchronous ref lock (immediate, no batching delay)
-    isTransitioningRef.current = true;
-    setIsTransitioning(true);
-
-    // Fix 1: Invalidate any in-flight stream token on session change
-    streamTokenRef.current = null;
-
-    // Cancel active streams only on actual session switch
-    if (isSessionSwitch) {
-      cancelDisputeStream();
-      cancelGeneralStream();
-    }
-
     if (resolvedSessionId) {
-      setSessionId(resolvedSessionId);
-
       if (storeSessionId !== resolvedSessionId) {
         setStoreSessionId(resolvedSessionId);
       }
 
-      // store의 chatSessions에서 세션 찾기 (이미 숨긴 세션이 필터링된 상태)
-      // stale closure 방지를 위해 직접 store에서 가져오기
-      const currentSessions = useChatStore.getState().chatSessions;
-      const session = currentSessions.find(s => s.id === resolvedSessionId);
+      if (isLoggedIn && authToken) {
+        // 로그인 사용자: DB에서 세션 메시지 조회
+        setBackendSessionId(resolvedSessionId);
+        getSessionHistory(authToken, resolvedSessionId, 50)
+          .then((historyResponse) => {
+            const messages: MessageWithCitations[] = historyResponse.messages
+              .map(msg => ({
+                id: msg.id,
+                type: msg.type,
+                content: msg.content,
+                timestamp: new Date(msg.timestamp),
+              }))
+              .reverse(); // 백엔드는 최신순(DESC) → 시간순으로 변환
 
-      if (session) {
-        // BUG-1 fix: 세션 전환 시 backendSessionId를 해당 세션 ID로 동기화
-        // 이렇게 하지 않으면 이전 세션의 backendSessionId가 남아있어
-        // saveChatSession에서 잘못된 세션에 메시지가 저장됨
-        setBackendSessionId(session.id);
+            if (messages.length === 0) return;
 
-        // 메시지를 id(turn_number) 순서로 정렬 (혹시 역순으로 저장된 경우 대비)
-        const restoredMessages = session.messages
-          .map(msg => ({
-            ...msg,
-            timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
-          }))
-          .sort((a, b) => a.id - b.id); // id 오름차순 정렬
+            // chatType 판별: 첫 user 메시지가 [분쟁 정보]로 시작하면 dispute
+            const firstUserMsg = messages.find(m => m.type === 'user');
+            const chatType: ChatType = firstUserMsg?.content.startsWith('[분쟁 정보]')
+              ? 'dispute'
+              : (storeActiveChatType || 'general');
 
-        // store에서 설정한 chatType을 우선 사용, 없으면 세션의 type 사용
-        const chatType = storeActiveChatType || session.type;
+            const greetingPlusMessages: MessageWithCitations[] = [
+              {
+                id: 0,
+                type: 'ai',
+                content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+                timestamp: new Date(messages[0]?.timestamp || new Date()),
+              },
+              ...messages,
+            ];
 
-        if (chatType === 'dispute') {
-          setDisputeMessages(restoredMessages);
-          // Fix 2: Clear opposite chat type messages to prevent cross-contamination
-          setGeneralMessages([...initialGreetingMessages]);
-          setActiveChatType('dispute');
-          setIsFormSubmitted(true);
-          setStoreChatType('dispute');
-          // Bug 2 fix: Register scroll timer for cleanup
-          const scrollTimer = setTimeout(() => {
-            disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, 200);
-          transitionTimersRef.current.push(scrollTimer);
-        } else {
-          setGeneralMessages(restoredMessages);
-          // Fix 2: Clear opposite chat type messages to prevent cross-contamination
-          setDisputeMessages([...initialGreetingMessages]);
-          setActiveChatType('general');
-          setStoreChatType('general');
-          // Bug 2 fix: Register scroll timer for cleanup
-          const scrollTimer = setTimeout(() => {
-            generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, 200);
-          transitionTimersRef.current.push(scrollTimer);
+            if (chatType === 'dispute') {
+              setDisputeMessages(greetingPlusMessages);
+              setGeneralMessages([{
+                id: 1, type: 'ai',
+                content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+                timestamp: new Date()
+              }]);
+              setActiveChatType('dispute');
+              setIsFormSubmitted(true);
+              setStoreChatType('dispute');
+              setTimeout(() => {
+                disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 200);
+            } else {
+              setGeneralMessages(greetingPlusMessages);
+              setDisputeMessages([{
+                id: 1, type: 'ai',
+                content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+                timestamp: new Date()
+              }]);
+              setActiveChatType('general');
+              setStoreChatType('general');
+              setTimeout(() => {
+                generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 200);
+            }
+          })
+          .catch((error) => {
+            console.error('[ChatPage] Failed to load session history:', error);
+          });
+      } else {
+        // 비로그인 사용자: store의 chatSessions에서 세션 찾기
+        const currentSessions = useChatStore.getState().chatSessions;
+        const session = currentSessions.find(s => s.id === resolvedSessionId);
+
+        if (session) {
+          setBackendSessionId(session.id);
+          const restoredMessages = session.messages
+            .map(msg => ({
+              ...msg,
+              timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)
+            }))
+            .sort((a, b) => a.id - b.id);
+
+          const chatType = storeActiveChatType || session.type;
+
+          if (chatType === 'dispute') {
+            setDisputeMessages(restoredMessages);
+            setGeneralMessages([{
+              id: 1, type: 'ai',
+              content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+              timestamp: new Date()
+            }]);
+            setActiveChatType('dispute');
+            setIsFormSubmitted(true);
+            setStoreChatType('dispute');
+            setTimeout(() => {
+              disputeMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 200);
+          } else {
+            setGeneralMessages(restoredMessages);
+            setDisputeMessages([{
+              id: 1, type: 'ai',
+              content: '안녕하세요! 똑소리 AI 상담입니다. 무엇을 도와드릴까요?',
+              timestamp: new Date()
+            }]);
+            setActiveChatType('general');
+            setStoreChatType('general');
+            setTimeout(() => {
+              generalMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 200);
+          }
+        } else if (storeActiveChatType) {
+          setActiveChatType(storeActiveChatType);
+          if (storeActiveChatType === 'dispute') {
+            setIsFormSubmitted(false);
+          }
         }
-        // Fix 4: Defer guard release to microtask so save useEffects
-        // (which run in the next render cycle) still see isTransitioning=true
-        queueMicrotask(() => {
-          isTransitioningRef.current = false;
-          setIsTransitioning(false);
-        });
-      } else if (storeActiveChatType) {
-        // 세션이 없지만 store에 chatType이 설정되어 있는 경우
-        setActiveChatType(storeActiveChatType);
-        if (storeActiveChatType === 'dispute') {
-          setIsFormSubmitted(false);
-        }
-        // Fix 4: Defer guard release to microtask
-        queueMicrotask(() => {
-          isTransitioningRef.current = false;
-          setIsTransitioning(false);
-        });
       }
     } else {
-      setSessionId(null);
       setActiveChatType(null);
       setIsFormSubmitted(false);
       setStoreSessionId(null);
@@ -250,64 +239,31 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         purchaseAmount: '',
         disputeDetail: ''
       });
-      // Fix 4: Defer guard release to microtask
-      queueMicrotask(() => {
-        isTransitioningRef.current = false;
-        setIsTransitioning(false);
-      });
     }
-
-    // Bug 2 fix: Cleanup all timers on unmount or next re-trigger
-    return () => {
-      transitionTimersRef.current.forEach(clearTimeout);
-      transitionTimersRef.current = [];
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedSessionId, setStoreChatType, setStoreSessionId, storeSessionId, storeActiveChatType]);
+  }, [resolvedSessionId]);
 
-  // Fix 3: 채팅 세션 저장 함수 - targetSessionId를 명시적으로 전달하여
-  // save 실행 시점의 state가 아닌 호출 시점의 세션 ID를 사용
-  const saveChatSession = useCallback(async (type: ChatType, messages: MessageWithCitations[], targetSessionId?: string | null) => {
-    await saveChatSessionToStore(type, messages, isLoggedIn, targetSessionId ?? undefined);
-  }, [saveChatSessionToStore, isLoggedIn]);
-
-  const disputeMessagesEndRef = useRef<HTMLDivElement | null>(null);
-  const generalMessagesEndRef = useRef<HTMLDivElement | null>(null);
-  const pageTopRef = useRef<HTMLDivElement | null>(null);
-
-  const scrollToBottom = (ref: RefObject<HTMLDivElement | null>) => {
-    ref.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // 분쟁 메시지 변경 시: 스크롤 + 저장
   useEffect(() => {
-    if (isTransitioningRef.current || isTransitioning) return;
-    // 2차 방어: store의 세션 ID와 로컬 세션 ID가 일치하는지 확인
-    const storeCurrentSessionId = useChatStore.getState().currentSessionId;
-    if (storeCurrentSessionId && sessionId && storeCurrentSessionId !== sessionId) return;
     if (disputeMessages.length > 1) {
       scrollToBottom(disputeMessagesEndRef);
     }
     const hasUserMessage = disputeMessages.some(m => m.type === 'user');
     if (disputeMessages.length > 1 && hasUserMessage) {
-      // Fix 3: Pass sessionId explicitly so save uses call-time ID, not execution-time state
-      saveChatSession('dispute', disputeMessages, sessionId);
+      saveChatSessionToStore('dispute', disputeMessages, isLoggedIn);
     }
-  }, [disputeMessages, saveChatSession, isTransitioning, sessionId]);
+  }, [disputeMessages, saveChatSessionToStore, isLoggedIn]);
 
+  // 일반 메시지 변경 시: 스크롤 + 저장
   useEffect(() => {
-    if (isTransitioningRef.current || isTransitioning) return;
-    // 2차 방어: store의 세션 ID와 로컬 세션 ID가 일치하는지 확인
-    const storeCurrentSessionId = useChatStore.getState().currentSessionId;
-    if (storeCurrentSessionId && sessionId && storeCurrentSessionId !== sessionId) return;
     if (generalMessages.length > 1) {
       scrollToBottom(generalMessagesEndRef);
     }
     const hasUserMessage = generalMessages.some(m => m.type === 'user');
     if (generalMessages.length > 1 && hasUserMessage) {
-      // Fix 3: Pass sessionId explicitly so save uses call-time ID, not execution-time state
-      saveChatSession('general', generalMessages, sessionId);
+      saveChatSessionToStore('general', generalMessages, isLoggedIn);
     }
-  }, [generalMessages, saveChatSession, isTransitioning, sessionId]);
+  }, [generalMessages, saveChatSessionToStore, isLoggedIn]);
 
   // 분쟁 상담 폼 제출 핸들러
   const handleDisputeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -320,10 +276,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       alert('모든 항목을 입력해주세요.');
       return;
     }
-
-    // Fix 1: Generate unique stream token — session transitions invalidate it
-    const token = crypto.randomUUID();
-    streamTokenRef.current = token;
 
     const formDataForBackend: DisputeFormData = {
       purchaseDate: disputeForm.purchaseDate,
@@ -349,11 +301,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setStoreChatType('dispute');
     setActiveChatType('dispute');
 
-    // AI 메시지 ID 미리 생성 (placeholder 없이)
     const aiMessageId = disputeMessages.length + 2;
 
     try {
-      // PR-7: Use SSE streaming API for real-time progress
       const response = await startDisputeStream({
         message: formMessage.content,
         chat_type: 'dispute',
@@ -367,11 +317,6 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           dispute_details: disputeForm.disputeDetail,
         },
       });
-
-      // Fix 1/6: Stream token guard — if token was invalidated by session transition, discard response
-      if (streamTokenRef.current !== token) {
-        return;
-      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
@@ -413,12 +358,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   /**
    * Phase 2-16: 입력 텍스트에서 불필요한 대화 히스토리 제거
-   * 사용자가 실수로 이전 답변을 복사해서 붙여넣은 경우를 방지
    */
   const cleanUserInput = (input: string): string => {
     const text = input.trim();
 
-    // 답변 템플릿 헤더 패턴
     const answerHeaders = [
       '[답변 요약]',
       '[규정]',
@@ -428,46 +371,35 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       '[이전 대화]',
     ];
 
-    // 텍스트가 답변 템플릿 헤더로 시작하는지 확인
     const startsWithTemplate = answerHeaders.some(header => text.startsWith(header));
 
     if (!startsWithTemplate) {
-      return text; // 정상적인 사용자 질문
+      return text;
     }
 
-    // 템플릿이 포함된 경우: 마지막 줄에서 실제 질문 추출
     const lines = text.split('\n');
 
-    // 뒤에서부터 유효한 사용자 질문 찾기
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i].trim();
 
-      // 빈 줄이나 템플릿 요소 건너뛰기
       if (!line) continue;
       if (line.startsWith('#') || line.startsWith('-') || line.startsWith('●')) continue;
       if (line.startsWith('[') && line.endsWith(']')) continue;
-      if (/^\d+\./.test(line)) continue; // 번호 리스트
+      if (/^\d+\./.test(line)) continue;
       if (line.startsWith('*') || line.startsWith('¹') || line.startsWith('²')) continue;
 
-      // 의미있는 질문 (최소 5글자)
       if (line.length >= 5) {
         return line;
       }
     }
 
-    // 추출 실패 시 원본 반환
     return text;
   };
 
-  // 분쟁 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
+  // 분쟁 상담 메시지 전송 핸들러
   const handleDisputeSend = async () => {
     if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
 
-    // Fix 1: Generate unique stream token
-    const token = crypto.randomUUID();
-    streamTokenRef.current = token;
-
-    // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(disputeInputValue);
 
     const newMessage: MessageWithCitations = {
@@ -480,21 +412,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setDisputeMessages(prev => [...prev, newMessage]);
     setDisputeInputValue('');
 
-    // AI 메시지 ID 미리 생성 (placeholder 없이)
     const aiMessageId = disputeMessages.length + 2;
 
     try {
-      // PR-7: Use SSE streaming API for real-time progress
       const response = await startDisputeStream({
         message: cleanedInput,
         chat_type: 'dispute',
         top_k: 5,
       });
-
-      // Fix 1/6: Stream token guard
-      if (streamTokenRef.current !== token) {
-        return;
-      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
@@ -531,15 +456,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     }
   };
 
-  // 일반 상담 메시지 전송 핸들러 (PR-7: SSE Streaming)
+  // 일반 상담 메시지 전송 핸들러
   const handleGeneralSend = async () => {
     if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
-    // Fix 1: Generate unique stream token
-    const token = crypto.randomUUID();
-    streamTokenRef.current = token;
-
-    // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(generalInputValue);
 
     const newMessage: MessageWithCitations = {
@@ -554,21 +474,14 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     setActiveChatType('general');
     setStoreChatType('general');
 
-    // AI 메시지 ID 미리 생성 (placeholder 없이)
     const aiMessageId = generalMessages.length + 2;
 
     try {
-      // PR-7: Use SSE streaming API for real-time progress
       const response = await startGeneralStream({
         message: cleanedInput,
         chat_type: 'general',
         top_k: 5,
       });
-
-      // Fix 1/6: Stream token guard
-      if (streamTokenRef.current !== token) {
-        return;
-      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);

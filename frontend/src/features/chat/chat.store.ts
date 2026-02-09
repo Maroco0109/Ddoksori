@@ -1,54 +1,11 @@
 import { create } from 'zustand';
 import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData } from '@/shared/types';
 import { storage } from '@/shared/lib/storage';
-import { STORAGE_KEYS, getUserChatSessionsKey, getUserHiddenSessionsKey } from '@/shared/config/storage-keys';
+import { STORAGE_KEYS } from '@/shared/config/storage-keys';
 import { SESSION_EXPIRY_DURATION } from '@/shared/config';
 import { generateGuestSessionId } from '@/shared/lib/session';
-import { getUserSessions, getSessionHistory, convertBackendSessionToLocal } from '@/shared/lib/api-client';
+import { getUserSessions, deleteSession, convertBackendSessionToLocal } from '@/shared/lib/api-client';
 import { useAuthStore } from '@/features/auth/auth.store';
-
-/**
- * BUG-3 fix: saveChatSession 직렬화 큐
- * 동시에 dispute/general useEffect가 fire하면 localStorage read-modify-write 경쟁 발생.
- * Promise 체이닝으로 save 호출을 직렬화하여 마지막 쓰기만 남는 문제를 방지.
- */
-let saveQueue: Promise<void> = Promise.resolve();
-
-/**
- * 현재 로그인한 사용자 ID를 가져옵니다.
- * Zustand의 in-memory 상태에서 직접 읽어 레이스 컨디션을 방지합니다.
- */
-function getCurrentUserId(): string | null {
-  const user = useAuthStore.getState().user;
-  return user?.id || null;
-}
-
-/**
- * 숨긴 세션 목록을 가져옵니다.
- */
-function getHiddenSessions(userId: string | null): Set<string> {
-  const key = getUserHiddenSessionsKey(userId);
-  const hidden = storage.get<string[]>(key, false) || [];
-  return new Set(hidden);
-}
-
-/**
- * 세션을 숨긴 목록에 추가합니다.
- */
-function addHiddenSession(userId: string | null, sessionId: string): void {
-  const key = getUserHiddenSessionsKey(userId);
-  const hidden = getHiddenSessions(userId);
-  hidden.add(sessionId);
-  storage.set(key, Array.from(hidden), false);
-}
-
-/**
- * 세션 목록에서 숨긴 세션을 필터링합니다.
- */
-function filterHiddenSessions(sessions: ChatSession[], userId: string | null): ChatSession[] {
-  const hiddenSessions = getHiddenSessions(userId);
-  return sessions.filter(session => !hiddenSessions.has(session.id));
-}
 
 /**
  * 메시지에서 세션 title을 생성합니다.
@@ -94,8 +51,6 @@ interface ChatState {
   isFormSubmitted: boolean;
   backendSessionId: string | null;
   disputeFormData: DisputeFormData | null;
-  isSyncing: boolean;
-  isTransitioning: boolean;
 
   // Actions
   setCurrentSessionId: (id: string | null) => void;
@@ -108,15 +63,13 @@ interface ChatState {
   setIsFormSubmitted: (submitted: boolean) => void;
   setBackendSessionId: (id: string | null) => void;
   setDisputeFormData: (data: DisputeFormData | null) => void;
-  setIsTransitioning: (transitioning: boolean) => void;
 
   loadChatSessions: (isLoggedIn: boolean) => void;
-  saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean, targetSessionId?: string) => void;
+  saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean) => void;
   deleteChatSession: (sessionId: string, isLoggedIn: boolean) => Promise<void>;
   refreshSessionTime: (sessionId: string) => void;
   startNewChat: () => void;
   resetState: () => void;
-  syncWithBackend: (token: string) => Promise<void>;
 }
 
 const initialMessages: MessageWithCitations[] = [
@@ -139,8 +92,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isFormSubmitted: false,
   backendSessionId: null,
   disputeFormData: null,
-  isSyncing: false,
-  isTransitioning: false,
 
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setActiveChatType: (type) => set({ activeChatType: type }),
@@ -152,150 +103,137 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsFormSubmitted: (submitted) => set({ isFormSubmitted: submitted }),
   setBackendSessionId: (id) => set({ backendSessionId: id }),
   setDisputeFormData: (data) => set({ disputeFormData: data }),
-  setIsTransitioning: (transitioning) => set({ isTransitioning: transitioning }),
 
-  loadChatSessions: (isLoggedIn) => {
-    // 동기화 중이면 로드 건너뛰기 (race condition 방지)
-    if (get().isSyncing) {
-      return;
-    }
-    let storageKey: string;
-    let userId: string | null = null;
-
+  loadChatSessions: async (isLoggedIn) => {
     if (isLoggedIn) {
-      // 로그인 사용자: 사용자별 고유 key 사용
-      userId = getCurrentUserId();
-      storageKey = getUserChatSessionsKey(userId);
+      // 로그인 사용자: API로 세션 목록 조회
+      const token = useAuthStore.getState().token;
+      if (!token) return;
+
+      try {
+        const response = await getUserSessions(token, 100, 0);
+        const sessions: ChatSession[] = response.sessions.map(s => ({
+          ...convertBackendSessionToLocal(s),
+          messages: [],
+        }));
+        set({ chatSessions: sessions });
+      } catch (error) {
+        console.error('[ChatStore] loadChatSessions API error:', error);
+      }
     } else {
-      // 비로그인 사용자: 임시 세션 key 사용
-      storageKey = STORAGE_KEYS.TEMP_CHAT_SESSIONS;
-    }
+      // 비로그인 사용자: sessionStorage에서 로드
+      const storageKey = STORAGE_KEYS.TEMP_CHAT_SESSIONS;
+      let sessions = storage.get<ChatSession[]>(storageKey, true) || [];
 
-    let sessions = storage.get<ChatSession[]>(storageKey, !isLoggedIn) || [];
-
-    // Filter expired sessions for non-logged-in users
-    if (!isLoggedIn) {
+      // Filter expired sessions
       const now = Date.now();
       sessions = sessions.filter((s) => !s.expiresAt || s.expiresAt > now);
       storage.set(storageKey, sessions, true);
-    } else {
-      // 로그인 사용자: 숨긴 세션 필터링
-      sessions = filterHiddenSessions(sessions, userId);
-    }
 
-    set({ chatSessions: sessions });
+      set({ chatSessions: sessions });
+    }
   },
 
-  saveChatSession: (type, messages, isLoggedIn, targetSessionId?) => {
-    // BUG-3 fix: Promise 체이닝으로 save를 직렬화
-    saveQueue = saveQueue.then(async () => {
+  saveChatSession: async (type, messages, isLoggedIn) => {
+    if (isLoggedIn) {
+      // 로그인 사용자: 백엔드가 DB에 자동 저장하므로 아무것도 하지 않음.
+      // 단, store의 chatSessions에 현재 세션 반영 (사이드바 표시용)
       const state = get();
-      // Guard: skip save during session transition to prevent message contamination
-      if (state.isTransitioning) {
-        return;
-      }
-      let storageKey: string;
-      let userId: string | null = null;
-
-      if (isLoggedIn) {
-        userId = getCurrentUserId();
-        storageKey = getUserChatSessionsKey(userId);
-      } else {
-        storageKey = STORAGE_KEYS.TEMP_CHAT_SESSIONS;
-      }
-
-      let sessions = storage.get<ChatSession[]>(storageKey, !isLoggedIn) || [];
-
-      // Fix 3: 세션 ID 결정 우선순위:
-      // 1. targetSessionId (호출자가 명시적으로 전달한 ID - 가장 우선)
-      // 2. backendSessionId (백엔드에서 반환한 ID)
-      // 3. currentSessionId (프론트엔드 로컬 ID)
-      // 4. 새 ID 생성
-      let newSessionId = targetSessionId || state.backendSessionId || state.currentSessionId;
-
-      // 백엔드 session_id를 받았고, 기존 currentSessionId와 다른 경우
-      // 임시 ID로 저장된 세션을 백엔드 ID로 변경
-      if (state.backendSessionId && state.currentSessionId &&
-          state.backendSessionId !== state.currentSessionId) {
-        const backendSessionExists = sessions.some((s) => s.id === state.backendSessionId);
-        if (!backendSessionExists) {
-          const oldSessionIndex = sessions.findIndex((s) => s.id === state.currentSessionId);
-          if (oldSessionIndex >= 0) {
-            sessions[oldSessionIndex].id = state.backendSessionId;
-          }
-        }
-      }
-
-      if (!isLoggedIn) {
-        if (sessions.length > 0 && !newSessionId) {
-          newSessionId = sessions[0].id;
-        } else if (!newSessionId) {
-          newSessionId = await generateGuestSessionId();
-        }
-        sessions = sessions.filter((s) => s.id === newSessionId);
-      } else {
-        if (!newSessionId) {
-          newSessionId = Date.now().toString();
-        }
-      }
+      const sessionId = state.backendSessionId || state.currentSessionId;
+      if (!sessionId) return;
 
       const title = generateTitleFromMessages(type, messages);
+      const existingIndex = state.chatSessions.findIndex(s => s.id === sessionId);
 
-      // 중복 세션 제거
-      const uniqueSessions: ChatSession[] = [];
-      const seenIds = new Set<string>();
-      for (const session of sessions) {
-        if (!seenIds.has(session.id)) {
-          uniqueSessions.push(session);
-          seenIds.add(session.id);
-        }
-      }
-      sessions = uniqueSessions;
-
-      const sessionIndex = sessions.findIndex((s) => s.id === newSessionId);
-      const now = Date.now();
-      const expiresAt = !isLoggedIn ? now + SESSION_EXPIRY_DURATION : null;
-
-      const sessionData: ChatSession = {
-        id: newSessionId,
-        type,
-        title,
-        createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
-        lastMessageAt: new Date(),
-        expiresAt:
-          sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
-        lastUpdated: now,
-        messages: messages.map((msg) => ({
-          ...msg,
-          timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
-        })),
-      };
-
-      if (sessionIndex >= 0) {
-        sessions[sessionIndex] = sessionData;
+      if (existingIndex >= 0) {
+        const updated = [...state.chatSessions];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          title,
+          messages: messages.map(msg => ({
+            ...msg,
+            timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
+          })),
+          lastMessageAt: new Date(),
+          lastUpdated: Date.now(),
+        };
+        set({ chatSessions: updated, currentSessionId: sessionId });
       } else {
-        sessions.unshift(sessionData);
+        // 새 세션을 목록에 추가
+        const newSession: ChatSession = {
+          id: sessionId,
+          type,
+          title,
+          createdAt: Date.now(),
+          lastMessageAt: new Date(),
+          expiresAt: null,
+          lastUpdated: Date.now(),
+          messages: messages.map(msg => ({
+            ...msg,
+            timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
+          })),
+        };
+        set({ chatSessions: [newSession, ...state.chatSessions], currentSessionId: sessionId });
       }
+      return;
+    }
 
-      storage.set(storageKey, sessions, !isLoggedIn);
+    // 비로그인 사용자: sessionStorage에 저장 (기존 방식)
+    const state = get();
+    const storageKey = STORAGE_KEYS.TEMP_CHAT_SESSIONS;
+    let sessions = storage.get<ChatSession[]>(storageKey, true) || [];
 
-      const visibleSessions = isLoggedIn ? filterHiddenSessions(sessions, getCurrentUserId()) : sessions;
-      set({ chatSessions: visibleSessions, currentSessionId: newSessionId });
-    }).catch((err) => {
-      console.error('[ChatStore] saveChatSession error:', err);
-    });
+    let newSessionId = state.backendSessionId || state.currentSessionId;
+
+    if (sessions.length > 0 && !newSessionId) {
+      newSessionId = sessions[0].id;
+    } else if (!newSessionId) {
+      newSessionId = await generateGuestSessionId();
+    }
+    sessions = sessions.filter((s) => s.id === newSessionId);
+
+    const title = generateTitleFromMessages(type, messages);
+    const sessionIndex = sessions.findIndex((s) => s.id === newSessionId);
+    const now = Date.now();
+    const expiresAt = now + SESSION_EXPIRY_DURATION;
+
+    const sessionData: ChatSession = {
+      id: newSessionId,
+      type,
+      title,
+      createdAt: sessionIndex >= 0 ? sessions[sessionIndex].createdAt : now,
+      lastMessageAt: new Date(),
+      expiresAt: sessionIndex >= 0 ? sessions[sessionIndex].expiresAt : expiresAt,
+      lastUpdated: now,
+      messages: messages.map((msg) => ({
+        ...msg,
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
+      })),
+    };
+
+    if (sessionIndex >= 0) {
+      sessions[sessionIndex] = sessionData;
+    } else {
+      sessions.unshift(sessionData);
+    }
+
+    storage.set(storageKey, sessions, true);
+    set({ chatSessions: sessions, currentSessionId: newSessionId });
   },
 
   deleteChatSession: async (sessionId, isLoggedIn) => {
-    console.log(`[ChatStore] Hiding session (not deleting from backend): ${sessionId}`);
-
     if (isLoggedIn) {
-      // 로그인 사용자: 숨긴 세션 목록에 추가
-      const userId = getCurrentUserId();
-      addHiddenSession(userId, sessionId);
-      console.log(`[ChatStore] Added session to hidden list: ${sessionId}`);
+      // 로그인 사용자: API로 삭제
+      const token = useAuthStore.getState().token;
+      if (token) {
+        try {
+          await deleteSession(token, sessionId);
+        } catch (error) {
+          console.error('[ChatStore] deleteSession API error:', error);
+        }
+      }
     } else {
-      // 비로그인 사용자: localStorage에서 실제로 삭제
+      // 비로그인 사용자: sessionStorage에서 삭제
       const storageKey = STORAGE_KEYS.TEMP_CHAT_SESSIONS;
       const sessions = storage.get<ChatSession[]>(storageKey, true) || [];
       const filteredSessions = sessions.filter((s) => s.id !== sessionId);
@@ -310,8 +248,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
       };
     });
-
-    console.log(`[ChatStore] Session hidden from UI: ${sessionId}`);
   },
 
   refreshSessionTime: (sessionId) => {
@@ -351,125 +287,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isFormSubmitted: false,
       backendSessionId: null,
       disputeFormData: null,
-      isTransitioning: false,
     });
-  },
-
-  syncWithBackend: async (token: string) => {
-    set({ isSyncing: true });
-    try {
-      const userId = getCurrentUserId();
-      if (!userId) {
-        console.warn('[ChatStore] syncWithBackend: No user ID');
-        return;
-      }
-
-      console.log('[ChatStore] Syncing with backend...');
-
-      // 백엔드에서 세션 목록 가져오기
-      const response = await getUserSessions(token, 100, 0);
-      const backendSessions = response.sessions;
-
-      console.log(`[ChatStore] Fetched ${backendSessions.length} sessions from backend`);
-
-      // localStorage의 현재 세션들
-      const storageKey = getUserChatSessionsKey(userId);
-      const localSessions = storage.get<ChatSession[]>(storageKey, false) || [];
-
-      // 백엔드 세션을 ChatSession 형식으로 변환
-      const convertedSessions: ChatSession[] = [];
-
-      for (const backendSession of backendSessions) {
-        // localStorage에 이미 있는 세션인지 확인
-        const existingSession = localSessions.find(s => s.id === backendSession.id);
-
-        if (existingSession) {
-          // 기존 세션 업데이트 (메시지는 유지)
-          // 백엔드 title이 기본값이면 메시지에서 재생성
-          const needsTitleRegeneration =
-            backendSession.title === 'dispute 상담' ||
-            backendSession.title === 'general 상담' ||
-            !backendSession.title;
-
-          const finalTitle = needsTitleRegeneration
-            ? generateTitleFromMessages(existingSession.type, existingSession.messages)
-            : backendSession.title;
-
-          convertedSessions.push({
-            ...existingSession,
-            title: finalTitle,
-            lastMessageAt: new Date(backendSession.lastMessageAt),
-            lastUpdated: new Date(backendSession.lastMessageAt).getTime(),
-          });
-        } else {
-          // 새 세션: 메시지를 백엔드에서 가져와야 함
-          try {
-            const historyResponse = await getSessionHistory(token, backendSession.id, 50);
-
-            // 백엔드는 최신순(DESC)으로 반환하므로 역순으로 변환 (오래된 것부터)
-            const messages: MessageWithCitations[] = historyResponse.messages
-              .map(msg => ({
-                id: msg.id,
-                type: msg.type,
-                content: msg.content,
-                timestamp: new Date(msg.timestamp),
-              }))
-              .reverse(); // 역순 변환: 최신순 → 시간순
-
-            // 메시지에서 title 재생성
-            const sessionType = backendSession.type as ChatType;
-            const generatedTitle = generateTitleFromMessages(sessionType, messages);
-
-            convertedSessions.push({
-              ...convertBackendSessionToLocal(backendSession),
-              title: generatedTitle,
-              messages,
-            });
-          } catch (error) {
-            console.error(`[ChatStore] Failed to fetch history for session ${backendSession.id}:`, error);
-            // 메시지 없이라도 세션은 추가
-            convertedSessions.push({
-              ...convertBackendSessionToLocal(backendSession),
-              messages: [],
-            });
-          }
-        }
-      }
-
-      // 백엔드에 없지만 최근 5분 이내 생성된 로컬 세션 보존 (DB 저장 지연 방어)
-      const backendSessionIds = new Set(convertedSessions.map(s => s.id));
-      const recentLocalOnly = localSessions.filter(
-        s => !backendSessionIds.has(s.id) && s.lastUpdated && (Date.now() - s.lastUpdated < 5 * 60 * 1000)
-      );
-      const mergedSessions = [...convertedSessions, ...recentLocalOnly];
-
-      if (recentLocalOnly.length > 0) {
-        console.log(`[ChatStore] Preserved ${recentLocalOnly.length} recent local-only sessions`);
-      }
-
-      // 숨긴 세션 필터링
-      const visibleSessions = filterHiddenSessions(mergedSessions, userId);
-
-      // localStorage에 저장 (필터링되지 않은 전체 세션 저장 - 숨김 해제 가능하도록)
-      storage.set(storageKey, mergedSessions, false);
-
-      // state 업데이트 (필터링된 세션만)
-      set({ chatSessions: visibleSessions });
-
-      console.log(`[ChatStore] Sync complete: ${visibleSessions.length} sessions (${mergedSessions.length - visibleSessions.length} hidden)`);
-    } catch (error) {
-      console.error('[ChatStore] syncWithBackend failed:', error);
-      // 동기화 실패 시 localStorage 데이터 사용
-      const userId = getCurrentUserId();
-      if (userId) {
-        const storageKey = getUserChatSessionsKey(userId);
-        const localSessions = storage.get<ChatSession[]>(storageKey, false) || [];
-        // 숨긴 세션 필터링
-        const visibleSessions = filterHiddenSessions(localSessions, userId);
-        set({ chatSessions: visibleSessions });
-      }
-    } finally {
-      set({ isSyncing: false });
-    }
   },
 }));
