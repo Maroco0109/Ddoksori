@@ -339,7 +339,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
       // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
       // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      if (isTransitioningRef.current || useChatStore.getState().currentSessionId !== expectedSessionId) {
+      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
+      const currentStoreSessionId = useChatStore.getState().currentSessionId;
+      if (isTransitioningRef.current ||
+          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
         return;
       }
 
@@ -462,7 +465,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
       // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
       // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      if (isTransitioningRef.current || useChatStore.getState().currentSessionId !== expectedSessionId) {
+      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
+      const currentStoreSessionId = useChatStore.getState().currentSessionId;
+      if (isTransitioningRef.current ||
+          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
         return;
       }
 
@@ -536,7 +542,10 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
       // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
       // store에서 직접 읽어야 함 - 클로저의 resolvedSessionId는 렌더 시점 값이라 변하지 않음
-      if (isTransitioningRef.current || useChatStore.getState().currentSessionId !== expectedSessionId) {
+      // BUG-8 fix: expectedSessionId가 null(새 채팅)이면 세션 생성으로 인한 ID 변경이므로 가드 스킵
+      const currentStoreSessionId = useChatStore.getState().currentSessionId;
+      if (isTransitioningRef.current ||
+          (expectedSessionId !== null && currentStoreSessionId !== expectedSessionId)) {
         return;
       }
 
