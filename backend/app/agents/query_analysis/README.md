@@ -45,7 +45,7 @@
 
 ## 2. 아키텍처 (Architecture)
 
-### v1 (query_analysis_node) - 규칙 기반
+### v1 (query_analysis_node) - 규칙 기반 `[LEGACY]`
 
 ```mermaid
 flowchart TD
@@ -134,8 +134,8 @@ backend/app/agents/query_analysis/
 
 | 함수 | 설명 | 버전 |
 |------|------|------|
-| `query_analysis_node(state)` | LangGraph 동기 노드 (규칙 기반 확장) | v1 |
-| `query_analysis_node_v2(state, config)` | LangGraph 비동기 노드 (LLM 기반 확장) | v2 |
+| `query_analysis_node(state)` | LangGraph 동기 노드 (규칙 기반 확장) | v1 `[LEGACY]` |
+| `query_analysis_node_v2(state, config)` | LangGraph 비동기 노드 (LLM 기반 확장) | v2 (현재 사용) |
 
 #### `classifiers.py` - 분류 로직
 
@@ -248,7 +248,7 @@ backend/app/agents/query_analysis/
 
 Rule-based 분류기와 LLM Fallback을 결합한 하이브리드 방식입니다.
 
-**v1 (query_analysis_node)**: 규칙 기반만 사용
+**v1 (query_analysis_node)** `[LEGACY]`: 규칙 기반만 사용
 - `classify_query_type_with_confidence()` 호출
 - confidence score를 로깅에 활용하지만 LLM fallback은 호출하지 않음
 
