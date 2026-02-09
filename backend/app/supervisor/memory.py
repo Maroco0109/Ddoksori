@@ -196,7 +196,7 @@ class ConversationMemory:
 
             self._db_loaded = True
         except Exception as e:
-            logger.error(f"[Memory] Failed to load from DB: {e}")
+            logger.error(f"[Memory] Failed to load from DB: {e}", exc_info=True)
             # Continue with in-memory mode
             self.use_db = False
             self.db = None
@@ -240,7 +240,7 @@ class ConversationMemory:
                     metadata=metadata,
                 )
             except Exception as e:
-                logger.error(f"[Memory] Failed to save turn to DB: {e}")
+                logger.error(f"[Memory] Failed to save turn to DB: {e}", exc_info=True)
 
         # Compact 트리거 체크
         if self._should_compact():
@@ -275,7 +275,9 @@ class ConversationMemory:
                     compacted_turn_count=self.total_turn_count,
                 )
             except Exception as e:
-                logger.error(f"[Memory] Failed to save summary to DB: {e}")
+                logger.error(
+                    f"[Memory] Failed to save summary to DB: {e}", exc_info=True
+                )
 
         # 최근 N턴만 유지
         self.turns = self.turns[-self.policy.sliding_window :]
