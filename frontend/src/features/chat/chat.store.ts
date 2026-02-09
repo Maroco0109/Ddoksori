@@ -87,6 +87,7 @@ interface ChatState {
   isFormSubmitted: boolean;
   backendSessionId: string | null;
   disputeFormData: DisputeFormData | null;
+  isSyncing: boolean;
 
   // Actions
   setCurrentSessionId: (id: string | null) => void;
@@ -129,6 +130,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isFormSubmitted: false,
   backendSessionId: null,
   disputeFormData: null,
+  isSyncing: false,
 
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setActiveChatType: (type) => set({ activeChatType: type }),
@@ -142,6 +144,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setDisputeFormData: (data) => set({ disputeFormData: data }),
 
   loadChatSessions: (isLoggedIn) => {
+    // 동기화 중이면 로드 건너뛰기 (race condition 방지)
+    if (get().isSyncing) {
+      console.log('[ChatStore] Skipping loadChatSessions — sync in progress');
+      return;
+    }
     let storageKey: string;
     let userId: string | null = null;
 
@@ -354,6 +361,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   syncWithBackend: async (token: string) => {
+    set({ isSyncing: true });
     try {
       const userId = getCurrentUserId();
       if (!userId) {
@@ -454,6 +462,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const visibleSessions = filterHiddenSessions(localSessions, userId);
         set({ chatSessions: visibleSessions });
       }
+    } finally {
+      set({ isSyncing: false });
     }
   },
 }));
