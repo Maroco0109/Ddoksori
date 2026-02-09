@@ -246,6 +246,10 @@ class ConversationMemory:
                 )
             except Exception as e:
                 logger.error(f"[Memory] Failed to save turn to DB: {e}", exc_info=True)
+                # BUG-5 fix: user 메시지 저장 실패 시 예외 전파하여 API에서 500 반환
+                # assistant 응답은 재생성 가능하므로 삼킴
+                if role == "user":
+                    raise
 
         # Compact 트리거 체크
         if self._should_compact():
