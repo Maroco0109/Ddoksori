@@ -58,6 +58,10 @@ const transferGuestSessions = async (userId: string, token: string) => {
   console.log(`[Auth] Transferred ${guestSessions.length} guest sessions to user ${userId}`);
 };
 
+// Auth hydration 상태 추적 (F5 새로고침 시 race condition 방지)
+let _isAuthHydrated = false;
+export const isAuthHydrated = () => _isAuthHydrated;
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -79,6 +83,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: STORAGE_KEYS.USER_DATA,
+      onRehydrateStorage: () => {
+        return () => {
+          _isAuthHydrated = true;
+        };
+      },
     }
   )
 );
