@@ -7,7 +7,6 @@ export default function OAuthCallback() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
-  const syncWithBackend = useChatStore((state) => state.syncWithBackend);
   const hasProcessed = useRef(false);
 
   useEffect(() => {
@@ -63,13 +62,8 @@ export default function OAuthCallback() {
         // 로그인 처리 (await로 claim API 완료 대기)
         await login(user, accessToken);
 
-        // 백엔드에서 채팅 세션 동기화 (멀티 디바이스 동기화)
-        try {
-          await syncWithBackend(accessToken);
-        } catch {
-          // 동기화 실패해도 로컬 세션 로드
-          loadChatSessions(true);
-        }
+        // 백엔드에서 채팅 세션 로드
+        loadChatSessions(true);
 
         // 홈페이지로 리다이렉트
         navigate('/', { replace: true });
@@ -80,7 +74,7 @@ export default function OAuthCallback() {
     };
 
     handleCallback();
-  }, [login, loadChatSessions, syncWithBackend, navigate]);
+  }, [login, loadChatSessions, navigate]);
 
   return (
     <div className="fixed inset-0 bg-white flex items-center justify-center">

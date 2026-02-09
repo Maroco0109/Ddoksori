@@ -1,6 +1,6 @@
 export const formatDate = (date: Date | string | number): string => {
   const d = new Date(date);
-  return d.toLocaleDateString('ko-KR').replace(/\. /g, '.').slice(0, -1);
+  return d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }).replace(/\. /g, '.').slice(0, -1);
 };
 
 export const formatTime = (date: Date | string | number): string => {
@@ -8,6 +8,7 @@ export const formatTime = (date: Date | string | number): string => {
   return d.toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'Asia/Seoul',
   });
 };
 

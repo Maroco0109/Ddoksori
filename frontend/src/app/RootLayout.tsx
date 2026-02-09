@@ -15,7 +15,6 @@ export default function RootLayout() {
   const isLoggedIn = useAuthStore((state) => state.isAuthenticated);
   const token = useAuthStore((state) => state.token);
   const loadChatSessions = useChatStore((state) => state.loadChatSessions);
-  const syncWithBackend = useChatStore((state) => state.syncWithBackend);
 
   const lastSyncTime = useRef<number>(0);
   const prevAuthRef = useRef(isLoggedIn);
@@ -68,17 +67,11 @@ export default function RootLayout() {
     if (!authReady) return;
 
     if (isLoggedIn && token) {
-      // 로그인 상태: 백엔드 동기화 우선 (5초 쿨다운)
+      // 로그인 상태: API로 세션 목록 조회 (5초 쿨다운)
       const now = Date.now();
       if (now - lastSyncTime.current > 5000) {
-        syncWithBackend(token).then(() => {
-          lastSyncTime.current = Date.now();
-        }).catch((error) => {
-          console.error('[RootLayout] Backend sync failed, falling back to localStorage:', error);
-          loadChatSessions(true);
-        });
-      } else {
         loadChatSessions(true);
+        lastSyncTime.current = Date.now();
       }
     } else {
       loadChatSessions(false);
@@ -88,37 +81,28 @@ export default function RootLayout() {
       const interval = setInterval(() => loadChatSessions(false), 60000);
       return () => clearInterval(interval);
     }
-  }, [authReady, isLoggedIn, token, loadChatSessions, syncWithBackend]);
+  }, [authReady, isLoggedIn, token, loadChatSessions]);
 
   // 페이지 focus 시 자동 동기화 (멀티 디바이스 지원)
   useEffect(() => {
     if (!authReady || !isLoggedIn || !token) return;
 
-    const handleVisibilityChange = async () => {
-      // 페이지가 다시 보이게 되었을 때
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         const now = Date.now();
         const timeSinceLastSync = now - lastSyncTime.current;
 
-        // 최소 30초 간격으로 동기화 (너무 자주 호출 방지)
+        // 최소 30초 간격으로 동기화
         if (timeSinceLastSync > 30000) {
-          console.log('[RootLayout] Page became visible, syncing with backend...');
-          try {
-            await syncWithBackend(token);
-            lastSyncTime.current = now;
-            console.log('[RootLayout] Sync complete');
-          } catch (error) {
-            console.error('[RootLayout] Sync failed:', error);
-          }
-        } else {
-          console.log(`[RootLayout] Skipping sync (last sync was ${Math.floor(timeSinceLastSync / 1000)}s ago)`);
+          loadChatSessions(true);
+          lastSyncTime.current = now;
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [authReady, isLoggedIn, token, syncWithBackend]);
+  }, [authReady, isLoggedIn, token, loadChatSessions]);
 
   // 브라우저 자동 스크롤 복원 비활성화
   useEffect(() => {
@@ -129,7 +113,6 @@ export default function RootLayout() {
 
   // 페이지 이동 시 스크롤 최상단으로 이동 (useLayoutEffect로 동기적 처리)
   useLayoutEffect(() => {
-    // DOM 업데이트 직후 즉시 실행
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
@@ -143,13 +126,11 @@ export default function RootLayout() {
       document.body.scrollTop = 0;
     };
 
-    // requestAnimationFrame으로 다음 프레임에서 실행
     requestAnimationFrame(() => {
       scrollToTop();
       requestAnimationFrame(scrollToTop);
     });
 
-    // 추가 지연 실행
     const timer = setTimeout(scrollToTop, 100);
     return () => clearTimeout(timer);
   }, [location.pathname]);

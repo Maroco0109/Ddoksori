@@ -46,16 +46,6 @@ interface UseStreamingChatReturn {
 
 /**
  * SSE-based streaming chat hook for real-time progress updates
- *
- * @example
- * const { streamingState, startStream, cancelStream } = useStreamingChat({
- *   onStatusUpdate: (status, progress) => console.log(`${status}: ${progress}%`),
- *   onComplete: (data) => addMessage(data.answer),
- *   onError: (error) => showError(error),
- * });
- *
- * // Start streaming
- * await startStream({ message: 'Hello' });
  */
 export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStreamingChatReturn {
   const { onStatusUpdate, onComplete, onError } = options;
@@ -109,9 +99,6 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
       });
 
       const backendSessionId = useChatStore.getState().backendSessionId;
-      // BUG-9 fix: 스트림 시작 시점의 backendSessionId를 캡처하여
-      // complete 시 세션 전환 여부를 판별
-      const capturedBackendSessionId = backendSessionId;
       const onboarding = request.onboarding || convertDisputeFormToOnboarding();
 
       const enhancedRequest: ChatAPIRequest = {
@@ -131,7 +118,6 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
       // Include Authorization header if user is logged in
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        console.log('[useStreamingChat] Including Authorization header for logged-in user');
       }
 
       try {
@@ -172,7 +158,6 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
 
                 if (eventData.type === 'status') {
                   const { node, status, progress } = eventData.data;
-                  console.log('[SSE] Status update:', { node, status, progress });
                   setStreamingState((prev) => ({
                     ...prev,
                     currentNode: node,
@@ -182,13 +167,8 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
                   onStatusUpdate?.(status, progress, node);
                 } else if (eventData.type === 'complete') {
                   completeData = eventData.data;
-                  // Fix 5: 세션 전환이 발생하지 않은 경우에만 backendSessionId 업데이트
-                  // capturedBackendSessionId === null은 새 채팅 시작을 의미하므로 항상 업데이트 허용
-                  const currentBackendSessionId = useChatStore.getState().backendSessionId;
-                  if (currentBackendSessionId === capturedBackendSessionId
-                      || capturedBackendSessionId === null) {
-                    setBackendSessionId(completeData.session_id);
-                  }
+                  // 무조건 backendSessionId 업데이트
+                  setBackendSessionId(completeData.session_id);
                   setStreamingState({
                     isStreaming: false,
                     currentNode: null,
@@ -216,7 +196,6 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
         return completeData;
       } catch (error) {
         if ((error as Error).name === 'AbortError') {
-          console.log('[useStreamingChat] Stream aborted');
           return null;
         }
 
