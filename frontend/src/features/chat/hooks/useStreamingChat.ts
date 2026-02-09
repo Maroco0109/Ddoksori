@@ -109,6 +109,9 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
       });
 
       const backendSessionId = useChatStore.getState().backendSessionId;
+      // BUG-9 fix: 스트림 시작 시점의 backendSessionId를 캡처하여
+      // complete 시 세션 전환 여부를 판별
+      const capturedBackendSessionId = backendSessionId;
       const onboarding = request.onboarding || convertDisputeFormToOnboarding();
 
       const enhancedRequest: ChatAPIRequest = {
@@ -179,7 +182,13 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
                   onStatusUpdate?.(status, progress, node);
                 } else if (eventData.type === 'complete') {
                   completeData = eventData.data;
-                  setBackendSessionId(completeData.session_id);
+                  // BUG-9 fix: 세션 전환이 발생하지 않은 경우에만 backendSessionId 업데이트
+                  // 세션 전환 시 backendSessionId가 새 세션 ID로 변경되므로
+                  // capturedBackendSessionId와 다르면 전환된 것
+                  const currentBackendSessionId = useChatStore.getState().backendSessionId;
+                  if (currentBackendSessionId === capturedBackendSessionId) {
+                    setBackendSessionId(completeData.session_id);
+                  }
                   setStreamingState({
                     isStreaming: false,
                     currentNode: null,
