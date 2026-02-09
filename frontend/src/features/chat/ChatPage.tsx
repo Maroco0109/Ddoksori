@@ -250,6 +250,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
 
   useEffect(() => {
     if (isTransitioningRef.current || isTransitioning) return;
+    // 2차 방어: store의 세션 ID와 로컬 세션 ID가 일치하는지 확인
+    const storeCurrentSessionId = useChatStore.getState().currentSessionId;
+    if (storeCurrentSessionId && sessionId && storeCurrentSessionId !== sessionId) return;
     if (disputeMessages.length > 1) {
       scrollToBottom(disputeMessagesEndRef);
     }
@@ -257,10 +260,13 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     if (disputeMessages.length > 1 && hasUserMessage) {
       saveChatSession('dispute', disputeMessages);
     }
-  }, [disputeMessages, saveChatSession, isTransitioning]);
+  }, [disputeMessages, saveChatSession, isTransitioning, sessionId]);
 
   useEffect(() => {
     if (isTransitioningRef.current || isTransitioning) return;
+    // 2차 방어: store의 세션 ID와 로컬 세션 ID가 일치하는지 확인
+    const storeCurrentSessionId = useChatStore.getState().currentSessionId;
+    if (storeCurrentSessionId && sessionId && storeCurrentSessionId !== sessionId) return;
     if (generalMessages.length > 1) {
       scrollToBottom(generalMessagesEndRef);
     }
@@ -268,7 +274,7 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
     if (generalMessages.length > 1 && hasUserMessage) {
       saveChatSession('general', generalMessages);
     }
-  }, [generalMessages, saveChatSession, isTransitioning]);
+  }, [generalMessages, saveChatSession, isTransitioning, sessionId]);
 
   // 분쟁 상담 폼 제출 핸들러
   const handleDisputeFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -281,6 +287,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
       alert('모든 항목을 입력해주세요.');
       return;
     }
+
+    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
+    const expectedSessionId = resolvedSessionId;
 
     const formDataForBackend: DisputeFormData = {
       purchaseDate: disputeForm.purchaseDate,
@@ -324,6 +333,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
           dispute_details: disputeForm.disputeDetail,
         },
       });
+
+      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
+      if (isTransitioningRef.current || resolvedSessionId !== expectedSessionId) {
+        return;
+      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
@@ -416,6 +430,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleDisputeSend = async () => {
     if (!disputeInputValue.trim() || disputeStreamingState.isStreaming) return;
 
+    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
+    const expectedSessionId = resolvedSessionId;
+
     // DEBUG: 원본 입력값 로깅
     console.log('[ChatPage] Original disputeInputValue (length=' + disputeInputValue.length + '):', disputeInputValue.substring(0, 100));
 
@@ -445,6 +462,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         chat_type: 'dispute',
         top_k: 5,
       });
+
+      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
+      if (isTransitioningRef.current || resolvedSessionId !== expectedSessionId) {
+        return;
+      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
@@ -485,6 +507,9 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
   const handleGeneralSend = async () => {
     if (!generalInputValue.trim() || generalStreamingState.isStreaming) return;
 
+    // 핸들러 진입 시 세션 ID 캡처 (스트림 응답 후 세션 전환 감지용)
+    const expectedSessionId = resolvedSessionId;
+
     // Phase 2-16: 입력 텍스트 정제 (대화 히스토리 제거)
     const cleanedInput = cleanUserInput(generalInputValue);
 
@@ -510,6 +535,11 @@ export default function ChatPage({ currentSessionId = null, onSessionCreate }: C
         chat_type: 'general',
         top_k: 5,
       });
+
+      // 스트림 응답 후 세션이 전환됐는지 확인 (버퍼에 남은 데이터로 인한 오염 방지)
+      if (isTransitioningRef.current || resolvedSessionId !== expectedSessionId) {
+        return;
+      }
 
       if (response) {
         const citations = extractCitations(response.answer, response.sources);
