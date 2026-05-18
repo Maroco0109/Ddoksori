@@ -85,12 +85,18 @@ frontend/.vite
 
 # Agents
 .agent
-.claude
+# Keep local/runtime agent state ignored, but track project guidance needed after context resets.
+.claude/*
+!.claude/CLAUDE.md
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/branch-worktree-pr-flow/
+!.claude/skills/branch-worktree-pr-flow/SKILL.md
 .sisyphus
 .omc
 .cursorrules
-AGENTS.md
-CLAUDE.md
+!/AGENTS.md
+!/CLAUDE.md
 AI_MEMO.md
 backend/backup.sql
 backup.sql
