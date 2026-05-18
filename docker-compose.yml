@@ -11,9 +11,18 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./.env
+      - path: ./.env
+        required: false
     environment:
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-ddoksori}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - RETRIEVAL_MODE=${RETRIEVAL_MODE:-hybrid}
       - REDIS_HOST=redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy
