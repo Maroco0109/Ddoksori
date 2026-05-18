@@ -28,7 +28,7 @@
 7. **tracked migration에는 RAG schema가 없다.**
    - `backend/app/database/migrations/004_conversation_memory.sql`은 user/conversation 계층이며 RAG DB schema가 아니다.
 
-따라서 M1-2로 넘어가기 전 기준선은 “`vector_chunks` 중심 schema + RRF 함수 + legacy object 호환 범위”를 명시한 뒤, 외부 DB dump/다른 리포의 DDL을 이 목록과 대조하는 것이다.
+따라서 M1-2로 넘어가기 전 기준선은 “`vector_chunks` 중심 schema + RRF 함수 + legacy object 호환 범위”를 명시한 뒤, 이미 Docker에 복원된 DB가 이 목록을 만족하는지 점검하는 것이다.
 
 ## 2. 필수 DB object 후보
 
@@ -113,20 +113,22 @@ M1-2에서는 index까지 구현하지 말고, container와 extension 확인에 
 4. **active schema와 legacy test schema가 혼재**
    - active retriever는 `vector_chunks` 중심이다.
    - 일부 fixture/evaluation/backup은 `documents`, `chunks`, `mv_searchable_chunks`를 요구한다.
-5. **임베딩 차원 일관성 확인 필요**
-   - `vector_chunks`와 RRF 함수는 `vector(1536)` / OpenAI `text-embedding-3-large` 기준이다.
-   - local embedding provider와 `EMBEDDING_MODEL_NAME=nlpai-lab/KURE-v1` 경로는 차원이 1024일 수 있어, 로컬 모델 전환 시 schema/embedding 차원 변경 전략이 필요하다.
-6. **외부 DB 복원 소스 필요**
-   - 기존 RDS dump, 다른 repo의 DDL/seed, 또는 volume backup 중 무엇을 기준으로 복구할지 확정해야 한다.
+5. **임베딩 차원 기준은 1536으로 확정**
+   - 기존 vector DB는 OpenAI `text-embedding-3-large`의 Matryoshka embedding을 1536차원으로 저장한 전제이다.
+   - 따라서 M1-2의 vector DB 점검 기준은 `vector(1536)`이다.
+   - `KURE-v1` 관련 local embedding provider / `EMBEDDING_MODEL_NAME` 경로는 임베딩 모델 확정 전의 잔재로 보고, 이번 RAG DB 복구 기준에는 포함하지 않는다.
+6. **Docker에 복원된 DB 실물 점검 필요**
+   - 사용자가 현재 Docker에 DB 복원 작업을 진행한 상태이므로, M1-2는 새 DB를 만드는 작업이 아니라 복원된 vector DB의 object/data/search 가능 여부를 점검하는 작업으로 시작한다.
 
 ## 7. M1-2 / M1-3 handoff
 
 ### M1-2에서 할 일
 
-- `docker-compose.yml`에 PostgreSQL + pgvector service만 추가한다.
-- volume 이름, port, local env 연결값을 확정한다.
-- 검증은 `CREATE EXTENSION vector` 가능 여부와 `SELECT extversion FROM pg_extension WHERE extname='vector'` 수준으로 제한한다.
-- `vector_chunks` schema나 seed data는 아직 만들지 않는다.
+- Docker에 복원된 vector DB의 container/volume/connection 정보를 확인한다.
+- DB object와 data를 점검한다: `vector` extension, `vector_chunks`, RRF 함수, row count, embedding null 여부, `vector_dims(embedding)=1536`, `text_tsv` 존재 여부.
+- `docker-compose.yml`이 해당 vector DB에 연결 가능한지 확인하고, 필요 시 compose 연결값만 최소 수정한다.
+- backend retrieval이 실제로 검색 가능한지 smoke test한다.
+- 이 단계에서는 검색 품질 개선, schema 재설계, local embedding 모델 교체를 하지 않는다.
 
 ### M1-3에서 할 일
 
@@ -143,16 +145,16 @@ M1-2에서는 index까지 구현하지 말고, container와 extension 확인에 
 
 ### 사용자 확인이 필요한 항목
 
-- 참고할 “다른 리포” 또는 DB dump/backup 위치
-- `vector_chunks`만 살릴지, `documents/chunks/law_units`도 local 개발에서 복구할지
-- 로컬 모델 전환 시에도 `vector(1536)`을 유지할지, 모델 차원에 맞춰 별도 embedding table/schema를 만들지
+- Docker에 복원된 DB container 이름, compose service 이름, 또는 접근 가능한 connection env 위치
+- `vector_chunks`만 먼저 검증할지, `documents/chunks/law_units` 호환도 같은 M1-2에서 읽기 전용으로 확인할지
+- 로컬 모델 전환은 이번 M1-2 범위 밖으로 두고, 기존 `vector(1536)` 검색 기준선을 먼저 통과시킬지
 
 ## 8. 다음 단계 제한
 
 M1-1 완료 후 바로 구현을 넓히지 않는다. 다음 대화에서는 이 인벤토리를 기준으로 다음 중 하나만 선택한다.
 
-1. M1-2: `pgvector` local container 추가
-2. M1-3: 외부 DDL/dump와 object 목록 비교
+1. M1-2: 복원된 Docker vector DB 점검 및 compose 연결 smoke test
+2. M1-3: 필요한 경우 외부 DDL/dump와 object 목록 비교
 3. M1-1 보완: 누락된 retrieval path 또는 DB object 추가 조사
 
 ## 9. 검증 근거
