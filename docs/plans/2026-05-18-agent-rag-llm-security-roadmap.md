@@ -49,17 +49,18 @@
 
 | 순서 | 모듈 | 목표 | 산출물 | 완료 기준 |
 |---|---|---|---|---|
-| M1-1 | 현재 DB/RAG 의존성 목록화 | 어떤 테이블, 함수, 데이터가 필요한지 확정 | RAG DB inventory 문서 | `documents`, `chunks`/`vector_chunks`, `search_hybrid_rrf` 등 필수 요소 목록 확정 |
-| M1-2 | pgvector 로컬 컨테이너 추가 | local PostgreSQL + pgvector 실행 | `docker-compose.yml`의 postgres service | `docker compose up postgres` 및 pgvector extension 확인 |
-| M1-3 | Vector DB 스키마 복구 계획 | 다른 리포/백업에서 가져올 schema와 현재 리포 schema 차이 확인 | schema mapping 문서 | 가져올 DDL, 수정할 DDL, 제외할 DDL 구분 |
-| M1-4 | Vector DB volume 복원 작업 | 외부 리포/백업 데이터를 Docker volume에 올리는 절차 확정 | restore runbook | 사용자가 수동으로 dump/volume 복원 절차를 따라갈 수 있음 |
-| M1-5 | 최소 seed 데이터 구성 | 전체 데이터 없이도 retrieval smoke test 가능 | local seed SQL 또는 fixture | 3~5개 문서와 embedding/mock embedding으로 검색 가능 |
-| M1-6 | Retrieval smoke test | RAG 검색 경로가 local DB로 동작하는지 확인 | smoke test script | DB count, vector 검색, hybrid 검색 중 최소 1개 통과 |
-| M1-7 | Redis cache 복구 및 점검 | Redis 연결과 cache 동작 확인 | Redis local 설정 및 cache smoke test | Redis ping, answer/retrieval cache read/write 확인 |
-| M1-8 | FastAPI 점검 | backend가 local DB/Redis 설정으로 실행되는지 확인 | backend local run guide | `/health`, `/search` 또는 관련 endpoint 통과 |
-| M1-9 | Frontend 점검 | frontend가 local backend와 연결되는지 확인 | frontend local run guide | local UI에서 최소 chat/search 요청 확인 |
+| M1-1 | 현재 DB/RAG 의존성 목록화 | 어떤 테이블, 함수, 데이터가 필요한지 확정 | RAG DB inventory 문서 | `vector_chunks`, RRF 함수, legacy object 후보 목록 확정 |
+| M1-2 | 복원된 Vector DB smoke 기준선 확인 | 외부 Docker pgvector DB가 active RAG 기준선으로 사용 가능한지 검증 | vector DB smoke script 및 결과 문서 | `vector_chunks` row/dimension/text_tsv와 `search_similar_chunks()`, `search_hybrid_rrf()` 통과 |
+| M1-3 | RAG schema compatibility 결정 | 복구/편입/제외할 schema 범위 결정 | schema compatibility 결정 문서 | `search_hybrid_rrf_2()` 복구, legacy schema 보류, compose-owned pgvector 후속화 결정 |
+| M1-4 | `search_hybrid_rrf_2()` schema 복구 | law/criteria retrieval용 enhanced RRF 함수를 재현 가능하게 복구 | tracked SQL schema file 및 smoke 확장 | `search_hybrid_rrf_2()` 적용 및 vector DB smoke 통과 |
+| M1-5 | 외부 DB dump/restore 경로 문서화 | 현재 외부 Docker DB를 Ddoksori DB volume으로 옮길 절차 확정 | dump/restore runbook | source DB, dump 형식, 산출물 위치, restore 검증 명령이 재실행 가능하게 정리됨 |
+| M1-6 | Ddoksori compose pgvector service 추가 | Ddoksori repo 자체 compose에 PostgreSQL/pgvector service 추가 | `docker-compose.yml` DB service | `docker compose up postgres`와 `vector` extension 확인 |
+| M1-7 | Ddoksori volume에 dump restore | M1-5 dump를 M1-6 service volume에 복원 | restore 실행 기록 및 검증 결과 | `vector_chunks` row count, embedding 1536차원, RRF 함수 재확인 |
+| M1-8 | Backend `/search` smoke | backend가 local compose DB로 검색 가능한지 확인 | backend search smoke guide/script | `/health`와 `/search` 또는 equivalent retrieval endpoint가 local DB 기준으로 통과 |
+| M1-9 | Redis cache 복구 및 점검 | Redis 연결과 cache 동작 확인 | Redis local 설정 및 cache smoke test | Redis ping, answer/retrieval cache read/write 확인 |
+| M1-10 | Frontend 점검 | frontend가 local backend와 연결되는지 확인 | frontend local run guide | local UI에서 최소 chat/search 요청 확인 |
 
-특히 Vector DB 복구는 `M1-3`과 `M1-4`를 별도 모듈로 둔다. 이 작업은 다른 리포지토리의 schema/data를 참고하고 Docker volume에 복원해야 할 가능성이 높으므로, 실제 코딩보다 **복원 경로 이해와 수동 검증**이 우선이다.
+M1의 현재 진행 기준은 외부 프로젝트 Docker DB를 임시 기준선으로 활용하되, 최종적으로 Ddoksori repo 자체 compose/volume에서 RAG 검색을 재현하는 것이다. 따라서 `M1-5 -> M1-6 -> M1-7 -> M1-8`은 dump 경로 문서화, compose DB service 추가, Ddoksori volume 복원, backend 검색 smoke를 순서대로 분리한다.
 
 #### M2. OpenAI API 중심 호출을 RunPod/local LLM 중심으로 전환
 
