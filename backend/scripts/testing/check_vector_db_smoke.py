@@ -2,8 +2,9 @@
 Read-only smoke checks for the restored Ddoksori vector DB.
 
 This script intentionally does not create, migrate, or seed database objects.
-It verifies the M1-2 baseline: pgvector is available, vector_chunks is populated
-with 1536-dimensional embeddings, and the active SQL search functions execute.
+It verifies the M1-4 baseline: pgvector is available, vector_chunks is populated
+with 1536-dimensional embeddings, and the active SQL search functions execute,
+including search_hybrid_rrf_2().
 """
 
 from __future__ import annotations
@@ -17,13 +18,16 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 
-CRITICAL_FUNCTIONS = ("search_similar_chunks", "search_hybrid_rrf")
+CRITICAL_FUNCTIONS = (
+    "search_similar_chunks",
+    "search_hybrid_rrf",
+    "search_hybrid_rrf_2",
+)
 OPTIONAL_OBJECTS = (
     "documents",
     "chunks",
     "law_units",
     "mv_searchable_chunks",
-    "search_hybrid_rrf_2",
 )
 
 
@@ -219,6 +223,39 @@ def run_checks() -> tuple[dict[str, Any], list[str]]:
                 if not summary["hybrid_sample"]:
                     failures.append("search_hybrid_rrf returned no sample rows")
 
+            if not failures and "search_hybrid_rrf_2" in present_functions:
+                summary["hybrid_rrf_2_sample"] = _fetch_all(
+                    cur,
+                    """
+                    WITH q AS (
+                      SELECT embedding
+                      FROM vector_chunks
+                      WHERE dataset_type = 'law_guide'
+                        AND embedding IS NOT NULL
+                      LIMIT 1
+                    )
+                    SELECT chunk_id,
+                           dataset_type,
+                           chunk_type,
+                           document_type,
+                           rrf_score,
+                           bm25_score,
+                           vector_similarity
+                    FROM search_hybrid_rrf_2(
+                      '소비자 분쟁 해결 기준',
+                      (SELECT embedding FROM q),
+                      'law_guide',
+                      NULL,
+                      ARRAY['법률', '시행령']::VARCHAR(20)[],
+                      NULL,
+                      NULL,
+                      NULL,
+                      3,
+                      60
+                    )
+                    """,
+                )
+
     return summary, failures
 
 
@@ -236,7 +273,7 @@ def main() -> int:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
-    print("\n[OK] Restored vector DB satisfies the M1-2 active retrieval baseline.")
+    print("\n[OK] Restored vector DB satisfies the M1-4 active retrieval baseline.")
     return 0
 
 
