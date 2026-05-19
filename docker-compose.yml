@@ -2,6 +2,30 @@ services:
   # NOTE: CloudBeaver removed for security (SEC-41)
   # Use local DBeaver or pgAdmin for database management instead
 
+  # PostgreSQL + pgvector (local RAG baseline target)
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ddoksori_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ddoksori}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      TZ: Asia/Seoul
+    ports:
+      # Host port defaults to 5433 to avoid colliding with the M1-5 source DB on 5432.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/app/database/init/00_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-ddoksori}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # FastAPI backend
   backend:
     build:
@@ -14,7 +38,7 @@ services:
       - path: ./.env
         required: false
     environment:
-      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_HOST=${DB_HOST:-postgres}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-ddoksori}
       - DB_USER=${DB_USER:-postgres}
@@ -24,6 +48,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -63,5 +89,6 @@ services:
       retries: 3
 
 volumes:
+  postgres_data:
   redis_data:
   frontend_node_modules:
