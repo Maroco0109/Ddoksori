@@ -297,3 +297,54 @@ M1-6가 merge되어도 바로 restore하지 않는다.
 | `M1-7` | M1-5 dump를 M1-6 `postgres_data` volume에 restore | `vector_chunks=40,285`, embedding/text_tsv/1536 dims, RRF functions, smoke 통과 |
 | `M1-8` | backend `/search` smoke | local compose DB 기준 `/health` 및 search/retrieval endpoint 통과 |
 | M1-6 수정 | plan/implementation feedback 반영 | compose service acceptance 재검증 |
+
+## 10. Implementation result
+
+M1-6 implementation completed the planned compose-owned pgvector baseline without restoring data.
+
+Changed files:
+
+- `docker-compose.yml`
+  - added `postgres` service using `pgvector/pgvector:pg17`
+  - added `postgres_data` named volume
+  - changed backend compose default `DB_HOST` to `postgres`
+  - added backend dependency on healthy `postgres`
+- `backend/app/database/init/00_extensions.sql`
+  - creates `vector` and `pgcrypto` extensions on first DB volume initialization
+- `.env.example`
+  - documents compose DB defaults, host access port, external baseline override, and production/RDS override
+- `README.md`
+  - documents local pgvector service and M1-7 restore separation
+
+Verification evidence:
+
+```text
+POSTGRES_HOST_PORT=5433 docker compose config --services
+=> frontend, postgres, redis, backend
+
+docker compose up -d postgres
+=> ddoksori_postgres started
+
+docker compose ps postgres
+=> Up ... (healthy), 0.0.0.0:5433->5432/tcp
+
+docker compose exec -T postgres \
+  psql -U postgres -d ddoksori \
+  -c "SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector', 'pgcrypto') ORDER BY extname;"
+=> pgcrypto 1.3, vector 0.8.2
+
+docker compose exec -T postgres pg_isready -U postgres -d ddoksori
+=> /var/run/postgresql:5432 - accepting connections
+
+docker compose down
+=> container/network removed, postgres_data volume preserved
+```
+
+Explicitly not run in M1-6:
+
+- M1-5 dump restore
+- `check_vector_db_smoke.py` against the empty compose DB
+- backend `/search` smoke
+- legacy schema/data restoration
+
+Next gate remains M1-7: restore the M1-5 dump into the Ddoksori `postgres_data` volume and then validate `vector_chunks`, embeddings, `text_tsv`, dimensions, and RRF functions.
