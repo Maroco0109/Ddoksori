@@ -320,3 +320,286 @@ The next roadmap area is:
 | Area | First module | Goal |
 | --- | --- | --- |
 | `M2` | `M2-1` | 현재 LLM 호출 경로 inventory |
+
+## 11. Implementation result
+
+- 실행일: 2026-05-28
+- 실행 위치: `/home/maroco/Ddoksori-worktrees/m1-10-frontend-smoke-plan`
+- Feature branch: `feature/m1-10-frontend-smoke-plan`
+- Base commit before implementation: `cf2767f` (`develop`, PR #11 merged)
+- Target compose project: `COMPOSE_PROJECT_NAME=ddoksori`
+- Target services: `ddoksori_postgres`, `ddoksori_redis`, `ddoksori_backend`, `ddoksori_frontend`
+- Target volumes preserved: `ddoksori_postgres_data`, `ddoksori_redis_data`
+- Canonical query: `헬스장 계약 해지 환불 위약금`
+
+### 11.1 Implementation changes
+
+M1-10 smoke exposed two local frontend connectivity issues and fixed them minimally:
+
+| File | Change | Why |
+| --- | --- | --- |
+| `docker-compose.yml` | Added `VITE_PROXY_TARGET=http://backend:8000` to the frontend service. | Inside the frontend container, Vite proxy target `localhost:8000` points at the frontend container itself, not the backend container. |
+| `frontend/vite.config.ts` | Reads `process.env.VITE_PROXY_TARGET` with `http://localhost:8000` fallback. | Host `npm run dev` keeps the old default; Docker compose uses the backend service DNS name. |
+| `frontend/vite.config.ts` | Bypasses proxy for `GET` document requests with `Accept: text/html`, returning `/index.html`. | `/chat` is both a frontend SPA route and a backend API prefix; browser navigation to `/chat` must render the SPA instead of being proxied to backend `POST /chat`. |
+| `.gitignore` | Stopped ignoring `frontend/e2e`. | The repo already has Playwright config; M1-10 needs a tracked repeatable smoke spec. |
+| `frontend/e2e/m1-10-local-smoke.spec.ts` | Added focused Playwright smoke for frontend-origin `/health`, `/search`, `/chat`, and `/chat/stream`. | Preserves repeatable evidence for future before/after comparisons. |
+
+### 11.2 Preflight and environment evidence
+
+The first compose run intentionally reused `ddoksori` volumes but no feature-worktree `.env` existed. That run classified the expected credential/env issue before the final run:
+
+```text
+backend_health_http=200 backend_health_time_total=0.024733
+{"status":"unhealthy","error":"서비스 연결 실패"}
+backend_search_http=500 backend_search_time_total=0.006290
+```
+
+Backend logs showed the cause was DB credentials mismatch against the restored volume:
+
+```text
+psycopg2.OperationalError: connection to server at "postgres" ... failed: FATAL:  password authentication failed for user "postgres"
+```
+
+Final smoke used the root local `.env` as a temporary untracked symlink in the feature worktree so compose could reuse the restored DB credentials and provider settings without committing secrets. Effective non-secret backend env:
+
+```text
+DB_HOST=postgres
+DB_NAME=ddoksori
+DB_PORT=5432
+DB_USER=***present***
+ENABLE_ANSWER_CACHE=true
+ENABLE_EMBEDDING_CACHE=false
+OPENAI_API_KEY=***present***
+REDIS_DB=0
+REDIS_HOST=redis
+REDIS_PASSWORD=***present***
+REDIS_PORT=6379
+RETRIEVAL_MODE=hybrid
+```
+
+Compose services during the successful smoke:
+
+```text
+ddoksori_backend    Up 6 minutes             0.0.0.0:8000->8000/tcp
+ddoksori_frontend   Up About a minute        0.0.0.0:5173->5173/tcp
+ddoksori_postgres   Up 6 minutes (healthy)   0.0.0.0:5433->5432/tcp
+ddoksori_redis      Up 6 minutes (healthy)   0.0.0.0:6379->6379/tcp
+```
+
+Observed named volumes:
+
+```text
+ddoksori_frontend_node_modules
+ddoksori_postgres_data
+ddoksori_redis_data
+```
+
+### 11.3 Direct backend smoke evidence
+
+`GET /health` against backend origin passed:
+
+```text
+backend_health_http=200 backend_health_time_total=0.026301
+```
+
+Response:
+
+```json
+{"status":"healthy","database":"connected"}
+```
+
+`POST /search` against backend origin passed:
+
+```text
+backend_search_http=200 backend_search_time_total=2.354274
+backend_results_count=3
+```
+
+Top result evidence:
+
+| Rank | `chunk_id` | `doc_id` | `doc_type` | `chunk_type` | `similarity` |
+| ---: | --- | --- | --- | --- | ---: |
+| 1 | `crawl_semantic_상담_10490_full_1` | `10490` | `counsel_case` | `case` | `0.01639344262295082` |
+| 2 | `crawl_semantic_조정_2182_judgment_3` | `2182` | `mediation_case` | `case` | `0.01639344262295082` |
+| 3 | `crawl_semantic_상담_10617_full_1` | `10617` | `counsel_case` | `case` | `0.016129032258064516` |
+
+### 11.4 Frontend-origin smoke evidence
+
+Frontend root served Vite HTML:
+
+```text
+frontend_root_http=200 frontend_root_time_total=0.028182
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
+```
+
+Browser-style `GET /chat` with `Accept: text/html` served SPA HTML after the proxy bypass fix:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: text/html
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
+```
+
+Frontend-origin `/health` through Vite proxy passed:
+
+```text
+frontend_health_http=200 frontend_health_time_total=0.024562
+```
+
+Response:
+
+```json
+{"status":"healthy","database":"connected"}
+```
+
+Frontend-origin `/search` through Vite proxy passed:
+
+```text
+frontend_search_http=200 frontend_search_time_total=1.021957
+frontend_results_count=3
+```
+
+Top result evidence matched the direct backend smoke:
+
+| Rank | `chunk_id` | `doc_id` | `doc_type` | `chunk_type` | `similarity` |
+| ---: | --- | --- | --- | --- | ---: |
+| 1 | `crawl_semantic_상담_10490_full_1` | `10490` | `counsel_case` | `case` | `0.01639344262295082` |
+| 2 | `crawl_semantic_조정_2182_judgment_3` | `2182` | `mediation_case` | `case` | `0.01639344262295082` |
+| 3 | `crawl_semantic_상담_10617_full_1` | `10617` | `counsel_case` | `case` | `0.016129032258064516` |
+
+### 11.5 Browser UI and chat stream smoke evidence
+
+Command shape:
+
+```bash
+docker run --rm --network host \
+  -v "$PWD/frontend:/work/frontend" \
+  -v m1_10_playwright_node_modules:/work/frontend/node_modules \
+  -w /work/frontend \
+  -e M1_10_REQUIRE_CHAT_COMPLETE=true \
+  mcr.microsoft.com/playwright:v1.58.1-noble \
+  sh -lc 'npm ci && npx playwright test e2e/m1-10-local-smoke.spec.ts --project=chromium --reporter=line --output=/tmp/m1-10-playwright-results'
+```
+
+Result:
+
+```text
+Running 2 tests using 2 workers
+m1-10 frontend-origin search: {"results_count":3,"top_results":[...]}
+m1-10 chat stream: {"status":200,"hasCompleteEvent":true,"hasErrorEvent":false,"bodyBytes":9210}
+2 passed (21.3s)
+```
+
+This proves:
+
+1. `/chat` rendered the browser-visible `AI 상담 챗봇` and `일반 상담` headings.
+2. The general chat input `질문을 입력하세요...` was visible.
+3. UI input submitted the canonical smoke query.
+4. Browser observed a `POST /chat/stream` response with HTTP 200.
+5. The SSE stream contained a `complete` event, not an error event.
+6. The Playwright console-error assertion passed.
+
+### 11.6 Build verification
+
+Frontend production build passed after the Vite config change:
+
+```text
+COMPOSE_PROJECT_NAME=ddoksori docker compose exec -T frontend npm run build
+✓ 2784 modules transformed.
+✓ built in 5.05s
+```
+
+Vite emitted the existing large-chunk warning for the bundled app; no build error was produced.
+
+### 11.7 Cleanup after verification
+
+Cleanup command:
+
+```bash
+COMPOSE_PROJECT_NAME=ddoksori docker compose down
+rm -f .env
+```
+
+Do not run `docker compose down -v`; M1-10 depends on preserving the restored local DB and Redis volumes.
+
+### 11.8 Local self-test guide
+
+After this PR is merged, a local tester can reproduce M1-10 from the repo root.
+
+1. Confirm the restored volumes exist:
+
+   ```bash
+   docker volume ls --format '{{.Name}}' | grep -E '^ddoksori_(postgres|redis)_data$'
+   ```
+
+2. Start the local stack. If root `.env` contains restored DB credentials and provider keys, keep it local and do not print secret values:
+
+   ```bash
+   COMPOSE_PROJECT_NAME=ddoksori \
+   DB_HOST=postgres \
+   DB_PORT=5432 \
+   RETRIEVAL_MODE=hybrid \
+   ENABLE_ANSWER_CACHE=true \
+   ENABLE_EMBEDDING_CACHE=false \
+   docker compose --env-file .env up -d postgres redis backend frontend
+   ```
+
+   If no provider key is available, `/health` and `/search` can still be tested, but `/chat/stream` may return a classified provider/config error instead of a complete answer.
+
+3. Quick curl checks:
+
+   ```bash
+   curl http://localhost:8000/health
+   curl http://localhost:5173/health
+
+   curl -H 'Content-Type: application/json' \
+     -X POST http://localhost:5173/search \
+     -d '{"query":"헬스장 계약 해지 환불 위약금", "top_k": 3}'
+   ```
+
+   Expected: health JSON is `{"status":"healthy","database":"connected"}` and search returns `results_count > 0`.
+
+4. Manual browser check:
+
+   - Open `http://localhost:5173/chat`.
+   - Confirm `AI 상담 챗봇` and `일반 상담` are visible.
+   - Enter `헬스장 계약 해지 환불 위약금` into `질문을 입력하세요...`.
+   - Send with Enter or the send button.
+   - In browser DevTools Network, confirm `POST http://localhost:8000/chat/stream` returns HTTP 200 and the UI renders an answer. If provider env is missing, record the visible/backend error as provider-config blocked rather than frontend-connectivity failed.
+
+5. Repeatable Playwright check:
+
+   ```bash
+   docker run --rm --network host \
+     -v "$PWD/frontend:/work/frontend" \
+     -v m1_10_playwright_node_modules:/work/frontend/node_modules \
+     -w /work/frontend \
+     -e M1_10_REQUIRE_CHAT_COMPLETE=true \
+     mcr.microsoft.com/playwright:v1.58.1-noble \
+     sh -lc 'npm ci && npx playwright test e2e/m1-10-local-smoke.spec.ts --project=chromium --reporter=line --output=/tmp/m1-10-playwright-results'
+   ```
+
+   Use `-e M1_10_REQUIRE_CHAT_COMPLETE=false` only when intentionally testing a no-provider environment where chat-stream request connectivity should be classified but not required to complete.
+
+6. Stop containers while preserving volumes:
+
+   ```bash
+   COMPOSE_PROJECT_NAME=ddoksori docker compose down
+   ```
+
+### 11.9 M1-10 status and next gate
+
+M1-10 is complete for local frontend/backend smoke:
+
+1. `postgres`, `redis`, `backend`, and `frontend` ran together under local compose.
+2. `http://localhost:5173` served the frontend app.
+3. Browser-style `/chat` navigation rendered the SPA.
+4. Frontend-origin `/health` returned healthy DB status.
+5. Frontend-origin `/search` returned HTTP 200 and `results_count=3`.
+6. UI-initiated `/chat/stream` returned HTTP 200 with SSE `complete` event.
+7. Evidence includes status codes, latency, result counts, top result identifiers, browser/Playwright status, and build status.
+8. Cleanup preserved `ddoksori_postgres_data` and `ddoksori_redis_data`.
+
+Stop here for user review before moving to M2-1 (`현재 LLM 호출 경로 inventory`).
