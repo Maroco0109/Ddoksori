@@ -45,6 +45,11 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - RETRIEVAL_MODE=${RETRIEVAL_MODE:-hybrid}
       - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password_change_in_production}
+      - ENABLE_ANSWER_CACHE=${ENABLE_ANSWER_CACHE:-false}
+      - ENABLE_EMBEDDING_CACHE=${ENABLE_EMBEDDING_CACHE:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
