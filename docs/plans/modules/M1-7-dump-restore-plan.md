@@ -69,7 +69,7 @@ Target DB is compose-owned but local-only. M1-7 must not touch the source DB con
 
 ### 3.1 Preflight: repo and artifact state
 
-Run from the M1-7 feature worktree.
+Run git checks from the M1-7 feature worktree. Run Docker/compose restore commands from the root worktree (`/home/maroco/Ddoksori`) so the target volume is the root compose project volume (`ddoksori_postgres_data`), not a feature-worktree compose project volume.
 
 ```bash
 git status --short --branch
@@ -92,11 +92,14 @@ Start only the target DB first.
 POSTGRES_HOST_PORT=5433 docker compose up -d postgres
 docker compose ps postgres
 
-docker compose exec -T postgres \
-  pg_isready -U postgres -d ddoksori
+DBU=$(docker compose exec -T postgres sh -lc 'printf %s "$POSTGRES_USER"')
+DBN=$(docker compose exec -T postgres sh -lc 'printf %s "$POSTGRES_DB"')
 
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  pg_isready -U "$DBU" -d "$DBN"
+
+docker compose exec -T postgres \
+  psql -U "$DBU" -d "$DBN" \
   -c "SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector', 'pgcrypto') ORDER BY extname;"
 ```
 
@@ -112,12 +115,12 @@ Before destructive restore, record whether the target volume is empty or already
 
 ```bash
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  psql -U "$DBU" -d "$DBN" \
   -c "SELECT to_regclass('public.vector_chunks') AS vector_chunks;"
 
 # Run only if the table exists.
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  psql -U "$DBU" -d "$DBN" \
   -c "SELECT COUNT(*) AS vector_chunks_total FROM public.vector_chunks;"
 ```
 
@@ -152,8 +155,8 @@ Recommended restore command:
 ```bash
 docker compose exec -T postgres \
   pg_restore \
-  --username=postgres \
-  --dbname=ddoksori \
+  --username="$DBU" \
+  --dbname="$DBN" \
   --clean \
   --if-exists \
   --no-owner \
@@ -174,7 +177,7 @@ Expected dump includes `search_hybrid_rrf_2()`. If post-restore function verific
 
 ```bash
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  psql -U "$DBU" -d "$DBN" \
   < backend/app/database/schema/search_hybrid_rrf_2.sql
 ```
 
@@ -188,7 +191,7 @@ Run the direct SQL checks first to confirm the restored DB shape.
 
 ```bash
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  psql -U "$DBU" -d "$DBN" \
   -c "
 SELECT
   COUNT(*) AS total,
@@ -200,7 +203,7 @@ FROM public.vector_chunks;
 "
 
 docker compose exec -T postgres \
-  psql -U postgres -d ddoksori \
+  psql -U "$DBU" -d "$DBN" \
   -c "
 SELECT p.proname
 FROM pg_proc p
@@ -225,8 +228,13 @@ Expected result:
 Run the existing smoke script from the backend container against the compose DB.
 
 ```bash
-docker compose run --rm backend \
-  python scripts/testing/check_vector_db_smoke.py
+docker compose run --rm \
+  -e DB_HOST=postgres \
+  -e DB_PORT=5432 \
+  -e DB_NAME="$DBN" \
+  -e DB_USER="$DBU" \
+  -e DB_PASSWORD="$(docker compose exec -T postgres sh -lc 'printf %s "$POSTGRES_PASSWORD"')" \
+  backend python scripts/testing/check_vector_db_smoke.py
 ```
 
 Expected result:
@@ -322,3 +330,123 @@ The next module candidate is:
 | Module | Goal | Completion criteria |
 | --- | --- | --- |
 | `M1-8` | Backend `/search` smoke | `/health` and `/search` or equivalent retrieval endpoint work against the restored local compose DB |
+
+## 10. Implementation result
+
+- 실행일: 2026-05-28
+- 실행 위치: Docker/compose restore는 root worktree `/home/maroco/Ddoksori`에서 실행했다. 이는 compose project name이 root 기준 `ddoksori`가 되어 실제 target volume이 `ddoksori_postgres_data`가 되도록 하기 위함이다. PR 문서 변경은 feature worktree `/home/maroco/Ddoksori-worktrees/m1-7-dump-restore-plan`에서만 수행했다.
+- Restore target: `ddoksori_postgres` / Docker volume `ddoksori_postgres_data` / database `ddoksori`
+- Local DB user observed from container env: `your_db_user` (`POSTGRES_USER`); plan commands now derive `POSTGRES_USER`/`POSTGRES_DB` from the running container instead of assuming `postgres`.
+
+### 10.1 Preflight evidence
+
+| Check | Result |
+| --- | --- |
+| Root branch | `develop...origin/develop`, clean |
+| Feature branch | `feature/m1-7-dump-restore-plan...origin/feature/m1-7-dump-restore-plan`, clean before result update |
+| PR #9 | `OPEN`, `MERGEABLE` before result update |
+| Dump path | `/home/maroco/Ddoksori-local-artifacts/db-dumps/ddoksori-vector-db-20260519-183814.pgcustom` |
+| Dump size | `304M` |
+| SHA256 | `13f1335364dd98c79e6ce68c8023f11c3868fcfaecdadb7ed566bdc0ea4e21e0` |
+| Sidecar SHA256 | `13f1335364dd98c79e6ce68c8023f11c3868fcfaecdadb7ed566bdc0ea4e21e0` |
+| Target before restore | `public.vector_chunks` missing |
+| Extensions before restore | `pgcrypto 1.3`, `vector 0.8.2` |
+
+Initial `pg_isready -U postgres` was not the correct local command because the local `.env` initialized the DB with `POSTGRES_USER=your_db_user`. Verification continued with the actual container-derived user/database.
+
+### 10.2 Restore evidence
+
+```bash
+docker cp /home/maroco/Ddoksori-local-artifacts/db-dumps/ddoksori-vector-db-20260519-183814.pgcustom \
+  ddoksori_postgres:/tmp/ddoksori-vector-db.pgcustom
+
+docker compose exec -T postgres pg_restore \
+  --username="$DBU" \
+  --dbname="$DBN" \
+  --clean \
+  --if-exists \
+  --no-owner \
+  --no-privileges \
+  /tmp/ddoksori-vector-db.pgcustom
+```
+
+- Restore started: `2026-05-28T11:24:22+09:00`
+- Restore finished: `2026-05-28T11:24:58+09:00`
+- Restore command exit code: `0`
+- Restore log: `/tmp/m1-7-pg-restore-20260528-112421.log` (local ephemeral log, not committed)
+- Restore output lines: `2` timestamp lines only; no warning/error output from `pg_restore`
+
+### 10.3 Direct SQL validation
+
+| Check | Actual | Expected | Result |
+| --- | ---: | ---: | --- |
+| `vector_chunks` total | `40,285` | `40,285` | PASS |
+| rows with embedding | `40,285` | `40,285` | PASS |
+| rows with `text_tsv` | `40,285` | `40,285` | PASS |
+| rows with `vector_dims(embedding)=1536` | `40,285` | `40,285` | PASS |
+| rows with non-1536 embedding | `0` | `0` | PASS |
+| `pgcrypto` extension | `1.3` | present | PASS |
+| `vector` extension | `0.8.2` | present | PASS |
+| `search_similar_chunks` | present | present | PASS |
+| `search_hybrid_rrf` | present | present | PASS |
+| `search_hybrid_rrf_2` | present | present | PASS |
+
+Function signatures after restore:
+
+| Function | Arguments |
+| --- | --- |
+| `search_similar_chunks` | `query_embedding vector, filter_dataset character varying, filter_category character varying, filter_law_name character varying, filter_year integer, result_limit integer` |
+| `search_hybrid_rrf` | `query_text text, query_embedding vector, filter_dataset character varying, filter_category character varying, filter_document_type character varying, filter_year integer, result_limit integer, rrf_k integer` |
+| `search_hybrid_rrf_2` | `query_text text, query_embedding vector, filter_dataset character varying, filter_category character varying, filter_document_type character varying[], filter_chunk_type character varying[], filter_year_from integer, filter_year_to integer, result_limit integer, rrf_k integer` |
+
+A manually written ad-hoc sample SQL using `search_similar_chunks(vector, integer)` failed because that was not the restored function signature. This did not indicate restore failure; the canonical smoke script below used the correct signatures and passed.
+
+### 10.4 Backend-container smoke validation
+
+First smoke attempt without overrides failed because root `.env` pointed `DB_HOST` at `your-instance.xxxx.ap-northeast-2.rds.amazonaws.com`. The canonical M1-7 smoke was rerun with explicit compose DB overrides:
+
+```bash
+docker compose run --rm \
+  -e DB_HOST=postgres \
+  -e DB_PORT=5432 \
+  -e DB_NAME="$DBN" \
+  -e DB_USER="$DBU" \
+  -e DB_PASSWORD="$(docker compose exec -T postgres sh -lc 'printf %s "$POSTGRES_PASSWORD"')" \
+  backend python scripts/testing/check_vector_db_smoke.py
+```
+
+Result: PASS
+
+```text
+[OK] Restored vector DB satisfies the M1-4 active retrieval baseline.
+```
+
+Smoke summary highlights:
+
+| Metric | Value |
+| --- | ---: |
+| `vector_chunks.total` | `40,285` |
+| `vector_chunks.with_embedding` | `40,285` |
+| `vector_chunks.with_text_tsv` | `40,285` |
+| `vector_chunks.dims_1536` | `40,285` |
+| `vector_chunks.dims_not_1536` | `0` |
+| `case / 조정` rows | `20,992` |
+| `case / 상담` rows | `11,342` |
+| `law_guide / 법률` rows | `3,448` |
+| `case / 해결` rows | `1,874` |
+| `law_guide / 별표` rows | `1,692` |
+| `law_guide / 시행령` rows | `611` |
+| `law_guide / 행정규칙` rows | `326` |
+
+The smoke output included non-empty `dense_sample`, `hybrid_sample`, and `hybrid_rrf_2_sample` arrays. Optional legacy relations remained absent: `documents`, `chunks`, `law_units`, `mv_searchable_chunks`.
+
+### 10.5 Cleanup after verification
+
+- Removed temporary container dump copy: `/tmp/ddoksori-vector-db.pgcustom`
+- Ran `docker compose down` from root worktree to stop/remove containers and network while preserving named volumes.
+- Preserved volumes observed after cleanup: `ddoksori_postgres_data`, `ddoksori_redis_data`
+- No repo-tracked dump or generated DB artifact was added.
+
+### 10.6 M1-7 status and next gate
+
+M1-7 restore and DB-level validation are complete. Stop before M1-8 until the restore evidence is reviewed/accepted. M1-8 remains backend `/health` plus `/search` or equivalent retrieval endpoint smoke against the restored local compose DB.
