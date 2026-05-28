@@ -603,3 +603,49 @@ M1-10 is complete for local frontend/backend smoke:
 8. Cleanup preserved `ddoksori_postgres_data` and `ddoksori_redis_data`.
 
 Stop here for user review before moving to M2-1 (`현재 LLM 호출 경로 inventory`).
+### 11.10 Troubleshooting notes from local rerun
+
+A follow-up local rerun reproduced two common failure modes:
+
+1. If the stack is started without the intended local compose project/env shape while `.env` contains an old external DB host, backend can report HTTP 200 with an unhealthy payload:
+
+   ```text
+   DB_HOST=your-instance.xxxx.ap-northeast-2.rds.amazonaws.com
+   {"status":"unhealthy","error":"서비스 연결 실패"}
+   ```
+
+   To prevent this in local compose, `docker-compose.yml` now pins backend container network DB routing to:
+
+   ```text
+   DB_HOST=postgres
+   DB_PORT=5432
+   ```
+
+   Keep using `COMPOSE_PROJECT_NAME=ddoksori` so the restored `ddoksori_postgres_data` and `ddoksori_redis_data` volumes are reused.
+
+2. Opening `http://localhost:8000/chat/stream` directly in a browser address bar sends a `GET` request. The endpoint is intentionally a streaming `POST` endpoint, so this response is expected and does not indicate UI failure:
+
+   ```text
+   get_chat_stream_http=405
+   {"detail":"Method Not Allowed"}
+   ```
+
+   The equivalent API/UI call must be `POST` with JSON and `Accept: text/event-stream`:
+
+   ```bash
+   curl -N \
+     -H 'Content-Type: application/json' \
+     -H 'Accept: text/event-stream' \
+     -X POST http://localhost:8000/chat/stream \
+     -d '{"message":"헬스장 계약 해지 환불 위약금","chat_type":"general","top_k":3}'
+   ```
+
+   Follow-up verification after the compose DB routing fix:
+
+   ```text
+   backend /health:  HTTP 200, {"status":"healthy","database":"connected"}
+   frontend /health: HTTP 200, {"status":"healthy","database":"connected"}
+   GET /chat/stream:  HTTP 405 Method Not Allowed (expected for address-bar GET)
+   POST /chat/stream: HTTP 200, SSE status events + complete event
+   Playwright M1-10 smoke: 2 passed (17.4s), chat stream complete event, no error event
+   ```
