@@ -5,7 +5,7 @@
 - 상위 계획: `docs/plans/2026-05-18-agent-rag-llm-security-roadmap.md`
 - 선행 모듈: `M1-8` Backend `/search` smoke 완료
 - 목표: local compose Redis에 backend가 인증 포함으로 연결되고, answer cache와 retrieval cache가 실제 Redis에 read/write/delete 되는지 smoke로 검증한다.
-- 이번 계획 문서에서 하지 않는 일: 실제 cache 코드 수정/실행, Docker volume 삭제, frontend UI smoke, chatbot answer-quality 평가, Goldenset/security 평가, provider 전환.
+- 이번 모듈에서 하지 않는 일: Docker volume 삭제, frontend UI smoke, chatbot answer-quality 평가, Goldenset/security 평가, provider 전환, broad cache architecture rewrite.
 
 ## 1. 진행상황 요약
 
@@ -256,6 +256,7 @@ PYTHONPATH=. pytest \
   scripts/testing/supervisor/test_answer_cache.py \
   scripts/testing/cache/test_embedding_cache.py \
   scripts/testing/cache/test_embedding_cache_integration.py \
+  scripts/testing/cache/test_redis_password_config.py \
   scripts/testing/query_analysis/test_intent_cache.py \
   scripts/testing/reliability/test_redis_failure.py \
   -q
@@ -354,3 +355,156 @@ The next module candidate is:
 | Module | Goal | Completion criteria |
 | --- | --- | --- |
 | `M1-10` | Frontend 점검 | local UI에서 최소 chat/search 요청 확인 |
+
+
+## 10. Implementation result
+
+- 실행일: 2026-05-28
+- 실행 위치: `/home/maroco/Ddoksori-worktrees/m1-9-redis-cache-plan`
+- Feature branch: `feature/m1-9-redis-cache-plan`
+- Base commit: `22e7bba` (`develop`, PR #10 merge)
+- Target services/volumes: `ddoksori_redis`, `ddoksori_backend`, `ddoksori_postgres`; preserved `ddoksori_postgres_data` and `ddoksori_redis_data`
+
+### 10.1 Pre-implementation evidence
+
+Redis container-level auth worked, but backend cache clients failed before the M1-9 fix.
+
+| Check | Result |
+| --- | --- |
+| Authenticated Redis ping | `PONG` |
+| Backend shared cache probe before fix | `client_connected=False` |
+| Failure message | `[Redis] Connection failed: Authentication required.` |
+| Root cause | Compose Redis uses `--requirepass`, but backend cache clients did not pass `REDIS_PASSWORD` |
+
+### 10.2 Implemented changes
+
+| File | Change |
+| --- | --- |
+| `docker-compose.yml` | Added backend Redis env propagation for `REDIS_PORT`, `REDIS_DB`, `REDIS_PASSWORD`, `ENABLE_ANSWER_CACHE`, and `ENABLE_EMBEDDING_CACHE`. |
+| `.env.example` | Documented `REDIS_PASSWORD` local default and `ENABLE_EMBEDDING_CACHE=false`. |
+| `backend/app/common/cache/base.py` | Shared `BaseRedisCache` Redis client now passes `password=os.getenv("REDIS_PASSWORD") or None`. |
+| `backend/app/agents/answer_generation/cache.py` | `AnswerCache` direct Redis client now passes `REDIS_PASSWORD`. |
+| `backend/app/common/cache/embedding_cache.py` | `EmbeddingCache` Redis client now passes `REDIS_PASSWORD`. |
+| `backend/scripts/testing/cache/check_redis_cache_smoke.py` | Added self-cleaning local smoke script for Redis ping, answer cache write/read/delete, retrieval cache write/read/delete, latency, hit/miss/error metrics, and cleanup counts. |
+| `backend/scripts/testing/cache/test_redis_password_config.py` | Added focused password wiring unit coverage for shared `get_redis_client()`, `AnswerCache`, and `EmbeddingCache`. |
+
+### 10.3 Post-fix connection evidence
+
+Backend shared cache probe after the fix:
+
+```text
+client_connected= True
+ping= True
+```
+
+Long-running backend service received the expected non-secret Redis settings:
+
+```text
+ENABLE_ANSWER_CACHE=true
+ENABLE_EMBEDDING_CACHE=false
+REDIS_DB=0
+REDIS_HOST=redis
+REDIS_PASSWORD=***present***
+REDIS_PORT=6379
+```
+
+Unauthenticated Redis access remains rejected as expected:
+
+```text
+NOAUTH Authentication required.
+```
+
+### 10.4 Redis cache smoke result
+
+Command shape:
+
+```bash
+COMPOSE_PROJECT_NAME=ddoksori docker compose run --rm --no-deps \
+  -e ENABLE_ANSWER_CACHE=true \
+  -e ENABLE_EMBEDDING_CACHE=false \
+  -e REDIS_HOST=redis \
+  -e REDIS_PORT=6379 \
+  -e REDIS_DB=0 \
+  -e REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_password_change_in_production} \
+  backend python scripts/testing/cache/check_redis_cache_smoke.py
+```
+
+Smoke output summary:
+
+| Metric | Value |
+| --- | ---: |
+| `status` | `ok` |
+| `run_id` | `m1-9:1779940126:6620f4a9` |
+| Redis `ping` | `true` |
+| Redis `ping_ms` | `1.243` |
+| Answer cache `set/get/delete` | `true / true / true` |
+| Answer cache `set_ms/get_ms/delete_ms` | `0.365 / 0.207 / 0.194` |
+| Answer cache `hit_count/miss_count/error_count` | `1 / 0 / 0` |
+| Retrieval cache `set/get/delete` | `true / true / true` |
+| Retrieval cache `set_ms/get_ms/delete_ms` | `1.061 / 0.194 / 0.126` |
+| Retrieval cache `hit_count/miss_count/error_count` | `1 / 0 / 0` |
+| Cleanup `test_keys_remaining` | `0` |
+
+### 10.5 Targeted tests
+
+Executed in the backend container because the host Python environment did not have `pytest` installed.
+
+```bash
+COMPOSE_PROJECT_NAME=ddoksori docker compose run --rm --no-deps \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  backend python -m pytest \
+  scripts/testing/supervisor/test_answer_cache.py \
+  scripts/testing/cache/test_embedding_cache.py \
+  scripts/testing/cache/test_embedding_cache_integration.py \
+  scripts/testing/cache/test_redis_password_config.py \
+  scripts/testing/query_analysis/test_intent_cache.py \
+  scripts/testing/reliability/test_redis_failure.py \
+  -q
+```
+
+Result:
+
+```text
+68 passed in 5.38s
+```
+
+Additional syntax check:
+
+```text
+syntax_ok backend/app/common/cache/base.py
+syntax_ok backend/app/agents/answer_generation/cache.py
+syntax_ok backend/app/common/cache/embedding_cache.py
+syntax_ok backend/scripts/testing/cache/check_redis_cache_smoke.py
+```
+
+### 10.6 Cleanup after verification
+
+Ran:
+
+```bash
+COMPOSE_PROJECT_NAME=ddoksori docker compose down
+```
+
+Post-cleanup state:
+
+| Check | Result |
+| --- | --- |
+| Running `ddoksori_*` containers | none |
+| Preserved volume | `ddoksori_postgres_data` |
+| Preserved volume | `ddoksori_redis_data` |
+| Broad Redis deletion | not run |
+| Docker volume deletion | not run |
+
+### 10.7 M1-9 status and next gate
+
+M1-9 is complete for Redis cache recovery and smoke validation:
+
+1. Authenticated Redis `PING` returned `PONG`.
+2. Backend cache clients connect to compose Redis with password configured.
+3. `AnswerCache` set/get/delete succeeded against real Redis.
+4. `RetrievalResultCache` set/get/invalidate succeeded against real Redis.
+5. Latency, hit/miss/error metrics, and cleanup counts were recorded.
+6. Targeted cache/reliability tests passed (`68 passed`).
+7. Cleanup preserved existing Docker volumes.
+
+Stop before M1-10 until this evidence is reviewed/accepted. M1-10 remains frontend local UI smoke against the local backend.
