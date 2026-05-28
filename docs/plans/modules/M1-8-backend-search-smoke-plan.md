@@ -5,7 +5,7 @@
 - 상위 계획: `docs/plans/2026-05-18-agent-rag-llm-security-roadmap.md`
 - 선행 모듈: `M1-7` Ddoksori compose-owned `postgres_data` volume restore 및 DB-level smoke 완료
 - 목표: M1-7에서 복원한 local compose DB를 기준으로 FastAPI backend가 `/health`와 `/search` 또는 equivalent retrieval endpoint를 통과하는지 확인한다.
-- 이번 계획 문서에서 하지 않는 일: 실제 backend smoke 실행, endpoint 코드 변경, Redis cache read/write 검증, frontend UI 검증, LLM 답변 품질 평가, provider 전환.
+- 이번 계획 문서의 초기 비범위: 실제 backend smoke 실행, endpoint 코드 변경, Redis cache read/write 검증, frontend UI 검증, LLM 답변 품질 평가, provider 전환. 단, 구현 실행 중 `/search` smoke를 막는 endpoint wiring 버그가 발견되면 M1-8 범위 안에서 최소 수정하고 증거를 기록한다.
 
 ## 1. 결론
 
@@ -258,3 +258,166 @@ The next module candidate is:
 | Module | Goal | Completion criteria |
 | --- | --- | --- |
 | `M1-9` | Redis cache 복구 및 점검 | Redis ping, answer/retrieval cache read/write 확인 |
+
+## 11. Implementation result
+
+- 실행일: 2026-05-28
+- 실행 위치:
+  - Initial root-code smoke: `/home/maroco/Ddoksori`
+  - Fixed endpoint smoke: `/home/maroco/Ddoksori-worktrees/m1-8-backend-search-smoke-plan` with `COMPOSE_PROJECT_NAME=ddoksori` so the restored root volume `ddoksori_postgres_data` was reused.
+- Target DB volume: `ddoksori_postgres_data`
+- Target services: `ddoksori_postgres`, `ddoksori_redis`, `ddoksori_backend`
+- Canonical query: `헬스장 계약 해지 환불 위약금`
+
+### 11.1 Preflight evidence
+
+| Check | Result |
+| --- | --- |
+| PR #10 before execution | `OPEN`, `MERGEABLE` |
+| Root branch | `develop...origin/develop`, clean |
+| Feature branch | `feature/m1-8-backend-search-smoke-plan...origin/feature/m1-8-backend-search-smoke-plan`, clean before implementation update |
+| Restored volume | `ddoksori_postgres_data` exists |
+| Compose services | `postgres`, `redis`, `backend`, `frontend` |
+
+### 11.2 Initial smoke result on pre-fix endpoint
+
+The stack was first started from the root worktree with explicit compose DB overrides:
+
+```bash
+DB_HOST=postgres DB_PORT=5432 RETRIEVAL_MODE=hybrid docker compose up -d postgres redis backend
+```
+
+Effective non-secret backend env:
+
+```text
+DB_HOST=postgres
+DB_NAME=ddoksori
+DB_PORT=5432
+DB_USER=your_db_user
+OPENAI_API_KEY=***present***
+RETRIEVAL_MODE=hybrid
+```
+
+`GET /health` initially hit a startup race (`curl: (56) Recv failure: Connection reset by peer`) while Uvicorn was still starting, then passed on retry:
+
+```text
+health_http=200 health_time_total=0.009400
+```
+
+Response:
+
+```json
+{"status":"healthy","database":"connected"}
+```
+
+Initial `POST /search` failed before retrieval:
+
+```text
+search_http=500 search_time_total=0.016209
+Internal Server Error
+```
+
+Backend traceback showed the failure was caused by the rate limiter wrapper contract, not by the restored DB:
+
+```text
+Exception: parameter `request` must be an instance of starlette.requests.Request
+```
+
+Root cause: `backend/app/api/search.py` used `http_request: Request` and `request: SearchRequest`. SlowAPI requires the FastAPI `Request` parameter to be named `request`.
+
+### 11.3 M1-8 endpoint fix
+
+M1-8 therefore includes a minimal endpoint bug fix required to execute the planned `/search` smoke:
+
+- Renamed the FastAPI request parameter from `http_request` to `request`.
+- Renamed the body parameter from `request` to `search_request`.
+- Updated references in the endpoint body and docstring.
+
+This does not change the API contract or response shape; it lets SlowAPI identify the `Request` object and allows the existing `/search` route to execute.
+
+### 11.4 Fixed endpoint smoke result
+
+The fixed code was tested from the feature worktree while reusing the root compose project/volume:
+
+```bash
+COMPOSE_PROJECT_NAME=ddoksori \
+DB_HOST=postgres \
+DB_PORT=5432 \
+RETRIEVAL_MODE=hybrid \
+docker compose --env-file /home/maroco/Ddoksori/.env up -d postgres redis backend
+```
+
+Effective non-secret backend env for the fixed run:
+
+```text
+DB_HOST=postgres
+DB_NAME=ddoksori
+DB_PORT=5432
+DB_USER=your_db_user
+RETRIEVAL_MODE=hybrid
+```
+
+`OPENAI_API_KEY` was not present in the fixed feature-worktree container because the compose service's local `env_file: ./.env` is feature-worktree relative and no tracked `.env` exists there. This made the smoke a **lexical fallback branch** rather than full dense+lexical hybrid branch. Backend logs confirmed dense embedding failed gracefully while lexical retrieval returned results:
+
+```text
+Dense search failed: OpenAI 임베딩 오류: The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable
+INFO:     172.19.0.1:47672 - "POST /search HTTP/1.1" 200 OK
+```
+
+`GET /health` passed:
+
+```text
+health_http=200 health_time_total=0.009474
+```
+
+Response:
+
+```json
+{"status":"healthy","database":"connected"}
+```
+
+`POST /search` passed:
+
+```text
+search_http=200 search_time_total=0.338204
+```
+
+Response summary:
+
+| Field | Value |
+| --- | --- |
+| `query` | `헬스장 계약 해지 환불 위약금` |
+| `results_count` | `3` |
+| response size | `13,191` bytes |
+| retrieval branch | lexical fallback branch |
+
+Top result evidence:
+
+| Rank | `chunk_id` | `doc_id` | `doc_type` | `chunk_type` | `similarity` |
+| ---: | --- | --- | --- | --- | ---: |
+| 1 | `crawl_semantic_조정_2182_judgment_3` | `2182` | `mediation_case` | `case` | `0.01639344262295082` |
+| 2 | `crawl_semantic_조정_446_judgment_3` | `446` | `mediation_case` | `case` | `0.016129032258064516` |
+| 3 | `crawl_semantic_조정_507_judgment_3` | `507` | `mediation_case` | `case` | `0.015873015873015872` |
+
+Content previews show the returned chunks are relevant to the smoke query, e.g. `헬스장 이용 계약 해지에 따른 환급 요구`.
+
+### 11.5 Cleanup after verification
+
+- Ran `docker compose down` with `COMPOSE_PROJECT_NAME=ddoksori` to stop/remove containers and network.
+- Preserved named volumes:
+  - `ddoksori_postgres_data`
+  - `ddoksori_redis_data`
+- Root worktree remained clean: `develop...origin/develop`.
+- Temporary response/log files were kept only under `/tmp` and were not committed.
+
+### 11.6 M1-8 status and next gate
+
+M1-8 is complete for API-level retrieval smoke:
+
+1. Backend stack started against the restored local compose DB.
+2. `GET /health` returned healthy DB status.
+3. `POST /search` returned HTTP 200 and `results_count=3` after the SlowAPI parameter bug fix.
+4. Result identifiers, latency, and retrieval branch were recorded.
+5. Cleanup preserved `ddoksori_postgres_data`.
+
+Stop before M1-9 until this evidence is reviewed/accepted. M1-9 remains Redis cache ping/read/write validation.

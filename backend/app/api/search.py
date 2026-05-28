@@ -44,7 +44,7 @@ def _serialize_search_result(chunk: SearchResult) -> Dict[str, Any]:
 @router.post("/search")
 @limiter.limit(RateLimits.SEARCH)
 async def search(
-    http_request: Request, request: SearchRequest, retriever=Depends(get_retriever)
+    request: Request, search_request: SearchRequest, retriever=Depends(get_retriever)
 ):
     """
     Vector DB에서 유사한 사례 검색
@@ -53,7 +53,8 @@ async def search(
     Hybrid 모드에서는 RRF 기반 fusion 검색을 사용합니다.
 
     Args:
-        request: 검색 요청 (쿼리, top_k 등)
+        request: SlowAPI rate limiting이 요구하는 FastAPI Request
+        search_request: 검색 요청 (쿼리, top_k 등)
         retriever: Retriever 인스턴스 (DI)
 
     Returns:
@@ -65,19 +66,21 @@ async def search(
 
     try:
         # chunk_types 필터 처리 (리스트의 첫 번째 값 사용)
-        chunk_type_filter = request.chunk_types[0] if request.chunk_types else None
+        chunk_type_filter = (
+            search_request.chunk_types[0] if search_request.chunk_types else None
+        )
 
         # Hybrid search (RRF fusion) or vector-only
         if hasattr(retriever, "search") and retrieval_mode == "hybrid":
             chunks = retriever.search(
-                query=request.query,
-                top_k=request.top_k,
+                query=search_request.query,
+                top_k=search_request.top_k,
                 chunk_type_filter=chunk_type_filter,
             )
         else:
             chunks = retriever.vector_search(
-                query=request.query,
-                top_k=request.top_k,
+                query=search_request.query,
+                top_k=search_request.top_k,
                 chunk_type_filter=chunk_type_filter,
             )
 
@@ -85,7 +88,7 @@ async def search(
         results = [_serialize_search_result(chunk) for chunk in chunks]
 
         return {
-            "query": request.query,
+            "query": search_request.query,
             "results_count": len(results),
             "results": results,
         }
