@@ -4,6 +4,21 @@ This guide describes how to set up and run the EXAONE-4.0-1.2B model using vLLM 
 
 > **최종 업데이트**: 2026-01-27 (스크립트 기반 배포 추가)
 
+> ## ⚠️ M2 canonical target: EXAONE 4.5-33B (2026-06-22)
+>
+> M2-2 결정에 따라 RunPod 추론 대상은 **EXAONE 4.5-33B**(`LGAI-EXAONE/EXAONE-4.5-33B`)로 통일한다.
+> 아래 본문의 EXAONE 4.0-1.2B 절차는 **legacy 참고용**이며, 4.5-33B 셋업은 다음이 다르다.
+>
+> - **모델**: `LGAI-EXAONE/EXAONE-4.5-33B` (33B, 컨텍스트 262,144)
+> - **커스텀 vLLM 포크 필요**: `uv pip install git+https://github.com/lkm2835/vllm.git@add-exaone4_5` (표준 vLLM 불가)
+> - **GPU**: H200×1 또는 A100-40GB×4 (`--tensor-parallel-size 2`, `--max-model-len 262144`)
+> - **canonical env**: `EXAONE_RUNPOD_URL` (단일화). `MODEL_EXAONE_BASE_URL`(:19010)은 candidate.
+> - **health 확인**: `python backend/scripts/testing/llm/check_vllm_health.py` 또는 `GET /health/llm/exaone`
+>   → provider/model/url/latency_ms/status 반환.
+>
+> 전체 4.5-33B 셋업 절차(스크립트·포트·tensor-parallel 상세) 재작성은 RunPod 실제 가동 시점의
+> **follow-up**으로 남긴다. M2-2 범위는 health 도구·canonical 결정·`.env.example`까지다.
+
 ## Prerequisites
 
 - RunPod account with credits.
