@@ -28,6 +28,20 @@
    - 챗봇 보안: Goldenset 기반으로 입력/출력/RAG/guardrail/OWASP LLM Top 10 위험을 테스트·모니터링한다.
    - 코드 보안: PR/commit diff를 GitHub Actions와 Agent가 검사하고, 보안 이슈 제기와 자동 수정 루프를 만든다.
 
+
+### 1.0 M0-H Agent Harness 기준선 통합
+
+`M0-H`는 M1~M4와 같은 runtime 구현 Phase가 아니라, 이후 모듈을 측정 가능한 포트폴리오 작업으로 연결하기 위한 **문서화된 harness 기준선**이다. PR #13에서 병합된 `docs/architecture/*` 문서는 현재 LangGraph/MAS runtime을 agent contract, capability, quality gate, security guardrail 관점으로 정리한다.
+
+따라서 M0-H는 별도 후속 구현 모듈로 확장하지 않고, 다음 방식으로 기존 roadmap에 통합한다.
+
+- M2는 M0-H의 `llm.provider_factory`, `llm.exaone_vllm`, `generation.answer`, `analysis.query_classifier`, `supervisor.routing` capability ID를 기준으로 provider 전환 범위를 inventory한다.
+- M3는 M0-H의 node timing, RAG JSON log, Prometheus, quality gate vocabulary를 DB observability schema의 event 이름/측정 항목으로 재사용한다.
+- M4는 M0-H의 input/output moderation, legal review, supervisor sanitization gate를 Goldenset 및 code security 기준으로 연결한다.
+- M0-H 문서는 roadmap 앞단의 architecture baseline으로 유지하되, 실제 코드는 각 M2/M3/M4 모듈에서 한 번에 하나씩 변경한다.
+
+포트폴리오 관점에서 M0-H는 “기능 추가”보다 “AI agent 시스템을 측정 가능한 소프트웨어로 다루는 기준선”을 보여주는 자료로 사용한다.
+
 ### 1.1 모듈화 실행 원칙
 
 이 계획은 **한 번에 하나의 작업만 진행**하는 것을 기본 원칙으로 한다. 각 모듈은 독립적인 목표, 산출물, 검증 기준을 가져야 하며, 이전 모듈이 검증되기 전에는 다음 모듈을 구현하지 않는다.
