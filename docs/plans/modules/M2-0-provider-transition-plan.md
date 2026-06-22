@@ -58,6 +58,24 @@ M2는 M0-H의 capability/gate vocabulary를 기준으로 진행한다.
 - provider 변경은 항상 숫자를 남긴다: status, latency, fallback count, selected provider/model, error reason.
 - M2 구현은 후속 M3 `llm_calls` 저장으로 이어질 수 있게 event field를 미리 정의한다.
 
+### 4.1 경량 구현 제약 (factory 재사용, 신규 프레임워크 금지)
+
+M2-3/M2-4/M2-5는 **신규 provider policy 프레임워크를 만들지 않는다.** 현재 repo에는 `LLMProviderFactory`(`backend/app/llm/providers/factory.py`)가 이미 존재하지만 어떤 Agent도 호출하지 않고 25곳 이상에서 client를 직접 생성한다. 따라서 구현 패턴을 다음으로 고정한다.
+
+1. 직접 `OpenAI()`/`AsyncOpenAI()`/`ChatOpenAI()` 생성부를 기존 `LLMProviderFactory` 경유로 교체한다.
+2. supervisor의 기존 폴백 패턴(`OpenAI -> Anthropic -> rule`)을 본떠 얇은 `call_with_fallback` 헬퍼 **1개만** 도입한다.
+3. 호출마다 측정 필드를 구조화 로그로 emit한다(§4.4).
+
+`ProviderPolicy`/`ProviderRegistry`/circuit-breaker 같은 중앙 추상화 프레임워크는 이 모듈 범위에서 **신설하지 않는다**(§8 non-scope 참조). 신입 포트폴리오 범위를 넘는 과설계이며 5개 이상 모듈에 회귀 위험을 만든다.
+
+### 4.2 RunPod 테스트 등급 제약
+
+RunPod vLLM 엔드포인트는 상시 가동이 아니라 **테스트 등급**이다(pod/port 셋업을 별도로 진행해야 하고 balance가 제한적임). 따라서:
+
+- **M2-2 health/availability 가시화가 필수다.** RunPod up/down을 항상 알 수 있어야 한다.
+- 측정은 `selected_provider`와 `fallback_reason`을 **반드시** 기록한다. RunPod이 간헐 가동이어도 fallback rate/latency 같은 의미 있는 숫자가 남는다.
+- **연속 RunPod 사용을 피한다.** 측정 런은 bounded(타깃 smoke 수 회)로 제한해 balance를 보존한다.
+
 ## 5. Module breakdown
 
 | 순서 | 모듈 | 목표 | 주요 산출물 | 완료 기준 |
@@ -71,9 +89,9 @@ M2는 M0-H의 capability/gate vocabulary를 기준으로 진행한다.
 
 ## 6. Recommended target sequence
 
-M2-4의 첫 전환 후보는 **answer generation**보다 작고 위험이 낮은 **query classifier 또는 query expander**를 우선 검토한다.
+M2-4의 첫 전환 후보는 **answer generation**보다 작고 위험이 낮은 경로를 우선 검토한다. 특히 ambiguity 감지 경로(`backend/app/agents/query_analysis/detectors.py:70`)는 이미 EXAONE→gpt-4o-mini 폴백이 배선되어 있어 가장 위험이 낮은 첫 전환 후보다. query classifier는 현재 LLM 실패 시 폴백 없이 ambiguous를 반환하므로 폴백 보강이 추가로 필요하다.
 
-다만 최종 선택은 M2-1 inventory에서 아래 기준으로 결정한다.
+다만 최종 선택은 M2-1 inventory에서 `detectors.py` 경로와 query classifier/expander를 아래 기준으로 비교해 결정한다.
 
 | 기준 | 우선순위 |
 | --- | --- |
@@ -95,7 +113,7 @@ M2 완료 시 최소 다음 숫자를 제시할 수 있어야 한다.
 | latency | provider health와 generation/classification latency |
 | token usage | 가능한 경우 prompt/completion token 수 |
 | endpoint pass/fail | `/health/llm/*`, `/chat/stream`, targeted Agent smoke pass/fail |
-| cost-risk reduction evidence | OpenAI 추론 호출 경로 감소 또는 fallback-only 전환 증거 |
+| cost-risk reduction evidence | RunPod 우선 경로 확보 후 OpenAI 추론 호출 경로 감소 또는 폴백률/latency 비교 증거 (RunPod 간헐 가동 전제, 100% 전환이 아님) |
 
 ## 8. Non-scope until later phases
 
@@ -104,6 +122,7 @@ M2 완료 시 최소 다음 숫자를 제시할 수 있어야 한다.
 - local embedding 모델 전환은 M2-6 이전에 하지 않는다.
 - Tool calling 활성화는 M2 범위가 아니다.
 - LangGraph topology 재작성은 M2 범위가 아니다.
+- `ProviderPolicy`/`ProviderRegistry`/circuit-breaker 등 신규 provider 추상화 프레임워크 신설은 M2 범위가 아니다(§4.1 참조). M2는 기존 `LLMProviderFactory` 재사용 + 얇은 폴백 헬퍼로 제한한다.
 
 ## 9. Next gate
 
