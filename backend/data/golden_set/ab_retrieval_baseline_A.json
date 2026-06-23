@@ -1,0 +1,142 @@
+{
+  "timestamp": "20260623_145010",
+  "variant": "A",
+  "eval_set": "backend/data/golden_set/ab_retrieval_eval.jsonl",
+  "n_queries": 12,
+  "k_values": [
+    5,
+    10
+  ],
+  "rrf_k": 10,
+  "embed_model": "text-embedding-3-large",
+  "retriever": "search_hybrid_rrf (core, no expansion, no filters)",
+  "summary": {
+    "ndcg@5": 0.7243596394308253,
+    "hit_rate@5": 1.0,
+    "ndcg@10": 0.8693480401430648,
+    "hit_rate@10": 1.0,
+    "mrr": 1.0
+  },
+  "per_query": [
+    {
+      "id": "law-001",
+      "domain": "law",
+      "n_labeled": 14,
+      "ndcg@5": 0.7765732350040719,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9582857450397501,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "law-002",
+      "domain": "law",
+      "n_labeled": 6,
+      "ndcg@5": 0.6875835186917185,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.8138295459976209,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "law-003",
+      "domain": "law",
+      "n_labeled": 13,
+      "ndcg@5": 0.8310951893751204,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9620010764380296,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "law-004",
+      "domain": "law",
+      "n_labeled": 11,
+      "ndcg@5": 0.8363616234272551,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9055910194242899,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "criteria-001",
+      "domain": "criteria",
+      "n_labeled": 9,
+      "ndcg@5": 0.6394875456373632,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.7854780590798566,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "criteria-002",
+      "domain": "criteria",
+      "n_labeled": 9,
+      "ndcg@5": 0.777747077360283,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9135331592022389,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "criteria-003",
+      "domain": "criteria",
+      "n_labeled": 10,
+      "ndcg@5": 0.6960556048694746,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.8344215398807475,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "criteria-004",
+      "domain": "criteria",
+      "n_labeled": 9,
+      "ndcg@5": 0.6685622027129364,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.8317359300233622,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "case-001",
+      "domain": "case",
+      "n_labeled": 10,
+      "ndcg@5": 0.9015629611050541,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9586355727703807,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "case-002",
+      "domain": "case",
+      "n_labeled": 9,
+      "ndcg@5": 0.5581994207003629,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.7634464088552448,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "case-003",
+      "domain": "case",
+      "n_labeled": 9,
+      "ndcg@5": 0.9218382134470557,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.9845175249663362,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    },
+    {
+      "id": "case-004",
+      "domain": "case",
+      "n_labeled": 9,
+      "ndcg@5": 0.3972490808392076,
+      "hit_rate@5": 1.0,
+      "ndcg@10": 0.72070090003892,
+      "hit_rate@10": 1.0,
+      "mrr": 1.0
+    }
+  ]
+}
