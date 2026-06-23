@@ -1,18 +1,21 @@
 """Variant B agent: deterministic cosine-gated clarification + ReAct answer.
 
 Flow (single-shot, no clarification loop):
+  0. input guardrail (reuse A's moderation): block disallowed input.
   1. gate retrieval (same primitive as A): compute max_cosine.
   2. if max_cosine < tau  -> return ONE clarification question, stop.
-  3. else -> run LangGraph ReAct agent (model + search tool) -> grounded answer.
+  3. else -> run LangGraph ReAct agent (model + tools) -> grounded answer.
+  4. output guardrail: block/replace disallowed answer.
 
-Returns a dict with the answer and a trace (gate result + tool calls) for the
-trace-completeness / clarification_rate measurements (M2-7R).
+Returns a dict with the answer and a trace (guardrail + gate + tool calls) for
+the trace-completeness / clarification_rate / guardrail measurements (M2-7R).
 """
 
 from typing import Any, Dict, List
 
 from langgraph.prebuilt import create_react_agent
 
+from ..guardrail.moderation import check_input, check_output
 from .model import get_chat_model
 from .tools import B_TOOLS, search
 
@@ -40,6 +43,19 @@ def run_b(
 ) -> Dict[str, Any]:
     trace: List[Dict[str, Any]] = []
 
+    # 0. Input guardrail (reuse A's moderation, read-only)
+    gr_in = check_input(query)
+    trace.append({"step": "guardrail_input", "blocked": gr_in["blocked"], "flagged": gr_in["flagged"]})
+    if gr_in["blocked"]:
+        return {
+            "clarified": False,
+            "blocked": True,
+            "answer": gr_in["fallback_message"],
+            "max_cosine": 0.0,
+            "tool_calls": [],
+            "trace": trace,
+        }
+
     # 1. Deterministic gate retrieval
     docs, max_cosine = search(query, top_k=top_k)
     trace.append({"step": "gate_retrieval", "max_cosine": round(max_cosine, 4), "n_docs": len(docs)})
@@ -49,6 +65,7 @@ def run_b(
         trace.append({"step": "clarify", "reason": f"max_cosine {max_cosine:.3f} < tau {tau}"})
         return {
             "clarified": True,
+            "blocked": False,
             "answer": CLARIFY_MESSAGE,
             "max_cosine": max_cosine,
             "tool_calls": [],
@@ -68,8 +85,16 @@ def run_b(
     answer = messages[-1].content if messages else ""
     trace.append({"step": "react", "n_tool_calls": len(tool_calls), "tool_calls": tool_calls})
 
+    # 4. Output guardrail (reuse A's moderation, read-only)
+    gr_out = check_output(answer)
+    trace.append({"step": "guardrail_output", "blocked": gr_out["blocked"], "flagged": gr_out["flagged"]})
+    blocked = gr_out["blocked"]
+    if blocked:
+        answer = gr_out["fallback_message"]
+
     return {
         "clarified": False,
+        "blocked": blocked,
         "answer": answer,
         "max_cosine": max_cosine,
         "tool_calls": tool_calls,
