@@ -76,18 +76,35 @@
 
 M1의 현재 진행 기준은 외부 프로젝트 Docker DB를 임시 기준선으로 활용하되, 최종적으로 Ddoksori repo 자체 compose/volume에서 RAG 검색을 재현하는 것이다. 따라서 `M1-5 -> M1-6 -> M1-7 -> M1-8`은 dump 경로 문서화, compose DB service 추가, Ddoksori volume 복원, backend 검색 smoke를 순서대로 분리한다.
 
-#### M2. OpenAI API 중심 호출을 RunPod/local LLM 중심으로 전환
+#### M2. (재정의 2026-06-23) A/B 아키텍처 비교 — Advanced RAG(A) vs Agentic RAG(B)
+
+> **재정의 근거/상세**: `docs/plans/2026-06-23-ab-architecture-simplification-proposal.md` (PR #21, merged).
+> 당초 M2는 "MAS 노드별 OpenAI→RunPod provider 전환"이었으나 2026-06-23 방향 전환으로 재정의되었다.
+> 현재 MAS(A)를 baseline으로 **동결·보존**하고, "강한 단일 모델 + tools/MCP"(B)를 신설해 **A/B를 측정·비교**한다.
+> 동기 = 관측가능성/디버깅(MAS는 "왜 이 결정을 내렸나" 추적이 어렵고 supervisor 라우팅은 이미 규칙 기반 + LLM 결정은 dead code. tools/MCP는 호출·context·결과 추적이 쉬움) + 포트폴리오 핵심인 측정 가능한 비교 숫자.
+> 패러다임 프레이밍: **A = Advanced RAG**(현재 hybrid dense+BM25 + RRF 융합 + HyDE/expansion), **B = Agentic RAG**(모델이 retrieval tool을 동적 선택·반복).
+
+**선행 완료(provider 기반 작업 — B에서도 재활용):**
+
+| 순서 | 모듈 | 상태 | 비고 |
+|---|---|---|---|
+| M2-1 | LLM 호출 경로 inventory | ✅ 완료 (PR #16) | capability→tool 매핑 근거로 재사용 |
+| M2-2 | RunPod vLLM health check | ✅ 완료 (PR #18) | EXAONE 4.5-33B H100 baseline 467.8ms. B도 `runpod_vllm` 사용 |
+| M2-3 | Provider policy 계획 | ✅ 계획 merge (PR #20) | provider 체인은 B 모델/tool 정책으로 흡수 |
+
+**재정의 모듈(A/B):**
 
 | 순서 | 모듈 | 목표 | 산출물 | 완료 기준 |
 |---|---|---|---|---|
-| M2-1 | 현재 LLM 호출 경로 inventory | 어떤 코드가 OpenAI/Anthropic/EXAONE을 호출하는지 파악 | LLM call map 문서 | Agent별 provider 호출 경로 목록화 |
-| M2-2 | RunPod vLLM health check 정리 | local/RunPod endpoint 연결 확인 | health check endpoint 또는 script | `/health` 또는 `/v1/models` 호출 성공/실패가 명확히 표시 |
-| M2-3 | Provider 선택 정책 문서화 | 기본 provider와 fallback 순서 확정 | provider policy 문서 | `runpod_vllm -> openai fallback -> rule_based` 같은 순서 확정 |
-| M2-4 | 단일 Agent provider 전환 | 가장 작은 Agent 하나만 RunPod 우선 호출로 변경 | 1개 Agent 변경 | 해당 Agent가 RunPod endpoint로 호출되는 것 확인 |
-| M2-5 | 나머지 Agent 순차 전환 | Agent별로 하나씩 provider routing 적용 | Agent별 작은 PR/commit | 각 Agent별 smoke test 통과 |
-| M2-6 | embedding provider 분리 | 추론 LLM과 embedding 의존성을 분리 | embedding config 정리 | OpenAI embedding 유지/대체 여부가 설정으로 명확히 분리 |
+| M2-3R | B 아키텍처 + A/B 하니스 결정 | B 구성(강한 모델 + tools/MCP), 게이트형 단발 clarification, A/B 측정 계약 확정 | B architecture decision doc | B tool 목록·clarification 정책·A/B 측정 필드(M0-H gate + M2-1 §4) 확정 |
+| M2-4R | retrieval 신뢰도 신호 복구 | RRF가 덮어쓴 cosine을 별도 보존(게이트/sufficiency/측정 신호 복구). RRF는 정렬용 유지. **vanilla 회귀 아님** | cosine 보존 코드 + 점수 분포 측정 | raw cosine이 별도 필드로 노출, before/after 분포 기록 |
+| M2-5R | B 최소 골격 | 강한 모델 + retrieval tool 1개 + 게이트형 단발 clarification(M2-4R 신호 사용). A 무변경, `variant=B`로 격리 | B skeleton + smoke | variant=B 단발 응답 생성 + trace 기록 (※ **여기서부터 pod 필요**) |
+| M2-6R | B retrieval 확장 | criteria/case tool + guardrail pre/post + citation | B 풀 파이프라인 | B smoke 통과 |
+| M2-7R | A/B 비교 런 | A(Advanced RAG) vs B(Agentic RAG) 측정 | 비교 리포트 | latency·retrieval 품질·clarification_rate·fallback·token·trace 완전성 수치 산출 |
+| M2-8R | B multi-RAG 실험 | vanilla cosine 외 검색 기법(rerank/Graph 등) 추가·측정 | 실험 리포트 | 기법별 retrieval 품질 비교 수치 |
+| M2-9R | embedding provider 분리 (구 M2-6 승계) | 추론 LLM과 embedding 의존성 분리 | embedding config | 1536d DB 호환 및 유지/대체 여부 명확화 |
 
-M2는 한 번에 전체 Agent를 바꾸지 않는다. `M2-4`에서 가장 작은 호출 경로 하나만 전환한 뒤, 동작을 확인하고 다음 Agent로 넘어간다.
+원칙: **A는 동결 baseline**, B는 flag/엔드포인트로 격리 도입해 회귀 위험을 차단한다. pod는 **M2-5R부터** 필요(그 전엔 Stop 유지). 한 번에 한 모듈만 진행하고, 게이트형 clarification은 다회/루프 없이 단발로 제한한다.
 
 #### M3. Agent/RAG workflow 모니터링 시스템 구축
 
@@ -271,9 +288,16 @@ flowchart TD
 
 ---
 
-## Phase 2. RunPod/local LLM Provider 전환
+## Phase 2. (재정의 2026-06-23) A/B 아키텍처 비교 — Advanced RAG(A) vs Agentic RAG(B)
 
-### 목표
+> **이 Phase는 §1.2 M2 재정의 모듈(M2-3R~M2-9R)을 권위 있는 기준으로 삼는다.** 상세 근거는 `docs/plans/2026-06-23-ab-architecture-simplification-proposal.md`.
+> 아래의 "RunPod/local LLM Provider 전환" 본문은 **선행 작업(M2-1~M2-3)의 역사적 맥락이자 B에서 재활용되는 provider 기반 자료**로 보존한다. 단독 목표가 아니라 B(Agentic RAG) 구축의 일부로 흡수되었다.
+
+### 목표 (재정의)
+
+현재 MAS(A)를 baseline으로 동결하고, 강한 단일 모델 + tools/MCP 기반 B(Agentic RAG)를 신설해 A/B를 측정·비교한다. provider 전환 자체는 목표가 아니라 B 구성의 수단이다.
+
+### (역사적 맥락 / B 재활용) RunPod/local LLM Provider 정리
 
 OpenAI API 중심 추론을 RunPod vLLM OpenAI-compatible endpoint 중심으로 전환한다.
 
