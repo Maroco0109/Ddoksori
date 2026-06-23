@@ -71,7 +71,12 @@ backend/data/criteria/
 backend/data/dispute/
 backend/data/law
 backend/data/evaluation
-backend/data/golden_set
+backend/data/golden_set/*
+# M2-4R A/B retrieval eval: commit the fixed eval set + baseline report for reproducibility
+!backend/data/golden_set/ab_eval_queries.jsonl
+!backend/data/golden_set/ab_retrieval_eval.jsonl
+!backend/data/golden_set/ab_retrieval_baseline_A.json
+!backend/data/golden_set/ab_retrieval_baseline_A.md
 backend/app/database
 
 # Test
