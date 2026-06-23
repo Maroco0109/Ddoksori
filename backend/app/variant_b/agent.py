@@ -17,7 +17,12 @@ from langgraph.prebuilt import create_react_agent
 
 from ..guardrail.moderation import check_input, check_output
 from .model import get_chat_model
-from .tools import B_TOOLS, search
+from .tools import (
+    B_TOOLS,
+    get_recorded_retrievals,
+    search,
+    start_retrieval_recording,
+)
 
 SYSTEM_PROMPT = (
     "당신은 한국 소비자분쟁 상담 도우미입니다. "
@@ -53,6 +58,7 @@ def run_b(
             "answer": gr_in["fallback_message"],
             "max_cosine": 0.0,
             "tool_calls": [],
+            "retrieved_chunk_ids": [],
             "trace": trace,
         }
 
@@ -69,10 +75,12 @@ def run_b(
             "answer": CLARIFY_MESSAGE,
             "max_cosine": max_cosine,
             "tool_calls": [],
+            "retrieved_chunk_ids": [],
             "trace": trace,
         }
 
-    # 3. ReAct answer
+    # 3. ReAct answer (record only the agent's tool retrievals, not the gate)
+    start_retrieval_recording()
     agent = create_react_agent(get_chat_model(model_spec), B_TOOLS, prompt=SYSTEM_PROMPT)
     result = agent.invoke({"messages": [("user", query)]})
     messages = result["messages"]
@@ -82,8 +90,21 @@ def run_b(
         for tc in (getattr(m, "tool_calls", None) or []):
             tool_calls.append({"name": tc.get("name"), "args": tc.get("args")})
 
+    # Dedupe recorded retrievals (rank order, first occurrence)
+    retrieved_chunk_ids: List[str] = []
+    seen = set()
+    for cid in get_recorded_retrievals():
+        if cid not in seen:
+            seen.add(cid)
+            retrieved_chunk_ids.append(cid)
+
     answer = messages[-1].content if messages else ""
-    trace.append({"step": "react", "n_tool_calls": len(tool_calls), "tool_calls": tool_calls})
+    trace.append({
+        "step": "react",
+        "n_tool_calls": len(tool_calls),
+        "tool_calls": tool_calls,
+        "n_retrieved": len(retrieved_chunk_ids),
+    })
 
     # 4. Output guardrail (reuse A's moderation, read-only)
     gr_out = check_output(answer)
@@ -98,5 +119,6 @@ def run_b(
         "answer": answer,
         "max_cosine": max_cosine,
         "tool_calls": tool_calls,
+        "retrieved_chunk_ids": retrieved_chunk_ids,
         "trace": trace,
     }
