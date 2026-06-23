@@ -14,13 +14,16 @@ from typing import Any, Dict, List
 from langgraph.prebuilt import create_react_agent
 
 from .model import get_chat_model
-from .tools import search, search_consumer_disputes
+from .tools import B_TOOLS, search
 
 SYSTEM_PROMPT = (
     "당신은 한국 소비자분쟁 상담 도우미입니다. "
-    "반드시 search_consumer_disputes 도구로 근거를 먼저 검색한 뒤, "
-    "검색된 근거에 기반해 한국어로 간결하고 정확하게 답하세요. "
-    "근거가 부족하면 모른다고 답하고 추측하지 마세요."
+    "반드시 search_consumer_disputes 도구로 근거를 먼저 검색하세요. "
+    "필요하면 domain(law/criteria/case)으로 검색 대상을 좁히고, "
+    "조문 원문이 필요하면 get_law_article, 사례 상세는 get_case_detail을 사용하세요. "
+    "특정 법령·조문이나 사례를 인용할 때는 verify_citation으로 실제 존재를 확인하고, "
+    "확인되지 않은 인용은 답변에 넣지 마세요. "
+    "검색된 근거에 기반해 한국어로 간결·정확하게 답하고, 근거가 부족하면 모른다고 하세요."
 )
 
 CLARIFY_MESSAGE = (
@@ -53,7 +56,7 @@ def run_b(
         }
 
     # 3. ReAct answer
-    agent = create_react_agent(get_chat_model(model_spec), [search_consumer_disputes], prompt=SYSTEM_PROMPT)
+    agent = create_react_agent(get_chat_model(model_spec), B_TOOLS, prompt=SYSTEM_PROMPT)
     result = agent.invoke({"messages": [("user", query)]})
     messages = result["messages"]
 
