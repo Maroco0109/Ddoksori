@@ -30,6 +30,10 @@ class ChatRequest(BaseModel):
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
     debug: bool = Field(default=False, description="디버그 모드 (타이밍 정보 포함)")
+    variant: Literal["A", "B"] = Field(
+        default="A",
+        description="응답 변형: A=MAS(baseline), B=Agentic RAG(실험/비교용)",
+    )
 
     @field_validator("message")
     @classmethod

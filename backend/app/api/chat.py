@@ -107,6 +107,24 @@ async def chat(
     try:
         session_id = body.session_id or str(uuid.uuid4())
 
+        # Variant B (Agentic RAG) — isolated comparison path. A path below unchanged.
+        if body.variant == "B":
+            from app.variant_b.agent import run_b
+
+            b_result = await asyncio.to_thread(
+                run_b, body.message, top_k=body.top_k or 5
+            )
+            clarified = bool(b_result.get("clarified", False))
+            return ChatResponse(
+                session_id=session_id,
+                answer=b_result["answer"],
+                chunks_used=0,
+                model="variant-b",
+                sources=[],
+                has_sufficient_evidence=not clarified,
+                clarifying_questions=[b_result["answer"]] if clarified else [],
+            )
+
         graph = get_graph_for_chat_type(body.chat_type)
 
         # Recursion limit 증가 (기본 25 → 50)
