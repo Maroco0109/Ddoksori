@@ -77,6 +77,9 @@ backend/data/golden_set/*
 !backend/data/golden_set/ab_retrieval_eval.jsonl
 !backend/data/golden_set/ab_retrieval_baseline_A.json
 !backend/data/golden_set/ab_retrieval_baseline_A.md
+# M2-7R A/B comparison results
+!backend/data/golden_set/ab_compare_*.json
+!backend/data/golden_set/ab_compare_report.md
 backend/app/database
 
 # Test

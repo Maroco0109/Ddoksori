@@ -13,9 +13,10 @@ DB defaults to localhost (EVAL_DB_* overridable). OPENAI_API_KEY from env.
 A (MAS) is NOT imported or modified — read-only DB access only.
 """
 
+import contextvars
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import psycopg2
 from langchain_core.tools import tool
@@ -28,6 +29,30 @@ EMBED_DIM = 1536
 DOMAIN_DOC_TYPES = {"law": ["법률", "시행령"], "criteria": ["별표", "행정규칙"]}
 
 _openai: OpenAI | None = None
+
+# --- Retrieval recorder (M2-7R measurement) -------------------------------
+# When active, every search() records the chunk_ids it returned (ranked), so a
+# measurement harness can score B's *agentic* retrieval (model query
+# reformulation + domain). Off by default -> zero effect on normal runs.
+_retrieval_recorder: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar(
+    "b_retrieval_recorder", default=None
+)
+
+
+def start_retrieval_recording() -> None:
+    """Begin recording chunk_ids returned by search() in this context."""
+    _retrieval_recorder.set([])
+
+
+def get_recorded_retrievals() -> List[str]:
+    """Recorded chunk_ids (rank order, with duplicates) since recording start."""
+    return list(_retrieval_recorder.get() or [])
+
+
+def _record_retrieval(chunk_ids: List[str]) -> None:
+    rec = _retrieval_recorder.get()
+    if rec is not None:
+        rec.extend(chunk_ids)
 
 
 def _client() -> OpenAI:
@@ -98,6 +123,7 @@ def search(
          "cosine": float(r[3]), "text": r[4]}
         for r in rows
     ]
+    _record_retrieval([d["chunk_id"] for d in docs])
     max_cosine = max((d["cosine"] for d in docs), default=0.0)
     return docs, max_cosine
 
