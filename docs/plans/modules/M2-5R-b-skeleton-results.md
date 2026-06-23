@@ -7,7 +7,7 @@
 
 ## 0. 한 줄 요약
 
-LangGraph ReAct 기반 B 골격 구현: retrieval tool 1개(`search_consumer_disputes`, A의 `search_hybrid_rrf` 래핑) + 결정형 cosine 게이트 단발 clarification + trace. **frontier(gpt-4o-mini)로 end-to-end 검증 완료.** EXAONE tool-calling smoke는 pod migration으로 환경 재구축 중 → **후속**.
+LangGraph ReAct 기반 B 골격 구현: retrieval tool 1개(`search_consumer_disputes`, A의 `search_hybrid_rrf` 래핑) + 결정형 cosine 게이트 단발 clarification + trace. **frontier(gpt-4o-mini)·EXAONE 4.5-33B(vLLM tool-calling) 둘 다 end-to-end 검증 완료 → M2-5R 완전 완료.**
 
 ## 1. 산출물
 
@@ -35,24 +35,30 @@ LangGraph ReAct 기반 B 골격 구현: retrieval tool 1개(`search_consumer_dis
 - 신호는 **B 내부**(retrieval tool의 vector_similarity)에서 계산 — A 의존 없음(M2-4R 재정의 방침과 일치).
 - τ는 M2-7R에서 `clarification_rate`로 정량 튜닝 예정.
 
-## 4. EXAONE smoke — 후속 (pending)
+## 4. EXAONE smoke — 통과 (2026-06-24)
 
-- 사유: H100 pod migration으로 SSH/환경이 초기화되어 재구축 중. B 로직은 frontier로 이미 검증되어, EXAONE smoke는 *동일 코드 base_url 교체*로 vLLM tool-calling만 확인하는 단계.
-- 실행 방법(환경 복구 후):
-  ```bash
-  # pod Resume + tool-calling 재기동:
-  #   vllm serve LGAI-EXAONE/EXAONE-4.5-33B ... --enable-auto-tool-choice --tool-call-parser hermes --reasoning-parser deepseek_r1
-  # 터널: ssh -N -L 19080:localhost:8000 <pod-ssh>
-  EXAONE_MODEL=LGAI-EXAONE/EXAONE-4.5-33B \
-  python backend/scripts/testing/variant_b/smoke_b.py --model exaone --env <repo>/.env
-  ```
-  > 주의: `.env`의 `EXAONE_MODEL`은 stale(3.5-7.8B) → smoke 시 4.5-33B로 override. EXAONE 4.5 커스텀 vLLM fork의 `--tool-call-parser hermes` 지원 여부는 미확인(실패 시 파서 점검).
+pod 복구 후(migration으로 SSH/환경 초기화 → 재구축, vLLM `vllm._C` 누락은 `VLLM_USE_PRECOMPILED=1` 재설치로 해결) 실행:
+
+```bash
+EXAONE_MODEL=LGAI-EXAONE/EXAONE-4.5-33B \
+python backend/scripts/testing/variant_b/smoke_b.py --model exaone --tau 0.45 --env <repo>/.env
+```
+- 엔드포인트: `http://localhost:19080/v1` (SSH 터널 → pod vLLM 8000), `/v1/models` = `LGAI-EXAONE/EXAONE-4.5-33B`.
+- ⚠️ `.env`의 `EXAONE_MODEL`은 stale(3.5-7.8B)이라 4.5-33B로 override 필요(상기 명령).
+
+| 케이스 | 입력 | max_cosine | 동작 | 결과 |
+| --- | --- | --- | --- | --- |
+| 명확 | "온라인으로 산 옷을 단순 변심으로 환불…" | 0.6617 | clarified=False → **EXAONE가 tool 호출** → 근거기반 답변 | 전자상거래법 7일 청약철회 + 조건(사용·태그·반품불가 고지 무효) 안내 ✅ |
+| 모호 | "도와주세요" | 0.3961 | <τ(0.45) → 단발 clarification(tool 미호출) | 구체화 요청 1회 ✅ |
+
+→ **EXAONE 4.5-33B의 vLLM tool-calling(`--tool-call-parser hermes`)이 동작 확인됨** (계획서에서 우려한 fork tool-calling 리스크 해소). frontier와 동일 코드, base_url만 교체.
 
 ## 5. 완료 상태 / 검증
 
-- ✅ frontier end-to-end(ReAct+tool+게이트+trace), A 무변경(별도 모듈, MAS diff 0).
-- ⏳ EXAONE tool-calling smoke(pod 복구 후 후속).
-- M2-5R는 **frontier 기준 기능 완료**, EXAONE 검증은 후속 항목.
+- ✅ frontier end-to-end(ReAct+tool+게이트+trace).
+- ✅ **EXAONE tool-calling smoke 통과**(2026-06-24).
+- ✅ A 무변경(별도 모듈, MAS diff 0).
+- **M2-5R 완전 완료** (frontier + EXAONE 둘 다 검증).
 
 ## 6. 환경 메모
 
