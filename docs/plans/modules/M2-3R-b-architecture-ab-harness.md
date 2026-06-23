@@ -16,7 +16,7 @@
 - B의 두뇌 모델 정책, tool-calling 하니스, tool 카탈로그, clarification 정책, A/B 격리 방식, 측정 계약을 확정한다.
 
 ### 비목표(이번 모듈에서 안 함)
-- B 코드 구현(M2-5R~), retrieval 신호 복구(M2-4R), tool 구현, RunPod 재기동/측정 런, DB 저장(M3), A(MAS) 변경.
+- B 코드 구현(M2-5R~), A/B 검색평가 하니스(M2-4R), tool 구현, RunPod 재기동/측정 런, DB 저장(M3), A(MAS) 변경.
 - MCP 도입, 신규 provider 추상화 framework 신설(M2-0 §8 유지).
 
 ## 2. B 두뇌 모델 — 두 모델 비교축
@@ -59,7 +59,7 @@ tool = "모델이 필요 시 호출하는 함수(이름 + 설명 + 입력 스키
 
 ## 5. clarification 정책 — 게이트형 단발
 
-- M2-4R의 **raw cosine 신뢰 신호**(RRF가 덮어쓰기 전 값, 별도 보존 예정)가 임계 미만일 때만 `request_clarification`을 **1회** 호출.
+- **B 내부 retrieval 신뢰 신호**(B의 retrieval tool이 반환하는 cosine/reranker 점수; **A 의존 없음**)가 임계 미만일 때만 `request_clarification`을 **1회** 호출. (M2-4R 재정의로 A에는 cosine 계측을 추가하지 않음 — B 내부에서 자체 계산)
 - 다회/루프 금지. 신호가 충분하면 곧장 답변.
 - 근거: LLM 기본 실패모드는 과소질문(answer ~95%/clarify <5%), 명시적 이진 분류기는 과대플래그 → 값싼 게이트 신호로 선택적 단발이 정답(제안 문서 §3 참조).
 
@@ -74,11 +74,11 @@ tool = "모델이 필요 시 호출하는 함수(이름 + 설명 + 입력 스키
   - **trace 완전성** — 각 run에서 tool 호출 체인이 빠짐없이 기록되는 비율(디버깅 용이성의 정량화).
   - `clarification_rate` + clarify 후 retrieval 품질 변화.
   - **허위인용 차단율** — `verify_citation`이 존재하지 않는 인용을 잡아낸 비율(보안 Goldenset의 citation 조작 항목과 직결).
-  - A vs B: latency, retrieval 품질(M2-4R calibrated cosine 기반), token, fallback.
+  - A vs B: latency, retrieval 품질(**M2-4R 외부 RAGAS/eval 하니스 기반**, A·B 동일 eval셋), token, fallback.
 
 ## 7. 구현 순서 (참고 — 실제 구현은 후속 모듈, 한 번에 하나)
 
-1. **M2-4R**: retrieval 신뢰 신호 복구(cosine 보존). B clarification 게이트의 전제.
+1. **M2-4R**: A/B 검색평가 하니스 + A baseline(외부 RAGAS/eval, **A 무변경**). B 게이트 신호는 A가 아니라 B 내부에서 계산(M2-5R).
 2. **M2-5R**: B 최소 골격 — ReAct + retrieval tool 1개 + `request_clarification`. **여기서 EXAONE를 tool-calling 플래그로 재기동**: `--enable-auto-tool-choice --tool-call-parser hermes --reasoning-parser deepseek_r1`(EXAONE 4.x 공식 권장). **pod는 이 시점부터 필요.**
 3. **M2-6R**: retrieval 2개 추가 + `verify_citation` + `get_law_article`/`get_case_detail` + citation 후처리 + guardrail pre/post.
 4. 이후: `calculate_deadline` 등 잔여 v1 tool 배치 → M2-7R A/B 비교 런 → M2-8R multi-RAG 실험 → M2-9R embedding 분리.
