@@ -116,19 +116,20 @@ def run_b_column(model, eval_rows, k_values, tau, top_k):
     return summary, per_query
 
 
-def a_baseline_summary():
-    if not A_BASELINE.exists():
+def a_baseline_summary(path=A_BASELINE):
+    p = Path(path)
+    if not p.exists():
         return None
-    return json.loads(A_BASELINE.read_text(encoding="utf-8")).get("summary")
+    return json.loads(p.read_text(encoding="utf-8")).get("summary")
 
 
-def write_report(report_path, k_values):
-    """Combine A baseline + every ab_compare_<model>.json into a markdown table."""
+def write_report(report_path, k_values, a_baseline_path=A_BASELINE, pattern="ab_compare_*.json", eval_name=None):
+    """Combine A baseline + every matching ab_compare_<model>.json into a table."""
     cols = []
-    a = a_baseline_summary()
+    a = a_baseline_summary(a_baseline_path)
     if a:
         cols.append(("A (MAS core retriever)", a))
-    for p in sorted(glob.glob(str(GOLDEN / "ab_compare_*.json"))):
+    for p in sorted(glob.glob(str(GOLDEN / pattern))):
         data = json.loads(Path(p).read_text(encoding="utf-8"))
         cols.append((f"B-{data['model']}", data["summary"]))
 
@@ -138,7 +139,7 @@ def write_report(report_path, k_values):
     metrics += ["mrr", "clarification_rate", "block_rate", "mean_latency_ms"]
 
     lines = ["# M2-7R A/B Comparison (retrieval)", "",
-             f"- eval set: `{DEFAULT_EVAL.name}` | columns: {', '.join(c[0] for c in cols)}",
+             f"- eval set: `{eval_name or DEFAULT_EVAL.name}` | columns: {', '.join(c[0] for c in cols)}",
              "", "| metric | " + " | ".join(c[0] for c in cols) + " |",
              "| --- | " + " | ".join(["---"] * len(cols)) + " |"]
     for met in metrics:
@@ -147,9 +148,8 @@ def write_report(report_path, k_values):
             v = summ.get(met)
             cells.append(f"{v:.4f}" if isinstance(v, (int, float)) else "-")
         lines.append(f"| {met} | " + " | ".join(cells) + " |")
-    lines += ["", "> A HitRate/MRR are pooling-inflated (labels drawn from A top-15); "
-              "B columns become discriminative. nDCG is the headline. clarified/blocked "
-              "queries excluded from retrieval metrics (see clarification_rate/block_rate)."]
+    lines += ["", "> nDCG is the headline. clarified/blocked queries are excluded from "
+              "retrieval metrics (see clarification_rate/block_rate)."]
     Path(report_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -161,7 +161,9 @@ def main():
     ap.add_argument("--tau", type=float, default=0.45)
     ap.add_argument("--top-k", type=int, default=5)
     ap.add_argument("--env", default=str(BACKEND_DIR.parent / ".env"))
-    ap.add_argument("--report", default=str(GOLDEN / "ab_compare_report.md"))
+    ap.add_argument("--a-baseline", default=str(A_BASELINE), help="A baseline JSON for the A column")
+    ap.add_argument("--tag", default="", help="suffix for outputs (e.g. v2) so runs don't clobber")
+    ap.add_argument("--report", default=None)
     args = ap.parse_args()
 
     if os.path.exists(args.env):
@@ -171,18 +173,22 @@ def main():
         except Exception:
             pass
 
+    suffix = f"_{args.tag}" if args.tag else ""
+    report_path = args.report or str(GOLDEN / f"ab_compare_report{suffix}.md")
+
     eval_rows = load_eval(args.eval_set)
     summary, per_query = run_b_column(args.model, eval_rows, args.k, args.tau, args.top_k)
 
-    out = GOLDEN / f"ab_compare_{args.model}.json"
+    out = GOLDEN / f"ab_compare_{args.model}{suffix}.json"
     payload = {"model": args.model, "eval_set": Path(args.eval_set).name,
                "n_queries": len(eval_rows), "k_values": args.k, "tau": args.tau,
                "summary": summary, "per_query": per_query}
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_report(args.report, args.k)
+    write_report(report_path, args.k, args.a_baseline, f"ab_compare_*{suffix}.json",
+                 eval_name=Path(args.eval_set).name)
 
     print(f"model={args.model} n={len(eval_rows)} summary={json.dumps(summary, ensure_ascii=False)}")
-    print(f"saved: {out} , {args.report}")
+    print(f"saved: {out} , {report_path}")
     return 0
 
 
