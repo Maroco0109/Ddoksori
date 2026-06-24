@@ -109,12 +109,30 @@ async def chat(
 
         # Variant B (Agentic RAG) — isolated comparison path. A path below unchanged.
         if body.variant == "B":
+            from app.observability import save_workflow_run
             from app.variant_b.agent import run_b
 
+            b_run_id = str(uuid.uuid4())
             b_result = await asyncio.to_thread(
                 run_b, body.message, top_k=body.top_k or 5
             )
             clarified = bool(b_result.get("clarified", False))
+            b_blocked = bool(b_result.get("blocked", False))
+
+            # M3-3: best-effort workflow run 저장. blocked/clarify는 정책상 정상
+            # 완료이므로 status='success' + 별도 플래그로 기록 (예외만 'error').
+            await save_workflow_run(
+                run_id=b_run_id,
+                variant="B",
+                query=body.message,
+                status="success",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                total_time_ms=(time.time() - start_time) * 1000.0,
+                clarified=clarified,
+                blocked=b_blocked,
+            )
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -308,6 +326,21 @@ async def chat(
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
 
+        # M3-3: best-effort workflow run 저장 (A 경로). run_id는 S3 로그와 공유.
+        from app.observability import save_workflow_run
+
+        await save_workflow_run(
+            run_id=log_entry.request_id,
+            variant="A",
+            query=body.message,
+            status="success",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            total_time_ms=log_entry.total_time_ms,
+            clarified=not response_data.get("has_sufficient_evidence", True),
+            blocked=bool(final_state.get("guardrail_blocked")),
+        )
+
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None
         if body.debug and node_timings:
@@ -342,6 +375,20 @@ async def chat(
         )
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
+
+        # M3-3: best-effort workflow run 저장 (A 경로, 에러). final_state 부재 가능.
+        from app.observability import save_workflow_run
+
+        await save_workflow_run(
+            run_id=log_entry.request_id,
+            variant="A",
+            query=body.message,
+            status="error",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            error_message=str(e),
+            total_time_ms=log_entry.total_time_ms,
+        )
 
         raise HTTPException(
             status_code=500,
