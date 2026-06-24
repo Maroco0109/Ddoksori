@@ -55,6 +55,7 @@ from app.api import (
     chat_router,
     health_router,
     metrics_router,
+    observability_router,
     search_router,
     users_router,
 )
@@ -120,6 +121,7 @@ app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(case_router)
 app.include_router(metrics_router)
+app.include_router(observability_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(board_router)
