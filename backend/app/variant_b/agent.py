@@ -21,6 +21,7 @@ from .model import get_chat_model
 from .tools import (
     B_TOOLS,
     get_recorded_retrievals,
+    get_recorded_search_events,
     search,
     start_retrieval_recording,
 )
@@ -48,6 +49,8 @@ def run_b(
     top_k: int = 5,
 ) -> Dict[str, Any]:
     trace: List[Dict[str, Any]] = []
+    # M3-5: per-search retrieval events (gate + tool). instrumentation only.
+    retrieval_records: List[Dict[str, Any]] = []
 
     # 0. Input guardrail (reuse A's moderation, read-only)
     _t = time.perf_counter()
@@ -62,12 +65,20 @@ def run_b(
             "tool_calls": [],
             "retrieved_chunk_ids": [],
             "trace": trace,
+            "retrieval_records": retrieval_records,
         }
 
     # 1. Deterministic gate retrieval
     _t = time.perf_counter()
     docs, max_cosine = search(query, top_k=top_k)
     trace.append({"step": "gate_retrieval", "max_cosine": round(max_cosine, 4), "n_docs": len(docs), "duration_ms": (time.perf_counter() - _t) * 1000})
+    retrieval_records.append({
+        "source": "gate",
+        "query": query,
+        "domain": None,
+        "top_k": top_k,
+        "docs": [{"chunk_id": d["chunk_id"], "cosine": d["cosine"]} for d in docs],
+    })
 
     # 2. Gate: single-shot clarification (no loop)
     if max_cosine < tau:
@@ -80,6 +91,7 @@ def run_b(
             "tool_calls": [],
             "retrieved_chunk_ids": [],
             "trace": trace,
+            "retrieval_records": retrieval_records,
         }
 
     # 3. ReAct answer (record only the agent's tool retrievals, not the gate)
@@ -101,6 +113,10 @@ def run_b(
         if cid not in seen:
             seen.add(cid)
             retrieved_chunk_ids.append(cid)
+
+    # M3-5: per-search tool events (each search_consumer_disputes call)
+    for ev in get_recorded_search_events():
+        retrieval_records.append({"source": "tool", **ev})
 
     answer = messages[-1].content if messages else ""
     trace.append({
@@ -127,4 +143,5 @@ def run_b(
         "tool_calls": tool_calls,
         "retrieved_chunk_ids": retrieved_chunk_ids,
         "trace": trace,
+        "retrieval_records": retrieval_records,
     }
