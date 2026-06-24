@@ -169,6 +169,18 @@ async def chat(
                 b_run_id, build_b_guardrail_events(b_result.get("trace", []))
             )
 
+            # M3-9: best-effort protocol event 저장 (B ReAct 궤적).
+            from app.observability.protocol_events import (
+                build_b_protocol_events,
+                save_protocol_events,
+            )
+
+            await save_protocol_events(
+                b_run_id,
+                "B",
+                build_b_protocol_events(b_result.get("protocol_messages", [])),
+            )
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -418,6 +430,18 @@ async def chat(
         await save_guardrail_events(
             log_entry.request_id,
             build_a_guardrail_events(node_timings),
+        )
+
+        # M3-9: best-effort protocol event 저장 (A inter-agent 궤적).
+        from app.observability.protocol_events import (
+            build_a_protocol_events,
+            save_protocol_events,
+        )
+
+        await save_protocol_events(
+            log_entry.request_id,
+            "A",
+            build_a_protocol_events(final_state.get("_agent_trace_entries", [])),
         )
 
         # debug 모드일 때 타이밍 정보 변환
