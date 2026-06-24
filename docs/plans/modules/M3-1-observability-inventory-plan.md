@@ -27,6 +27,7 @@
 | # | 관측 표면 | 위치 | 형태 | 적용 경로 |
 | --- | --- | --- | --- | --- |
 | S1 | Prometheus 공통 metric | `backend/app/common/metrics.py` | Counter/Histogram + in-memory `AgentMetrics`(percentile) | A(에이전트 전반) |
+| S1-note | **노출(scrape) 엔드포인트 부재** | backend 전역에 `generate_latest`/`make_asgi_app` 없음 | Prometheus 객체는 정의·증가만 됨, `/metrics` scrape 엔드포인트 없음. 별도 `api/metrics.py`의 `/metrics/*`는 Prometheus 형식이 아니라 **in-memory `AgentMetrics`를 JSON**으로 주는 REST API(이원화) | — |
 | S2 | legal_review metric | `backend/app/agents/legal_review/metrics.py` | 별도 Prometheus(violations/hallucination/confidence/…) + dataclass | A(guardrail/legal) |
 | S3 | RAG JSON 구조화 로그 | `backend/app/common/logging/rag_logger.py` | 요청당 JSON 파일 `logs/rag/YYYY-MM-DD/…json` (Retrieval/LLM/NodeTiming/Input/Domain… dataclass) | A |
 | S4 | supervisor trace state | `backend/app/supervisor/state/control.py` | `_agent_trace_entries`(append-only), `_node_timings`(Dict) | A(MAS 내부) |
