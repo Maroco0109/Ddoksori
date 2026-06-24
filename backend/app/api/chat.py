@@ -135,6 +135,7 @@ async def chat(
                 total_time_ms=(time.time() - start_time) * 1000.0,
                 clarified=clarified,
                 blocked=b_blocked,
+                answer=b_result.get("answer"),
             )
 
             # M3-4: best-effort workflow step 저장 (B trace + 단계 타이머).
@@ -392,6 +393,7 @@ async def chat(
             total_time_ms=log_entry.total_time_ms,
             clarified=not response_data.get("has_sufficient_evidence", True),
             blocked=bool(final_state.get("guardrail_blocked")),
+            answer=answer,
         )
 
         # M3-4: best-effort workflow step 저장 (A node sequence + latency).
