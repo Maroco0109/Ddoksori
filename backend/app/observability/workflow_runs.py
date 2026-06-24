@@ -48,6 +48,7 @@ class WorkflowRunDB:
         total_time_ms: Optional[float] = None,
         clarified: Optional[bool] = None,
         blocked: Optional[bool] = None,
+        answer: Optional[str] = None,
     ) -> None:
         """workflow_runs에 row 1건 삽입 (동기). run_id 중복 시 무시."""
         conn = self._get_connection()
@@ -57,8 +58,8 @@ class WorkflowRunDB:
                     """
                     INSERT INTO workflow_runs
                         (run_id, variant, session_id, chat_type, query, status,
-                         error_message, total_time_ms, clarified, blocked)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         error_message, total_time_ms, clarified, blocked, answer)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (run_id) DO NOTHING
                     """,
                     (
@@ -72,6 +73,7 @@ class WorkflowRunDB:
                         total_time_ms,
                         clarified,
                         blocked,
+                        answer,
                     ),
                 )
             conn.commit()
@@ -91,6 +93,7 @@ async def save_workflow_run(
     total_time_ms: Optional[float] = None,
     clarified: Optional[bool] = None,
     blocked: Optional[bool] = None,
+    answer: Optional[str] = None,
     db: Optional[WorkflowRunDB] = None,
 ) -> bool:
     """workflow_runs에 run 1건을 best-effort로 저장한다.
@@ -112,6 +115,7 @@ async def save_workflow_run(
             total_time_ms=total_time_ms,
             clarified=clarified,
             blocked=blocked,
+            answer=answer,
         )
         logger.info(
             f"[workflow_runs] saved run={run_id[:8]} variant={variant} "
