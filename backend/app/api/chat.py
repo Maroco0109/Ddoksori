@@ -143,6 +143,17 @@ async def chat(
                 b_run_id, build_b_steps(b_result.get("trace", []))
             )
 
+            # M3-5: best-effort retrieval event 저장 (B gate + tool 검색).
+            from app.observability.retrieval_events import (
+                build_b_retrieval_events,
+                save_retrieval_events,
+            )
+
+            await save_retrieval_events(
+                b_run_id,
+                build_b_retrieval_events(b_result.get("retrieval_records", [])),
+            )
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -363,6 +374,17 @@ async def chat(
                 log_entry.request_id,
                 build_a_steps(pipeline_summary.get("per_node", []), node_timings),
             )
+
+        # M3-5: best-effort retrieval event 저장 (A 4섹션).
+        from app.observability.retrieval_events import (
+            build_a_retrieval_events,
+            save_retrieval_events,
+        )
+
+        await save_retrieval_events(
+            log_entry.request_id,
+            build_a_retrieval_events(retrieval, body.top_k or 5, body.message),
+        )
 
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None

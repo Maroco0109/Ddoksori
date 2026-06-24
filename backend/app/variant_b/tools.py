@@ -38,10 +38,19 @@ _retrieval_recorder: contextvars.ContextVar[Optional[List[str]]] = contextvars.C
     "b_retrieval_recorder", default=None
 )
 
+# M3-5: per-search event recorder. When active, each search() also records a
+# full event {query, domain, top_k, docs:[{chunk_id, cosine}]} so retrieval
+# quality (similarity / top_chunks) is persisted per tool search. Off by
+# default -> zero effect; results/answer unchanged (instrumentation only).
+_search_event_recorder: contextvars.ContextVar[Optional[List[Dict]]] = contextvars.ContextVar(
+    "b_search_event_recorder", default=None
+)
+
 
 def start_retrieval_recording() -> None:
-    """Begin recording chunk_ids returned by search() in this context."""
+    """Begin recording chunk_ids + per-search events returned by search()."""
     _retrieval_recorder.set([])
+    _search_event_recorder.set([])
 
 
 def get_recorded_retrievals() -> List[str]:
@@ -49,10 +58,30 @@ def get_recorded_retrievals() -> List[str]:
     return list(_retrieval_recorder.get() or [])
 
 
+def get_recorded_search_events() -> List[Dict]:
+    """Recorded per-search events (M3-5) since recording start."""
+    return list(_search_event_recorder.get() or [])
+
+
 def _record_retrieval(chunk_ids: List[str]) -> None:
     rec = _retrieval_recorder.get()
     if rec is not None:
         rec.extend(chunk_ids)
+
+
+def _record_search_event(
+    query: str, domain: str, top_k: int, docs: List[Dict]
+) -> None:
+    rec = _search_event_recorder.get()
+    if rec is not None:
+        rec.append(
+            {
+                "query": query,
+                "domain": domain,
+                "top_k": top_k,
+                "docs": [{"chunk_id": d["chunk_id"], "cosine": d["cosine"]} for d in docs],
+            }
+        )
 
 
 def _client() -> OpenAI:
@@ -124,6 +153,7 @@ def search(
         for r in rows
     ]
     _record_retrieval([d["chunk_id"] for d in docs])
+    _record_search_event(query, domain, top_k, docs)
     max_cosine = max((d["cosine"] for d in docs), default=0.0)
     return docs, max_cosine
 
