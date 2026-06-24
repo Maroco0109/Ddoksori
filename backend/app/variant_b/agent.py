@@ -55,7 +55,7 @@ def run_b(
     # 0. Input guardrail (reuse A's moderation, read-only)
     _t = time.perf_counter()
     gr_in = check_input(query)
-    trace.append({"step": "guardrail_input", "blocked": gr_in["blocked"], "flagged": gr_in["flagged"], "duration_ms": (time.perf_counter() - _t) * 1000})
+    trace.append({"step": "guardrail_input", "blocked": gr_in["blocked"], "flagged": gr_in["flagged"], "categories": [c for c, v in (gr_in.get("categories") or {}).items() if v], "duration_ms": (time.perf_counter() - _t) * 1000})
     if gr_in["blocked"]:
         return {
             "clarified": False,
@@ -149,7 +149,7 @@ def run_b(
     # 4. Output guardrail (reuse A's moderation, read-only)
     _t = time.perf_counter()
     gr_out = check_output(answer)
-    trace.append({"step": "guardrail_output", "blocked": gr_out["blocked"], "flagged": gr_out["flagged"], "duration_ms": (time.perf_counter() - _t) * 1000})
+    trace.append({"step": "guardrail_output", "blocked": gr_out["blocked"], "flagged": gr_out["flagged"], "categories": [c for c, v in (gr_out.get("categories") or {}).items() if v], "duration_ms": (time.perf_counter() - _t) * 1000})
     blocked = gr_out["blocked"]
     if blocked:
         answer = gr_out["fallback_message"]

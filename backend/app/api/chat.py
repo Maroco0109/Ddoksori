@@ -159,6 +159,16 @@ async def chat(
 
             await save_llm_calls(b_run_id, build_b_llm_call(b_result))
 
+            # M3-7: best-effort guardrail event 저장 (B input/output moderation).
+            from app.observability.guardrail_events import (
+                build_b_guardrail_events,
+                save_guardrail_events,
+            )
+
+            await save_guardrail_events(
+                b_run_id, build_b_guardrail_events(b_result.get("trace", []))
+            )
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -397,6 +407,17 @@ async def chat(
         await save_llm_calls(
             log_entry.request_id,
             build_a_llm_calls(final_state, node_timings),
+        )
+
+        # M3-7: best-effort guardrail event 저장 (A input/output moderation + review).
+        from app.observability.guardrail_events import (
+            build_a_guardrail_events,
+            save_guardrail_events,
+        )
+
+        await save_guardrail_events(
+            log_entry.request_id,
+            build_a_guardrail_events(node_timings),
         )
 
         # debug 모드일 때 타이밍 정보 변환
