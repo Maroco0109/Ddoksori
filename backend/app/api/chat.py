@@ -154,6 +154,11 @@ async def chat(
                 build_b_retrieval_events(b_result.get("retrieval_records", [])),
             )
 
+            # M3-6: best-effort llm call 저장 (B react model + token 집계).
+            from app.observability.llm_calls import build_b_llm_call, save_llm_calls
+
+            await save_llm_calls(b_run_id, build_b_llm_call(b_result))
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -384,6 +389,14 @@ async def chat(
         await save_retrieval_events(
             log_entry.request_id,
             build_a_retrieval_events(retrieval, body.top_k or 5, body.message),
+        )
+
+        # M3-6: best-effort llm call 저장 (A LLM 호출 노드별, read-only).
+        from app.observability.llm_calls import build_a_llm_calls, save_llm_calls
+
+        await save_llm_calls(
+            log_entry.request_id,
+            build_a_llm_calls(final_state, node_timings),
         )
 
         # debug 모드일 때 타이밍 정보 변환
