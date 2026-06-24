@@ -97,7 +97,8 @@ def run_b(
     # 3. ReAct answer (record only the agent's tool retrievals, not the gate)
     _t = time.perf_counter()
     start_retrieval_recording()
-    agent = create_react_agent(get_chat_model(model_spec), B_TOOLS, prompt=SYSTEM_PROMPT)
+    chat_model = get_chat_model(model_spec)
+    agent = create_react_agent(chat_model, B_TOOLS, prompt=SYSTEM_PROMPT)
     result = agent.invoke({"messages": [("user", query)]})
     messages = result["messages"]
 
@@ -117,6 +118,24 @@ def run_b(
     # M3-5: per-search tool events (each search_consumer_disputes call)
     for ev in get_recorded_search_events():
         retrieval_records.append({"source": "tool", **ev})
+
+    # M3-6: aggregate react LLM usage (model + summed tokens + n_calls)
+    prompt_t = completion_t = total_t = n_llm = 0
+    for m in messages:
+        um = getattr(m, "usage_metadata", None)
+        if um:
+            prompt_t += um.get("input_tokens", 0) or 0
+            completion_t += um.get("output_tokens", 0) or 0
+            total_t += um.get("total_tokens", 0) or 0
+            n_llm += 1
+    llm_summary = {
+        "model": getattr(chat_model, "model_name", None) or getattr(chat_model, "model", None),
+        "prompt_tokens": prompt_t,
+        "completion_tokens": completion_t,
+        "total_tokens": total_t,
+        "n_calls": n_llm,
+        "status": "ok",
+    }
 
     answer = messages[-1].content if messages else ""
     trace.append({
@@ -144,4 +163,5 @@ def run_b(
         "retrieved_chunk_ids": retrieved_chunk_ids,
         "trace": trace,
         "retrieval_records": retrieval_records,
+        "llm_summary": llm_summary,
     }
