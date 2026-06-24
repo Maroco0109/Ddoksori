@@ -8,6 +8,7 @@ SSE 스트리밍과 일반 응답 모두 지원합니다.
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, Optional, cast
@@ -113,8 +114,11 @@ async def chat(
             from app.variant_b.agent import run_b
 
             b_run_id = str(uuid.uuid4())
+            # B canonical model = EXAONE (강한 모델 agentic RAG, A/B 의도).
+            # VARIANT_B_MODEL_SPEC로 override 가능(exaone | frontier).
+            b_model_spec = os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
             b_result = await asyncio.to_thread(
-                run_b, body.message, top_k=body.top_k or 5
+                run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
             )
             clarified = bool(b_result.get("clarified", False))
             b_blocked = bool(b_result.get("blocked", False))
