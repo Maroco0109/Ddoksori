@@ -137,6 +137,30 @@ def run_b(
         "status": "ok",
     }
 
+    # M3-9: distill ReAct trajectory (AIMessage reasoning+tool_calls, ToolMessage 관찰).
+    # human(query) 제외. content는 절단(용량). answer/검색 무변경(읽기만).
+    _PREVIEW = 500
+    protocol_messages: List[Dict[str, Any]] = []
+    for m in messages:
+        mtype = getattr(m, "type", None)
+        if mtype == "ai":
+            tcs = [
+                {"name": tc.get("name"), "args": tc.get("args")}
+                for tc in (getattr(m, "tool_calls", None) or [])
+            ]
+            content = m.content if isinstance(m.content, str) else str(m.content)
+            protocol_messages.append(
+                {"kind": "ai", "tool_calls": tcs, "content": content[:_PREVIEW]}
+            )
+        elif mtype == "tool":
+            protocol_messages.append(
+                {
+                    "kind": "tool",
+                    "name": getattr(m, "name", None),
+                    "content": str(m.content)[:_PREVIEW],
+                }
+            )
+
     answer = messages[-1].content if messages else ""
     trace.append({
         "step": "react",
@@ -164,4 +188,5 @@ def run_b(
         "trace": trace,
         "retrieval_records": retrieval_records,
         "llm_summary": llm_summary,
+        "protocol_messages": protocol_messages,
     }

@@ -22,6 +22,7 @@ _CHILD_TABLES = [
     "retrieval_events",
     "llm_calls",
     "guardrail_events",
+    "protocol_events",
 ]
 
 
