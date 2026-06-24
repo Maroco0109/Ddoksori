@@ -133,6 +133,16 @@ async def chat(
                 blocked=b_blocked,
             )
 
+            # M3-4: best-effort workflow step 저장 (B trace + 단계 타이머).
+            from app.observability.workflow_steps import (
+                build_b_steps,
+                save_workflow_steps,
+            )
+
+            await save_workflow_steps(
+                b_run_id, build_b_steps(b_result.get("trace", []))
+            )
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -303,6 +313,7 @@ async def chat(
             rag_logger.log_node_timings(log_entry, node_timings)
 
         # 에이전트 트레이스 로깅
+        pipeline_summary = None
         trace_entries = final_state.get("_agent_trace_entries", [])
         if trace_entries:
             from app.supervisor.graph import build_pipeline_summary
@@ -340,6 +351,18 @@ async def chat(
             clarified=not response_data.get("has_sufficient_evidence", True),
             blocked=bool(final_state.get("guardrail_blocked")),
         )
+
+        # M3-4: best-effort workflow step 저장 (A node sequence + latency).
+        if pipeline_summary:
+            from app.observability.workflow_steps import (
+                build_a_steps,
+                save_workflow_steps,
+            )
+
+            await save_workflow_steps(
+                log_entry.request_id,
+                build_a_steps(pipeline_summary.get("per_node", []), node_timings),
+            )
 
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None

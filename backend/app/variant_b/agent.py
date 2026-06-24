@@ -11,6 +11,7 @@ Returns a dict with the answer and a trace (guardrail + gate + tool calls) for
 the trace-completeness / clarification_rate / guardrail measurements (M2-7R).
 """
 
+import time
 from typing import Any, Dict, List
 
 from langgraph.prebuilt import create_react_agent
@@ -49,8 +50,9 @@ def run_b(
     trace: List[Dict[str, Any]] = []
 
     # 0. Input guardrail (reuse A's moderation, read-only)
+    _t = time.perf_counter()
     gr_in = check_input(query)
-    trace.append({"step": "guardrail_input", "blocked": gr_in["blocked"], "flagged": gr_in["flagged"]})
+    trace.append({"step": "guardrail_input", "blocked": gr_in["blocked"], "flagged": gr_in["flagged"], "duration_ms": (time.perf_counter() - _t) * 1000})
     if gr_in["blocked"]:
         return {
             "clarified": False,
@@ -63,12 +65,13 @@ def run_b(
         }
 
     # 1. Deterministic gate retrieval
+    _t = time.perf_counter()
     docs, max_cosine = search(query, top_k=top_k)
-    trace.append({"step": "gate_retrieval", "max_cosine": round(max_cosine, 4), "n_docs": len(docs)})
+    trace.append({"step": "gate_retrieval", "max_cosine": round(max_cosine, 4), "n_docs": len(docs), "duration_ms": (time.perf_counter() - _t) * 1000})
 
     # 2. Gate: single-shot clarification (no loop)
     if max_cosine < tau:
-        trace.append({"step": "clarify", "reason": f"max_cosine {max_cosine:.3f} < tau {tau}"})
+        trace.append({"step": "clarify", "reason": f"max_cosine {max_cosine:.3f} < tau {tau}", "duration_ms": 0.0})
         return {
             "clarified": True,
             "blocked": False,
@@ -80,6 +83,7 @@ def run_b(
         }
 
     # 3. ReAct answer (record only the agent's tool retrievals, not the gate)
+    _t = time.perf_counter()
     start_retrieval_recording()
     agent = create_react_agent(get_chat_model(model_spec), B_TOOLS, prompt=SYSTEM_PROMPT)
     result = agent.invoke({"messages": [("user", query)]})
@@ -104,11 +108,13 @@ def run_b(
         "n_tool_calls": len(tool_calls),
         "tool_calls": tool_calls,
         "n_retrieved": len(retrieved_chunk_ids),
+        "duration_ms": (time.perf_counter() - _t) * 1000,
     })
 
     # 4. Output guardrail (reuse A's moderation, read-only)
+    _t = time.perf_counter()
     gr_out = check_output(answer)
-    trace.append({"step": "guardrail_output", "blocked": gr_out["blocked"], "flagged": gr_out["flagged"]})
+    trace.append({"step": "guardrail_output", "blocked": gr_out["blocked"], "flagged": gr_out["flagged"], "duration_ms": (time.perf_counter() - _t) * 1000})
     blocked = gr_out["blocked"]
     if blocked:
         answer = gr_out["fallback_message"]
