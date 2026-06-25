@@ -80,6 +80,8 @@ backend/data/golden_set/*
 # M2-7R A/B comparison results (incl. de-biased v2)
 !backend/data/golden_set/ab_compare_*.json
 !backend/data/golden_set/ab_compare_report*.md
+# M5-3 quality eval goldenset: commit the human-labeled seed set for reproducibility
+!backend/data/golden_set/quality_eval_*.jsonl
 backend/app/database
 
 # Test
