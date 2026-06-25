@@ -82,6 +82,9 @@ backend/data/golden_set/*
 !backend/data/golden_set/ab_compare_report*.md
 # M5-3 quality eval goldenset: commit the human-labeled seed set for reproducibility
 !backend/data/golden_set/quality_eval_*.jsonl
+# M5-4 retrieval metrics + LLM-judge cross-check: commit measured numbers for reproducibility
+!backend/data/golden_set/quality_retrieval_*
+!backend/data/golden_set/quality_judge_*
 backend/app/database
 
 # Test
