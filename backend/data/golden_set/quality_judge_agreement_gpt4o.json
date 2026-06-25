@@ -1,0 +1,381 @@
+{
+  "model": "gpt-4o",
+  "n_pairs": 60,
+  "n_queries": 12,
+  "exact_agreement": 0.4667,
+  "binary_agreement": 0.75,
+  "cohen_kappa": 0.1816,
+  "confusion": {
+    "h0_j0": 4,
+    "h0_j1": 7,
+    "h0_j2": 4,
+    "h1_j0": 3,
+    "h1_j1": 11,
+    "h1_j2": 13,
+    "h2_j0": 1,
+    "h2_j1": 4,
+    "h2_j2": 13
+  },
+  "per_query": [
+    {
+      "id": "law-001",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_8789_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_8795_full_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_조정_543_judgment_1",
+          "human": 0,
+          "judge": 0
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_1027_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_978_full_1",
+          "human": 2,
+          "judge": 2
+        }
+      ]
+    },
+    {
+      "id": "law-002",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_1290_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "별표2_2_II서비스업_14장례상조관련_②상조업1개업종_dispute4_단순",
+          "human": 2,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3759_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "pdf_semantic_해결_2017_8_3_쟁점사항_1",
+          "human": 0,
+          "judge": 0
+        },
+        {
+          "chunk_id": "별표2_2_II서비스업_4금융서비스관련_③유사투자자문업1개업종_dispute3_단순",
+          "human": 0,
+          "judge": 1
+        }
+      ]
+    },
+    {
+      "id": "law-003",
+      "pairs": [
+        {
+          "chunk_id": "pdf_semantic_해결_2013_4_1_판단경위_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "pdf_semantic_해결_2014_5_1_판단경위_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3915_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_423_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_6288_full_1",
+          "human": 1,
+          "judge": 1
+        }
+      ]
+    },
+    {
+      "id": "law-004",
+      "pairs": [
+        {
+          "chunk_id": "전자상거래 등에서의 소비자보호에 관한 법률_제35조",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "pdf_semantic_해결_2019_10_1_쟁점사항_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "방문판매 등에 관한 법률_제52조",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "할부거래에 관한 법률_제43조",
+          "human": 2,
+          "judge": 1
+        },
+        {
+          "chunk_id": "할부거래에 관한 법률 시행령_제43조",
+          "human": 1,
+          "judge": 1
+        }
+      ]
+    },
+    {
+      "id": "criteria-001",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_5593_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_5537_full_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_4050_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_11253_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_해결_601_full_1",
+          "human": 1,
+          "judge": 1
+        }
+      ]
+    },
+    {
+      "id": "criteria-002",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_3163_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_6053_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_5163_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_해결_609_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_해결_1033_full_1",
+          "human": 0,
+          "judge": 2
+        }
+      ]
+    },
+    {
+      "id": "criteria-003",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_6814_full_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3776_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_237_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3481_full_1",
+          "human": 0,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_8877_full_1",
+          "human": 2,
+          "judge": 0
+        }
+      ]
+    },
+    {
+      "id": "criteria-004",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_11325_full_1",
+          "human": 2,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_10058_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_7632_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_10617_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_10619_full_1",
+          "human": 0,
+          "judge": 2
+        }
+      ]
+    },
+    {
+      "id": "case-001",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_해결_604_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_해결_1494_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_2494_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_4857_full_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3507_full_1",
+          "human": 1,
+          "judge": 1
+        }
+      ]
+    },
+    {
+      "id": "case-002",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_7468_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_8230_full_1",
+          "human": 0,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_2818_full_1",
+          "human": 1,
+          "judge": 0
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_10560_full_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_3232_full_1",
+          "human": 1,
+          "judge": 0
+        }
+      ]
+    },
+    {
+      "id": "case-003",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_8314_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "pdf_semantic_조정_38_judgement_reason_2",
+          "human": 2,
+          "judge": 1
+        },
+        {
+          "chunk_id": "pdf_semantic_해결_2023_16_신청_내용_1",
+          "human": 1,
+          "judge": 0
+        },
+        {
+          "chunk_id": "crawl_semantic_조정_299_case_summary_1",
+          "human": 1,
+          "judge": 1
+        },
+        {
+          "chunk_id": "pdf_semantic_해결_2024_3_신청_내용_1",
+          "human": 0,
+          "judge": 0
+        }
+      ]
+    },
+    {
+      "id": "case-004",
+      "pairs": [
+        {
+          "chunk_id": "crawl_semantic_상담_8088_full_1",
+          "human": 2,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_9204_full_1",
+          "human": 0,
+          "judge": 1
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_4028_full_1",
+          "human": 1,
+          "judge": 2
+        },
+        {
+          "chunk_id": "crawl_semantic_조정_1626_party_claims_1",
+          "human": 0,
+          "judge": 0
+        },
+        {
+          "chunk_id": "crawl_semantic_상담_9025_full_1",
+          "human": 1,
+          "judge": 2
+        }
+      ]
+    }
+  ]
+}
