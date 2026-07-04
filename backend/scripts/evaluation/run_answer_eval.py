@@ -55,6 +55,8 @@ def main() -> int:
     ap.add_argument("--chat-type", default="dispute", choices=["dispute", "general"])
     ap.add_argument("--timeout", type=int, default=120,
                     help="per-request timeout (s); EXAONE runs can be slow")
+    ap.add_argument("--delay", type=float, default=7.0,
+                    help="sleep between requests (s) to stay under the API rate limit")
     args = ap.parse_args()
 
     rows = load_eval_set(args.eval_set)
@@ -63,6 +65,8 @@ def main() -> int:
 
     ok, failed = 0, 0
     for i, s in enumerate(rows):
+        if i > 0 and args.delay > 0:
+            time.sleep(args.delay)
         qid = s.get("id")
         session_id = f"m5-5-{args.label}-{qid}"
         body = {

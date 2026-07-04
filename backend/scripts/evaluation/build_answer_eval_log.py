@@ -60,7 +60,7 @@ def fetch_latest_runs(cur, max_contexts):
     cur.execute(
         """
         SELECT DISTINCT ON (session_id)
-               run_id, session_id, variant, query, answer, clarified, blocked, created_at
+               run_id, session_id, variant, status, query, answer, clarified, blocked, created_at
         FROM workflow_runs
         WHERE session_id LIKE 'm5-5-%'
         ORDER BY session_id, created_at DESC
@@ -94,6 +94,7 @@ def fetch_latest_runs(cur, max_contexts):
             "label": label,
             "qid": qid,
             "variant": run["variant"],
+            "status": run["status"],
             "query": run["query"],
             "answer": run["answer"] or "",
             "clarified": bool(run["clarified"]),
@@ -149,6 +150,7 @@ def main() -> int:
             "id": r["qid"],
             "label": r["label"],
             "variant": r["variant"],
+            "status": r["status"],
             "run_id": r["run_id"],
             "query": r["query"],
             "answer": r["answer"],

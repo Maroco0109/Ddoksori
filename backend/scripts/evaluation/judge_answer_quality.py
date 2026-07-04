@@ -119,12 +119,14 @@ def aggregate(rows):
         scored = [r for r in rs if r["faithfulness"] is not None]
         faith = [r["faithfulness"] for r in scored]
         cov = [r["coverage_ratio"] for r in rs if r["coverage_ratio"] is not None]
+        safe_evaluable = [r for r in rs if r["safe"] is not None]  # non-errored
         summ[label] = {
             "n": n,
             "n_scored": len(scored),
             "faithfulness_mean": round(statistics.fmean(faith), 4) if faith else None,
             "coverage_ratio_mean": round(statistics.fmean(cov), 4) if cov else None,
-            "safety_pass_rate": round(sum(1 for r in rs if r["safe"]) / n, 4) if n else None,
+            "safety_pass_rate": round(sum(1 for r in safe_evaluable if r["safe"]) / len(safe_evaluable), 4) if safe_evaluable else None,
+            "error_rate": round(sum(1 for r in rs if r["errored"]) / n, 4) if n else None,
             "clarification_rate": round(sum(1 for r in rs if r["clarified"]) / n, 4) if n else None,
             "block_rate": round(sum(1 for r in rs if r["blocked"]) / n, 4) if n else None,
         }
@@ -134,7 +136,7 @@ def aggregate(rows):
 def write_report(path, summ):
     labels = sorted(summ)
     metrics = ["n", "n_scored", "faithfulness_mean", "coverage_ratio_mean",
-               "safety_pass_rate", "clarification_rate", "block_rate"]
+               "safety_pass_rate", "error_rate", "clarification_rate", "block_rate"]
     lines = ["# M5-5 Answer Generation Quality (A/B)", "",
              f"- columns: {', '.join(labels)}",
              "", "| metric | " + " | ".join(labels) + " |",
@@ -168,25 +170,32 @@ def main() -> int:
     rows = [json.loads(l) for l in open(args.log, encoding="utf-8") if l.strip()]
     scored = []
     for r in rows:
-        substantive = not (r.get("clarified") or r.get("blocked"))
+        clarified, blocked = bool(r.get("clarified")), bool(r.get("blocked"))
+        answer = r.get("answer") or ""
+        # errored = backend crash (status=error) or empty answer with no clarify/block.
+        errored = (r.get("status") == "error") or (not clarified and not blocked and not answer.strip())
+        substantive = not clarified and not blocked and not errored
         contexts = r.get("contexts", [])
         faith, hall, note = None, 0, ""
         cov, cov_ratio = None, None
         if substantive and contexts:
-            faith, hall, note = judge_faithfulness(client, args.model, r["query"], r["answer"], contexts)
+            faith, hall, note = judge_faithfulness(client, args.model, r["query"], answer, contexts)
         if substantive and r.get("key_points"):
-            cov = judge_coverage(client, args.model, r["query"], r["answer"], r["key_points"])
+            cov = judge_coverage(client, args.model, r["query"], answer, r["key_points"])
             cov_ratio = round(sum(cov) / len(cov), 4) if cov else None
-        safety = score_safety(r["answer"], r.get("must_not", []), hall)
+        # safety only meaningful for a real emitted message (substantive or canned clarify/block).
+        safety = score_safety(answer, r.get("must_not", []), hall) if not errored else None
         scored.append({
             "id": r["id"], "label": r["label"], "variant": r["variant"], "run_id": r.get("run_id"),
-            "clarified": bool(r.get("clarified")), "blocked": bool(r.get("blocked")),
+            "status": r.get("status"), "errored": errored,
+            "clarified": clarified, "blocked": blocked,
             "n_contexts": len(contexts),
             "faithfulness": faith, "faithfulness_note": note,
             "coverage": cov, "coverage_ratio": cov_ratio,
             "hallucinated_citation": hall,
-            "safe": safety["safe"], "safety_violated": safety["violated"],
-            "safety_detail": safety["per_category"],
+            "safe": (safety["safe"] if safety else None),
+            "safety_violated": (safety["violated"] if safety else None),
+            "safety_detail": (safety["per_category"] if safety else None),
         })
 
     summ = aggregate(scored)
