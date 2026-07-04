@@ -1,0 +1,31 @@
+{"id": "case-001", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 1, 0, 0], "h_hallucinated_citation": 0, "reason": "제17조 verbatim in ctx; KP3/4 absent", "source": "web-grounded-reviewer"}
+{"id": "case-002", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "reason": "제조물책임법 제3조 in ctx; KP3 not conveyed", "source": "web-grounded-reviewer"}
+{"id": "case-003", "label": "A", "h_faithfulness": 2, "h_coverage": [0, 1, 1], "h_hallucinated_citation": 0, "reason": "제17조 grounded but mis-framed vs 약관규제법 제8조; KP0 missed", "source": "web-grounded-reviewer"}
+{"id": "case-004", "label": "A", "h_faithfulness": 2, "h_coverage": [0, 1, 0, 1], "h_hallucinated_citation": 0, "reason": "제17조 in ctx; KP3/4 not stated | user-ratified kp0=0,kp3=1", "source": "web-grounded-reviewer"}
+{"id": "criteria-001", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "reason": "no statute cited; KP2/3 absent", "source": "web-grounded-reviewer"}
+{"id": "criteria-002", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 0, 0, 0], "h_hallucinated_citation": 0, "reason": "상법137조 only in KP not answer; KP2/3/4 absent", "source": "web-grounded-reviewer"}
+{"id": "criteria-003", "label": "A", "h_faithfulness": 2, "h_coverage": [0, 1, 1], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-004", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-001", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-004", "label": "A", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "case-002", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 1], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "case-004", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 0, 0], "h_hallucinated_citation": 1, "source": "web-grounded-reviewer"}
+{"id": "criteria-001", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 1], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-003", "label": "Bexaone", "h_faithfulness": 1, "h_coverage": [1, 0, 1], "h_hallucinated_citation": 1, "source": "web-grounded-reviewer"}
+{"id": "criteria-004", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-001", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-002", "label": "Bexaone", "h_faithfulness": 1, "h_coverage": [1, 0, 0, 0, 1], "h_hallucinated_citation": 1, "source": "web-grounded-reviewer"}
+{"id": "law-003", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-004", "label": "Bexaone", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 1, "source": "web-grounded-reviewer"}
+{"id": "case-001", "label": "Bfrontier", "h_faithfulness": 1, "h_coverage": [1, 0, 0, 1], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "case-002", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "case-003", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "case-004", "label": "Bfrontier", "h_faithfulness": 1, "h_coverage": [0, 0, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-001", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-002", "label": "Bfrontier", "h_faithfulness": 1, "h_coverage": [0, 0, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-003", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "criteria-004", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-001", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-002", "label": "Bfrontier", "h_faithfulness": 1, "h_coverage": [0, 0, 0, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-003", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 0, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}
+{"id": "law-004", "label": "Bfrontier", "h_faithfulness": 2, "h_coverage": [1, 1, 0], "h_hallucinated_citation": 0, "source": "web-grounded-reviewer"}

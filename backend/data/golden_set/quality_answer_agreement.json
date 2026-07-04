@@ -1,0 +1,176 @@
+{
+  "n_records": 31,
+  "faithfulness": {
+    "n": 31,
+    "exact_agreement": 0.871,
+    "cohen_kappa": 0.4464,
+    "confusion": {
+      "h1_j1": 2,
+      "h1_j2": 4,
+      "h2_j1": 0,
+      "h2_j2": 25
+    },
+    "binary_agreement": 1.0
+  },
+  "coverage_pointwise": {
+    "n": 101,
+    "exact_agreement": 0.901,
+    "cohen_kappa": 0.8023,
+    "confusion": {
+      "h0_j0": 41,
+      "h0_j1": 10,
+      "h1_j0": 0,
+      "h1_j1": 50
+    }
+  },
+  "hallucinated_citation": {
+    "n": 31,
+    "exact_agreement": 0.871,
+    "cohen_kappa": 0.4259,
+    "confusion": {
+      "h0_j0": 25,
+      "h0_j1": 2,
+      "h1_j0": 2,
+      "h1_j1": 2
+    }
+  },
+  "disagreements": [
+    {
+      "axis": "coverage",
+      "label": "A",
+      "id": "criteria-003",
+      "key_point": 0,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "A",
+      "id": "law-004",
+      "key_point": 1,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bexaone",
+      "id": "case-004",
+      "key_point": 3,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "hallucinated_citation",
+      "label": "Bexaone",
+      "id": "case-004",
+      "human": 1,
+      "judge": 0
+    },
+    {
+      "axis": "faithfulness",
+      "label": "Bexaone",
+      "id": "criteria-003",
+      "human": 1,
+      "judge": 2
+    },
+    {
+      "axis": "hallucinated_citation",
+      "label": "Bexaone",
+      "id": "criteria-003",
+      "human": 1,
+      "judge": 0
+    },
+    {
+      "axis": "faithfulness",
+      "label": "Bfrontier",
+      "id": "case-001",
+      "human": 1,
+      "judge": 2
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "case-001",
+      "key_point": 1,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "case-003",
+      "key_point": 1,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "case-003",
+      "key_point": 2,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "faithfulness",
+      "label": "Bfrontier",
+      "id": "case-004",
+      "human": 1,
+      "judge": 2
+    },
+    {
+      "axis": "faithfulness",
+      "label": "Bfrontier",
+      "id": "criteria-002",
+      "human": 1,
+      "judge": 2
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "criteria-002",
+      "key_point": 0,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "criteria-003",
+      "key_point": 1,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "hallucinated_citation",
+      "label": "Bfrontier",
+      "id": "law-001",
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "law-002",
+      "key_point": 1,
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "hallucinated_citation",
+      "label": "Bfrontier",
+      "id": "law-002",
+      "human": 0,
+      "judge": 1
+    },
+    {
+      "axis": "coverage",
+      "label": "Bfrontier",
+      "id": "law-003",
+      "key_point": 2,
+      "human": 0,
+      "judge": 1
+    }
+  ],
+  "skipped": []
+}
