@@ -1,0 +1,142 @@
+{
+  "uid": "ddoksori-ops-ab",
+  "title": "DDOKSORI Ops & A/B",
+  "tags": ["ddoksori", "m6"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "variant",
+        "label": "variant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+        "query": { "query": "label_values(chat_requests_total, variant)", "refId": "variant" },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request rate by variant/status (req/s)",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "sum by (variant, status) (rate(chat_requests_total{variant=~\"$variant\"}[5m]))",
+          "legendFormat": "{{variant}} / {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "p95 latency by variant (s)",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, variant) (rate(chat_request_latency_seconds_bucket{variant=~\"$variant\"}[5m])))",
+          "legendFormat": "{{variant}} p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Error rate by variant",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "sum by (variant) (rate(chat_requests_total{status=\"error\", variant=~\"$variant\"}[5m])) / clamp_min(sum by (variant) (rate(chat_requests_total{variant=~\"$variant\"}[5m])), 0.001)",
+          "legendFormat": "{{variant}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Guardrail block rate by variant/stage (blocks/s)",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "sum by (variant, stage) (rate(guardrail_blocks_total{variant=~\"$variant\"}[5m]))",
+          "legendFormat": "{{variant}} / {{stage}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "LLM token rate by variant/type (tokens/s)",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "sum by (variant, type) (rate(llm_tokens_total{variant=~\"$variant\"}[5m]))",
+          "legendFormat": "{{variant}} / {{type}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Cache hit ratio",
+      "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "ddoksori-prometheus" },
+          "expr": "sum(rate(cache_hits_total[5m])) / clamp_min(sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m])), 0.001)",
+          "legendFormat": "cache hit ratio"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "A/B summary from M3 DB (workflow_runs)",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "ddoksori-postgres" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "ddoksori-postgres" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT variant, count(*) AS runs, round(avg(total_time_ms)) AS avg_ms, round(100.0*sum((status='error')::int)/count(*),1) AS error_pct, round(100.0*sum((coalesce(blocked,false))::int)/count(*),1) AS block_pct, round(100.0*sum((coalesce(clarified,false))::int)/count(*),1) AS clarify_pct FROM workflow_runs GROUP BY variant ORDER BY variant;"
+        }
+      ]
+    }
+  ]
+}
