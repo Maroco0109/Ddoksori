@@ -581,7 +581,11 @@ def _enhance_sources(
         new_source_section = "[출처]\n\n" + "\n\n".join(source_entries)
 
         old_answer = answer
-        answer = re.sub(source_section_pattern, new_source_section, answer)
+        # #67: pass the replacement as a function so it is inserted literally.
+        # A string repl is parsed as a template, so source text containing a
+        # backslash escape (e.g. "\U" in a URL/citation) raised re.error: bad
+        # escape and 500'd the whole request (law-002/003).
+        answer = re.sub(source_section_pattern, lambda _m: new_source_section, answer)
 
         if old_answer != answer:
             logger.info("[Postprocessor] Source section replaced successfully")
