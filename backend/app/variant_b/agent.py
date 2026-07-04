@@ -99,8 +99,16 @@ def run_b(
     start_retrieval_recording()
     chat_model = get_chat_model(model_spec)
     agent = create_react_agent(chat_model, B_TOOLS, prompt=SYSTEM_PROMPT)
-    result = agent.invoke({"messages": [("user", query)]})
-    messages = result["messages"]
+    try:
+        result = agent.invoke({"messages": [("user", query)]})
+        messages = result["messages"]
+    except Exception as react_err:
+        # #68: ReAct can overflow max_model_len(8192) as accumulated tool context
+        # grows -> the model call 400s (prompt too long) before any answer, which
+        # otherwise 500s the request. Degrade to the empty-answer fallback below
+        # (synthesize from the gate-retrieved docs) instead of a hard failure.
+        messages = []
+        trace.append({"step": "react_error", "error": str(react_err)[:300]})
 
     tool_calls: List[Dict[str, Any]] = []
     for m in messages:
@@ -169,6 +177,45 @@ def run_b(
         "n_retrieved": len(retrieved_chunk_ids),
         "duration_ms": (time.perf_counter() - _t) * 1000,
     })
+
+    # #68: EXAONE(추론 모델)+ReAct 다단계로 누적 컨텍스트가 max_model_len(8192)을 채우면
+    # 최종 답변 단계가 잘려 content가 빈 채로 온다(단일 호출은 정상 — probe 확인). 빈 답변이면
+    # 수집한 tool 검색 근거만으로 '짧은' 프롬프트로 1회 재합성해 컨텍스트를 리셋하고 답을 확보한다.
+    if not (answer or "").strip():
+        _t = time.perf_counter()
+        tool_context = "\n\n".join(
+            str(m.content)[:1200] for m in messages if getattr(m, "type", None) == "tool"
+        )[:6000]
+        if not tool_context.strip():
+            # No tool observations (e.g. ReAct invoke overflowed) -> use gate docs.
+            tool_context = "\n\n".join((d.get("text") or "")[:1200] for d in docs)[:6000]
+        synth_answer = ""
+        try:
+            synth = chat_model.invoke([
+                ("system", SYSTEM_PROMPT),
+                ("user",
+                 "아래 검색 근거만 사용해 질문에 한국어로 간결·정확하게 답하세요. "
+                 "도구를 더 호출하지 말고 최종 답변만 작성하세요. 근거가 부족하면 모른다고 하세요.\n\n"
+                 f"[검색 근거]\n{tool_context}\n\n[질문]\n{query}"),
+            ])
+            synth_answer = synth.content if isinstance(synth.content, str) else str(synth.content)
+            um = getattr(synth, "usage_metadata", None)
+            if um:
+                llm_summary["prompt_tokens"] += um.get("input_tokens", 0) or 0
+                llm_summary["completion_tokens"] += um.get("output_tokens", 0) or 0
+                llm_summary["total_tokens"] += um.get("total_tokens", 0) or 0
+                llm_summary["n_calls"] += 1
+        except Exception as e:
+            trace.append({"step": "fallback_synthesis_error", "error": str(e)})
+        if (synth_answer or "").strip():
+            answer = synth_answer
+        trace.append({
+            "step": "fallback_synthesis",
+            "reason": "empty ReAct answer (context exhaustion)",
+            "recovered": bool((synth_answer or "").strip()),
+            "answer_len": len(answer or ""),
+            "duration_ms": (time.perf_counter() - _t) * 1000,
+        })
 
     # 4. Output guardrail (reuse A's moderation, read-only)
     _t = time.perf_counter()
