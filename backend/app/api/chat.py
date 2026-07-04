@@ -186,6 +186,17 @@ async def chat(
                 build_b_protocol_events(b_result.get("protocol_messages", [])),
             )
 
+            # M6-2: A/B Prometheus 계측 (variant=B). best-effort, 위 M3 빌더 재사용.
+            from app.common.metrics import (
+                record_chat_request,
+                record_guardrail_blocks,
+                record_llm_tokens,
+            )
+
+            record_chat_request("B", "success", time.time() - start_time)
+            record_guardrail_blocks("B", build_b_guardrail_events(b_result.get("trace", [])))
+            record_llm_tokens("B", build_b_llm_call(b_result))
+
             return ChatResponse(
                 session_id=session_id,
                 answer=b_result["answer"],
@@ -463,6 +474,17 @@ async def chat(
                 for name, info in node_timings.items()
             ]
 
+        # M6-2: A/B Prometheus 계측 (variant=A). best-effort, 위 M3 빌더 재사용.
+        from app.common.metrics import (
+            record_chat_request,
+            record_guardrail_blocks,
+            record_llm_tokens,
+        )
+
+        record_chat_request("A", "success", (log_entry.total_time_ms or 0) / 1000.0)
+        record_guardrail_blocks("A", build_a_guardrail_events(node_timings))
+        record_llm_tokens("A", build_a_llm_calls(final_state, node_timings))
+
         return ChatResponse(
             **response_data,
             chunks_used=len(response_data["sources"]),
@@ -498,6 +520,11 @@ async def chat(
             error_message=str(e),
             total_time_ms=log_entry.total_time_ms,
         )
+
+        # M6-2: A/B Prometheus 계측 (variant=A, error).
+        from app.common.metrics import record_chat_request
+
+        record_chat_request("A", "error", (log_entry.total_time_ms or 0) / 1000.0)
 
         raise HTTPException(
             status_code=500,

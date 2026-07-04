@@ -21,7 +21,7 @@ PROM_AGENT_REQUESTS = Counter(
     "agent_requests_total", "Total number of agent requests", ["agent_name", "status"]
 )
 PROM_LLM_TOKENS = Counter(
-    "llm_tokens_total", "Total LLM tokens used", ["model", "type"]
+    "llm_tokens_total", "Total LLM tokens used", ["variant", "type"]
 )
 PROM_TOOL_USAGE = Counter(
     "agent_tool_usage_total", "Total tool usage by mode", ["tool_name", "mode"]
@@ -37,6 +37,52 @@ PROM_LLM_COST = Counter("llm_cost_usd_total", "Total LLM API cost in USD", ["mod
 PROM_EMBEDDING_COST = Counter(
     "embedding_cost_usd_total", "Total embedding API cost in USD"
 )
+
+# M6-2: Core chat A/B metrics (variant-labeled for A/B comparison in Prometheus).
+PROM_CHAT_REQUESTS = Counter(
+    "chat_requests_total", "Total /chat requests", ["variant", "status"]
+)
+PROM_CHAT_LATENCY = Histogram(
+    "chat_request_latency_seconds", "End-to-end /chat latency", ["variant"]
+)
+PROM_GUARDRAIL_BLOCKS = Counter(
+    "guardrail_blocks_total", "Guardrail block decisions", ["variant", "stage"]
+)
+
+
+def record_chat_request(variant: str, status: str, latency_seconds: Optional[float]) -> None:
+    """M6-2: /chat 요청 1건의 variant/status/지연을 계측한다. best-effort(비차단)."""
+    try:
+        PROM_CHAT_REQUESTS.labels(variant=variant, status=status).inc()
+        if latency_seconds is not None:
+            PROM_CHAT_LATENCY.labels(variant=variant).observe(latency_seconds)
+    except Exception as e:  # pragma: no cover - 계측 실패가 /chat을 깨면 안 됨
+        logger.warning(f"[metrics] record_chat_request failed: {e}")
+
+
+def record_guardrail_blocks(variant: str, guardrail_events: Optional[List[Dict[str, Any]]]) -> None:
+    """M6-2: 이미 만들어진 M3 guardrail_events(stage/decision)에서 block을 variant/stage로 계측."""
+    try:
+        for e in guardrail_events or []:
+            if e.get("decision") == "block":
+                PROM_GUARDRAIL_BLOCKS.labels(
+                    variant=variant, stage=e.get("stage") or "unknown"
+                ).inc()
+    except Exception as e:  # pragma: no cover
+        logger.warning(f"[metrics] record_guardrail_blocks failed: {e}")
+
+
+def record_llm_tokens(variant: str, llm_call_events: Optional[List[Dict[str, Any]]]) -> None:
+    """M6-2: M3 llm_call 이벤트의 토큰을 variant/type으로 계측(값 없으면 skip; A는 미표면화라 대개 skip)."""
+    try:
+        for c in llm_call_events or []:
+            p, comp = c.get("prompt_tokens"), c.get("completion_tokens")
+            if p:
+                PROM_LLM_TOKENS.labels(variant=variant, type="prompt").inc(p)
+            if comp:
+                PROM_LLM_TOKENS.labels(variant=variant, type="completion").inc(comp)
+    except Exception as e:  # pragma: no cover
+        logger.warning(f"[metrics] record_llm_tokens failed: {e}")
 
 
 @dataclass
