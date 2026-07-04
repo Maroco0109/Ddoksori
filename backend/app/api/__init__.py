@@ -35,6 +35,7 @@ from .dependencies import (
 from .health import router as health_router
 from .metrics import router as metrics_router
 from .observability import router as observability_router
+from .prometheus import router as prometheus_router
 
 # 모델도 함께 export
 from .models import (
@@ -59,6 +60,7 @@ __all__ = [
     "case_router",
     "metrics_router",
     "observability_router",
+    "prometheus_router",
     "auth_router",
     "admin_router",
     "board_router",
