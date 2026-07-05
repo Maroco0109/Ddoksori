@@ -10,6 +10,7 @@ import { getSessionHistory } from '@/shared/lib/api-client';
 import { MessageBubble } from './components/MessageBubble';
 import { SafetyWarning } from './components/SafetyWarning';
 import { StatusIndicator } from './components/StatusIndicator';
+import { VariantSelector } from './components/VariantSelector';
 
 interface ChatPageProps {
   currentSessionId?: string | null;
@@ -579,8 +580,9 @@ export default function ChatPage({ currentSessionId = null }: ChatPageProps) {
         {(activeChatType === null || activeChatType === 'dispute') && (
           <div className="bg-white rounded-xl md:rounded-2xl shadow-lg flex flex-col overflow-hidden">
           {/* 분쟁 상담 헤더 */}
-          <div className="bg-deep-teal text-white px-4 sm:px-6 py-3 sm:py-4">
+          <div className="bg-deep-teal text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
             <h2 className="text-lg sm:text-xl font-bold">분쟁 상담</h2>
+            <VariantSelector />
           </div>
 
           {!isFormSubmitted ? (

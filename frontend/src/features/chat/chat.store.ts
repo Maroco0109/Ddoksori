@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData } from '@/shared/types';
+import type { ChatSession, MessageWithCitations, ChatType, DisputeFormData, TestVariant } from '@/shared/types';
 import { storage } from '@/shared/lib/storage';
 import { STORAGE_KEYS } from '@/shared/config/storage-keys';
 import { SESSION_EXPIRY_DURATION } from '@/shared/config';
@@ -51,6 +51,7 @@ interface ChatState {
   isFormSubmitted: boolean;
   backendSessionId: string | null;
   disputeFormData: DisputeFormData | null;
+  testVariant: TestVariant;
 
   // Actions
   setCurrentSessionId: (id: string | null) => void;
@@ -63,6 +64,7 @@ interface ChatState {
   setIsFormSubmitted: (submitted: boolean) => void;
   setBackendSessionId: (id: string | null) => void;
   setDisputeFormData: (data: DisputeFormData | null) => void;
+  setTestVariant: (tv: TestVariant) => void;
 
   loadChatSessions: (isLoggedIn: boolean) => void;
   saveChatSession: (type: ChatType, messages: MessageWithCitations[], isLoggedIn: boolean) => void;
@@ -92,6 +94,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isFormSubmitted: false,
   backendSessionId: null,
   disputeFormData: null,
+  testVariant: 'A',
 
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setActiveChatType: (type) => set({ activeChatType: type }),
@@ -103,6 +106,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setIsFormSubmitted: (submitted) => set({ isFormSubmitted: submitted }),
   setBackendSessionId: (id) => set({ backendSessionId: id }),
   setDisputeFormData: (data) => set({ disputeFormData: data }),
+  setTestVariant: (tv) => set({ testVariant: tv }),
 
   loadChatSessions: async (isLoggedIn) => {
     if (isLoggedIn) {
