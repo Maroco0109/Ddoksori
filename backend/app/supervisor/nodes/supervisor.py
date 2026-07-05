@@ -201,7 +201,13 @@ class SupervisorNode:
         self._init_llm_chain()
 
     def _init_llm_chain(self) -> None:
-        """LLM fallback 체인 초기화"""
+        """LLM fallback 체인 초기화.
+
+        NOTE: 이 LLM 체인은 현재 라우팅에 사용되지 않는다. 유일한 소비처였던
+        _try_llm_decision이 dead code이기 때문이다(decide_next_action은 규칙 기반).
+        주입/초기화 로직은 히스토리 및 향후 LLM 라우팅 재도입 여지를 위해 보존한다.
+        참조: docs/architecture/2026-07-05-a-orchestration-decision.md
+        """
         if self._injected_llm is not None:
             self._primary_llm = self._injected_llm
             self._current_model_name = "injected"
@@ -244,6 +250,12 @@ class SupervisorNode:
     async def decide_next_action(self, state: ChatState) -> Dict[str, Any]:
         """
         현재 상태를 분석하고 다음 행동을 결정합니다.
+
+        [의사결정 메커니즘] 라우팅은 **100% 규칙 기반(결정론적)** 이다.
+        LLM 라우팅 경로(_try_llm_decision/_build_decision_prompt)는 설계 초기에
+        구현됐으나 현재 프로덕션 경로에서 호출되지 않는 dead code다(변수 A는
+        "결정론적 orchestration" 시스템으로 동결됨).
+        근거/히스토리: docs/architecture/2026-07-05-a-orchestration-decision.md
 
         === 2-전략 라우팅 ===
         1. NO_RETRIEVAL → Fast Path (검색/검토 생략)
@@ -318,10 +330,17 @@ class SupervisorNode:
         )
         return self._full_pipeline_decision(state)
 
+    # === DEAD CODE (LLM 라우팅) ===================================================
+    # 아래 _try_llm_decision / _build_decision_prompt / _parse_decision_with_retry는
+    # LLM 기반 동적 라우팅을 위해 구현됐으나 현재 프로덕션 경로에서 호출되지 않는다.
+    # decide_next_action이 규칙 기반으로 라우팅하므로 A는 결정론적 orchestration이다.
+    # 히스토리 보존 + 향후 LLM 슈퍼바이저 재도입 여지를 위해 남겨둔다.
+    # 근거: docs/architecture/2026-07-05-a-orchestration-decision.md
+    # =============================================================================
     async def _try_llm_decision(
         self, llm: LLMProtocol, prompt: str, model_name: str
     ) -> Optional[Dict[str, Any]]:
-        """단일 LLM으로 결정 시도. 실패 시 None 반환."""
+        """[DEAD CODE] 단일 LLM으로 결정 시도. 실패 시 None 반환. (미호출)"""
         try:
             response = await asyncio.wait_for(
                 llm.generate(prompt), timeout=LLM_TIMEOUT_SECONDS
@@ -449,6 +468,7 @@ class SupervisorNode:
 
     def _build_decision_prompt(self, state: ChatState) -> str:
         """
+        [DEAD CODE] LLM 라우팅용 프롬프트 생성 (미호출, 테스트에서만 참조).
         Supervisor 판단을 위한 프롬프트를 생성합니다.
 
         보안 고려사항:
@@ -571,6 +591,7 @@ class SupervisorNode:
         self, response: str, retries: int = 0
     ) -> Dict[str, Any]:
         """
+        [DEAD CODE] _try_llm_decision 전용 파서 (미호출).
         LLM 응답을 JSON으로 파싱합니다. 실패 시 재시도 후 규칙 기반 전환.
 
         Args:
