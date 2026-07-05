@@ -87,6 +87,8 @@ backend/data/golden_set/*
 !backend/data/golden_set/quality_judge_*
 # M5-5 answer generation quality: commit measured numbers for reproducibility
 !backend/data/golden_set/quality_answer_*
+# M4-A security goldenset: commit the schema seed set for reproducibility
+!backend/data/golden_set/security_eval_*.jsonl
 backend/app/database
 
 # Test
