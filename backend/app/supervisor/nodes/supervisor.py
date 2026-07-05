@@ -825,13 +825,15 @@ class SupervisorNode:
                     {
                         "node_name": "supervisor_routing",
                         "timestamp": time.time(),
-                        "protocol_summary": (
-                            f"routing=llm reason={meta['reason']} "
-                            f"fallback={meta['fallback']} agree={meta['agree']} "
-                            f"llm_target={meta['llm_target']} "
-                            f"det_target={meta['det_target']} "
-                            f"latency_ms={meta['latency_ms']}"
-                        ),
+                        "protocol_summary": {
+                            "routing": "llm",
+                            "reason": meta["reason"],
+                            "fallback": meta["fallback"],
+                            "agree": meta["agree"],
+                            "llm_target": meta["llm_target"],
+                            "det_target": meta["det_target"],
+                            "latency_ms": meta["latency_ms"],
+                        },
                     }
                 ]
 
