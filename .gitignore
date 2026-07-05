@@ -71,12 +71,32 @@ backend/data/criteria/
 backend/data/dispute/
 backend/data/law
 backend/data/evaluation
-backend/data/golden_set
+backend/data/golden_set/*
+# M2-4R A/B retrieval eval: commit the fixed eval set + baseline report for reproducibility
+!backend/data/golden_set/ab_eval_queries.jsonl
+!backend/data/golden_set/ab_retrieval_eval*.jsonl
+!backend/data/golden_set/ab_retrieval_baseline_A*.json
+!backend/data/golden_set/ab_retrieval_baseline_A*.md
+# M2-7R A/B comparison results (incl. de-biased v2)
+!backend/data/golden_set/ab_compare_*.json
+!backend/data/golden_set/ab_compare_report*.md
+# M5-3 quality eval goldenset: commit the human-labeled seed set for reproducibility
+!backend/data/golden_set/quality_eval_*.jsonl
+# M5-4 retrieval metrics + LLM-judge cross-check: commit measured numbers for reproducibility
+!backend/data/golden_set/quality_retrieval_*
+!backend/data/golden_set/quality_judge_*
+# M5-5 answer generation quality: commit measured numbers for reproducibility
+!backend/data/golden_set/quality_answer_*
+# M4-A security goldenset: commit the schema seed set for reproducibility
+!backend/data/golden_set/security_eval_*.jsonl
+# M4-A5 security scores: commit measured A/B numbers for reproducibility
+!backend/data/golden_set/security_eval_scores.json
+# M4-A6 OWASP coverage report (generated): commit for reproducibility
+!backend/data/golden_set/security_owasp_coverage.md
 backend/app/database
 
 # Test
 frontend/test-results
-frontend/e2e
 frontend/playwright-report
 frontend/vitest.config.ts
 backend/app/agents/retrieval/tools/rds_internal_functions_playground.ipynb
@@ -85,12 +105,18 @@ frontend/.vite
 
 # Agents
 .agent
-.claude
+# Keep local/runtime agent state ignored, but track project guidance needed after context resets.
+.claude/*
+!.claude/CLAUDE.md
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/branch-worktree-pr-flow/
+!.claude/skills/branch-worktree-pr-flow/SKILL.md
 .sisyphus
 .omc
 .cursorrules
-AGENTS.md
-CLAUDE.md
+!/AGENTS.md
+!/CLAUDE.md
 AI_MEMO.md
 backend/backup.sql
 backup.sql

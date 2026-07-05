@@ -8,6 +8,7 @@ SSE 스트리밍과 일반 응답 모두 지원합니다.
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, Optional, cast
@@ -106,6 +107,105 @@ async def chat(
 
     try:
         session_id = body.session_id or str(uuid.uuid4())
+
+        # Variant B (Agentic RAG) — isolated comparison path. A path below unchanged.
+        if body.variant == "B":
+            from app.observability import save_workflow_run
+            from app.variant_b.agent import run_b
+
+            b_run_id = str(uuid.uuid4())
+            # B canonical model = EXAONE (강한 모델 agentic RAG, A/B 의도).
+            # VARIANT_B_MODEL_SPEC로 override 가능(exaone | frontier).
+            b_model_spec = os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
+            b_result = await asyncio.to_thread(
+                run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
+            )
+            clarified = bool(b_result.get("clarified", False))
+            b_blocked = bool(b_result.get("blocked", False))
+
+            # M3-3: best-effort workflow run 저장. blocked/clarify는 정책상 정상
+            # 완료이므로 status='success' + 별도 플래그로 기록 (예외만 'error').
+            await save_workflow_run(
+                run_id=b_run_id,
+                variant="B",
+                query=body.message,
+                status="success",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                total_time_ms=(time.time() - start_time) * 1000.0,
+                clarified=clarified,
+                blocked=b_blocked,
+                answer=b_result.get("answer"),
+            )
+
+            # M3-4: best-effort workflow step 저장 (B trace + 단계 타이머).
+            from app.observability.workflow_steps import (
+                build_b_steps,
+                save_workflow_steps,
+            )
+
+            await save_workflow_steps(
+                b_run_id, build_b_steps(b_result.get("trace", []))
+            )
+
+            # M3-5: best-effort retrieval event 저장 (B gate + tool 검색).
+            from app.observability.retrieval_events import (
+                build_b_retrieval_events,
+                save_retrieval_events,
+            )
+
+            await save_retrieval_events(
+                b_run_id,
+                build_b_retrieval_events(b_result.get("retrieval_records", [])),
+            )
+
+            # M3-6: best-effort llm call 저장 (B react model + token 집계).
+            from app.observability.llm_calls import build_b_llm_call, save_llm_calls
+
+            await save_llm_calls(b_run_id, build_b_llm_call(b_result))
+
+            # M3-7: best-effort guardrail event 저장 (B input/output moderation).
+            from app.observability.guardrail_events import (
+                build_b_guardrail_events,
+                save_guardrail_events,
+            )
+
+            await save_guardrail_events(
+                b_run_id, build_b_guardrail_events(b_result.get("trace", []))
+            )
+
+            # M3-9: best-effort protocol event 저장 (B ReAct 궤적).
+            from app.observability.protocol_events import (
+                build_b_protocol_events,
+                save_protocol_events,
+            )
+
+            await save_protocol_events(
+                b_run_id,
+                "B",
+                build_b_protocol_events(b_result.get("protocol_messages", [])),
+            )
+
+            # M6-2: A/B Prometheus 계측 (variant=B). best-effort, 위 M3 빌더 재사용.
+            from app.common.metrics import (
+                record_chat_request,
+                record_guardrail_blocks,
+                record_llm_tokens,
+            )
+
+            record_chat_request("B", "success", time.time() - start_time)
+            record_guardrail_blocks("B", build_b_guardrail_events(b_result.get("trace", [])))
+            record_llm_tokens("B", build_b_llm_call(b_result))
+
+            return ChatResponse(
+                session_id=session_id,
+                answer=b_result["answer"],
+                chunks_used=0,
+                model="variant-b",
+                sources=[],
+                has_sufficient_evidence=not clarified,
+                clarifying_questions=[b_result["answer"]] if clarified else [],
+            )
 
         graph = get_graph_for_chat_type(body.chat_type)
 
@@ -267,6 +367,7 @@ async def chat(
             rag_logger.log_node_timings(log_entry, node_timings)
 
         # 에이전트 트레이스 로깅
+        pipeline_summary = None
         trace_entries = final_state.get("_agent_trace_entries", [])
         if trace_entries:
             from app.supervisor.graph import build_pipeline_summary
@@ -290,6 +391,76 @@ async def chat(
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
 
+        # M3-3: best-effort workflow run 저장 (A 경로). run_id는 S3 로그와 공유.
+        from app.observability import save_workflow_run
+
+        await save_workflow_run(
+            run_id=log_entry.request_id,
+            variant="A",
+            query=body.message,
+            status="success",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            total_time_ms=log_entry.total_time_ms,
+            clarified=not response_data.get("has_sufficient_evidence", True),
+            blocked=bool(final_state.get("guardrail_blocked")),
+            answer=answer,
+        )
+
+        # M3-4: best-effort workflow step 저장 (A node sequence + latency).
+        if pipeline_summary:
+            from app.observability.workflow_steps import (
+                build_a_steps,
+                save_workflow_steps,
+            )
+
+            await save_workflow_steps(
+                log_entry.request_id,
+                build_a_steps(pipeline_summary.get("per_node", []), node_timings),
+            )
+
+        # M3-5: best-effort retrieval event 저장 (A 4섹션).
+        from app.observability.retrieval_events import (
+            build_a_retrieval_events,
+            save_retrieval_events,
+        )
+
+        await save_retrieval_events(
+            log_entry.request_id,
+            build_a_retrieval_events(retrieval, body.top_k or 5, body.message),
+        )
+
+        # M3-6: best-effort llm call 저장 (A LLM 호출 노드별, read-only).
+        from app.observability.llm_calls import build_a_llm_calls, save_llm_calls
+
+        await save_llm_calls(
+            log_entry.request_id,
+            build_a_llm_calls(final_state, node_timings),
+        )
+
+        # M3-7: best-effort guardrail event 저장 (A input/output moderation + review).
+        from app.observability.guardrail_events import (
+            build_a_guardrail_events,
+            save_guardrail_events,
+        )
+
+        await save_guardrail_events(
+            log_entry.request_id,
+            build_a_guardrail_events(node_timings),
+        )
+
+        # M3-9: best-effort protocol event 저장 (A inter-agent 궤적).
+        from app.observability.protocol_events import (
+            build_a_protocol_events,
+            save_protocol_events,
+        )
+
+        await save_protocol_events(
+            log_entry.request_id,
+            "A",
+            build_a_protocol_events(final_state.get("_agent_trace_entries", [])),
+        )
+
         # debug 모드일 때 타이밍 정보 변환
         timing_response = None
         if body.debug and node_timings:
@@ -302,6 +473,17 @@ async def chat(
                 )
                 for name, info in node_timings.items()
             ]
+
+        # M6-2: A/B Prometheus 계측 (variant=A). best-effort, 위 M3 빌더 재사용.
+        from app.common.metrics import (
+            record_chat_request,
+            record_guardrail_blocks,
+            record_llm_tokens,
+        )
+
+        record_chat_request("A", "success", (log_entry.total_time_ms or 0) / 1000.0)
+        record_guardrail_blocks("A", build_a_guardrail_events(node_timings))
+        record_llm_tokens("A", build_a_llm_calls(final_state, node_timings))
 
         return ChatResponse(
             **response_data,
@@ -324,6 +506,25 @@ async def chat(
         )
         rag_logger.finalize(log_entry, start_time)
         rag_logger.save(log_entry)
+
+        # M3-3: best-effort workflow run 저장 (A 경로, 에러). final_state 부재 가능.
+        from app.observability import save_workflow_run
+
+        await save_workflow_run(
+            run_id=log_entry.request_id,
+            variant="A",
+            query=body.message,
+            status="error",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            error_message=str(e),
+            total_time_ms=log_entry.total_time_ms,
+        )
+
+        # M6-2: A/B Prometheus 계측 (variant=A, error).
+        from app.common.metrics import record_chat_request
+
+        record_chat_request("A", "error", (log_entry.total_time_ms or 0) / 1000.0)
 
         raise HTTPException(
             status_code=500,

@@ -1,0 +1,28 @@
+# M6-3: Grafana datasources (provisioned).
+# Two layers (M3-1): Prometheus = Layer 1 (ops health), PostgreSQL = Layer 2 (M3 DB analysis).
+# DB creds are interpolated from the grafana container env (${VAR}); see docker-compose.yml.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: ddoksori-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: PostgreSQL
+    uid: ddoksori-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: ${DB_NAME}
+    user: ${DB_USER}
+    isDefault: false
+    editable: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1700
+    secureJsonData:
+      password: ${DB_PASSWORD}

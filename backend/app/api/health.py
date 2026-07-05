@@ -6,6 +6,7 @@
 
 import logging
 import os
+import time
 
 import httpx
 from fastapi import APIRouter
@@ -104,27 +105,70 @@ async def check_supervisor_llm():
 
 @router.get("/health/llm/exaone")
 async def check_exaone_llm():
-    base_url = os.getenv("MODEL_EXAONE_BASE_URL") or os.getenv("EXAONE_RUNPOD_URL")
+    # M2-1 canonical: 활성 ExaoneLLMClient 경로가 EXAONE_RUNPOD_URL을 사용하므로 우선한다.
+    # MODEL_EXAONE_BASE_URL(MAS/candidate)은 fallback으로만 둔다.
+    base_url = os.getenv("EXAONE_RUNPOD_URL") or os.getenv("MODEL_EXAONE_BASE_URL")
     if not base_url:
-        return {"status": "unhealthy", "error": "LLM 서비스 설정 오류"}
+        return {
+            "status": "unhealthy",
+            "provider": "runpod_vllm",
+            "error_type": "not_configured",
+            "error": "LLM 서비스 설정 오류",
+        }
 
     if not base_url.endswith("/v1"):
         base_url = base_url.rstrip("/") + "/v1"
 
     try:
         async with httpx.AsyncClient() as client:
+            start = time.perf_counter()
             response = await client.get(f"{base_url}/models", timeout=5.0)
+            latency_ms = round((time.perf_counter() - start) * 1000, 1)
             if response.status_code == 200:
-                return {"status": "healthy", "url": base_url}
+                model = None
+                try:
+                    data = response.json().get("data", [])
+                    if data:
+                        model = data[0].get("id")
+                except ValueError:
+                    pass
+                return {
+                    "status": "healthy",
+                    "provider": "runpod_vllm",
+                    "url": base_url,
+                    "model": model,
+                    "latency_ms": latency_ms,
+                    "http_status": response.status_code,
+                }
             else:
                 logger.error(f"[Health] vLLM 응답 오류: {response.status_code}")
                 return {
                     "status": "unhealthy",
+                    "provider": "runpod_vllm",
+                    "url": base_url,
+                    "http_status": response.status_code,
+                    "latency_ms": latency_ms,
+                    "error_type": "bad_response",
                     "error": "LLM 서비스 응답 오류",
                 }
+    except httpx.TimeoutException as e:
+        logger.error(f"[Health] vLLM 타임아웃: {e}")
+        return {
+            "status": "unhealthy",
+            "provider": "runpod_vllm",
+            "url": base_url,
+            "error_type": "timeout",
+            "error": "LLM 서비스 연결 실패",
+        }
     except Exception as e:
         logger.error(f"[Health] vLLM 연결 실패: {e}")
-        return {"status": "unhealthy", "error": "LLM 서비스 연결 실패"}
+        return {
+            "status": "unhealthy",
+            "provider": "runpod_vllm",
+            "url": base_url,
+            "error_type": "connection_error",
+            "error": "LLM 서비스 연결 실패",
+        }
 
 
 @router.get("/health/embedding")

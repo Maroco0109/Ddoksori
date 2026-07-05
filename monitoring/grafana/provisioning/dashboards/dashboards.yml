@@ -1,0 +1,16 @@
+# M6-3: Grafana dashboard provider (file-based).
+# Loads dashboard JSONs from /etc/grafana/dashboards. Empty for now — M6-4 (ops/A/B)
+# and M6-6 (run drilldown) drop their JSON here.
+apiVersion: 1
+
+providers:
+  - name: ddoksori
+    orgId: 1
+    folder: DDOKSORI
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

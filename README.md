@@ -283,17 +283,20 @@ npm run dev
 
 ### Docker Compose
 
-Docker Compose를 사용하여 서비스 스택(Backend, Frontend, Redis)을 한 번에 실행할 수 있습니다.
-데이터베이스는 AWS RDS를 사용하므로 로컬에서 실행되지 않습니다.
+Docker Compose를 사용하여 서비스 스택(Backend, Frontend, Redis, PostgreSQL/pgvector)을 실행할 수 있습니다.
+PostgreSQL/pgvector service는 Ddoksori가 관리하는 local RAG DB volume을 만들며, 실제 vector data restore는 M1-7 dump restore 단계에서 수행합니다.
 
 ```bash
-# 전체 서비스 실행
+# M1-6: 로컬 pgvector DB service만 실행하고 extension 확인
+POSTGRES_HOST_PORT=5433 docker compose up -d postgres
+
+# 전체 서비스 실행 (M1-7 restore 이후 RAG 데이터 사용 가능)
 docker compose up -d
 
 # Redis만 실행 (로컬 개발 시)
 docker compose up redis -d
 
-# 서비스 중지
+# 서비스 중지 (DB volume은 보존됨)
 docker compose down
 ```
 
@@ -303,6 +306,7 @@ docker compose down
 |--------|------|------|
 | Frontend | 5173 | React Web UI |
 | Backend | 8000 | FastAPI API Server |
+| PostgreSQL/pgvector | 5433 -> 5432 | Local RAG DB target (`POSTGRES_HOST_PORT`로 변경 가능) |
 | Redis | 6379 | Answer Caching (인증 필수) |
 
 ### Key URLs
