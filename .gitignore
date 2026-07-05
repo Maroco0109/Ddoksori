@@ -89,6 +89,8 @@ backend/data/golden_set/*
 !backend/data/golden_set/quality_answer_*
 # M4-A security goldenset: commit the schema seed set for reproducibility
 !backend/data/golden_set/security_eval_*.jsonl
+# M4-A5 security scores: commit measured A/B numbers for reproducibility
+!backend/data/golden_set/security_eval_scores.json
 backend/app/database
 
 # Test
