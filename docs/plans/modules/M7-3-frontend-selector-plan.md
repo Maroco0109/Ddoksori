@@ -34,13 +34,20 @@
 - [x] `ChatAPIRequest`에 variant/model_spec, 셀렉터→스토어→요청 주입 경로 구성.
 - [x] B-exaone 경고 표기.
 - [x] 빌드 통과: 컨테이너에서 `vite build` 성공(2790 modules, 에러 없음). 신규 파일 타입 이슈 없음(기존 tsc 부채는 무관, 프로젝트는 vite build 게이트).
-- 백엔드 경로는 M7-2에서 라이브 검증(변경 없음). 브라우저 상호작용 QA는 선택(후속).
+- [x] **실제 브라우저 QA(gstack /browse)**: 아래 §5.
 
 ## 5. 결과
 
 - 5파일 변경(타입/스토어/훅/컴포넌트/ChatPage). `vite build` 성공.
 - 흐름: 셀렉터 선택 → `store.testVariant` → `useStreamingChat` 주입 → `/chat/stream` body(`variant`/`model_spec`) → 백엔드 라우팅(M7-2 검증).
-- 남은 검증(선택): 브라우저에서 B-frontier 선택·전송 → variant='B' 적재 확인(백엔드 M7-2에서 이미 실증).
+
+### 5.1 브라우저 QA (2026-07-05, 실제 브라우저)
+
+frontend를 m7-3 worktree로 띄우고(:5173) + backend(:8000), gstack `/browse`로 `/chat` 검증:
+
+1. **셀렉터 렌더**: 분쟁 상담 헤더에 `테스트 모델` combobox + 3 옵션(`A · MAS (기본)`[기본 선택]/`B · gpt-4o-mini`/`B · EXAONE 4.5`). 콘솔 에러 없음.
+2. **B-exaone 경고**: `B · EXAONE 4.5` 선택 시 `⚠ 느림·파드` 표시, 다른 옵션 선택 시 사라짐.
+3. **end-to-end 전송**: `B · gpt-4o-mini` 선택 후 일반 상담 입력 전송 → `POST /chat/stream 200` → DB `workflow_runs` 최신 general run이 **`variant='B'`**로 적재됨(`B|general|온라인으로 구매한 신발의 환불에 대한…`). 프론트 셀렉터→스토어→요청→백엔드 라우팅 전 구간 실증.
 
 ## 6. Next gate → M7-4
 
