@@ -493,7 +493,7 @@ graph TB
     end
 
     subgraph "External Services"
-        QA & AD -.->|LLM (생성·조건부 분석)| OAI[OpenAI gpt-4o]
+        QA & AD -.->|LLM 생성·조건부 분석| OAI[OpenAI gpt-4o]
         AD -.->|Fallback| ANT[Anthropic Claude]
     end
 ```
@@ -567,8 +567,8 @@ graph TB
 graph TB
     GW["POST /chat<br/>(variant=B, model_spec)"] --> IGB["Input Guardrail<br/>(A와 동일)"]
     IGB -->|PASS| GATE{"Cosine Gate<br/>max_cosine ≥ τ?"}
-    GATE -->|"< τ (모호)"| CLR["단발성 Clarification"] --> EB([END])
-    GATE -->|"≥ τ"| RA["ReAct Agent<br/>create_react_agent"]
+    GATE -->|근거 약함| CLR["단발성 Clarification"] --> EB([END])
+    GATE -->|근거 충분| RA["ReAct Agent<br/>create_react_agent"]
     RA -->|자율 tool-calling| TOOLS["Tools:<br/>search_consumer_disputes<br/>get_law_article / get_case_detail<br/>verify_citation"]
     TOOLS -->|검색 근거| RA
     TOOLS -.->|SQL| DB[(pgvector)]
