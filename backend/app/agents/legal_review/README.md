@@ -1,6 +1,8 @@
 # Legal Review Agent (법률검토 에이전트)
 
-**최종 수정**: 2026-02-09
+**최종 수정**: 2026-07-05
+
+> **변형 맥락**: 이 에이전트는 **variant A/A-hub**의 검토 노드로, **전부 규칙/정규식 기반**(LLM 미사용)으로 금지 표현·인용 정확성을 검증합니다. **variant B**(ReAct)는 이 노드를 쓰지 않고 입출력 가드레일 + `verify_citation` 도구로 검증합니다. A가 안전·보안 지표에서 우위인 핵심 이유가 이 결정론 검토 게이트입니다([측정 비교](../../../../docs/architecture/2026-07-05-variant-system-architecture.md)).
 
 ## 1. 개요 (Overview)
 

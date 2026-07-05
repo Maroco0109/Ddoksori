@@ -1,6 +1,8 @@
 # Query Analysis Agent (질의분석 에이전트)
 
-**최종 수정**: 2026-02-09
+**최종 수정**: 2026-07-05
+
+> **변형 맥락**: 이 에이전트는 **variant A/A-hub**(결정론적 MAS)의 첫 관문으로, 여기서 결정한 `mode`가 A의 결정론 라우팅을 좌우합니다(라우팅 판단은 규칙 기반; LLM은 저신뢰 시 분류 보조·쿼리 확장에만 사용). **variant B**(ReAct)는 이 노드를 쓰지 않고 LLM이 직접 검색 도구를 호출합니다. 전체 비교: [변형 시스템 아키텍처](../../../../docs/architecture/2026-07-05-variant-system-architecture.md).
 
 ## 1. 개요 (Overview)
 

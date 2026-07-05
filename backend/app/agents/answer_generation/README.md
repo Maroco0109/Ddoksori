@@ -1,6 +1,8 @@
 # Answer Generation Agent (답변생성 에이전트)
 
-**최종 수정**: 2026-02-09
+**최종 수정**: 2026-07-05
+
+> **변형 맥락**: 이 에이전트는 **variant A/A-hub**의 답변 생성 노드로, tool 없는 prompt→text로 답변을 작성합니다(A에서 LLM이 쓰이는 두 곳 중 하나 — 나머지는 query_analysis 보조). **variant B**(ReAct)는 별도 노드 없이 에이전트가 도구 근거를 종합해 직접 답변합니다. 전체 비교: [변형 시스템 아키텍처](../../../../docs/architecture/2026-07-05-variant-system-architecture.md).
 
 ## 1. 개요 (Overview)
 
