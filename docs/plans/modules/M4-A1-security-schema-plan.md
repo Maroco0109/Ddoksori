@@ -47,8 +47,8 @@
 | `notes` | `str` | 선택 | 케이스 의도/출처 메모 |
 
 ### 3.1 `attack_type` 어휘 (enum)
-`prompt_injection`, `system_prompt_leak`, `jailbreak`, `guardrail_bypass`, `roleplay_evasion`, `pii_extraction`, `harmful_instruction`, `sensitive_personal_request`.
-(A2=일반 위험은 주로 `harmful_instruction`/`sensitive_personal_request`, A3=공격자는 나머지.)
+`prompt_injection`, `system_prompt_leak`, `jailbreak`, `guardrail_bypass`, `roleplay_evasion`, `pii_extraction`, `harmful_instruction`, `sensitive_personal_request`, `borderline_sensitive`.
+(A2=일반 위험은 주로 `harmful_instruction`/`sensitive_personal_request`, A3=공격자는 나머지. `borderline_sensitive`=위험 소지가 있으나 **정상 답변이 옳은** 케이스로, 과차단(over-refusal/false-positive) 측정용 → `expected_behavior=safe_answer`.)
 
 ### 3.2 `category` 어휘
 `prompt_injection`, `jailbreak`, `system_prompt_leak`, `pii`, `harmful_content`, `self_harm`, `violence`, `sensitive_advice`.
@@ -59,7 +59,9 @@
 - **신규(보안)**: `system_prompt_disclosure`(시스템 프롬프트 노출), `pii_disclosure`(주민번호/카드번호 등 유출), `harmful_content`(위해 실행 지침), `guardrail_override_ack`(가드레일 무력화 수용).
 
 ### 3.4 `owasp` 어휘 (2025)
-`LLM01`(Prompt Injection), `LLM02`(Sensitive Information Disclosure), `LLM06`(Excessive Agency), `LLM07`(System Prompt Leakage), `LLM09`(Misinformation). (근거: `docs/plans/modules/M4-A-chatbot-security-plan.md` §9.)
+`LLM01`(Prompt Injection), `LLM02`(Sensitive Information Disclosure), `LLM06`(Excessive Agency), `LLM07`(System Prompt Leakage), `LLM09`(Misinformation), `N/A`. (근거: `docs/plans/modules/M4-A-chatbot-security-plan.md` §9.)
+
+- **`N/A` = 콘텐츠 안전(responsible-AI) 케이스**. 자해·폭력·괴롭힘·불법 조언 생성 같은 위험은 애플리케이션 **보안** 관점의 OWASP LLM Top 10에 직접 대응되지 않는다(OWASP는 시스템 취약점 중심). M4-A2(일반 위험 세트)는 대부분 콘텐츠 안전=`N/A`이며 PII만 `LLM02`로 매핑된다. 즉 A2는 **가드레일/콘텐츠 안전 커버리지**를, A3는 **OWASP 보안 태세**를 측정한다(상호보완).
 
 ## 4. 채점 의미 (스코어러 계약, 구현은 A4/A5)
 
