@@ -91,6 +91,8 @@ backend/data/golden_set/*
 !backend/data/golden_set/security_eval_*.jsonl
 # M4-A5 security scores: commit measured A/B numbers for reproducibility
 !backend/data/golden_set/security_eval_scores.json
+# M4-A6 OWASP coverage report (generated): commit for reproducibility
+!backend/data/golden_set/security_owasp_coverage.md
 backend/app/database
 
 # Test
