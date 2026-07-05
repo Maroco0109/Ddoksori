@@ -108,6 +108,11 @@ async def chat(
     try:
         session_id = body.session_id or str(uuid.uuid4())
 
+        # M8: A-hub = MAS(A)와 동일 그래프를 쓰되 슈퍼바이저 라우팅만 LLM으로.
+        # A(결정론)는 기본값 그대로 동결; variant_label로 측정 라벨을 구분한다.
+        variant_label = body.variant  # "A" | "A-hub" ("B"는 아래 별도 경로)
+        routing_mode = "llm" if body.variant == "A-hub" else "deterministic"
+
         # Variant B (Agentic RAG) — isolated comparison path. A path below unchanged.
         if body.variant == "B":
             from app.observability import save_workflow_run
@@ -263,6 +268,7 @@ async def chat(
             user_query=body.message,
             chat_type=body.chat_type,
             onboarding=cast(Any, body.onboarding),
+            routing_mode=routing_mode,
         )
 
         # 온보딩 데이터 영속화
@@ -294,7 +300,7 @@ async def chat(
                     "configurable": {"thread_id": session_id},
                     "recursion_limit": GRAPH_RECURSION_LIMIT,
                 },
-                variant="A",
+                variant=variant_label,
                 session_id=session_id,
                 chat_type=body.chat_type,
             ),
@@ -418,7 +424,7 @@ async def chat(
 
         await save_workflow_run(
             run_id=log_entry.request_id,
-            variant="A",
+            variant=variant_label,
             query=body.message,
             status="success",
             session_id=session_id,
@@ -534,7 +540,7 @@ async def chat(
 
         await save_workflow_run(
             run_id=log_entry.request_id,
-            variant="A",
+            variant=variant_label,
             query=body.message,
             status="error",
             session_id=session_id,
@@ -759,6 +765,10 @@ async def chat_stream_sse(
         # Get user_id from JWT token
         user_id = current_user.user_id if current_user else None
 
+        # M8: A-hub = MAS 그래프 + LLM 슈퍼바이저 라우팅. A(결정론)는 기본값 동결.
+        variant_label = body.variant  # "A" | "A-hub"
+        routing_mode = "llm" if body.variant == "A-hub" else "deterministic"
+
         # M7-2: variant B는 별도 스트리밍 경로(ReAct는 sync). A(MAS) astream과 분리.
         if body.variant == "B":
             async for chunk in _variant_b_stream(body, session_id, start_time):
@@ -797,6 +807,7 @@ async def chat_stream_sse(
                 user_query=body.message,
                 chat_type=body.chat_type,
                 onboarding=cast(Any, body.onboarding),
+                routing_mode=routing_mode,
             )
 
             # 온보딩 데이터 영속화
@@ -830,7 +841,7 @@ async def chat_stream_sse(
                         "configurable": {"thread_id": session_id},
                         "recursion_limit": GRAPH_RECURSION_LIMIT,
                     },
-                    variant="A",
+                    variant=variant_label,
                     session_id=session_id,
                     chat_type=body.chat_type,
                 ),
@@ -1069,7 +1080,7 @@ async def chat_stream_sse(
 
                     await save_workflow_run(
                         run_id=log_entry.request_id,
-                        variant="A",
+                        variant=variant_label,
                         query=body.message,
                         status="success",
                         session_id=session_id,
@@ -1208,7 +1219,7 @@ async def chat_stream_sse(
 
                 await save_workflow_run(
                     run_id=log_entry.request_id,
-                    variant="A",
+                    variant=variant_label,
                     query=body.message,
                     status="error",
                     session_id=session_id,
