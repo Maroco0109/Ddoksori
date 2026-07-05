@@ -120,3 +120,4 @@ frontend/.vite
 AI_MEMO.md
 backend/backup.sql
 backup.sql
+.gstack/
