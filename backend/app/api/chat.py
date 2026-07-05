@@ -119,8 +119,20 @@ async def chat(
             b_model_spec = body.model_spec or os.getenv(
                 "VARIANT_B_MODEL_SPEC", "exaone"
             )
+            from app.common.tracing import with_trace_tags
+
             b_result = await asyncio.to_thread(
-                run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
+                run_b,
+                body.message,
+                model_spec=b_model_spec,
+                top_k=body.top_k or 5,
+                trace_config=with_trace_tags(
+                    {},
+                    variant="B",
+                    session_id=session_id,
+                    chat_type=body.chat_type,
+                    model_spec=b_model_spec,
+                ),
             )
             clarified = bool(b_result.get("clarified", False))
             b_blocked = bool(b_result.get("blocked", False))
@@ -272,12 +284,20 @@ async def chat(
         # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
         initial_state["session_id"] = session_id
 
+        # M7-4: LangSmith 태그(variant/session/chat_type) 부여 — A/B 필터·비교용.
+        from app.common.tracing import with_trace_tags
+
         config = cast(
             Any,
-            {
-                "configurable": {"thread_id": session_id},
-                "recursion_limit": GRAPH_RECURSION_LIMIT,
-            },
+            with_trace_tags(
+                {
+                    "configurable": {"thread_id": session_id},
+                    "recursion_limit": GRAPH_RECURSION_LIMIT,
+                },
+                variant="A",
+                session_id=session_id,
+                chat_type=body.chat_type,
+            ),
         )
 
         # === PR-6: L1 Supervisor Response Cache Check ===
@@ -576,9 +596,21 @@ async def _variant_b_stream(body, session_id: str, start_time: float):
     }
     yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
 
+    from app.common.tracing import with_trace_tags
+
     try:
         b_result = await asyncio.to_thread(
-            run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
+            run_b,
+            body.message,
+            model_spec=b_model_spec,
+            top_k=body.top_k or 5,
+            trace_config=with_trace_tags(
+                {},
+                variant="B",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                model_spec=b_model_spec,
+            ),
         )
     except Exception as e:
         logger.error(f"[chat_stream][B] run_b failed: {e}", exc_info=True)
@@ -788,12 +820,20 @@ async def chat_stream_sse(
             # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
             initial_state["session_id"] = session_id
 
+            # M7-4: LangSmith 태그(variant/session/chat_type) 부여 — A/B 필터·비교용.
+            from app.common.tracing import with_trace_tags
+
             runnable_config = cast(
                 Any,
-                {
-                    "configurable": {"thread_id": session_id},
-                    "recursion_limit": GRAPH_RECURSION_LIMIT,
-                },
+                with_trace_tags(
+                    {
+                        "configurable": {"thread_id": session_id},
+                        "recursion_limit": GRAPH_RECURSION_LIMIT,
+                    },
+                    variant="A",
+                    session_id=session_id,
+                    chat_type=body.chat_type,
+                ),
             )
 
             logger.info(
