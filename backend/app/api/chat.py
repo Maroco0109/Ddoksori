@@ -115,8 +115,10 @@ async def chat(
 
             b_run_id = str(uuid.uuid4())
             # B canonical model = EXAONE (강한 모델 agentic RAG, A/B 의도).
-            # VARIANT_B_MODEL_SPEC로 override 가능(exaone | frontier).
-            b_model_spec = os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
+            # 요청 model_spec 우선, 없으면 VARIANT_B_MODEL_SPEC env(기본 exaone).
+            b_model_spec = body.model_spec or os.getenv(
+                "VARIANT_B_MODEL_SPEC", "exaone"
+            )
             b_result = await asyncio.to_thread(
                 run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
             )
@@ -552,6 +554,136 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
             break
 
 
+async def _variant_b_stream(body, session_id: str, start_time: float):
+    """M7-2: variant B(ReAct)용 스트리밍 경로.
+
+    run_b는 동기(agent.invoke)라 토큰 스트리밍이 없다. 따라서 status 이벤트 →
+    run_b(threadpool) → complete 이벤트를 내보내고, 비스트리밍 /chat B 분기와 동일한
+    M3 적재 + M6 메트릭(build_b_*)을 best-effort로 수행한다(계측 실패가 스트림을 깨지 않음).
+    """
+    from app.variant_b.agent import run_b
+
+    b_model_spec = body.model_spec or os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
+    b_run_id = str(uuid.uuid4())
+
+    status_event = {
+        "type": "status",
+        "data": {
+            "node": "variant_b",
+            "status": f"B({b_model_spec}) 에이전트 실행 중...",
+            "progress": 30,
+        },
+    }
+    yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+
+    try:
+        b_result = await asyncio.to_thread(
+            run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
+        )
+    except Exception as e:
+        logger.error(f"[chat_stream][B] run_b failed: {e}", exc_info=True)
+        try:
+            from app.common.metrics import record_chat_request
+            from app.observability import save_workflow_run
+
+            await save_workflow_run(
+                run_id=b_run_id,
+                variant="B",
+                query=body.message,
+                status="error",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                error_message=str(e),
+                total_time_ms=(time.time() - start_time) * 1000.0,
+            )
+            record_chat_request("B", "error", time.time() - start_time)
+        except Exception as instr_err:
+            logger.warning(
+                f"[chat_stream][B] error-path instrumentation failed (non-fatal): {instr_err}"
+            )
+        error_event = {
+            "type": "error",
+            "data": {
+                "message": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+            },
+        }
+        yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        return
+
+    clarified = bool(b_result.get("clarified", False))
+    b_blocked = bool(b_result.get("blocked", False))
+    answer = b_result.get("answer", "") or ""
+
+    complete_event = {
+        "type": "complete",
+        "data": {
+            "session_id": session_id,
+            "answer": answer,
+            "sources": [],
+            "has_sufficient_evidence": not clarified,
+            "clarifying_questions": [answer] if clarified else [],
+            "model": f"variant-b-{b_model_spec}",
+        },
+    }
+    yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
+
+    # best-effort B 계측 (비스트리밍 /chat B 분기와 동일 빌더 재사용).
+    try:
+        from app.common.metrics import (
+            record_chat_request,
+            record_guardrail_blocks,
+            record_llm_tokens,
+        )
+        from app.observability import save_workflow_run
+        from app.observability.guardrail_events import (
+            build_b_guardrail_events,
+            save_guardrail_events,
+        )
+        from app.observability.llm_calls import build_b_llm_call, save_llm_calls
+        from app.observability.protocol_events import (
+            build_b_protocol_events,
+            save_protocol_events,
+        )
+        from app.observability.retrieval_events import (
+            build_b_retrieval_events,
+            save_retrieval_events,
+        )
+        from app.observability.workflow_steps import build_b_steps, save_workflow_steps
+
+        await save_workflow_run(
+            run_id=b_run_id,
+            variant="B",
+            query=body.message,
+            status="success",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            total_time_ms=(time.time() - start_time) * 1000.0,
+            clarified=clarified,
+            blocked=b_blocked,
+            answer=answer,
+        )
+        await save_workflow_steps(b_run_id, build_b_steps(b_result.get("trace", [])))
+        await save_retrieval_events(
+            b_run_id, build_b_retrieval_events(b_result.get("retrieval_records", []))
+        )
+        await save_llm_calls(b_run_id, build_b_llm_call(b_result))
+        await save_guardrail_events(
+            b_run_id, build_b_guardrail_events(b_result.get("trace", []))
+        )
+        await save_protocol_events(
+            b_run_id, "B", build_b_protocol_events(b_result.get("protocol_messages", []))
+        )
+        record_chat_request("B", "success", time.time() - start_time)
+        record_guardrail_blocks(
+            "B", build_b_guardrail_events(b_result.get("trace", []))
+        )
+        record_llm_tokens("B", build_b_llm_call(b_result))
+    except Exception as instr_err:
+        logger.warning(
+            f"[chat_stream][B] M7-2 instrumentation failed (non-fatal): {instr_err}"
+        )
+
+
 @router.post("/chat/stream")
 @limiter.limit(RateLimits.CHAT_GUEST)
 async def chat_stream_sse(
@@ -594,6 +726,12 @@ async def chat_stream_sse(
 
         # Get user_id from JWT token
         user_id = current_user.user_id if current_user else None
+
+        # M7-2: variant B는 별도 스트리밍 경로(ReAct는 sync). A(MAS) astream과 분리.
+        if body.variant == "B":
+            async for chunk in _variant_b_stream(body, session_id, start_time):
+                yield chunk
+            return
 
         try:
             graph = get_graph_for_chat_type(body.chat_type)

@@ -34,6 +34,11 @@ class ChatRequest(BaseModel):
         default="A",
         description="응답 변형: A=MAS(baseline), B=Agentic RAG(실험/비교용)",
     )
+    model_spec: Optional[Literal["frontier", "exaone"]] = Field(
+        default=None,
+        description="variant=B일 때 모델 선택(frontier=gpt-4o-mini, exaone=EXAONE). "
+        "미지정 시 VARIANT_B_MODEL_SPEC env로 폴백.",
+    )
 
     @field_validator("message")
     @classmethod
