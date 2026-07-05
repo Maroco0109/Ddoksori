@@ -76,14 +76,19 @@ def routing_stats(cur, session_prefix: str, variant: str) -> Dict[str, Any]:
         SELECT pe.summary AS summary
         FROM protocol_events pe
         JOIN workflow_runs wr ON wr.run_id = pe.run_id
-        WHERE pe.name = 'supervisor_routing'
+        WHERE pe.name = 'supervisor'
+          AND pe.summary ? 'routing_meta'
           AND wr.variant = %s
           AND wr.session_id LIKE %s
         """,
         (variant, session_prefix + "%"),
     )
     rows = cur.fetchall()
-    decisions = [r["summary"] for r in rows if isinstance(r["summary"], dict)]
+    decisions = [
+        r["summary"]["routing_meta"]
+        for r in rows
+        if isinstance(r["summary"], dict) and isinstance(r["summary"].get("routing_meta"), dict)
+    ]
     n = len(decisions)
     if n == 0:
         return {"n_decisions": 0}

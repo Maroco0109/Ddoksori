@@ -686,28 +686,31 @@ class SupervisorNode:
         Returns:
             파싱된 결정 딕셔너리
         """
+        # 1) 원문 그대로 파싱
         try:
-            # JSON 직접 파싱 시도
             return json.loads(response)
         except json.JSONDecodeError:
-            if retries < MAX_JSON_PARSE_RETRIES:
-                # 재시도: 마크다운 코드 블록 제거 후 파싱
-                cleaned = re.sub(r"```json?\n?|\n?```", "", response).strip()
-                # JSON 객체 추출 시도
-                match = re.search(r"\{[^{}]*\}", cleaned, re.DOTALL)
-                if match:
-                    try:
-                        return json.loads(match.group())
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "[SupervisorNode] JSON re-parse failed after cleanup"
-                        )
-                return self._parse_decision_with_retry(cleaned, retries + 1)
+            pass
 
-            logger.warning(
-                f"[SupervisorNode] JSON 파싱 실패 (재시도 {retries}회). 규칙 기반 fallback."
-            )
-            return {"action": "rule_based_fallback", "reasoning": "JSON parse failure"}
+        # 2) 마크다운 코드펜스 제거 후 파싱
+        cleaned = re.sub(r"```json?\s*|\s*```", "", response).strip()
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # 3) 가장 바깥 JSON 객체 추출(그리디, 중첩 객체 포함). 이전 구현의
+        #    r"\{[^{}]*\}"는 "request": {} 같은 중첩 빈 객체를 먼저 잡아
+        #    action 없는 {}를 반환하는 버그가 있었어서 그리디로 교체.
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                logger.warning("[SupervisorNode] JSON re-parse failed after extract")
+
+        logger.warning("[SupervisorNode] JSON 파싱 실패. 규칙 기반 fallback.")
+        return {"action": "rule_based_fallback", "reasoning": "JSON parse failure"}
 
     def _rule_based_fallback(self, state: ChatState) -> Dict[str, Any]:
         """
@@ -806,38 +809,24 @@ class SupervisorNode:
             existing_messages = supervisor_state.get("agent_messages", [])
             updated_messages = existing_messages + [message]
 
-            updates: Dict[str, Any] = {
-                "supervisor": {
-                    **supervisor_state,
-                    "agent_messages": updated_messages,
-                    "next_agent": decision.get("target_agent"),
-                    "supervisor_reasoning": decision.get("reasoning", ""),
-                    "iteration_count": iteration_count,
-                    "current_phase": _determine_phase(decision),
-                }
+            supervisor_update = {
+                **supervisor_state,
+                "agent_messages": updated_messages,
+                "next_agent": decision.get("target_agent"),
+                "supervisor_reasoning": decision.get("reasoning", ""),
+                "iteration_count": iteration_count,
+                "current_phase": _determine_phase(decision),
             }
 
-            # M8(A-hub): LLM 라우팅 계측을 trace에 append-only로 적재.
+            # M8(A-hub): LLM 라우팅 계측을 supervisor state에 실어 각 supervisor
+            # 노드의 protocol_summary(→ protocol_events)로 노출한다. 타이밍 래퍼가
+            # _agent_trace_entries를 덮어쓰므로 그 대신 이 경로로 적재.
             # variant A(결정론)에는 _routing_meta가 없어 영향 없음.
             meta = decision.get("_routing_meta")
             if meta:
-                updates["_agent_trace_entries"] = [
-                    {
-                        "node_name": "supervisor_routing",
-                        "timestamp": time.time(),
-                        "protocol_summary": {
-                            "routing": "llm",
-                            "reason": meta["reason"],
-                            "fallback": meta["fallback"],
-                            "agree": meta["agree"],
-                            "llm_target": meta["llm_target"],
-                            "det_target": meta["det_target"],
-                            "latency_ms": meta["latency_ms"],
-                        },
-                    }
-                ]
+                supervisor_update["routing_meta"] = meta
 
-            return updates
+            return {"supervisor": supervisor_update}
 
         return supervisor_node
 
