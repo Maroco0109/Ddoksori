@@ -199,6 +199,8 @@ class ChatState(MessagesState):
     mode: RoutingMode
     guardrail_blocked: bool
     guardrail_type: Optional[str]
+    # 슈퍼바이저 라우팅 방식: "deterministic"(A, 기본) | "llm"(A-hub, M8 측정)
+    routing_mode: str
 
     # === ReAct 패턴 ===
     react_steps: Annotated[List[ReActStep], operator.add]
@@ -254,6 +256,7 @@ def create_initial_state(
     chat_type: Literal["dispute", "general"] = "general",
     onboarding: Optional[OnboardingInfo] = None,
     max_iterations: Optional[int] = None,
+    routing_mode: str = "deterministic",
 ) -> ChatState:
     """
     초기 ChatState 생성 헬퍼 함수
@@ -304,6 +307,7 @@ def create_initial_state(
         mode="NEED_RAG",
         guardrail_blocked=False,
         guardrail_type=None,
+        routing_mode=routing_mode,
         # ReAct 패턴
         react_steps=[],
         current_iteration=0,

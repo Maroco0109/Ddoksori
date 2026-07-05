@@ -30,9 +30,10 @@ class ChatRequest(BaseModel):
     chunk_types: Optional[List[str]] = None
     agencies: Optional[List[str]] = None
     debug: bool = Field(default=False, description="디버그 모드 (타이밍 정보 포함)")
-    variant: Literal["A", "B"] = Field(
+    variant: Literal["A", "A-hub", "B"] = Field(
         default="A",
-        description="응답 변형: A=MAS(baseline), B=Agentic RAG(실험/비교용)",
+        description="응답 변형: A=MAS 고정 파이프라인(결정론, baseline), "
+        "A-hub=MAS LLM 슈퍼바이저 라우팅(M8 측정용), B=Agentic RAG(ReAct, 실험/비교용)",
     )
     model_spec: Optional[Literal["frontier", "exaone"]] = Field(
         default=None,
