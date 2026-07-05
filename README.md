@@ -4,7 +4,7 @@
 
 > 복잡한 소비자 분쟁 문의에 대해 법령, 분쟁조정사례, 상담사례를 기반으로 정확하고 신뢰도 높은 답변을 제공합니다.
 
-최종 수정일: 2026-02-09
+최종 수정일: 2026-07-05
 
 ---
 
@@ -12,6 +12,7 @@
 
 - [프로젝트 개요](#1-프로젝트-개요)
 - [왜 MAS인가?](#2-왜-mas인가)
+- [변형(Variant) 아키텍처 & 측정 비교](#변형variant-아키텍처--측정-비교)
 - [Happy Path (E2E)](#3-happy-path-e2e)
 - [CI/CD 파이프라인](#4-cicd-파이프라인)
 - [Quickstart](#5-quickstart)
@@ -29,7 +30,7 @@
 
 | 기능 | 설명 |
 |------|------|
-| **MAS Supervisor v2** | gpt-4o 기반 Supervisor가 전문 에이전트를 조율하는 Hub-Spoke 구조 |
+| **MAS Supervisor v2** | **규칙 기반(결정론적)** Supervisor가 전문 에이전트를 조율하는 Hub-Spoke 구조 (variant A). LLM 라우팅은 A-hub·측정 전용 — [변형 비교](#변형variant-아키텍처--측정-비교) 참조 |
 | **Selective Retrieval** | 쿼리 분석 결과에 따라 필요한 Retrieval Agent만 선택적 병렬 실행 (법령/기준/사례) |
 | **Progressive Disclosure** | 적응형 응답 모드 (legacy/minimal/adaptive) + 후속 질문 기반 점진적 상세 안내 |
 | **온보딩 컨텍스트 영속화** | 구매일/품목/금액 등 온보딩 데이터를 세션 간 유지, 경과 일수 자동 계산 |
@@ -86,6 +87,36 @@
 3. **품질 게이트** -- LegalReviewer가 최종 답변의 법적 정확성을 검증하는 별도 단계 확보
 4. **장애 격리** -- 개별 Agent 실패가 전체 시스템에 전파되지 않음 (Agent별 에러 핸들링)
 5. **재생성 루프** -- LegalReviewer 검토 결과에 따라 AnswerDrafter에게 재생성 요청 가능 (max 1회)
+
+---
+
+## 변형(Variant) 아키텍처 & 측정 비교
+
+DDOKSORI의 목표는 "답변 잘하는 챗봇 하나"가 아니라 **서로 다른 아키텍처의 챗봇을 동일 조건에서 측정·비교하는 시스템**이다. 하나의 백엔드가 여러 **변형(variant)** 을 실행하고, 각 요청은 variant 라벨로 DB·Prometheus에 적재되어 SQL·대시보드로 A/B 비교된다. 핵심 대비는 **workflow(결정론 조율) vs agent(LLM 자율 판단)** — Anthropic *"Building Effective Agents"* 의 구분과 일치한다.
+
+| 변형 | 정의 | 의사결정 | LLM tool-calling | 모델 | 상태 |
+|------|------|----------|:---:|------|------|
+| **A** | MAS Hub-Spoke **고정 파이프라인** (결정론) | 규칙 기반 | ❌ | gpt-4o | **프로덕션 기본(동결)** |
+| **A-hub** | A와 동일 그래프 + **LLM 슈퍼바이저 라우팅** | LLM 라우팅 | ❌(라우팅만) | gpt-4o | 측정 전용(M8) |
+| **B-frontier** | **ReAct 자율 에이전트** | LLM 자율 | ✅ | gpt-4o-mini | opt-in 비교 |
+| **B-exaone** | ReAct 자율 에이전트 (자체 호스팅) | LLM 자율 | ✅ | EXAONE 4.5-33B (RunPod H100) | 연구/비교 전용 |
+
+> A와 A-hub는 **같은 LangGraph 그래프**를 공유(차이는 라우팅 방식뿐). B-frontier와 B-exaone은 **같은 ReAct 에이전트**를 공유(차이는 chat model뿐). A에는 LLM tool-calling이 없다 — 진짜 agentic tool-calling은 B에만 있다.
+
+### 측정 비교 (핵심 지표)
+
+| 지표 | A (결정론 MAS) | B-frontier (ReAct) | B-exaone | 출처 |
+|------|:---:|:---:|:---:|------|
+| faithfulness | **2.00** | 1.92 | — | M5-5 |
+| safety pass | **1.00** | 0.83 | — | M5-5 |
+| 보안 decided | **100%** | 96% | 96.2% | M4-A |
+| leak_rate | 0% | 0% | 0% | M4-A |
+| latency median | 10.2s | **6.4s** | ≈84s | M5-5 |
+| 자율성/유연성 | 낮음 | **높음** | **높음** | 구조 |
+
+**A vs A-hub (M8, "LLM 라우팅이 이득인가")**: A-hub의 LLM 슈퍼바이저는 결정론 라우터와 **100% 동일한 결정**(60/60)을 내리면서 **지연 +74%**(10.8s→18.9s)와 요청당 +5 LLM 호출만 더했다. 약모델(gpt-4o-mini)에선 루프→에러. → **선형 파이프라인에서 LLM 라우팅은 순수 오버헤드**이며, A의 결정론 동결이 정당함을 실측으로 입증.
+
+**결론**: 도메인 핵심 축(안전·보안·충실성)은 A(workflow)가, 속도·유연성은 B-frontier(agent)가 우위. 보안 격차는 **모델이 아니라 아키텍처**(고정 파이프라인 vs 자율 에이전트) 차이. 전체 구조·의사결정·측정 상세는 **[변형 시스템 아키텍처 문서](docs/architecture/2026-07-05-variant-system-architecture.md)** 참조.
 
 ---
 
@@ -470,6 +501,9 @@ Entry → CacheCheck ──HIT──→ CacheResponse → END
 
 | 문서 | 링크 | 설명 |
 |------|------|------|
+| **변형 시스템 아키텍처** ⭐ | [docs/architecture/2026-07-05-variant-system-architecture.md](docs/architecture/2026-07-05-variant-system-architecture.md) | A/A-hub/B-frontier/B-exaone 4개 변형 구조·의사결정·측정 비교 (단일 출처) |
+| **A 결정 기록** | [docs/architecture/2026-07-05-a-orchestration-decision.md](docs/architecture/2026-07-05-a-orchestration-decision.md) | A가 결정론적 orchestration인 이유(설계→동결 히스토리) |
+| **LLM 클라이언트 레이어** | [backend/app/llm/README.md](backend/app/llm/README.md) | OpenAI/EXAONE(vLLM)/Anthropic 클라이언트 + 변형별 매핑 |
 | **Backend** | [backend/README.md](backend/README.md) | 백엔드 MAS 아키텍처 전체 구조 |
 | **Frontend** | [frontend/README.md](frontend/README.md) | 프론트엔드 구조 및 기능 모듈 |
 | **에이전트 통합** | [backend/app/agents/README.md](backend/app/agents/README.md) | 에이전트 인터페이스 및 통합 가이드 |
