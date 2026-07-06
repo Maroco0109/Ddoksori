@@ -3,6 +3,7 @@
 - 작성일: 2026-07-05
 - 성격: **시스템 아키텍처 정리 + 변형 비교의 단일 출처(single source).** 각 변형의 구조·의사결정 메커니즘·모델·측정 결과를 한 문서로 통합한다.
 - 관련: [A 결정 기록](2026-07-05-a-orchestration-decision.md), [M8 라우팅 측정](../plans/modules/M8-a-hub-routing-results.md), [M7 mainline 프레임워크](../plans/modules/M7-mainline-decision-framework.md), [LLM 클라이언트 레이어](../../backend/app/llm/README.md)
+- 시각 요약(발표/포트폴리오용): [ReAct vs A / A-hub — 제어 흐름 비교](2026-07-06-variant-comparison-visual.html) (브라우저로 열기)
 
 ---
 

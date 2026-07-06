@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>제어 흐름은 누가 쥐는가 — ReAct vs A / A-hub</title>
+<style>
+  /* minimal reset */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  img { max-width: 100%; height: auto; }
+
+  :root {
+    --paper: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --ink: #151a22;
+    --ink-2: #4b5563;
+    --ink-3: #7b8494;
+    --hair: #dfe3ea;
+    --hair-2: #e8ebf0;
+    /* semantic decision-maker hues */
+    --a: #3f74ab;         /* deterministic (A) — steel blue */
+    --a-soft: #e4edf6;
+    --hub: #7466a8;       /* hybrid (A-hub) — violet */
+    --hub-soft: #ece8f5;
+    --b: #c67a26;         /* agentic (B) — amber */
+    --b-soft: #f6ecdd;
+    --teal: #218a7d;      /* structural accent */
+    --good: #2f9e6f;
+    --warn: #c98a24;
+    --bad: #c05353;
+    --shadow: 0 1px 2px rgba(20,26,34,.05), 0 8px 28px -18px rgba(20,26,34,.35);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1017; --surface: #141a23; --surface-2: #1a212c;
+      --ink: #e9edf3; --ink-2: #a9b3c1; --ink-3: #6f7a8a;
+      --hair: #26303c; --hair-2: #202832;
+      --a: #6ea3d8; --a-soft: #17293b;
+      --hub: #a394d6; --hub-soft: #241f38;
+      --b: #e0a256; --b-soft: #33270f;
+      --teal: #4dbcac; --good: #4cc48c; --warn: #e0b05a; --bad: #e08585;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f4;
+    --ink: #151a22; --ink-2: #4b5563; --ink-3: #7b8494;
+    --hair: #dfe3ea; --hair-2: #e8ebf0;
+    --a: #3f74ab; --a-soft: #e4edf6; --hub: #7466a8; --hub-soft: #ece8f5;
+    --b: #c67a26; --b-soft: #f6ecdd; --teal: #218a7d;
+    --good: #2f9e6f; --warn: #c98a24; --bad: #c05353;
+    --shadow: 0 1px 2px rgba(20,26,34,.05), 0 8px 28px -18px rgba(20,26,34,.35);
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d1017; --surface: #141a23; --surface-2: #1a212c;
+    --ink: #e9edf3; --ink-2: #a9b3c1; --ink-3: #6f7a8a;
+    --hair: #26303c; --hair-2: #202832;
+    --a: #6ea3d8; --a-soft: #17293b; --hub: #a394d6; --hub-soft: #241f38;
+    --b: #e0a256; --b-soft: #33270f; --teal: #4dbcac;
+    --good: #4cc48c; --warn: #e0b05a; --bad: #e08585;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); line-height: 1.65; -webkit-font-smoothing: antialiased;
+    font-size: 17px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .prose { max-width: 720px; margin-left: auto; margin-right: auto; }
+
+  a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, .takes a:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 3px; }
+
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--teal); font-weight: 600; }
+  h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); line-height: 1.05; letter-spacing: -.022em;
+    font-weight: 800; text-wrap: balance; margin: .35em 0 .3em; }
+  h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.12; letter-spacing: -.015em;
+    font-weight: 750; text-wrap: balance; margin: 0 0 .5em; }
+  h3 { font-size: 1.16rem; letter-spacing: -.01em; font-weight: 700; margin: 0 0 .4em; }
+  p { margin: 0 0 1.1em; color: var(--ink-2); }
+  .prose p { color: var(--ink-2); }
+  strong { color: var(--ink); font-weight: 680; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface-2);
+    padding: .1em .38em; border-radius: 5px; color: var(--ink); }
+
+  /* ---- Hero ---- */
+  header.hero { padding: clamp(64px, 11vw, 128px) 0 44px; border-bottom: 1px solid var(--hair); }
+  .lede { font-size: clamp(1.12rem, 2.1vw, 1.32rem); color: var(--ink-2); max-width: 660px;
+    text-wrap: pretty; }
+  .lede b { color: var(--ink); font-weight: 680; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 30px;
+    font-family: var(--mono); font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); }
+  .dot { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .dot.a { background: var(--a); } .dot.hub { background: var(--hub); } .dot.b { background: var(--b); }
+
+  /* ---- Section rhythm ---- */
+  section { padding: 60px 0; border-bottom: 1px solid var(--hair); }
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .kicker::before { content: ""; width: 22px; height: 2px; background: var(--teal); border-radius: 2px; }
+
+  /* ---- ReAct trace block ---- */
+  .trace { font-family: var(--mono); font-size: 13.5px; line-height: 1.55; background: var(--surface);
+    border: 1px solid var(--hair); border-radius: 12px; box-shadow: var(--shadow);
+    overflow-x: auto; margin: 4px 0 6px; }
+  .trace-head { padding: 10px 16px; border-bottom: 1px solid var(--hair-2); color: var(--ink-3);
+    font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; display: flex; gap: 8px; align-items: center; }
+  .trace-head .rl { width: 9px; height: 9px; border-radius: 50%; background: var(--b); }
+  .trace-body { padding: 14px 18px; white-space: pre; min-width: 460px; }
+  .tk { font-weight: 700; }
+  .tk.think { color: var(--hub); } .tk.act { color: var(--b); } .tk.obs { color: var(--teal); }
+  .trace-body .mut { color: var(--ink-3); }
+
+  /* ---- Diagram: three variants ---- */
+  .flows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 8px 0; }
+  @media (max-width: 780px) { .flows { grid-template-columns: 1fr; max-width: 380px; margin: 0 auto; } }
+  .flowcard { background: var(--surface); border: 1px solid var(--hair); border-radius: 14px;
+    padding: 20px 18px 22px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .flowcard::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; }
+  .flowcard.a::before { background: var(--a); } .flowcard.hub::before { background: var(--hub); }
+  .flowcard.b::before { background: var(--b); }
+  .fc-tag { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    font-weight: 700; display: inline-flex; align-items: center; gap: 7px; }
+  .flowcard.a .fc-tag { color: var(--a); } .flowcard.hub .fc-tag { color: var(--hub); } .flowcard.b .fc-tag { color: var(--b); }
+  .fc-sub { font-size: 12.5px; color: var(--ink-3); margin: 3px 0 16px; min-height: 32px; }
+
+  .node { font-family: var(--mono); font-size: 12px; padding: 7px 10px; border-radius: 7px;
+    border: 1px solid var(--hair); background: var(--surface-2); color: var(--ink-2); text-align: center;
+    position: relative; }
+  .node.decide { font-weight: 700; color: var(--ink); }
+  .flowcard.a .node.decide { background: var(--a-soft); border-color: var(--a); color: var(--a); }
+  .flowcard.hub .node.decide { background: var(--hub-soft); border-color: var(--hub); color: var(--hub); }
+  .flowcard.b .node.decide { background: var(--b-soft); border-color: var(--b); color: var(--b); }
+  .conn { width: 1.5px; height: 15px; background: var(--hair); margin: 5px auto; }
+  .flowstack { display: flex; flex-direction: column; }
+  .who { margin-top: 16px; font-family: var(--mono); font-size: 11.5px; padding: 9px 11px;
+    border-radius: 8px; line-height: 1.45; }
+  .flowcard.a .who { background: var(--a-soft); color: var(--a); }
+  .flowcard.hub .who { background: var(--hub-soft); color: var(--hub); }
+  .flowcard.b .who { background: var(--b-soft); color: var(--b); }
+  .who b { color: inherit; font-weight: 700; }
+
+  /* ReAct self-loop node */
+  .loopnode { border: 1.5px dashed var(--b); background: var(--b-soft); border-radius: 10px;
+    padding: 12px; text-align: center; position: relative; }
+  .loopnode .ll { font-family: var(--mono); font-size: 11px; color: var(--b); line-height: 1.5; }
+  .loopnode .ll .rot { display: inline-block; }
+
+  /* ---- Comparison table ---- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--hair); border-radius: 12px;
+    box-shadow: var(--shadow); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 540px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--hair-2); }
+  thead th { font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .rowlbl { font-weight: 620; color: var(--ink); }
+  .best { color: var(--a); font-weight: 700; }
+  .best-b { color: var(--b); font-weight: 700; }
+  .vhead-a { color: var(--a); } .vhead-hub { color: var(--hub); } .vhead-b { color: var(--b); }
+  caption { caption-side: bottom; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+    padding: 10px 16px; text-align: left; }
+
+  /* ---- Verdict cards ---- */
+  .verdicts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 6px; }
+  @media (max-width: 760px) { .verdicts { grid-template-columns: 1fr; } }
+  .vcard { background: var(--surface); border: 1px solid var(--hair); border-radius: 13px;
+    padding: 20px; box-shadow: var(--shadow); }
+  .vcard .step { font-family: var(--mono); font-size: 12px; color: var(--ink-3); letter-spacing: .05em; }
+  .vcard .rule { font-size: 15px; font-weight: 700; color: var(--ink); margin: 6px 0 10px; line-height: 1.3; }
+  .vcard p { font-size: 14px; margin: 0; }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+    padding: 3px 9px; border-radius: 20px; letter-spacing: .04em; margin-bottom: 12px; }
+  .badge.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .badge.mid { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .badge.risk { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+  /* ---- Callout ---- */
+  .callout { border-left: 3px solid var(--teal); background: var(--surface); padding: 18px 22px;
+    border-radius: 0 12px 12px 0; box-shadow: var(--shadow); margin: 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .lbl { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--teal); font-weight: 700; display: block; margin-bottom: 6px; }
+
+  /* ---- Takeaways ---- */
+  .takes { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+  .takes li { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--hair-2); align-items: baseline; }
+  .takes li:last-child { border-bottom: none; }
+  .takes .n { font-family: var(--mono); font-size: 13px; color: var(--teal); font-weight: 700; flex: none;
+    width: 26px; }
+  .takes .t { color: var(--ink-2); font-size: 15.5px; }
+  .takes .t b { color: var(--ink); }
+
+  .src { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
+  .src a { color: var(--ink-2); }
+
+  footer { padding: 40px 0 64px; }
+  footer p { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin: 0; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .rot { animation: spin 3.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">DDOKSORI · Architecture Note</div>
+    <h1>제어 흐름은 누가 쥐는가</h1>
+    <p class="lede"><b>ReAct 자율 에이전트</b>와 내가 만든 <b>A · A-hub</b>의 차이는
+      에이전트 개수가 아니라 <b>“다음에 무엇을 할지”를 코드가 정하느냐 LLM이 정하느냐</b>에 있다.
+      이 한 축이 예측가능성 · 지연 · 비용 · 안전을 전부 가른다 — 그리고 그 값을 측정으로 증명했다.</p>
+    <div class="legend">
+      <span><i class="dot a"></i> A — 코드(규칙)가 결정 · workflow</span>
+      <span><i class="dot hub"></i> A-hub — LLM이 라우팅만 결정 · 중간형</span>
+      <span><i class="dot b"></i> B — LLM이 도구를 자율 결정 · ReAct agent</span>
+    </div>
+  </div>
+</header>
+
+<!-- ReAct concept -->
+<section>
+  <div class="wrap prose">
+    <div class="kicker">개념 · ReAct</div>
+    <h2>ReAct = Reasoning + Acting</h2>
+    <p>Shunyu Yao 외, <em>“ReAct: Synergizing Reasoning and Acting in Language Models”</em> (ICLR 2023).
+      이전에는 따로 연구되던 두 가지를 <strong>한 궤적에서 교차</strong>시킨 것이 핵심이다.</p>
+    <p><strong>Chain-of-Thought</strong>는 머릿속으로만 추론해 외부 세계에 접지되지 않고(→ 환각·지식 갱신 불가),
+      <strong>Action-only</strong>는 도구는 부르지만 “왜”라는 추론 궤적이 없다.
+      ReAct는 <b>생각(Thought)</b>이 계획을 세우고 갱신하며, <b>행동(Action)</b>이 외부에서 새 정보를 끌어와
+      다시 추론에 주입하는 루프를 돌린다.</p>
+  </div>
+  <div class="wrap" style="max-width:720px;">
+    <div class="trace">
+      <div class="trace-head"><span class="rl"></span> ReAct trajectory · LLM이 루프를 스스로 통제</div>
+      <div class="trace-body"><span class="tk think">Thought 1</span>  답하려면 먼저 관련 근거를 검색해야 한다
+<span class="tk act">Action 1</span>   search("전자상거래 환불 기한")
+<span class="tk obs">Observation 1</span> <span class="mut">[검색 결과 5건]</span>
+<span class="tk think">Thought 2</span>  조문 원문이 빠졌으니 좁혀서 다시 검색
+<span class="tk act">Action 2</span>   get_law_article("전자상거래법", 17)
+<span class="tk obs">Observation 2</span> <span class="mut">[제17조 원문]</span>
+<span class="tk think">Thought 3</span>  근거가 충분하다 · 이제 답을 작성한다
+<span class="tk act">Action 3</span>   finish("...")</div>
+    </div>
+  </div>
+  <div class="wrap prose" style="margin-top:22px;">
+    <p><strong>본질</strong>: 다음에 어떤 도구를 · 몇 번 부를지 · 언제 멈출지를
+      <b>코드가 아니라 LLM이 매 스텝 스스로 정한다.</b> 이것이 오늘날 “agentic” 시스템의 표준 골격
+      (LangGraph <code>create_react_agent</code>, function-calling loop)이 됐다.</p>
+    <p class="src">출처 —
+      <a href="https://arxiv.org/abs/2210.03629">arXiv:2210.03629</a> ·
+      <a href="https://research.google/blog/react-synergizing-reasoning-and-acting-in-language-models/">Google Research</a> ·
+      <a href="https://github.com/ysymyth/ReAct">github/ysymyth/ReAct</a>
+    </p>
+  </div>
+</section>
+
+<!-- Three variants control-flow -->
+<section>
+  <div class="wrap">
+    <div class="kicker">대비 · 누가 제어 흐름을 결정하는가</div>
+    <h2 style="max-width:720px;">같은 도구, 다른 두뇌 — A · A-hub · B</h2>
+    <p class="prose" style="margin-left:0;">색은 <strong>의사결정 주체</strong>를 뜻한다. 파랑은 코드, 보라는 라우팅만 LLM,
+      주황은 LLM이 도구를 자율 호출. 세 변형 모두 같은 검색·가드레일 primitive를 공유하므로
+      <b>순수하게 “구조(제어 흐름)” 차이만</b> 비교된다.</p>
+
+    <div class="flows">
+      <!-- A -->
+      <div class="flowcard a">
+        <div class="fc-tag"><i class="dot a"></i> A · workflow</div>
+        <div class="fc-sub">MAS 구조의 고정 파이프라인 · 결정론</div>
+        <div class="flowstack">
+          <div class="node">input guardrail</div><div class="conn"></div>
+          <div class="node">query_analysis</div><div class="conn"></div>
+          <div class="node decide">Supervisor · 규칙 분기</div><div class="conn"></div>
+          <div class="node">retrieval (RRF)</div><div class="conn"></div>
+          <div class="node">generation</div><div class="conn"></div>
+          <div class="node">review · 규칙</div><div class="conn"></div>
+          <div class="node">output guardrail</div>
+        </div>
+        <div class="who"><b>결정자 = 코드.</b> <code>mode</code> 값 따라 다음 노드를 if/else로 고정. LLM은 분석·생성 2곳에서 prompt→text로만.</div>
+      </div>
+
+      <!-- A-hub -->
+      <div class="flowcard hub">
+        <div class="fc-tag"><i class="dot hub"></i> A-hub · hybrid</div>
+        <div class="fc-sub">A와 동일 그래프 + LLM 라우팅 (측정 전용)</div>
+        <div class="flowstack">
+          <div class="node">input guardrail</div><div class="conn"></div>
+          <div class="node">query_analysis</div><div class="conn"></div>
+          <div class="node decide">Supervisor · LLM이 다음 에이전트 선택</div><div class="conn"></div>
+          <div class="node">retrieval (RRF)</div><div class="conn"></div>
+          <div class="node">generation</div><div class="conn"></div>
+          <div class="node">review · 규칙</div><div class="conn"></div>
+          <div class="node">output guardrail</div>
+        </div>
+        <div class="who"><b>결정자 = LLM(라우팅만).</b> 정해진 에이전트 집합 중 하나를 고를 뿐 · 도구 자율성 없음.</div>
+      </div>
+
+      <!-- B -->
+      <div class="flowcard b">
+        <div class="fc-tag"><i class="dot b"></i> B · agent</div>
+        <div class="fc-sub">ReAct 자율 에이전트 · 결정론 안전장치로 감쌈</div>
+        <div class="flowstack">
+          <div class="node">input guardrail</div><div class="conn"></div>
+          <div class="node">cosine gate τ=0.45</div><div class="conn"></div>
+          <div class="loopnode">
+            <div class="ll"><span class="rot">↻</span> <b>ReAct loop</b><br>Thought → Action → Observation<br>
+              <span style="opacity:.85">4 tools · LLM이 자율 호출</span></div>
+          </div>
+          <div class="conn"></div>
+          <div class="node">output guardrail</div>
+        </div>
+        <div class="who"><b>결정자 = LLM(도구).</b> <code>create_react_agent</code>가 도구를 바인딩 · 무엇을 언제 몇 번 부를지 스스로 결정.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- who decides table -->
+<section>
+  <div class="wrap">
+    <div class="kicker">요약 축</div>
+    <h2 style="max-width:720px;">에이전트 개수 ≠ agentic</h2>
+    <p class="prose" style="margin-left:0;">A는 에이전트 4개짜리 결정론 워크플로, B는 에이전트 <b>1개</b>짜리 자율 agent다.
+      이 역전이 핵심 — agentic의 척도는 개수가 아니라 <strong>LLM이 제어 흐름을 쥔 정도</strong>다.</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th class="vhead-a">A</th>
+            <th class="vhead-hub">A-hub</th>
+            <th class="vhead-b">B (ReAct)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="rowlbl">제어 흐름 결정자</td><td>코드(규칙)</td><td>LLM — 다음 <em>에이전트</em></td><td>LLM — 다음 <em>도구</em></td></tr>
+          <tr><td class="rowlbl">도구/검색 호출</td><td>코드가 무조건</td><td>코드가 무조건</td><td>LLM이 자율</td></tr>
+          <tr><td class="rowlbl">반복(loop)</td><td>고정 그래프</td><td>고정 그래프</td><td>LLM이 횟수 결정</td></tr>
+          <tr><td class="rowlbl">예측가능성</td><td>완전 재현</td><td>낮음</td><td>매번 다를 수 있음</td></tr>
+          <tr><td class="rowlbl">논문상 분류</td><td>Workflow</td><td>Workflow + LLM 라우팅</td><td><b>Agent (진짜 agentic)</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Measurement -->
+<section>
+  <div class="wrap">
+    <div class="kicker">측정 · 말이 아니라 숫자로</div>
+    <h2 style="max-width:720px;">품질 · 지연 · 안전</h2>
+    <p class="prose" style="margin-left:0;">동일 백엔드 · 동일 goldenset을 variant 라벨로 적재해 비교한 실측치. A는 도메인 핵심 축에서 최고, B-frontier는 속도·유연성 우위.</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>지표</th><th class="num vhead-a">A · 결정론 MAS</th><th class="num vhead-b">B-frontier · ReAct</th><th class="num">출처</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="rowlbl">faithfulness</td><td class="num best">2.00</td><td class="num">1.92</td><td class="num">M5-5</td></tr>
+          <tr><td class="rowlbl">safety pass</td><td class="num best">1.00</td><td class="num">0.83</td><td class="num">M5-5</td></tr>
+          <tr><td class="rowlbl">보안 decided</td><td class="num best">100%</td><td class="num">96%</td><td class="num">M4-A5</td></tr>
+          <tr><td class="rowlbl">leak_rate</td><td class="num">0%</td><td class="num">0%</td><td class="num">M4-A5</td></tr>
+          <tr><td class="rowlbl">latency median</td><td class="num">10.2s</td><td class="num best-b">6.4s</td><td class="num">M5-5</td></tr>
+          <tr><td class="rowlbl">자율성 · 유연성</td><td class="num">낮음</td><td class="num best-b">높음</td><td class="num">구조</td></tr>
+        </tbody>
+        <caption>도메인 핵심(충실성·안전·보안) = A · 속도·유연성 = B. 보안 격차는 모델이 아니라 <b>아키텍처</b> 차이(3-way 측정으로 규명).</caption>
+      </table>
+    </div>
+
+    <h3 style="margin-top:40px;">A vs A-hub — “LLM 라우팅은 이득이 있는가” (M8)</h3>
+    <p class="prose" style="margin-left:0;">dead code였던 LLM 슈퍼바이저를 A-hub로 부활시켜, 강모델(gpt-4o)로 격리 측정했다.</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>지표</th><th class="num vhead-a">A · 결정론</th><th class="num vhead-hub">A-hub · LLM 라우팅</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="rowlbl">latency avg</td><td class="num best">10.8s</td><td class="num">18.9s <span style="color:var(--bad)">(+74%)</span></td></tr>
+          <tr><td class="rowlbl">라우팅 결정 = 결정론과 일치</td><td class="num">—</td><td class="num"><b>60 / 60 (100%)</b></td></tr>
+          <tr><td class="rowlbl">요청당 추가 LLM 호출</td><td class="num">0</td><td class="num">+5 (총 60)</td></tr>
+          <tr><td class="rowlbl">답변 길이(품질 프록시)</td><td class="num">745자</td><td class="num">737자 (동등)</td></tr>
+          <tr><td class="rowlbl">실패 모드</td><td class="num">없음</td><td class="num" style="color:var(--bad)">약모델 루프→에러</td></tr>
+        </tbody>
+        <caption>선형 파이프라인에서 LLM 슈퍼바이저는 결정론 라우터를 100% 재현하며 지연·비용만 더한다 → 결정론 동결은 정당(측정으로 뒷받침).</caption>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Design review -->
+<section>
+  <div class="wrap">
+    <div class="kicker">검토 · 초기 설계 사고</div>
+    <h2 style="max-width:720px;">시간 · 비용 · 성능 · UX 관점의 판정</h2>
+    <p class="prose" style="margin-left:0;">“단순 tool calling의 한계 → 기능별 전문 에이전트 → LLM 슈퍼바이저 조율”로 이어진 초기 설계를 현업 축으로 검토한다.</p>
+    <div class="verdicts">
+      <div class="vcard">
+        <span class="badge ok">적절</span>
+        <div class="step">사고 ① → ②</div>
+        <div class="rule">기능별 전문화</div>
+        <p>질의분석 · 검색 · 생성 · 검토 분해는 관심사 분리 · 가드레일 삽입 · 단계별 측정에 타당. A의 충실성·안전 최고치가 이 구조와 review 단계의 산물.</p>
+      </div>
+      <div class="vcard">
+        <span class="badge mid">과잉 → 자산으로 전환</span>
+        <div class="step">사고 ③</div>
+        <div class="rule">LLM 슈퍼바이저 동적 조율</div>
+        <p>선형 파이프라인엔 판단 여지가 없어 이득 0. 하지만 <b>폐기 대신 A-hub로 측정 가능하게 남긴 것</b>이 정답 — “왜 결정론인가”를 데이터로 증명.</p>
+      </div>
+      <div class="vcard">
+        <span class="badge risk">트레이드오프</span>
+        <div class="step">UX · 비용</div>
+        <div class="rule">자율성은 공짜가 아니다</div>
+        <p>A는 10.2s로 느리지만 안전·정확 · B는 6.4s로 빠르고 유연하나 안전 소폭 양보. agentic은 토큰·지연·실패모드(예: #68 컨텍스트 초과)를 늘린다.</p>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:26px;">
+      <span class="lbl">현업 교훈</span>
+      <p>“에이전트가 결정하게 하자”는 <strong>유연성이 정말 필요할 때만</strong> 값어치가 있다.
+        분기가 자명한 워크플로에 LLM 조율을 넣으면 지연·비용·불안정성만 는다. 이는 Anthropic
+        <em>“Building Effective Agents”</em>의 <b>“대부분의 프로덕션은 workflow가 낫고, agent는 필요할 때만”</b>과
+        정확히 일치하며 — 나는 이걸 말이 아니라 격리 측정으로 증명했다.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MAS -->
+<section>
+  <div class="wrap prose">
+    <div class="kicker">관점 · MAS</div>
+    <h2>MAS의 옷을 입은 workflow</h2>
+    <p><strong>구조상 YES, 의사결정상 부분적으로만 YES.</strong> Hub-Spoke 슈퍼바이저 토폴로지와 역할 전문화는
+      교과서적 MAS다. 그러나 정통 MAS의 본질은 각 에이전트·슈퍼바이저가 <b>LLM으로 자율 판단</b>하는 것 —
+      A는 조율 두뇌가 규칙(결정론)이다.</p>
+    <ul class="takes" style="margin-top:8px;">
+      <li><span class="n">A</span><span class="t"><b>MAS의 옷을 입은 workflow</b> — 구조는 MAS, 판단은 결정론.</span></li>
+      <li><span class="n">A-hub</span><span class="t">슈퍼바이저만 LLM화 — MAS에 한 발 더 가깝지만 도구 자율성은 없음.</span></li>
+      <li><span class="n">B</span><span class="t">단일 에이전트인데 <b>가장 agentic</b> — 이 역전이 프로젝트가 측정하는 대비의 정수.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- takeaways -->
+<section style="border-bottom:none;">
+  <div class="wrap prose">
+    <div class="kicker">요약</div>
+    <h2>한 장 결론</h2>
+    <ul class="takes">
+      <li><span class="n">01</span><span class="t"><b>ReAct</b>는 Thought↔Action↔Observation 루프를 LLM이 스스로 돌리는 패러다임 — 오늘날 agentic의 표준 골격.</span></li>
+      <li><span class="n">02</span><span class="t"><b>A</b>는 ReAct가 아니라 MAS 구조의 결정론 워크플로 · <b>A-hub</b>는 라우팅만 LLM화한 대조군 · <b>B</b>만 진짜 ReAct agent.</span></li>
+      <li><span class="n">03</span><span class="t">초기 설계의 ①②는 타당, ③은 과잉이었으나 <b>측정 대상으로 남긴 것</b>이 최고의 결정 — M8이 “LLM 조율 = 순수 오버헤드(+74%, 결정 100% 동일)”를 실증.</span></li>
+      <li><span class="n">04</span><span class="t">이 프로젝트의 가치는 “어느 하나가 최고”가 아니라 <b>아키텍처 선택을 숫자로 비교·설명</b>할 수 있다는 것.</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>DDOKSORI · docs/architecture/2026-07-05-{a-orchestration-decision, variant-system-architecture}.md · 측정 M5-5 · M4-A5 · M8</p>
+  </div>
+</footer>
+
+</body>
+</html>
