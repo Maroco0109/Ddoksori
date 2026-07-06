@@ -3,6 +3,7 @@
 - 작성일: 2026-07-05
 - 성격: **결정 기록(decision record).** "A"가 어떤 종류의 시스템인지, 왜 지금 형태로 동결됐는지를 사실 기반으로 고정한다.
 - 관련: [[M7-mainline-decision-framework]](../plans/modules/M7-mainline-decision-framework.md), [MAS Supervisor Architecture](../feature/MAS_SUPERVISOR_ARCHITECTURE.md), [MAS 파이프라인 아키텍처 리뷰](../report/2026-02-01-mas-pipeline-architecture-review.md)
+- 시각 요약(발표/포트폴리오용): [ReAct vs A / A-hub — 제어 흐름 비교](2026-07-06-variant-comparison-visual.html) (브라우저로 열기)
 
 ---
 
