@@ -3,7 +3,7 @@
 DDOKSORI의 라이브 모니터링 스택(§M6) 사용 가이드. "모니터링 데이터는 있으나 시스템은 없다"던 상태를
 Prometheus scrape + Grafana 대시보드로 실제 감시 가능한 시스템으로 만든 결과물이다.
 
-> 최종 업데이트: 2026-07-04 (M6-1~M6-4 + M6-6 구현 기준. M6-5 알림은 제외)
+> 최종 업데이트: 2026-07-10 (M6-1~M6-4 + M6-6 기준. §1·§7에 WSL stale bind-mount, Grafana v11+ `jsonData.database`, Prometheus 카운터 리셋 트러블슈팅 추가. M6-5 알림은 제외)
 
 ## 0. 두 계층 (한눈에)
 
@@ -32,6 +32,15 @@ docker compose -p ddoksori ps
 ```
 
 > `-p ddoksori` 프로젝트명을 항상 붙인다(과거 `.env`의 `COMPOSE_PROJECT_NAME` 오염 이슈로 명시 권장).
+
+> **WSL2/Docker Desktop stale bind-mount**: Docker Desktop 재시작이나 WSL 리셋 뒤 `up -d`가
+> `error mounting ... /run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/... : no such file or directory`
+> 로 실패할 수 있다(소스 파일은 호스트에 멀쩡히 존재). 마운트 캐시가 깨진 것이므로 해당 서비스를
+> 강제 재생성한다:
+> ```bash
+> docker compose -p ddoksori rm -sf <svc> && docker compose -p ddoksori up -d --force-recreate <svc>
+> ```
+> postgres·prometheus·grafana가 각각 당할 수 있으니 실패한 서비스마다 반복한다.
 
 ## 2. 접속
 
@@ -149,6 +158,8 @@ monitoring/
 | Targets에서 backend **DOWN** | backend 미기동 또는 `/metrics` 부재. `curl localhost:8000/metrics` 확인. 컨테이너 네트워크에선 `backend:8000`으로 접근 |
 | 대시보드 패널이 **비어있음** | 트래픽 없음(정상). §4로 `/chat` 호출 후 15초 대기 |
 | PostgreSQL datasource 연결 실패 | `.env`의 `DB_USER`/`DB_PASSWORD`가 볼륨 계정과 불일치. 현재 dev 볼륨 계정은 `your_db_user`. Grafana 컨테이너 env로 주입됨 |
+| Postgres 패널만 **"no default database configured"** 에러(헬스체크는 OK) | Grafana `:latest`가 v11+로 드리프트해 신 `grafana-postgresql-datasource` 플러그인이 DB명을 `jsonData.database`에서 읽음. provisioning의 legacy top-level `database:`만으론 백엔드는 붙지만(헬스 OK) 프론트엔드 패널 쿼리가 터짐. `datasources.yml`의 `jsonData`에 `database: ${DB_NAME}` 추가(PR #106, v1.1.1). 확인: `curl -s -u admin:admin localhost:3000/api/datasources/uid/ddoksori-postgres`의 `jsonData.database` |
+| Prometheus 패널이 backend 재시작 후 **리셋/빈 값** | `prometheus_client` 카운터는 프로세스 in-memory라 backend 재기동 시 0으로 리셋됨(정상). §4로 트래픽 재생성. 누적 분석은 Postgres 기반 "A/B summary from M3 DB" 표(재시작 무관)를 사용 |
 | B/토큰 패널만 비어있음 | A는 토큰 미표면화(정상). B-exaone은 pod 필요 |
 | Grafana 대시보드가 안 보임 | provider 경로/JSON 오류. `docker logs ddoksori_grafana | grep provision` 확인. UI 수정본은 export 후 커밋 |
 | 이미지 버전 고정 | compose가 `:latest` 사용 중. 운영 재현성 위해 태그 pin 권장 |
