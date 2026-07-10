@@ -58,7 +58,7 @@ def load_eval_set(path):
 def main() -> int:
     ap = argparse.ArgumentParser(description="M5-5 run goldenset through /chat (persist answers).")
     ap.add_argument("--eval-set", default="backend/data/golden_set/quality_eval_v1.jsonl")
-    ap.add_argument("--variant", choices=["A", "B"], required=True)
+    ap.add_argument("--variant", choices=["A", "A-hub", "B"], required=True)
     ap.add_argument("--label", required=True,
                     help="session tag component, e.g. A / Bfrontier / Bexaone")
     ap.add_argument("--session-prefix", default="m5-5",

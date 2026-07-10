@@ -1,20 +1,24 @@
 # 상태 스키마 모듈
 
+**최종 수정**: 2026-07-05
+
 ## 개요
 
-LangGraph 오케스트레이터에서 사용하는 상태(State) 스키마를 정의합니다.
+LangGraph MAS Supervisor(variant A/A-hub)에서 사용하는 상태(State) 스키마를 정의합니다.
 기존 단일 파일(`state.py`)을 관심사별로 분리하여 유지보수성을 향상시켰습니다.
+
+> `mode`(`RoutingMode`: NO_RETRIEVAL/NEED_RAG…)와 `routing_mode`(`"deterministic"` = A / `"llm"` = A-hub)는 다릅니다. 전자는 파이프라인 전략, 후자는 슈퍼바이저 라우팅 방식(M8)입니다. 변형 비교: [변형 시스템 아키텍처](../../../../docs/architecture/2026-07-05-variant-system-architecture.md).
 
 ## 모듈 구조
 
 ```
-backend/app/orchestrator/state/
-├── __init__.py      # 통합 API (ChatState, create_initial_state 등)
+backend/app/supervisor/state/
+├── __init__.py      # 통합 API (ChatState, create_initial_state, routing_mode 등)
 ├── session.py       # 세션 메타데이터 (OnboardingInfo, SessionState)
 ├── agent_results.py # 에이전트 결과 (QueryAnalysisResult, RetrievalResult, ReviewResult)
 ├── output.py        # 최종 출력 (ClaimEvidenceMapping, OutputState)
 ├── control.py       # 제어 플래그 (RoutingMode, ControlState)
-├── react.py         # ReAct 패턴 (ReActStep, ReActState)
+├── supervisor.py    # Supervisor 의사결정 상태 (SupervisorState, AgentMessage)
 ├── memory.py        # 메모리 관리 (MemoryState)
 └── README.md        # 이 문서
 ```
@@ -24,7 +28,7 @@ backend/app/orchestrator/state/
 ### 기본 사용 (권장)
 
 ```python
-from app.orchestrator.state import ChatState, create_initial_state
+from app.supervisor.state import ChatState, create_initial_state
 
 # 초기 상태 생성
 state = create_initial_state(
@@ -37,7 +41,7 @@ state = create_initial_state(
 ### 개별 타입 사용
 
 ```python
-from app.orchestrator.state import (
+from app.supervisor.state import (
     QueryAnalysisResult,
     RetrievalResult,
     ReviewResult,
@@ -55,10 +59,10 @@ def process_query(result: QueryAnalysisResult) -> str:
 
 ```python
 # 기존 방식 (계속 동작)
-from app.orchestrator.state import ChatState, RoutingMode
+from app.supervisor.state import ChatState, RoutingMode
 
 # 새 방식 (권장, 동일)
-from app.orchestrator.state import ChatState, RoutingMode
+from app.supervisor.state import ChatState, RoutingMode
 ```
 
 ## 상태 그룹 설명
@@ -102,7 +106,7 @@ from app.orchestrator.state import ChatState, RoutingMode
 | `RoutingMode` | 라우팅 모드 (NO_RETRIEVAL, NEED_RAG, ...) |
 | `ControlState` | 제어 플래그 상태 |
 
-### 5. ReAct (react.py)
+### 5. ReAct 타입 (ReActStep 등)
 
 ReAct 패턴(추론-행동 사이클)을 지원합니다.
 
@@ -172,7 +176,7 @@ react_steps: Annotated[List[ReActStep], operator.add]
 ```bash
 # 상태 모듈 import 테스트
 conda run -n dsr python -c "
-from app.orchestrator.state import ChatState, create_initial_state
+from app.supervisor.state import ChatState, create_initial_state
 state = create_initial_state('테스트 질문')
 print(f'chat_type: {state[\"chat_type\"]}')
 print(f'user_query: {state[\"user_query\"]}')
@@ -181,7 +185,7 @@ print('✅ Import 테스트 통과')
 
 # 하위 호환성 테스트
 conda run -n dsr python -c "
-from app.orchestrator.state import ChatState, RoutingMode
+from app.supervisor.state import ChatState, RoutingMode
 print('✅ 하위 호환성 테스트 통과')
 "
 ```

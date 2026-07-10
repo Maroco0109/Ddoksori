@@ -108,6 +108,11 @@ async def chat(
     try:
         session_id = body.session_id or str(uuid.uuid4())
 
+        # M8: A-hub = MAS(A)와 동일 그래프를 쓰되 슈퍼바이저 라우팅만 LLM으로.
+        # A(결정론)는 기본값 그대로 동결; variant_label로 측정 라벨을 구분한다.
+        variant_label = body.variant  # "A" | "A-hub" ("B"는 아래 별도 경로)
+        routing_mode = "llm" if body.variant == "A-hub" else "deterministic"
+
         # Variant B (Agentic RAG) — isolated comparison path. A path below unchanged.
         if body.variant == "B":
             from app.observability import save_workflow_run
@@ -115,10 +120,24 @@ async def chat(
 
             b_run_id = str(uuid.uuid4())
             # B canonical model = EXAONE (강한 모델 agentic RAG, A/B 의도).
-            # VARIANT_B_MODEL_SPEC로 override 가능(exaone | frontier).
-            b_model_spec = os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
+            # 요청 model_spec 우선, 없으면 VARIANT_B_MODEL_SPEC env(기본 exaone).
+            b_model_spec = body.model_spec or os.getenv(
+                "VARIANT_B_MODEL_SPEC", "exaone"
+            )
+            from app.common.tracing import with_trace_tags
+
             b_result = await asyncio.to_thread(
-                run_b, body.message, model_spec=b_model_spec, top_k=body.top_k or 5
+                run_b,
+                body.message,
+                model_spec=b_model_spec,
+                top_k=body.top_k or 5,
+                trace_config=with_trace_tags(
+                    {},
+                    variant="B",
+                    session_id=session_id,
+                    chat_type=body.chat_type,
+                    model_spec=b_model_spec,
+                ),
             )
             clarified = bool(b_result.get("clarified", False))
             b_blocked = bool(b_result.get("blocked", False))
@@ -249,6 +268,7 @@ async def chat(
             user_query=body.message,
             chat_type=body.chat_type,
             onboarding=cast(Any, body.onboarding),
+            routing_mode=routing_mode,
         )
 
         # 온보딩 데이터 영속화
@@ -270,12 +290,20 @@ async def chat(
         # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
         initial_state["session_id"] = session_id
 
+        # M7-4: LangSmith 태그(variant/session/chat_type) 부여 — A/B 필터·비교용.
+        from app.common.tracing import with_trace_tags
+
         config = cast(
             Any,
-            {
-                "configurable": {"thread_id": session_id},
-                "recursion_limit": GRAPH_RECURSION_LIMIT,
-            },
+            with_trace_tags(
+                {
+                    "configurable": {"thread_id": session_id},
+                    "recursion_limit": GRAPH_RECURSION_LIMIT,
+                },
+                variant=variant_label,
+                session_id=session_id,
+                chat_type=body.chat_type,
+            ),
         )
 
         # === PR-6: L1 Supervisor Response Cache Check ===
@@ -396,7 +424,7 @@ async def chat(
 
         await save_workflow_run(
             run_id=log_entry.request_id,
-            variant="A",
+            variant=variant_label,
             query=body.message,
             status="success",
             session_id=session_id,
@@ -512,7 +540,7 @@ async def chat(
 
         await save_workflow_run(
             run_id=log_entry.request_id,
-            variant="A",
+            variant=variant_label,
             query=body.message,
             status="error",
             session_id=session_id,
@@ -550,6 +578,148 @@ async def _stream_with_heartbeat(async_iterable, heartbeat_interval: int = 15):
             yield ("heartbeat", None)
         except StopAsyncIteration:
             break
+
+
+async def _variant_b_stream(body, session_id: str, start_time: float):
+    """M7-2: variant B(ReAct)용 스트리밍 경로.
+
+    run_b는 동기(agent.invoke)라 토큰 스트리밍이 없다. 따라서 status 이벤트 →
+    run_b(threadpool) → complete 이벤트를 내보내고, 비스트리밍 /chat B 분기와 동일한
+    M3 적재 + M6 메트릭(build_b_*)을 best-effort로 수행한다(계측 실패가 스트림을 깨지 않음).
+    """
+    from app.variant_b.agent import run_b
+
+    b_model_spec = body.model_spec or os.getenv("VARIANT_B_MODEL_SPEC", "exaone")
+    b_run_id = str(uuid.uuid4())
+
+    status_event = {
+        "type": "status",
+        "data": {
+            "node": "variant_b",
+            "status": f"B({b_model_spec}) 에이전트 실행 중...",
+            "progress": 30,
+        },
+    }
+    yield f"data: {json.dumps(status_event, ensure_ascii=False)}\n\n"
+
+    from app.common.tracing import with_trace_tags
+
+    try:
+        b_result = await asyncio.to_thread(
+            run_b,
+            body.message,
+            model_spec=b_model_spec,
+            top_k=body.top_k or 5,
+            trace_config=with_trace_tags(
+                {},
+                variant="B",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                model_spec=b_model_spec,
+            ),
+        )
+    except Exception as e:
+        logger.error(f"[chat_stream][B] run_b failed: {e}", exc_info=True)
+        try:
+            from app.common.metrics import record_chat_request
+            from app.observability import save_workflow_run
+
+            await save_workflow_run(
+                run_id=b_run_id,
+                variant="B",
+                query=body.message,
+                status="error",
+                session_id=session_id,
+                chat_type=body.chat_type,
+                error_message=str(e),
+                total_time_ms=(time.time() - start_time) * 1000.0,
+            )
+            record_chat_request("B", "error", time.time() - start_time)
+        except Exception as instr_err:
+            logger.warning(
+                f"[chat_stream][B] error-path instrumentation failed (non-fatal): {instr_err}"
+            )
+        error_event = {
+            "type": "error",
+            "data": {
+                "message": "답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+            },
+        }
+        yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        return
+
+    clarified = bool(b_result.get("clarified", False))
+    b_blocked = bool(b_result.get("blocked", False))
+    answer = b_result.get("answer", "") or ""
+
+    complete_event = {
+        "type": "complete",
+        "data": {
+            "session_id": session_id,
+            "answer": answer,
+            "sources": [],
+            "has_sufficient_evidence": not clarified,
+            "clarifying_questions": [answer] if clarified else [],
+            "model": f"variant-b-{b_model_spec}",
+        },
+    }
+    yield f"data: {json.dumps(complete_event, ensure_ascii=False)}\n\n"
+
+    # best-effort B 계측 (비스트리밍 /chat B 분기와 동일 빌더 재사용).
+    try:
+        from app.common.metrics import (
+            record_chat_request,
+            record_guardrail_blocks,
+            record_llm_tokens,
+        )
+        from app.observability import save_workflow_run
+        from app.observability.guardrail_events import (
+            build_b_guardrail_events,
+            save_guardrail_events,
+        )
+        from app.observability.llm_calls import build_b_llm_call, save_llm_calls
+        from app.observability.protocol_events import (
+            build_b_protocol_events,
+            save_protocol_events,
+        )
+        from app.observability.retrieval_events import (
+            build_b_retrieval_events,
+            save_retrieval_events,
+        )
+        from app.observability.workflow_steps import build_b_steps, save_workflow_steps
+
+        await save_workflow_run(
+            run_id=b_run_id,
+            variant="B",
+            query=body.message,
+            status="success",
+            session_id=session_id,
+            chat_type=body.chat_type,
+            total_time_ms=(time.time() - start_time) * 1000.0,
+            clarified=clarified,
+            blocked=b_blocked,
+            answer=answer,
+        )
+        await save_workflow_steps(b_run_id, build_b_steps(b_result.get("trace", [])))
+        await save_retrieval_events(
+            b_run_id, build_b_retrieval_events(b_result.get("retrieval_records", []))
+        )
+        await save_llm_calls(b_run_id, build_b_llm_call(b_result))
+        await save_guardrail_events(
+            b_run_id, build_b_guardrail_events(b_result.get("trace", []))
+        )
+        await save_protocol_events(
+            b_run_id, "B", build_b_protocol_events(b_result.get("protocol_messages", []))
+        )
+        record_chat_request("B", "success", time.time() - start_time)
+        record_guardrail_blocks(
+            "B", build_b_guardrail_events(b_result.get("trace", []))
+        )
+        record_llm_tokens("B", build_b_llm_call(b_result))
+    except Exception as instr_err:
+        logger.warning(
+            f"[chat_stream][B] M7-2 instrumentation failed (non-fatal): {instr_err}"
+        )
 
 
 @router.post("/chat/stream")
@@ -595,6 +765,16 @@ async def chat_stream_sse(
         # Get user_id from JWT token
         user_id = current_user.user_id if current_user else None
 
+        # M8: A-hub = MAS 그래프 + LLM 슈퍼바이저 라우팅. A(결정론)는 기본값 동결.
+        variant_label = body.variant  # "A" | "A-hub"
+        routing_mode = "llm" if body.variant == "A-hub" else "deterministic"
+
+        # M7-2: variant B는 별도 스트리밍 경로(ReAct는 sync). A(MAS) astream과 분리.
+        if body.variant == "B":
+            async for chunk in _variant_b_stream(body, session_id, start_time):
+                yield chunk
+            return
+
         try:
             graph = get_graph_for_chat_type(body.chat_type)
             GRAPH_RECURSION_LIMIT = 50
@@ -627,6 +807,7 @@ async def chat_stream_sse(
                 user_query=body.message,
                 chat_type=body.chat_type,
                 onboarding=cast(Any, body.onboarding),
+                routing_mode=routing_mode,
             )
 
             # 온보딩 데이터 영속화
@@ -650,12 +831,20 @@ async def chat_stream_sse(
             # 세션 ID를 state에 포함 (L4 캐시 키로 사용)
             initial_state["session_id"] = session_id
 
+            # M7-4: LangSmith 태그(variant/session/chat_type) 부여 — A/B 필터·비교용.
+            from app.common.tracing import with_trace_tags
+
             runnable_config = cast(
                 Any,
-                {
-                    "configurable": {"thread_id": session_id},
-                    "recursion_limit": GRAPH_RECURSION_LIMIT,
-                },
+                with_trace_tags(
+                    {
+                        "configurable": {"thread_id": session_id},
+                        "recursion_limit": GRAPH_RECURSION_LIMIT,
+                    },
+                    variant=variant_label,
+                    session_id=session_id,
+                    chat_type=body.chat_type,
+                ),
             )
 
             logger.info(
@@ -882,6 +1071,109 @@ async def chat_stream_sse(
                 rag_logger.finalize(log_entry, start_time)
                 rag_logger.save(log_entry)
 
+                # M7-1: 스트리밍 경로 계측 파리티 (비스트리밍 /chat A-path와 동일 빌더 재사용).
+                # 이미 complete 이벤트를 전송한 뒤이므로 계측 실패가 스트림을 깨지 않도록 best-effort.
+                try:
+                    node_timings = final_state.get("_node_timings", {})
+
+                    from app.observability import save_workflow_run
+
+                    await save_workflow_run(
+                        run_id=log_entry.request_id,
+                        variant=variant_label,
+                        query=body.message,
+                        status="success",
+                        session_id=session_id,
+                        chat_type=body.chat_type,
+                        total_time_ms=log_entry.total_time_ms,
+                        clarified=not response_data.get("has_sufficient_evidence", True),
+                        blocked=bool(final_state.get("guardrail_blocked")),
+                        answer=answer,
+                    )
+
+                    if trace_entries:
+                        from app.observability.workflow_steps import (
+                            build_a_steps,
+                            save_workflow_steps,
+                        )
+                        from app.supervisor.graph import (
+                            build_pipeline_summary as _build_pipeline_summary,
+                        )
+
+                        _summary = _build_pipeline_summary(
+                            trace_entries,
+                            total_duration_ms=(time.time() - start_time) * 1000,
+                        )
+                        await save_workflow_steps(
+                            log_entry.request_id,
+                            build_a_steps(_summary.get("per_node", []), node_timings),
+                        )
+
+                    from app.observability.retrieval_events import (
+                        build_a_retrieval_events,
+                        save_retrieval_events,
+                    )
+
+                    await save_retrieval_events(
+                        log_entry.request_id,
+                        build_a_retrieval_events(
+                            retrieval, body.top_k or 5, body.message
+                        ),
+                    )
+
+                    from app.observability.llm_calls import (
+                        build_a_llm_calls,
+                        save_llm_calls,
+                    )
+
+                    await save_llm_calls(
+                        log_entry.request_id,
+                        build_a_llm_calls(final_state, node_timings),
+                    )
+
+                    from app.observability.guardrail_events import (
+                        build_a_guardrail_events,
+                        save_guardrail_events,
+                    )
+
+                    await save_guardrail_events(
+                        log_entry.request_id,
+                        build_a_guardrail_events(node_timings),
+                    )
+
+                    from app.observability.protocol_events import (
+                        build_a_protocol_events,
+                        save_protocol_events,
+                    )
+
+                    await save_protocol_events(
+                        log_entry.request_id,
+                        "A",
+                        build_a_protocol_events(
+                            final_state.get("_agent_trace_entries", [])
+                        ),
+                    )
+
+                    from app.common.metrics import (
+                        record_chat_request,
+                        record_guardrail_blocks,
+                        record_llm_tokens,
+                    )
+
+                    record_chat_request(
+                        "A", "success", (log_entry.total_time_ms or 0) / 1000.0
+                    )
+                    record_guardrail_blocks(
+                        "A", build_a_guardrail_events(node_timings)
+                    )
+                    record_llm_tokens(
+                        "A", build_a_llm_calls(final_state, node_timings)
+                    )
+                except Exception as instr_err:
+                    logger.warning(
+                        f"[chat_stream] M7-1 instrumentation failed (non-fatal): {instr_err}"
+                    )
+
         except asyncio.CancelledError:
             logger.info(
                 f"[chat_stream] Client disconnected during streaming, session={session_id[:8]}"
@@ -920,6 +1212,32 @@ async def chat_stream_sse(
             )
             rag_logger.finalize(log_entry, start_time)
             rag_logger.save(log_entry)
+
+            # M7-1: 에러 경로도 A와 동일하게 best-effort 적재/메트릭.
+            try:
+                from app.observability import save_workflow_run
+
+                await save_workflow_run(
+                    run_id=log_entry.request_id,
+                    variant=variant_label,
+                    query=body.message,
+                    status="error",
+                    session_id=session_id,
+                    chat_type=body.chat_type,
+                    error_message=str(e),
+                    total_time_ms=log_entry.total_time_ms,
+                )
+
+                from app.common.metrics import record_chat_request
+
+                record_chat_request(
+                    "A", "error", (log_entry.total_time_ms or 0) / 1000.0
+                )
+            except Exception as instr_err:
+                logger.warning(
+                    f"[chat_stream] M7-1 error-path instrumentation failed (non-fatal): {instr_err}"
+                )
+
             error_event = {
                 "type": "error",
                 "data": {

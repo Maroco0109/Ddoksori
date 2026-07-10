@@ -43,6 +43,28 @@ export interface ChatAPIRequest {
   top_k?: number;
   chunk_types?: string[];
   agencies?: string[];
+  /** M7-2/M7-3: A=MAS(baseline), B=Agentic RAG. 미지정 시 백엔드 기본 A. */
+  variant?: 'A' | 'B';
+  /** variant=B일 때 모델 선택. frontier=gpt-4o-mini, exaone=EXAONE(느림/파드 필요). */
+  model_spec?: 'frontier' | 'exaone';
+}
+
+/** M7-3: 테스트 모드 variant 선택지 (프론트 셀렉터 → variant/model_spec으로 매핑). */
+export type TestVariant = 'A' | 'B-frontier' | 'B-exaone';
+
+/** TestVariant → ChatAPIRequest의 variant/model_spec으로 변환. */
+export function testVariantToRequest(
+  tv: TestVariant
+): Pick<ChatAPIRequest, 'variant' | 'model_spec'> {
+  switch (tv) {
+    case 'B-frontier':
+      return { variant: 'B', model_spec: 'frontier' };
+    case 'B-exaone':
+      return { variant: 'B', model_spec: 'exaone' };
+    case 'A':
+    default:
+      return { variant: 'A' };
+  }
 }
 
 /**

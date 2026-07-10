@@ -4,7 +4,7 @@
 
 > 복잡한 소비자 분쟁 문의에 대해 법령, 분쟁조정사례, 상담사례를 기반으로 정확하고 신뢰도 높은 답변을 제공합니다.
 
-최종 수정일: 2026-02-09
+최종 수정일: 2026-07-05
 
 ---
 
@@ -12,6 +12,7 @@
 
 - [프로젝트 개요](#1-프로젝트-개요)
 - [왜 MAS인가?](#2-왜-mas인가)
+- [변형(Variant) 아키텍처 & 측정 비교](#변형variant-아키텍처--측정-비교)
 - [Happy Path (E2E)](#3-happy-path-e2e)
 - [CI/CD 파이프라인](#4-cicd-파이프라인)
 - [Quickstart](#5-quickstart)
@@ -29,7 +30,7 @@
 
 | 기능 | 설명 |
 |------|------|
-| **MAS Supervisor v2** | gpt-4o 기반 Supervisor가 전문 에이전트를 조율하는 Hub-Spoke 구조 |
+| **MAS Supervisor v2** | **규칙 기반(결정론적)** Supervisor가 전문 에이전트를 조율하는 Hub-Spoke 구조 (variant A). LLM 라우팅은 A-hub·측정 전용 — [변형 비교](#변형variant-아키텍처--측정-비교) 참조 |
 | **Selective Retrieval** | 쿼리 분석 결과에 따라 필요한 Retrieval Agent만 선택적 병렬 실행 (법령/기준/사례) |
 | **Progressive Disclosure** | 적응형 응답 모드 (legacy/minimal/adaptive) + 후속 질문 기반 점진적 상세 안내 |
 | **온보딩 컨텍스트 영속화** | 구매일/품목/금액 등 온보딩 데이터를 세션 간 유지, 경과 일수 자동 계산 |
@@ -89,11 +90,46 @@
 
 ---
 
+## 변형(Variant) 아키텍처 & 측정 비교
+
+DDOKSORI의 목표는 "답변 잘하는 챗봇 하나"가 아니라 **서로 다른 아키텍처의 챗봇을 동일 조건에서 측정·비교하는 시스템**이다. 하나의 백엔드가 여러 **변형(variant)** 을 실행하고, 각 요청은 variant 라벨로 DB·Prometheus에 적재되어 SQL·대시보드로 A/B 비교된다. 핵심 대비는 **workflow(결정론 조율) vs agent(LLM 자율 판단)** — Anthropic *"Building Effective Agents"* 의 구분과 일치한다.
+
+| 변형 | 정의 | 의사결정 | LLM tool-calling | 모델 | 상태 |
+|------|------|----------|:---:|------|------|
+| **A** | MAS Hub-Spoke **고정 파이프라인** (결정론) | 규칙 기반 | ❌ | gpt-4o | **프로덕션 기본(동결)** |
+| **A-hub** | A와 동일 그래프 + **LLM 슈퍼바이저 라우팅** | LLM 라우팅 | ❌(라우팅만) | gpt-4o | 측정 전용(M8) |
+| **B-frontier** | **ReAct 자율 에이전트** | LLM 자율 | ✅ | gpt-4o-mini | opt-in 비교 |
+| **B-exaone** | ReAct 자율 에이전트 (자체 호스팅) | LLM 자율 | ✅ | EXAONE 4.5-33B (RunPod H100) | 연구/비교 전용 |
+
+> A와 A-hub는 **같은 LangGraph 그래프**를 공유(차이는 라우팅 방식뿐). B-frontier와 B-exaone은 **같은 ReAct 에이전트**를 공유(차이는 chat model뿐). A에는 LLM tool-calling이 없다 — 진짜 agentic tool-calling은 B에만 있다.
+
+### 측정 비교 (핵심 지표)
+
+| 지표 | A (결정론 MAS) | A-hub (LLM 라우팅) | B-frontier (ReAct) | B-exaone | 출처 |
+|------|:---:|:---:|:---:|:---:|------|
+| faithfulness | **2.00** | ≈A ¹ | 1.92 | 1.89 ⁴ | M5-5 |
+| safety pass | **1.00** | ≈A ¹ | 0.83 | 0.78 ⁴ | M5-5 |
+| 보안 decided | **100%** | ≈A ¹ | 96% | 96.2% | M4-A |
+| leak_rate | 0% | 0% | 0% | 0% | M4-A |
+| latency | 10.2s ² | 18.9s ³ | **6.4s** | ≈84s | M5-5 / M8 |
+| 라우팅=결정론 일치 | — | **100%** (60/60) | — | — | M8 |
+| 자율성/유연성 | 낮음 | 낮음 | **높음** | **높음** | 구조 |
+
+> ¹ A-hub는 A와 **동일 파이프라인**(M8에서 라우팅 결정 100% 일치)이라 품질·안전·보안은 A와 사실상 동일 — 별도 측정하지 않음. &nbsp; ² M5-5 median. &nbsp; ³ M8 평균(gpt-4o 라우팅), A 대비 **+74%**. 약모델(gpt-4o-mini)은 루프→에러. &nbsp; ⁴ B-exaone는 `n_scored=9`(에러 3건 제외), 소량셋(12쿼리) 기준 참고치 — pod 추론 불안정(error_rate 0.25)으로 완주 표본이 작다.
+
+**A vs A-hub (M8, "LLM 라우팅이 이득인가")**: A-hub의 LLM 슈퍼바이저는 결정론 라우터와 **100% 동일한 결정**(60/60)을 내리면서 **지연 +74%**(10.8s→18.9s)와 요청당 +5 LLM 호출만 더했다. 약모델(gpt-4o-mini)에선 루프→에러. → **선형 파이프라인에서 LLM 라우팅은 순수 오버헤드**이며, A의 결정론 동결이 정당함을 실측으로 입증.
+
+**결론**: 도메인 핵심 축(안전·보안·충실성)은 A(workflow)가, 속도·유연성은 B-frontier(agent)가 우위. 보안 격차는 **모델이 아니라 아키텍처**(고정 파이프라인 vs 자율 에이전트) 차이. 전체 구조·의사결정·측정 상세는 **[변형 시스템 아키텍처 문서](docs/architecture/2026-07-05-variant-system-architecture.md)** 참조.
+
+---
+
 ## 3. Happy Path (E2E)
 
-### 예시 시나리오: "헬스장 환불 받고 싶어요"
+하나의 백엔드가 여러 변형을 실행한다. 대표 두 경로 — **A(결정론 MAS)** 와 **B(ReAct 에이전트)** — 를 각각 도식화한다. **A-hub**는 A와 동일 경로이며 슈퍼바이저 라우팅만 LLM으로 대체된다([Architecture §7](#7-architecture) 참조).
 
-사용자가 헬스장 환불에 대해 질문하면, 시스템은 다음 10단계를 거쳐 법적 근거가 포함된 답변을 생성합니다.
+### 3.1 Variant A — 결정론 MAS: "헬스장 환불 받고 싶어요"
+
+규칙 기반 Supervisor가 고정 파이프라인을 조율하며, LLM은 **답변 생성**(+ 질의분석의 조건부 보조)에만 쓰입니다. 다음 10단계로 법적 근거가 포함된 답변을 생성합니다.
 
 ```mermaid
 sequenceDiagram
@@ -102,15 +138,16 @@ sequenceDiagram
     participant API as API Gateway<br/>(FastAPI)
     participant Cache as L1 Cache<br/>(Redis)
     participant IG as InputGuardrail
-    participant SUP as Supervisor<br/>(gpt-4o)
-    participant QA as QueryAnalyst
+    participant SUP as Supervisor<br/>(규칙 기반 라우팅)
+    participant QA as QueryAnalyst<br/>(규칙+조건부 LLM)
     participant RL as Retrieval Law
     participant RC as Retrieval Criteria
     participant RCase as Retrieval Case
     participant RM as RetrievalMerge
     participant AD as AnswerDrafter<br/>(gpt-4o)
-    participant LR as LegalReviewer<br/>(gpt-4o)
+    participant LR as LegalReviewer<br/>(규칙/정규식)
     participant OG as OutputGuardrail
+    participant MS as MemorySave
 
     User->>FE: "헬스장 환불 받고 싶어요"
     FE->>API: POST /chat/stream
@@ -153,14 +190,47 @@ sequenceDiagram
 
     Note over SUP,OG: Step 9. 출력 가드레일
     SUP->>OG: 최종 답변 유해성 검사
-    OG-->>API: PASS → final_answer 확정<br/>+ L1 캐시 저장
+    OG->>MS: PASS → 대화 메모리 저장 + L1 캐시
+    MS-->>API: final_answer 확정
 
     Note over API,User: Step 10. SSE 스트리밍 응답
     API-->>FE: SSE 스트리밍 (실시간)
     FE-->>User: 법적 근거 포함 답변 표시<br/>+ 출처 링크 제공
 ```
 
-### 주요 분기 경로
+### 3.2 Variant B — ReAct 에이전트 (frontier / exaone)
+
+동일 질문을 **단일 LLM + 도구**로 처리한다. 결정론 cosine 게이트로 근거가 약하면 단발성 되물음(clarification), 충분하면 ReAct 에이전트가 **도구를 자율 호출**해 근거를 모아 답한다. 입출력 가드레일·게이트는 A와 동일 primitive를 재사용하며, **모델만 바꾸면** B-frontier(gpt-4o-mini) / B-exaone(EXAONE 4.5-33B)이 된다.
+
+```mermaid
+sequenceDiagram
+    actor User as 사용자
+    participant API as API Gateway<br/>(FastAPI)
+    participant IG as InputGuardrail<br/>(A와 동일 재사용)
+    participant GATE as Cosine Gate<br/>(max_cosine ≥ τ?)
+    participant RA as ReAct Agent<br/>(gpt-4o-mini / EXAONE)
+    participant TOOL as Tools<br/>(search/law/case/verify)
+    participant OG as OutputGuardrail
+
+    User->>API: POST /chat (variant=B[, model_spec])
+    API->>IG: 입력 가드레일
+    IG-->>API: PASS
+    API->>GATE: 게이트 검색 (max_cosine 계산)
+    alt 근거 약함 (max_cosine 임계 미만)
+        GATE-->>API: 단발성 Clarification 질문
+    else 근거 충분 (임계 이상)
+        GATE->>RA: ReAct 시작
+        loop LLM 자율 tool-calling
+            RA->>TOOL: search_consumer_disputes / get_law_article / verify_citation ...
+            TOOL-->>RA: 검색 근거 (pgvector)
+        end
+        RA->>OG: 근거 기반 답변
+        OG-->>API: 최종 답변 (인용 검증 후)
+    end
+    API-->>User: 응답 (Clarification 또는 답변+출처)
+```
+
+### 주요 분기 경로 (Variant A)
 
 | 경로 | 조건 | 동작 |
 |------|------|------|
@@ -369,7 +439,11 @@ docker compose down
 
 ## 7. Architecture
 
-### 전체 시스템 구조
+DDOKSORI는 하나의 백엔드에서 **A / A-hub / B** 세 변형을 실행합니다. 아래에 각각을 도식화합니다. A와 A-hub는 같은 LangGraph 그래프를 공유(슈퍼바이저 라우팅만 다름), B-frontier/B-exaone은 같은 ReAct 에이전트를 공유(chat model만 다름).
+
+### 7.1 Variant A — 결정론 MAS (전체 구조)
+
+규칙 기반 Supervisor가 spoke를 조율하며, LLM은 **답변 생성**(+질의분석의 조건부 보조)에만 쓰입니다.
 
 ```mermaid
 graph TB
@@ -388,9 +462,9 @@ graph TB
             CC -->|MISS| IG[InputGuardrail]
             CC -->|HIT| CR[Cache Response]
 
-            IG -->|PASS| SUP[Supervisor<br/>gpt-4o]
+            IG -->|PASS| SUP[Supervisor<br/>규칙 기반 라우팅]
 
-            SUP --> QA[QueryAnalyst<br/>의도 분류 + 쿼리 확장]
+            SUP --> QA[QueryAnalyst<br/>규칙 + 조건부 LLM]
             QA --> SUP
 
             SUP -->|Fan-out| RL[Retrieval Law<br/>법령 검색]
@@ -405,7 +479,7 @@ graph TB
             SUP --> AD[AnswerDrafter<br/>gpt-4o]
             AD --> SUP
 
-            SUP --> LR[LegalReviewer<br/>gpt-4o]
+            SUP --> LR[LegalReviewer<br/>규칙/정규식]
             LR -->|재생성 요청| SUP
             LR -->|PASS| OG[OutputGuardrail]
 
@@ -419,12 +493,14 @@ graph TB
     end
 
     subgraph "External Services"
-        AD & LR & SUP -.->|API| OAI[OpenAI gpt-4o]
-        SUP -.->|Fallback| ANT[Anthropic Claude]
+        QA & AD -.->|LLM 생성·조건부 분석| OAI[OpenAI gpt-4o]
+        AD -.->|Fallback| ANT[Anthropic Claude]
     end
 ```
 
-### MAS 노드 실행 순서
+> Supervisor·LegalReviewer·Retrieval은 **LLM을 호출하지 않는다**(규칙/SQL). OpenAI는 QueryAnalyst(조건부)와 AnswerDrafter에서만 사용.
+
+### Variant A — 노드 실행 순서
 
 ```
 Entry → CacheCheck ──HIT──→ CacheResponse → END
@@ -464,12 +540,53 @@ Entry → CacheCheck ──HIT──→ CacheResponse → END
                MemorySave ──→ END
 ```
 
+### 7.2 Variant A-hub — LLM 슈퍼바이저 라우팅 (측정 전용)
+
+A와 **노드·함수가 전부 동일**하고 슈퍼바이저만 매 스텝 LLM으로 다음 노드를 고릅니다. 검색은 여전히 SQL, 검토는 여전히 규칙 — LLM은 "일을 대신"하지 않고 "순서만 결정"합니다.
+
+```mermaid
+graph TB
+    IG["Input Guardrail"] -->|PASS| SUP{{"Supervisor<br/>LLM 라우팅 · gpt-4o"}}
+    SUP -.->|매 스텝 라우팅 결정| OAI["OpenAI gpt-4o"]
+    SUP --> QA["QueryAnalyst"] --> SUP
+    SUP -->|Fan-out| RET["Retrieval Law/Criteria/Case<br/>SQL 하이브리드"]
+    RET --> RM["RetrievalMerge"] --> SUP
+    SUP --> AD["AnswerDrafter · gpt-4o"] --> SUP
+    SUP --> LR["LegalReviewer · 규칙/정규식"] --> SUP
+    LR -->|PASS| OG["Output Guardrail"] --> MS["Memory Save"] --> E([END])
+    RET -.->|SQL| DB[(pgvector)]
+```
+
+> **M8 측정**: LLM 라우팅 결정이 결정론과 **100% 일치**(60/60)하면서 지연만 **+74%**. 약모델(gpt-4o-mini)은 루프→에러. 선형 파이프라인에서 LLM 라우팅은 순수 오버헤드 → A는 결정론으로 동결.
+
+### 7.3 Variant B — ReAct 자율 에이전트 (frontier / exaone)
+
+단일 LLM이 **도구를 자율 호출**(진짜 agentic tool-calling). 입출력 가드레일·게이트는 A와 동일 primitive를 재사용하며, **모델만 스왑**하면 B-frontier(gpt-4o-mini) / B-exaone(EXAONE 4.5-33B)이 됩니다.
+
+```mermaid
+graph TB
+    GW["POST /chat<br/>(variant=B, model_spec)"] --> IGB["Input Guardrail<br/>(A와 동일)"]
+    IGB -->|PASS| GATE{"Cosine Gate<br/>max_cosine ≥ τ?"}
+    GATE -->|근거 약함| CLR["단발성 Clarification"] --> EB([END])
+    GATE -->|근거 충분| RA["ReAct Agent<br/>create_react_agent"]
+    RA -->|자율 tool-calling| TOOLS["Tools:<br/>search_consumer_disputes<br/>get_law_article / get_case_detail<br/>verify_citation"]
+    TOOLS -->|검색 근거| RA
+    TOOLS -.->|SQL| DB[(pgvector)]
+    RA --> OGB["Output Guardrail"] --> ANS([답변 + 출처])
+    RA -.->|LLM| MODEL["frontier: gpt-4o-mini<br/>exaone: EXAONE 4.5-33B"]
+```
+
+> B-exaone은 자체 호스팅(RunPod H100 + vLLM)이라 느리고(≈84s) 불안정 — ReAct 누적 컨텍스트가 `max_model_len`(8192) 초과 시 게이트 근거로 1회 재합성 폴백(#68). 프로덕션 mainline 제외.
+
 ---
 
 ## 8. Documentation Hub
 
 | 문서 | 링크 | 설명 |
 |------|------|------|
+| **변형 시스템 아키텍처** ⭐ | [docs/architecture/2026-07-05-variant-system-architecture.md](docs/architecture/2026-07-05-variant-system-architecture.md) | A/A-hub/B-frontier/B-exaone 4개 변형 구조·의사결정·측정 비교 (단일 출처) |
+| **A 결정 기록** | [docs/architecture/2026-07-05-a-orchestration-decision.md](docs/architecture/2026-07-05-a-orchestration-decision.md) | A가 결정론적 orchestration인 이유(설계→동결 히스토리) |
+| **LLM 클라이언트 레이어** | [backend/app/llm/README.md](backend/app/llm/README.md) | OpenAI/EXAONE(vLLM)/Anthropic 클라이언트 + 변형별 매핑 |
 | **Backend** | [backend/README.md](backend/README.md) | 백엔드 MAS 아키텍처 전체 구조 |
 | **Frontend** | [frontend/README.md](frontend/README.md) | 프론트엔드 구조 및 기능 모듈 |
 | **에이전트 통합** | [backend/app/agents/README.md](backend/app/agents/README.md) | 에이전트 인터페이스 및 통합 가이드 |

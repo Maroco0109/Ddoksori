@@ -7,6 +7,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useChatStore } from '@/features/chat/chat.store';
 import { useAuthStore } from '@/features/auth/auth.store';
 import { API_BASE_URL } from '@/shared/api/client';
+import { testVariantToRequest } from '@/shared/types';
 import type {
   ChatAPIRequest,
   SSEEvent,
@@ -101,11 +102,15 @@ export function useStreamingChat(options: UseStreamingChatOptions = {}): UseStre
       const backendSessionId = useChatStore.getState().backendSessionId;
       const onboarding = request.onboarding || convertDisputeFormToOnboarding();
 
+      // M7-3: 테스트 모드 variant/model_spec을 스토어에서 주입(모든 호출부 공통).
+      const testVariant = useChatStore.getState().testVariant;
+
       const enhancedRequest: ChatAPIRequest = {
         ...request,
         session_id: backendSessionId || undefined,
         chat_type: request.chat_type || 'dispute',
         onboarding: onboarding,
+        ...testVariantToRequest(testVariant),
       };
 
       // Get JWT token from auth store for user identification

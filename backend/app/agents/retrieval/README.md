@@ -1,6 +1,8 @@
 # Retrieval Agent (정보검색 에이전트)
 
-**최종 수정**: 2026-02-09
+**최종 수정**: 2026-07-05
+
+> **변형 맥락**: 이 검색 에이전트는 **variant A/A-hub**의 spoke로, 활성 MAS 그래프(`app/supervisor/`)는 **law/criteria/case 3개**를 Fan-out 병렬 실행합니다(`counsel`은 구현·export됐으나 그래프 노드로는 미등록 — 아래 §Graph 디스패치 현황 참조). 검색은 코드가 `UnifiedRetriever`를 **무조건 호출**합니다(LLM tool-calling 아님). **variant B**(ReAct)는 자체 도구(`search_consumer_disputes`, `get_law_article`, `get_case_detail`, `verify_citation`)를 LLM이 자율 호출합니다. 전체 비교: [변형 시스템 아키텍처](../../../../docs/architecture/2026-07-05-variant-system-architecture.md).
 
 ## 1. 개요 (Overview)
 

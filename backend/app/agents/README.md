@@ -1,9 +1,11 @@
 # DDOKSORI MAS 에이전트 시스템
 
-> **최종 수정**: 2026-02-09
+> **최종 수정**: 2026-07-05
 >
 > MAS(Multi-Agent System) Supervisor 아키텍처 기반의 에이전트 계층 문서입니다.
 > 각 에이전트의 역할, 인터페이스 프로토콜, 실행 흐름을 정의합니다.
+
+> **변형 맥락**: 이 문서의 에이전트들은 **variant A**(결정론적 MAS orchestration)와 **A-hub**(동일 그래프 + LLM 라우팅, 측정 전용)의 spoke입니다. A의 조율은 규칙 기반이며 LLM tool-calling이 없습니다 — 진짜 agentic tool-calling은 **variant B**(ReAct, `app/variant_b/`)에만 있습니다. A/A-hub/B-frontier/B-exaone 전체 비교: [변형 시스템 아키텍처](../../../docs/architecture/2026-07-05-variant-system-architecture.md).
 
 ---
 

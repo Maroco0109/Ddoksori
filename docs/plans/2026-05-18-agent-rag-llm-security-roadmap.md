@@ -189,6 +189,23 @@ M4-B(코드 보안)는 **optional/backlog**다(위 우선순위 갱신 참조). 
 
 실행 우선순위(2026-06-24): **M3-9 → M5 → M6 → M4-A → (M4-B optional)**. M5-1(답변 영속화)은 M3-9 직후 또는 M5 착수 시 선행한다. M6-1(Prometheus 노출)은 독립적이라 어느 시점에나 끼울 수 있다. M4-A(챗봇/LLM 보안)는 M5·M6 뒤, M4-B(코드 보안)는 optional. 원칙은 동일하게 **한 번에 한 모듈**.
 
+#### M7. 제품 경로 통합 — 스트리밍 계측 파리티 + variant 라우팅
+
+도입 배경(2026-07-05, M4-A 완료·v1.0.0 릴리스 후): M3/M4-A/M5/M6 측정 스택은 전부 **비스트리밍 `/chat`** 위에 구축됐으나, 프론트엔드 실사용 경로는 **`/chat/stream`**(SSE)이다. 코드 확인 결과 `/chat/stream`은 (1) M3 적재(`save_workflow_run`)·M6 메트릭(`record_chat_request` 등)·`guardrail_events` 저장이 **전무**하고, (2) `get_graph_for_chat_type`로 **A(MAS) 전용**이라 variant B를 탈 수 없다. 즉 **실사용 트래픽이 측정되지 않고**, A/B 비교도 제품 경로에서 불가능하다. M7은 이 갭을 닫아 "실사용이 측정되고 세 variant를 프론트에서 검증 가능한" 상태를 만든다.
+
+원칙: 새 계측을 만들기보다 **비스트리밍 `/chat`의 기존 계측(M3 `save_workflow_run` + M6 `record_*` + `guardrail_events`)을 스트리밍 경로에 재사용**해 파리티를 맞춘다. mainline(A vs B) 확정은 이 인프라 위에서 실사용/테스트 데이터로 **후속 결정**한다. LangSmith는 자체 스택(M3/M6, canonical)을 대체하지 않고 **개발 트레이싱·eval 가속의 보완**으로만 둔다.
+
+| 순서 | 모듈 | 목표 | 산출물 | 완료 기준 |
+|---|---|---|---|---|
+| M7-1 | 스트리밍 계측 파리티 | `/chat/stream`에 M3 적재+M6 메트릭+guardrail_events를 A 경로와 동일 부여 | 계측된 스트리밍 핸들러 | 스트리밍 요청 1건이 `workflow_runs`/`guardrail_events` 적재 + `/metrics`에 variant 라벨로 집계 |
+| M7-2 | variant 라우팅 통합 | `/chat/stream`을 per-request 3택(A/B-frontier/B-exaone) 라우팅 + B에 status SSE 부여 | variant-aware 스트리밍 | 요청 variant로 A/B 실행·스트리밍·적재(라벨 분리) |
+| M7-3 | 프론트 variant 셀렉터 | 요청 타입에 variant 추가 + 테스트 모드 UI(선택·경고) | 프론트 셀렉터 | UI에서 3 variant 선택→해당 경로 응답·표시, B-exaone 파드/지연 경고 표기 |
+| M7-4 | LangSmith 리치 트레이싱(보완) | variant/session 태그·메타데이터 표준화, (선택) dataset/eval 연동 | LangSmith 설정·태깅 | LangChain/LangGraph 트레이스에 variant 태그로 A/B 필터·비교 가능. 자체 스택 canonical 유지 |
+
+실행 우선순위(2026-07-05): M4-A까지 완료(v1.0.0 릴리스). 다음은 **M7-1 → M7-2 → M7-3 → M7-4**. **M7-1(계측 파리티)이 최우선** — 실사용 측정이 없으면 이후가 무의미하다. mainline(A/B) 확정은 M7 인프라 위 데이터로 후속. B-exaone 프론트 테스트는 RunPod 파드 가동 시에만(비용). 원칙은 동일하게 **한 번에 한 모듈**.
+
+> **mainline 결정(2026-07-05)**: M7-1~4 완료 후 mainline을 **지금 확정하지 않고 "운영하며 데이터로 결정"**하기로 함. 운영 기본값은 A 유지, B-frontier는 opt-in, B-exaone은 프로덕션 제외. 결정 기준·데이터 소스·전환 임계는 `docs/plans/modules/M7-mainline-decision-framework.md`에 고정.
+
 ### 1.3 단일 모듈 진행 템플릿
 
 각 모듈을 시작할 때는 아래 형식으로 진행한다.

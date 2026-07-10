@@ -141,7 +141,7 @@ def summarize_node_output(
     if node_name == "supervisor":
         sup = result.get("supervisor") or {}
         reasoning = sup.get("reasoning", "")
-        return {
+        summary = {
             "current_phase": sup.get("current_phase"),
             "next_agent": sup.get("next_agent"),
             "iteration_count": sup.get("iteration_count", 0),
@@ -149,6 +149,11 @@ def summarize_node_output(
                 (reasoning[:200] + "...") if len(reasoning or "") > 200 else reasoning
             ),
         }
+        # M8(A-hub): LLM 라우팅 계측을 요약에 노출 (A에는 routing_meta 없음).
+        routing_meta = sup.get("routing_meta")
+        if routing_meta:
+            summary["routing_meta"] = routing_meta
+        return summary
 
     if node_name == "query_analysis":
         qa = result.get("query_analysis") or {}

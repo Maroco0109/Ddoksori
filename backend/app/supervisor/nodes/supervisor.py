@@ -201,7 +201,12 @@ class SupervisorNode:
         self._init_llm_chain()
 
     def _init_llm_chain(self) -> None:
-        """LLM fallback 체인 초기화"""
+        """LLM fallback 체인 초기화.
+
+        NOTE: 이 LLM 체인은 variant A(결정론)에서는 라우팅에 쓰이지 않고,
+        variant A-hub(routing_mode="llm", M8)에서 _try_llm_decision 경로로만 사용된다.
+        참조: docs/architecture/2026-07-05-a-orchestration-decision.md
+        """
         if self._injected_llm is not None:
             self._primary_llm = self._injected_llm
             self._current_model_name = "injected"
@@ -245,9 +250,11 @@ class SupervisorNode:
         """
         현재 상태를 분석하고 다음 행동을 결정합니다.
 
-        === 2-전략 라우팅 ===
-        1. NO_RETRIEVAL → Fast Path (검색/검토 생략)
-        2. NEED_RAG / CACHED_RAG → Full Pipeline (검토 항상 포함)
+        [의사결정 메커니즘] 기본(variant A)은 **규칙 기반(결정론적)** 라우팅이다.
+        variant A-hub(routing_mode="llm", M8 측정용)일 때만 LLM 슈퍼바이저 라우팅
+        (_llm_routing_decision → _try_llm_decision)을 사용한다. A는 여전히 결정론으로
+        동결되어 있고, LLM 경로는 A-hub 측정에서만 켜진다.
+        근거/히스토리: docs/architecture/2026-07-05-a-orchestration-decision.md
 
         Args:
             state: 현재 ChatState
@@ -259,32 +266,46 @@ class SupervisorNode:
                 - request: 에이전트에게 보낼 요청 (action이 call_agent인 경우)
                 - reasoning: 판단 근거
                 - partial: True if max iterations reached
+                - _routing_meta: A-hub 라우팅 계측 (routing_mode="llm"일 때만)
         """
         supervisor_state = state.get("supervisor") or {}
         iteration = (
             supervisor_state.get("iteration_count", 0) if supervisor_state else 0
         )
 
-        # 무한 루프 방지
+        # 무한 루프 방지 (양 라우팅 모드 공통)
         if iteration >= MAX_SUPERVISOR_ITERATIONS:
             logger.warning(
                 f"[SupervisorNode] 최대 반복 횟수({MAX_SUPERVISOR_ITERATIONS}) 도달. 강제 종료."
             )
             return self._fallback_respond(state)
 
+        # M8: A-hub는 LLM 슈퍼바이저 라우팅, A는 결정론 라우팅.
+        if state.get("routing_mode") == "llm":
+            return await self._llm_routing_decision(state)
+
+        return self._deterministic_decision(state)
+
+    def _deterministic_decision(self, state: ChatState) -> Dict[str, Any]:
+        """variant A: 규칙 기반 2-전략 라우팅 (결정론).
+
+        1. NO_RETRIEVAL → Fast Path (검색/검토 생략)
+        2. NEED_RAG / CACHED_RAG → Full Pipeline (검토 항상 포함)
+        """
         query_analysis = state.get("query_analysis")
         mode = state.get("mode", "NEED_RAG")
+        supervisor_state = state.get("supervisor") or {}
+        iteration = supervisor_state.get("iteration_count", 0)
 
         logger.info(
-            f"[SupervisorNode] decide_next_action: mode={mode}, "
+            f"[SupervisorNode] deterministic: mode={mode}, "
             f"query_analysis={'present' if query_analysis else 'absent'}, "
             f"iteration={iteration}"
         )
 
-        # Query Analysis가 없으면 먼저 수행
-        supervisor_state = state.get("supervisor") or {}
         completed = supervisor_state.get("completed_tasks", [])
 
+        # Query Analysis가 없으면 먼저 수행
         if (
             not query_analysis
             and "query_analyst" not in completed
@@ -299,29 +320,112 @@ class SupervisorNode:
             }
 
         # === 2-전략 라우팅 ===
-
-        # 1. NO_RETRIEVAL → Fast Path
         if mode == "NO_RETRIEVAL":
             return self._no_retrieval_decision(state)
-
-        # 2. RESTRICTED_DOMAIN → 전문기관 안내 (기존 유지)
         if mode == "RESTRICTED_DOMAIN":
             return self._no_retrieval_decision(state)
-
-        # 3. NEED_RAG / CACHED_RAG → Full Pipeline (항상 Review 포함)
         if mode in ("NEED_RAG", "CACHED_RAG"):
             return self._full_pipeline_decision(state)
 
-        # Fallback → Full Pipeline
         logger.warning(
             f"[SupervisorNode] 알 수 없는 mode={mode}. Full Pipeline fallback."
         )
         return self._full_pipeline_decision(state)
 
+    async def _llm_routing_decision(self, state: ChatState) -> Dict[str, Any]:
+        """variant A-hub(M8): LLM 슈퍼바이저가 다음 에이전트를 결정.
+
+        결정론 결정을 함께 계산해 (1) 일치율 측정, (2) LLM 실패 시 폴백에 사용한다.
+        계측(_routing_meta)을 decision에 부착 → supervisor_node가 trace에 적재한다.
+        A(결정론)에는 영향 없음: 이 경로는 routing_mode="llm"일 때만 호출된다.
+        """
+        det = self._deterministic_decision(state)
+
+        llm = self.llm
+        if llm is None:
+            logger.warning("[SupervisorNode] A-hub: LLM 미가용 → 결정론 폴백")
+            return self._with_routing_meta(det, det, fallback=True, reason="no_llm")
+
+        prompt = self._build_decision_prompt(state)
+        t0 = time.time()
+        llm_decision = await self._try_llm_decision(
+            llm, prompt, self._current_model_name
+        )
+        latency_ms = int((time.time() - t0) * 1000)
+
+        if not self._is_valid_llm_decision(llm_decision):
+            logger.info("[SupervisorNode] A-hub: LLM 결정 무효/실패 → 결정론 폴백")
+            return self._with_routing_meta(
+                det,
+                det,
+                fallback=True,
+                reason="parse_fail_or_invalid",
+                latency_ms=latency_ms,
+            )
+
+        assert llm_decision is not None  # _is_valid_llm_decision이 None을 걸러냄
+        return self._with_routing_meta(
+            llm_decision,
+            det,
+            fallback=False,
+            reason="llm",
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    def _is_valid_llm_decision(decision: Optional[Dict[str, Any]]) -> bool:
+        """LLM 라우팅 결정이 그래프가 라우팅 가능한 형태인지 검증."""
+        if not decision:
+            return False
+        action = decision.get("action")
+        if action not in ("call_agent", "respond", "clarify"):
+            return False
+        if action == "call_agent":
+            routable = {
+                "query_analyst",
+                "retrieval_team",
+                "answer_drafter",
+                "legal_reviewer",
+            }
+            if decision.get("target_agent") not in routable:
+                return False
+        return True
+
+    def _with_routing_meta(
+        self,
+        decision: Dict[str, Any],
+        det: Dict[str, Any],
+        *,
+        fallback: bool,
+        reason: str,
+        latency_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """라우팅 계측 메타를 decision에 부착 (A-hub 측정 전용)."""
+        out = dict(decision)
+        llm_target = None if fallback else decision.get("target_agent")
+        det_target = det.get("target_agent")
+        out["_routing_meta"] = {
+            "routing_mode": "llm",
+            "fallback": fallback,
+            "reason": reason,
+            "llm_target": llm_target,
+            "det_target": det_target,
+            "agree": (not fallback) and (llm_target == det_target),
+            "latency_ms": latency_ms,
+        }
+        return out
+
+    # === LLM 라우팅 (A-hub 전용, M8) =============================================
+    # 아래 _try_llm_decision / _build_decision_prompt / _parse_decision_with_retry는
+    # LLM 기반 동적 라우팅용이다. variant A(결정론)에서는 호출되지 않으며,
+    # variant A-hub(routing_mode="llm")에서 _llm_routing_decision을 통해서만 사용된다.
+    # A는 여전히 결정론적 orchestration으로 동결됨.
+    # 근거: docs/architecture/2026-07-05-a-orchestration-decision.md
+    # =============================================================================
     async def _try_llm_decision(
         self, llm: LLMProtocol, prompt: str, model_name: str
     ) -> Optional[Dict[str, Any]]:
-        """단일 LLM으로 결정 시도. 실패 시 None 반환."""
+        """[A-hub] 단일 LLM으로 라우팅 결정 시도. 실패 시 None 반환."""
         try:
             response = await asyncio.wait_for(
                 llm.generate(prompt), timeout=LLM_TIMEOUT_SECONDS
@@ -449,6 +553,7 @@ class SupervisorNode:
 
     def _build_decision_prompt(self, state: ChatState) -> str:
         """
+        [A-hub] LLM 라우팅용 프롬프트 생성 (routing_mode="llm"에서만 사용).
         Supervisor 판단을 위한 프롬프트를 생성합니다.
 
         보안 고려사항:
@@ -571,6 +676,7 @@ class SupervisorNode:
         self, response: str, retries: int = 0
     ) -> Dict[str, Any]:
         """
+        [A-hub] _try_llm_decision 전용 파서.
         LLM 응답을 JSON으로 파싱합니다. 실패 시 재시도 후 규칙 기반 전환.
 
         Args:
@@ -580,28 +686,31 @@ class SupervisorNode:
         Returns:
             파싱된 결정 딕셔너리
         """
+        # 1) 원문 그대로 파싱
         try:
-            # JSON 직접 파싱 시도
             return json.loads(response)
         except json.JSONDecodeError:
-            if retries < MAX_JSON_PARSE_RETRIES:
-                # 재시도: 마크다운 코드 블록 제거 후 파싱
-                cleaned = re.sub(r"```json?\n?|\n?```", "", response).strip()
-                # JSON 객체 추출 시도
-                match = re.search(r"\{[^{}]*\}", cleaned, re.DOTALL)
-                if match:
-                    try:
-                        return json.loads(match.group())
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "[SupervisorNode] JSON re-parse failed after cleanup"
-                        )
-                return self._parse_decision_with_retry(cleaned, retries + 1)
+            pass
 
-            logger.warning(
-                f"[SupervisorNode] JSON 파싱 실패 (재시도 {retries}회). 규칙 기반 fallback."
-            )
-            return {"action": "rule_based_fallback", "reasoning": "JSON parse failure"}
+        # 2) 마크다운 코드펜스 제거 후 파싱
+        cleaned = re.sub(r"```json?\s*|\s*```", "", response).strip()
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # 3) 가장 바깥 JSON 객체 추출(그리디, 중첩 객체 포함). 이전 구현의
+        #    r"\{[^{}]*\}"는 "request": {} 같은 중첩 빈 객체를 먼저 잡아
+        #    action 없는 {}를 반환하는 버그가 있었어서 그리디로 교체.
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                logger.warning("[SupervisorNode] JSON re-parse failed after extract")
+
+        logger.warning("[SupervisorNode] JSON 파싱 실패. 규칙 기반 fallback.")
+        return {"action": "rule_based_fallback", "reasoning": "JSON parse failure"}
 
     def _rule_based_fallback(self, state: ChatState) -> Dict[str, Any]:
         """
@@ -700,17 +809,24 @@ class SupervisorNode:
             existing_messages = supervisor_state.get("agent_messages", [])
             updated_messages = existing_messages + [message]
 
-            # 상태 업데이트
-            return {
-                "supervisor": {
-                    **supervisor_state,
-                    "agent_messages": updated_messages,
-                    "next_agent": decision.get("target_agent"),
-                    "supervisor_reasoning": decision.get("reasoning", ""),
-                    "iteration_count": iteration_count,
-                    "current_phase": _determine_phase(decision),
-                }
+            supervisor_update = {
+                **supervisor_state,
+                "agent_messages": updated_messages,
+                "next_agent": decision.get("target_agent"),
+                "supervisor_reasoning": decision.get("reasoning", ""),
+                "iteration_count": iteration_count,
+                "current_phase": _determine_phase(decision),
             }
+
+            # M8(A-hub): LLM 라우팅 계측을 supervisor state에 실어 각 supervisor
+            # 노드의 protocol_summary(→ protocol_events)로 노출한다. 타이밍 래퍼가
+            # _agent_trace_entries를 덮어쓰므로 그 대신 이 경로로 적재.
+            # variant A(결정론)에는 _routing_meta가 없어 영향 없음.
+            meta = decision.get("_routing_meta")
+            if meta:
+                supervisor_update["routing_meta"] = meta
+
+            return {"supervisor": supervisor_update}
 
         return supervisor_node
 

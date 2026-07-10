@@ -12,7 +12,7 @@ the trace-completeness / clarification_rate / guardrail measurements (M2-7R).
 """
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from langgraph.prebuilt import create_react_agent
 
@@ -47,6 +47,7 @@ def run_b(
     model_spec: str = "frontier",
     tau: float = 0.45,
     top_k: int = 5,
+    trace_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     trace: List[Dict[str, Any]] = []
     # M3-5: per-search retrieval events (gate + tool). instrumentation only.
@@ -100,7 +101,7 @@ def run_b(
     chat_model = get_chat_model(model_spec)
     agent = create_react_agent(chat_model, B_TOOLS, prompt=SYSTEM_PROMPT)
     try:
-        result = agent.invoke({"messages": [("user", query)]})
+        result = agent.invoke({"messages": [("user", query)]}, config=trace_config)
         messages = result["messages"]
     except Exception as react_err:
         # #68: ReAct can overflow max_model_len(8192) as accumulated tool context
@@ -197,7 +198,7 @@ def run_b(
                  "아래 검색 근거만 사용해 질문에 한국어로 간결·정확하게 답하세요. "
                  "도구를 더 호출하지 말고 최종 답변만 작성하세요. 근거가 부족하면 모른다고 하세요.\n\n"
                  f"[검색 근거]\n{tool_context}\n\n[질문]\n{query}"),
-            ])
+            ], config=trace_config)
             synth_answer = synth.content if isinstance(synth.content, str) else str(synth.content)
             um = getattr(synth, "usage_metadata", None)
             if um:
