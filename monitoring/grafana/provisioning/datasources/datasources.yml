@@ -22,6 +22,11 @@ datasources:
     isDefault: false
     editable: true
     jsonData:
+      # Grafana 11+ postgres plugin reads the db name from jsonData.database.
+      # The legacy top-level `database` above still feeds the backend health
+      # check, but the panel query editor errors ("no default database
+      # configured") without this. Keep both for backward/forward compat.
+      database: ${DB_NAME}
       sslmode: disable
       postgresVersion: 1700
     secureJsonData:
